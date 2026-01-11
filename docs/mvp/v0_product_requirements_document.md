@@ -2,8 +2,8 @@
 
 ## v0 Product Requirements Document (Simplified)
 
-**Version:** 0.2.0  
-**Last Updated:** January 2026  
+**Version:** 0.3.0  
+**Last Updated:** March 2026  
 **Status:** Draft for Implementation
 
 ---
@@ -18,6 +18,16 @@ This document defines a lean v0 for an AI-powered adaptive running coach. The pr
 
 ---
 
+## Definition of Done (v0 Acceptance)
+
+- **Profile & constraints captured:** Athlete profile file exists with goal, run-day availability, conflict policy, and at least one recent race or pace proxy.
+- **Activity ingestion works:** Either (a) Strava sync pulls ≥1 activity into `activities/YYYY-MM/*.yaml` without duplication, or (b) user can log a manual activity that passes schema validation.
+- **Metrics compute end-to-end:** CTL/ATL/TSB, ACWR, readiness, and weekly intensity distribution are written to `metrics/` after ingesting activities.
+- **Plan generation respects constraints:** Running plan is created that matches run-day availability, caps long-run/time limits, and honors the conflict policy.
+- **Adaptation triggers fire:** When ACWR/readiness/injury flags breach thresholds, at least one scheduled workout is automatically moved/downgraded with a logged reason.
+- **Conversation loop usable:** “What should I do today?” returns a concrete workout or rest recommendation that references the athlete’s current metrics and context.
+- **Local-only safety:** No secrets are committed; the app runs offline except for intentional Strava calls.
+
 ## Architecture Overview
 
 ### No Web UI, No Database
@@ -27,6 +37,14 @@ Everything happens through:
 1. **Terminal conversation** with Claude Code
 2. **Local files** in the repository for persistence
 3. **Strava API calls** triggered manually by user request
+
+### Explicitly Out of Scope (v0)
+
+- Background daemons, push notifications, or any UI beyond the terminal conversation.
+- Real-time re-planning on every message; adaptations happen after ingesting activities or on explicit request.
+- Complex physiology modeling (HRV-based readiness, terrain-aware pacing, heat/altitude models beyond RPE/HR guidance).
+- Multi-athlete handling in one repo; v0 assumes a single athlete context.
+- Rich dashboards; outputs are YAML/Markdown plus textual summaries in the terminal.
 
 ### File Structure
 
@@ -114,6 +132,8 @@ Claude: [Updates workout file, recalculates week]
 | "What should I do today?"          | Checks scheduled workout, adapts if needed |
 | "I did an extra yoga session"      | Logs manual activity                       |
 
+Freshness guard: if metrics/plan cache are older than 24 hours or missing, Claude re-runs metric aggregation before answering plan-related questions.
+
 ---
 
 ## Data Specifications
@@ -125,6 +145,7 @@ Claude: [Updates workout file, recalculates week]
 name: "Du Phan"
 email: "du@example.com"
 created_at: "2025-11-01"
+age: 32 # Optional; used for recovery guidance
 
 # Strava Connection
 strava:
@@ -134,6 +155,14 @@ strava:
 # Running Background
 running_experience_years: 5
 injury_history: "Hip flexor tightness, especially left side. Flares up with high intensity."
+
+# Recent Fitness Snapshot (used for pacing)
+recent_race:
+  distance: "10k"
+  time: "47:00"
+  date: "2025-04-20"
+current_weekly_run_km: 28
+current_run_days_per_week: 3
 
 # Personal Records (from Strava or self-reported)
 personal_records:
@@ -153,6 +182,8 @@ personal_records:
 # Estimated fitness metrics (calculated from PRs)
 estimated_vdot: 45
 estimated_max_hr: 185 # or measured if known
+estimated_lthr: 172 # Lactate threshold HR, if known
+vdot_last_updated: "2025-06-15"
 
 # Training Constraints
 constraints:
@@ -199,6 +230,7 @@ goal:
 preferences:
   detail_level: "moderate" # brief, moderate, detailed
   coaching_style: "supportive" # supportive, direct, analytical
+  intensity_metric: "pace" # pace, hr, rpe
 ```
 
 ### Activity File (`activities/2025-11/2025-11-05_run_lunch.yaml`)
@@ -599,6 +631,29 @@ baseline:
 
 ## Core Logic & Algorithms
 
+### 0. Training Principles & Safety Guardrails (v0)
+
+These guardrails are derived from Daniels, Pfitzinger, 80/20, and FIRST, and are
+used by the plan generator and adaptation engine:
+
+- Train at current fitness, not goal pace. Derive paces from a race in the last 4-6 weeks.
+- Update VDOT no more than every 3-4 weeks, or after a new race.
+- Consistency beats hero workouts. Prefer sustainable progress over spikes.
+- Intensity distribution: if running >= 3 days/week, target ~80% low intensity and <= 20% moderate+high.
+- If running <= 2 days/week: allow only 1 quality run; long run stays easy.
+- Hard/easy separation: no back-to-back high-intensity sessions across all sports.
+- Avoid leg-heavy strength within 24-36 hours of a quality run.
+- Long run caps: <= 25-30% of weekly run volume and <= 2.5 hours.
+- T/I/R volume caps (Daniels-style):
+  - T-pace total <= 10% of weekly mileage
+  - I-pace total <= 8% of weekly mileage or 10 km (whichever is lower)
+  - R-pace total <= 5% of weekly mileage or 8 km (whichever is lower)
+- Use RPE/HR over pace in heat, hills, or altitude.
+- If sick (below the chest), feverish, or pain alters gait: replace with rest or low-impact cross-training
+  and flag for medical advice if persistent.
+
+Note: T = threshold/tempo, I = interval/VO2max, R = repetition/speed.
+
 ### 1. Training Load Calculation
 
 #### v0 Load Model (Simple, Multi-Sport Friendly)
@@ -669,6 +724,15 @@ Also look for:
 - Sleep quality mentions → affects readiness
 - Soreness/pain mentions → flag for injury tracking
 - Fatigue mentions → factor into recovery estimates
+
+**Intensity band classification (for 80/20 tracking):**
+
+- low: easy/recovery sessions or RPE <= 4
+- moderate: steady/tempo sessions or RPE 5-6
+- high: interval/repetition/race sessions or RPE >= 7
+
+This maps to `session_type` and is used to compute weekly intensity distribution.
+High-intensity session count is tracked across all sports for recovery gating.
 
 ### 2. CTL/ATL/TSB Calculation
 
@@ -774,6 +838,25 @@ Instead, v0 prioritizes **specificity + durability**:
 This is broadly compatible with FIRST-style low-frequency running, but v0 adapts it to multi-sport reality
 (leg-heavy strength and high-impact running are not treated as interchangeable).
 
+#### Intensity Distribution & Quality Session Limits (v0)
+
+- If running >= 3 days/week: target ~80% low intensity and <= 20% moderate+high within running time.
+- Across all sports: cap high-intensity sessions at 2 per 7 days unless running is the primary sport.
+- Never schedule back-to-back quality sessions (any sport). Keep at least 1 easy day in between.
+- If a key run follows a leg-heavy day, move it 24-48 hours or downgrade to easy.
+
+#### Multi-Sport Adaptation of Running Methodologies (v0)
+
+The reference methodologies (Daniels, Pfitzinger, 80/20, FIRST) assume a running-only focus.
+v0 adapts them for multi-sport athletes:
+
+- Apply pace/zone prescriptions to running sessions only; other sports are guided by RPE/HR/time.
+- Preserve a minimum running-specific stimulus (see table below); cross-training builds aerobic fitness
+  but does not replace running economy or impact tolerance.
+- Count hard sessions across all sports together; cap at 2 per 7 days (3 only if running is primary).
+- Gate key runs by lower-body load from non-running sessions (strength, trail, CrossFit, ski).
+- If running <= 2 days/week: only 1 quality run; long run stays easy and short of volume caps.
+
 #### Minimum Running Specificity (v0)
 
 v0 defines a **minimum “specificity dose”** so progress happens even when running is secondary.
@@ -803,8 +886,10 @@ v0 defines a **minimum “specificity dose”** so progress happens even when ru
 **Progression Rules:**
 
 - Increase weekly mileage max 10% per week
+- Increase for 2-3 weeks, then hold or step back for 1 week
 - Every 4th week: reduce volume 20-30% (recovery week)
 - Long run progression: add 1-2km per week until peak (max ~21km for HM)
+- Long run caps: <= 25-30% of weekly volume and <= 2.5 hours
 
 ### 6. Plan Adaptation Rules
 
@@ -817,9 +902,12 @@ v0 defines a **minimum “specificity dose”** so progress happens even when ru
 | Systemic ACWR 1.3-1.5          | Quality run       | → Reduce duration 20%                   |
 | Readiness < 50                 | Quality run       | → Easy run                              |
 | Readiness < 35                 | Any               | → Rest                                  |
+| 2+ high-intensity sessions/7d  | Quality run       | → Move 24-48h or downgrade              |
 | High lower-body load yesterday | Quality run       | → Swap to aerobic easy or move 24-48h   |
 | High lower-body load yesterday | Long run          | → Reduce 15-25% or split into 2 runs    |
 | Injury flag in notes           | Quality run       | → Easy run + monitoring                 |
+| Pain alters gait / sharp pain  | Any               | → Stop run; rest or low-impact XT       |
+| Illness below the chest/fever  | Any               | → Rest 48-72h; reassess before resuming |
 | Missed 3-7 days                | Next week         | → Reduce volume 10-15%                  |
 | Missed 1-2 weeks               | Plan              | → Reduce 20%, no intensity first 3 days |
 | Missed 3+ weeks                | Plan              | → Regenerate from reassessment          |
@@ -827,6 +915,7 @@ v0 defines a **minimum “specificity dose”** so progress happens even when ru
 **Cross-Training Credit:**
 
 - 2-2.5 hours cycling ≈ 1 hour easy running (cardiovascular load)
+- Elliptical or pool running ≈ 1:1 with easy running (time-based)
 - If user does a long aerobic session (ride/hike/ski at low intensity), it can replace part of the _aerobic_ purpose of the long run that week, but not the full running-specific stimulus.
 - v0 substitution rule of thumb:
   - For `general_fitness`: can replace a planned aerobic run 1:1 (time-based) if lower-body load is high.
@@ -847,6 +936,9 @@ Using Jack Daniels' VDOT system:
 | Repetition        | 4:05 - 4:15   | Speed, running economy |
 
 **If no PR available:** Use recent training paces + perceived effort to estimate.
+
+**VDOT update rule:** Use the most recent race (last 4-6 weeks) and do not update VDOT more than once every 3-4 weeks.
+If only an older PR is available, downgrade paces conservatively or prompt for a new time trial.
 
 ---
 
@@ -916,9 +1008,10 @@ Key Principles:
 1. Respect their multi-sport lifestyle—never suggest abandoning other activities
 2. Use training load data (CTL/ATL/TSB/ACWR) to inform every recommendation
 3. Prioritize injury prevention—ACWR > 1.3 is a warning, > 1.5 requires action
-4. Quality over quantity—fewer, purposeful runs beat junk miles
-5. Parse their activity notes carefully for wellness signals and injury flags
-6. Be conversational, warm, and direct—avoid being preachy
+4. Keep easy runs easy; avoid the moderate-intensity rut
+5. Quality over quantity—fewer, purposeful runs beat junk miles
+6. Parse activity notes for wellness signals, injury flags, and illness cues
+7. Be conversational, warm, and direct—avoid being preachy
 
 Current Athlete Context:
 [Insert athlete profile summary]
@@ -982,6 +1075,7 @@ When processing a new activity with description/private_note, Claude should:
    - Pain that wasn't there before
    - Unusual fatigue patterns
    - Overtraining signals
+   - Illness symptoms (below chest, fever) or heat stress cues
 
 ### Conversation Examples
 
@@ -1112,6 +1206,7 @@ For non-cardio activities (climbing, strength), HR data is less relevant anyway�
 ### Phase 3: Planning
 
 - [ ] Implement VDOT/pace calculation from PRs
+- [ ] Implement intensity zones (pace/HR/RPE) and 80/20 tracking
 - [ ] Implement plan generation with constraints
 - [ ] Implement weekly structure templates
 - [ ] Create workout description templates
@@ -1122,6 +1217,7 @@ For non-cardio activities (climbing, strength), HR data is less relevant anyway�
 - [ ] Implement adaptation rule engine
 - [ ] Implement missed workout handling
 - [ ] Implement cross-training credit logic
+- [ ] Implement red-flag detection (illness, injury, overtraining)
 - [ ] Implement plan modification commands
 
 ### Phase 5: AI Coaching
