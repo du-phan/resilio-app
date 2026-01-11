@@ -222,9 +222,6 @@ distance_km: 10.2
 elevation_gain_m: 45
 average_pace_min_km: "5:05"
 
-# Link to plan (if matched)
-linked_workout_id: "w02_tue_tempo" # Optional, set when matched to a planned workout
-
 # Heart Rate (if available)
 average_hr: 158
 max_hr: 175
@@ -440,21 +437,6 @@ weekly_targets:
   week_3: { total_km: 30, long_run_km: 14, quality_sessions: 1 }
   # ... etc
 
-# Workout Index (quick view)
-workout_index:
-  - workout_id: "w02_tue_tempo"
-    scheduled_date: "2025-11-12"
-    type: "tempo"
-    priority: "key"
-    status: "scheduled"
-    file: "plans/workouts/week_02/tue_tempo.yaml"
-  - workout_id: "w02_sat_long"
-    scheduled_date: "2025-11-16"
-    type: "long_run"
-    priority: "key"
-    status: "scheduled"
-    file: "plans/workouts/week_02/sat_long.yaml"
-
 # Adaptation Log
 adaptations:
   - date: "2025-11-12"
@@ -478,8 +460,6 @@ workout_id: "w02_tue_tempo"
 plan_id: "plan_2025-11-01_v2"
 week: 2
 scheduled_date: "2025-11-12"
-priority: "key" # key, important, optional
-locked: true # key workouts default to locked unless injury risk is high
 
 # Prescription
 type: "tempo"
@@ -506,12 +486,6 @@ structure:
     count: 4
     duration_seconds: 20
     rest_seconds: 60
-
-# Planned Load (estimate)
-planned_load:
-  base_effort_au: 350
-  systemic_load_au: 350
-  lower_body_load_au: 350
 
 # Purpose & Context
 purpose: |
@@ -540,18 +514,12 @@ execution:
   actual_distance_km: null
   average_hr: null
   average_pace_min_km: null
-  perceived_effort: null
-  execution_notes: null
+  session_rpe: null # Optional (1-10)
+  pain_flag: "none" # Optional (none, monitor, stop)
+  execution_notes: null # Athlete feedback
 
 # Coach Review (short debrief)
 coach_review: null
-
-# Plan vs Actual (optional delta)
-  delta:
-    duration_minutes: null
-    distance_km: null
-    systemic_load_au: null
-    lower_body_load_au: null
 ```
 
 ### Planned vs Actual (Coach Model)

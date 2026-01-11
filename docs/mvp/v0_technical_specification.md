@@ -76,7 +76,6 @@ easy to evolve while avoiding overengineering.
 | M12 | Coach Response Formatter | Render outputs for the user | Plan + metrics + context | Console responses | None |
 | M13 | Memory & Insights | Extract durable athlete facts | Activity notes + conversation snippets | Updated memories | `athlete/memories.yaml` |
 | M14 | Conversation Logger | Persist session transcripts | User/coach messages | Markdown logs | `conversations/` |
-| M15 | Workout Matcher | Link actual activities to planned workouts | New activities + plan index | Updated workout status + activity links | `plans/`, `activities/` |
 
 ### 4.2 Module Contracts (Responsibilities + Interfaces)
 
@@ -99,7 +98,7 @@ All persistence flows through `M3 Repository I/O`.
 - Module calls to M4–M11
 
 **Depends on**
-- M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13, M14, M15
+- M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13, M14
 
 #### M2 — Config & Secrets
 
@@ -233,9 +232,7 @@ All persistence flows through `M3 Repository I/O`.
 
 **Responsibilities**
 - Generate plan + workouts from goal/constraints.
-- Tag workouts with `priority` and `locked`.
 - Respect conflict policy and run-day constraints.
-- Maintain `workout_index[]` in `plans/current_plan.yaml`.
 
 **Inputs**
 - Athlete profile
@@ -254,7 +251,6 @@ All persistence flows through `M3 Repository I/O`.
 - Apply adaptation rules based on metrics and flags.
 - Respect `conflict_policy`.
 - Log adaptations for auditability.
-- Keep `workout_index[]` in sync when workouts move or change status.
 
 **Inputs**
 - Plan + workouts
@@ -281,31 +277,6 @@ All persistence flows through `M3 Repository I/O`.
 
 **Depends on**
 - M3, M9, M10, M11
-
-#### M15 — Workout Matcher
-
-**Responsibilities**
-- Match new activities to planned workouts (by date window, sport, and type).
-- Write `linked_workout_id` into activity files.
-- Update workout `status` and `execution` fields when a match is found.
-- Update the plan `workout_index[]` status for the matched workout.
-- Flag unplanned activities for review (no matching workout).
-
-**Matching heuristic (v0)**
-- Same sport type as the workout.
-- Scheduled date window: +/- 24 hours (configurable).
-- If multiple candidates: pick the closest by start time, then by duration similarity.
-
-**Inputs**
-- Newly ingested activities
-- `plans/current_plan.yaml` workout index
-
-**Outputs**
-- Updated workout file (status/execution)
-- Updated activity file (linked_workout_id)
-
-**Depends on**
-- M3, M10
 
 #### M13 — Memory & Insights
 
@@ -341,12 +312,11 @@ All persistence flows through `M3 Repository I/O`.
 
 **Sync flow**
 1. M1 → M2 (config) → M5 (Strava) → M6 (normalize) → M7 (RPE) → M8 (load)
-2. M15 matches activities to planned workouts (if any)
-3. M13 updates memories if new durable facts are found
-4. M9 recomputes daily metrics
-5. M11 applies adaptations if triggered
-6. M12 summarizes results
-7. M14 logs the session transcript
+2. M13 updates memories if new durable facts are found
+3. M9 recomputes daily metrics
+4. M11 applies adaptations if triggered
+5. M12 summarizes results
+6. M14 logs the session transcript
 
 **“What should I do today?” flow**
 1. M1 reads profile + plan (M3/M4/M10)
@@ -436,7 +406,6 @@ v0 uses YAML for human readability and easy diffing.
 - `distance_km: float`
 - `average_hr/max_hr/has_hr_data`
 - `description/private_note`
-- `linked_workout_id: str` (set when matched to a planned workout)
 
 **Derived fields (computed)**
 - `calculated.estimated_rpe: int (1..10)`
@@ -468,8 +437,6 @@ v0 uses YAML for human readability and easy diffing.
 - `total_lower_body_load_au: float` # actual
 
 **Optional**
-- `planned_systemic_load_au: float`
-- `planned_lower_body_load_au: float`
 - `run_sessions: int`
 - `key_sessions_completed: int`
 - `notes: str`
@@ -477,17 +444,12 @@ v0 uses YAML for human readability and easy diffing.
 ### 6.6 Plan (`plans/current_plan.yaml`) and Workouts (`plans/workouts/...`)
 
 **Plan file (key additions)**
-- `workout_index[]` with:
-  - `workout_id`, `scheduled_date`, `type`, `priority`, `status`, `file`
+No special additions required in v0 beyond what the PRD already defines. The source of truth is the workout files under `plans/workouts/`.
 
 **Workout file (key additions)**
-- `priority: enum(key|important|optional)`
-- `locked: bool` (true if “key” unless injury risk is high)
-- `planned_load.{base_effort_au, systemic_load_au, lower_body_load_au}`
 - `status: enum(scheduled|completed|skipped|adapted)`
-- `execution.{actual_activity_id, actual_duration_minutes, actual_distance_km, average_hr, average_pace_min_km, perceived_effort, execution_notes}`
+- `execution.{actual_activity_id, actual_duration_minutes, actual_distance_km, average_hr, average_pace_min_km, session_rpe, pain_flag, execution_notes}`
 - `coach_review: str`
-- `delta.{duration_minutes, distance_km, systemic_load_au, lower_body_load_au}`
 
 ### 6.7 Coach Memories (`athlete/memories.yaml`)
 
@@ -629,7 +591,7 @@ Minimum prompt inputs for “What should I do today?”:
 - Athlete profile summary (goal, constraints, conflict_policy)
 - Last 7 days of activities (systemic + lower-body summary)
 - Current metrics (systemic CTL/ATL/TSB/ACWR, readiness)
-- Next scheduled workout(s) and whether they are key/locked
+- Next scheduled workout(s)
 
 Minimum prompt outputs:
 - Workout prescription (time/distance, intensity guidance)
