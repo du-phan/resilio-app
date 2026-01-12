@@ -2,22 +2,23 @@
 
 **Version**: 0.1.0
 **Last Updated**: 2026-01-12
-**Status**: Phase 2 Data Ingestion - In Progress (M7 ✅)
+**Status**: Phase 2 Data Ingestion - In Progress (M7 ✅, M6 ✅)
 
 ---
 
-## Overall Progress: 50%
+## Overall Progress: 55%
 
 - [x] Documentation complete
 - [x] Repository structure designed
 - [x] Package scaffolding created
-- [x] Module implementations (4/14 complete: M2, M3, M4, M7)
+- [x] Module implementations (5/14 complete: M2, M3, M4, M6, M7)
 - [ ] API layer implementations (0/5 modules)
 - [x] Schema definitions (4/6 modules: config, repository, profile, activity)
-- [x] Testing infrastructure (pytest configured, 81 tests passing)
-- [x] Integration testing (verified M7↔M4 integration)
+- [x] Testing infrastructure (pytest configured, 106 tests passing)
+- [x] Integration testing (verified M7↔M4, M6↔M7 integration)
 - [x] Phase 1 end-to-end validation complete
 - [x] Phase 2 M7 complete with 84% test coverage
+- [x] Phase 2 M6 complete with 83% test coverage
 
 ---
 
@@ -84,7 +85,7 @@
 
 ---
 
-## Phase 2: Data Ingestion & Processing (25% - M7 ✅)
+## Phase 2: Data Ingestion & Processing (50% - M7 ✅, M6 ✅)
 
 ### M7 - Notes & RPE Analyzer (100% ✅)
 
@@ -108,16 +109,26 @@
   - `sports_coach_engine/schemas/profile.py` (added VitalSigns model)
   - `tests/unit/test_notes.py` (621 lines, 31 comprehensive tests)
 
-### M6 - Activity Normalization (0%)
+### M6 - Activity Normalization (100% ✅)
 
-- [ ] Sport type normalization
-- [ ] Unit conversions
-- [ ] Surface type detection (treadmill)
-- [ ] Data quality flags
-- [ ] Schema enforcement
+- [x] Sport type normalization (40+ Strava aliases → 13 canonical types)
+- [x] Surface type detection using M7 treadmill detection
+- [x] Data quality assessment (HIGH/MEDIUM/LOW/TREADMILL)
+- [x] Unit conversions (meters→km, seconds→minutes)
+- [x] Filename generation with collision handling
+- [x] Activity validation (duration, pace, HR sanity checks)
+- [x] File persistence via M3 Repository I/O
 - **Depends on**: M3, M7
 - **Priority**: P0
 - **Estimate**: 1-2 days
+- **Actual**: 1 day
+- **Tests**: 25/25 passing (83% coverage)
+- **Files**:
+  - `sports_coach_engine/core/normalization.py` (557 lines - complete implementation)
+  - `tests/unit/test_normalization.py` (489 lines, 25 comprehensive tests)
+  - Sport type mapping: 40+ aliases covering running variants, cycling, strength, climbing, etc.
+  - Surface detection: Multi-priority decision tree (explicit sport type → M7 detection → GPS heuristics)
+  - Filename format: `activities/YYYY-MM/YYYY-MM-DD_sport_HHmm.yaml` with automatic collision handling
 
 ### M5 - Strava Integration (0%)
 
