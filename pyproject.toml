@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "sports-coach-engine"
+version = "0.1.0"
+description = "AI-powered adaptive running coach for multi-sport athletes"
+authors = ["Du Phan"]
+readme = "README.md"
+packages = [{include = "sports_coach_engine"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = "^2.5"
+pyyaml = "^6.0"
+requests = "^2.31"
+python-dateutil = "^2.8"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4"
+pytest-cov = "^4.1"
+black = "^23.0"
+mypy = "^1.7"
+ruff = "^0.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "N", "W"]
