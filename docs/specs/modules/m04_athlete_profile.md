@@ -6,10 +6,16 @@
 |-------|-------|
 | **Module ID** | M4 |
 | **Module Name** | Athlete Profile Service |
-| **Version** | 1.0.1 |
+| **Code Module** | `core/profile.py` |
+| **Version** | 1.0.2 |
 | **Status** | Draft |
 | **Complexity** | Medium |
 | **Last Updated** | 2026-01-12 |
+
+### Changelog
+- **1.0.2** (2026-01-12): Added code module path (`core/profile.py`) and API layer integration notes
+- **1.0.1** (prior): Previous updates
+- **1.0.0** (initial): Initial draft
 
 ---
 
@@ -58,7 +64,9 @@ M4 manages the athlete's profile data, including personal information, training 
 
 ---
 
-## 3. Public Interface
+## 3. Internal Interface
+
+**Note:** This module is called internally by the API layer and other core modules. Claude Code should NOT import from `core/profile.py` directly—use API functions like `api.profile.get_profile()`, `api.profile.update_profile()`, etc.
 
 ### 3.1 Type Definitions
 
@@ -1126,15 +1134,38 @@ ERROR_MESSAGES: dict[ProfileErrorType, str] = {
 
 ## 7. Integration Points
 
-### 7.1 Usage Examples
+### 7.1 Integration with API Layer
+
+This module is called internally by the API layer and other core modules. Claude Code calls API functions, which then use M4 internally.
+
+```
+Claude Code calls: api.profile.get_profile()
+                        │
+                        ▼
+API Layer:         profile.py::get_profile()
+                        │
+                        ▼ calls internally
+M4:                load_profile()
+                        │
+                        ▼
+M3:                read_yaml("athlete/profile.yaml")
+```
+
+**API Functions that use M4:**
+- `api.profile.get_profile()` → `M4::load_profile()`
+- `api.profile.update_profile(**fields)` → `M4::update_profile()`
+- `api.profile.set_goal(...)` → `M4::update_goal()`
+- `api.plan.regenerate_plan()` → `M4::load_profile()` (for constraints)
+
+### 7.2 Usage Examples
 
 ```python
-from sports_coach_engine.m04_profile import (
+from sports_coach_engine.core.profile import (
     load_profile, create_profile, update_vdot_from_race,
     get_training_paces, validate_constraints, ProfileError
 )
 
-# M1 (CLI Orchestrator) - Load profile at startup
+# API Layer - Get profile for API function
 profile = load_profile()
 if profile is None:
     # Initiate onboarding
@@ -1153,13 +1184,22 @@ if profile.conflict_policy == ConflictPolicy.ASK_EACH_TIME:
     pass
 ```
 
+### 7.3 Module Dependencies (Who Calls M4)
+
+| Module | Usage |
+|--------|-------|
+| API Layer (`api.profile`) | All profile operations |
+| API Layer (`api.plan`) | Load profile for plan generation |
+| M10 (Plan Generator) | Get constraints, paces, goal |
+| M11 (Adaptation Engine) | Check conflict policy |
+
 ---
 
 ## 8. Test Scenarios
 
 ```python
 import pytest
-from sports_coach_engine.m04_profile import (
+from sports_coach_engine.core.profile import (
     calculate_vdot, derive_paces, validate_constraints,
     RaceDistance, GoalType, Goal, TrainingConstraints, Weekday
 )

@@ -6,7 +6,8 @@
 |-------|-------|
 | Module ID | M7 |
 | Name | Notes & RPE Analyzer |
-| Version | 1.0.1 |
+| Code Module | `core/notes.py` |
+| Version | 1.0.2 |
 | Status | Draft |
 | Dependencies | M3 (Repository I/O), M4 (Athlete Profile) |
 
@@ -46,7 +47,9 @@ pydantic>=2.0        # Data models
 regex>=2023.0        # Enhanced regex for text parsing (optional)
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows as part of the sync pipeline. Claude Code should NOT import from `core/notes.py` directly.
 
 ### 4.1 Type Definitions
 
@@ -1057,21 +1060,38 @@ def adjust_rpe_for_treadmill(
 
 ## 6. Integration Points
 
-### 6.1 Called By
+### 6.1 Integration with API Layer
+
+This module is called internally by M1 workflows as part of the sync pipeline. Claude Code does NOT call M7 directly.
+
+```
+Claude Code → api.sync.sync_strava()
+                    │
+                    ▼
+              M1::run_sync_workflow()
+                    │
+                    ├─► M5::fetch_activities()
+                    ├─► M6::normalize_activity()
+                    ├─► M7::analyze_activity_notes() ← HERE
+                    ├─► M8::calculate_loads()
+                    └─► M9::compute_daily_metrics()
+```
+
+### 6.2 Called By
 
 | Module | When |
 |--------|------|
-| M1 | During sync pipeline after M6 normalization |
+| M1 (Workflows) | During sync pipeline after M6 normalization |
 | M6 | Requests treadmill detection before normalization |
 
-### 6.2 Calls To
+### 6.3 Calls To
 
 | Module | Purpose |
 |--------|---------|
 | M3 | Read activity files |
 | M4 | Get athlete vital signs |
 
-### 6.3 Returns To
+### 6.4 Returns To
 
 | Module | Data |
 |--------|------|
@@ -1080,7 +1100,7 @@ def adjust_rpe_for_treadmill(
 | M9 | Injury/illness flags for daily metrics |
 | M13 | Wellness indicators for memory extraction |
 
-### 6.4 Analysis Pipeline Position
+### 6.5 Analysis Pipeline Position
 
 ```
 [M6 Normalization]
@@ -1281,5 +1301,6 @@ RPE_KEYWORDS.update(CUSTOM_RPE_KEYWORDS)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.0.2 | 2026-01-12 | Added code module path (`core/notes.py`) and API layer integration notes. |
 | 1.0.1 | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (RPEEstimate, RPEConflict, TreadmillDetection, InjuryFlag, IllnessFlag, WellnessIndicators, ContextualFactors, AnalysisResult - 8 types converted). Removed `dataclass` and `field` imports. Added Pydantic `Field` for default factories. |
 | 1.0.0 | 2026-01-12 | Initial specification |

@@ -6,11 +6,13 @@
 |-------|-------|
 | Module ID | M11 |
 | Name | Adaptation Engine |
-| Version | 1.0.1 |
+| Code Module | `core/adaptation.py` |
+| Version | 1.0.2 |
 | Status | Draft |
 | Dependencies | M3 (Repository I/O), M4 (Athlete Profile), M9 (Metrics Engine), M10 (Plan Generator) |
 
 ### Changelog
+- **1.0.2** (2026-01-12): Added code module path (`core/adaptation.py`) and API layer integration notes.
 - **1.0.1** (2026-01-12): Converted all dataclass types to BaseModel for consistency. Added complete algorithms for `expire_stale_suggestions()`, `get_pending_suggestions()`, and `track_override_pattern()` to remove `...` placeholders and make spec LLM-implementable.
 - **1.0.0** (initial): Initial draft with comprehensive adaptation trigger logic
 
@@ -33,7 +35,7 @@ Generate workout adaptation suggestions based on current metrics, health flags, 
 - Computing metrics (M9)
 - Generating the original plan (M10)
 - Extracting flags from notes (M7)
-- Formatting suggestions for display (M12)
+- Enriching suggestions with interpretations (M12 - Data Enrichment)
 
 ## 3. Dependencies
 
@@ -52,7 +54,9 @@ Generate workout adaptation suggestions based on current metrics, health flags, 
 pydantic>=2.0        # Data models
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows and the API layer. Claude Code should NOT import from `core/adaptation.py` directly—use API functions like `api.plan.accept_suggestion()`, `api.plan.decline_suggestion()`, `api.plan.get_pending_suggestions()`.
 
 ### 4.1 Type Definitions
 
@@ -1201,6 +1205,46 @@ adaptations:
 
 ## 7. Integration Points
 
+**Integration with API Layer:**
+
+This module is called internally by the API layer and M1 workflows. Claude Code does not call `core/adaptation.py` functions directly.
+
+**API Functions → M11 Mapping:**
+
+```
+Claude Code → api.plan.get_pending_suggestions()
+                  ↓
+            M11::get_pending_suggestions()
+                  ↓
+            M3::read_yaml("plans/pending_suggestions.yaml")
+                  ↓
+            M12::enrich_suggestions() (add interpretations)
+
+Claude Code → api.plan.accept_suggestion(suggestion_id)
+                  ↓
+            M11::apply_suggestion()
+                  ↓
+            M3::write_yaml() (update workout file)
+
+Claude Code → api.plan.decline_suggestion(suggestion_id)
+                  ↓
+            M11::decline_suggestion()
+                  ↓
+            M11::track_override_pattern()
+                  ↓
+            M13::extract_insight() (if pattern detected)
+
+Automatic trigger (after sync):
+    M1::run_sync_workflow()
+        ↓
+    M11::generate_adaptation_suggestions()
+        ↓ (reads)
+    M9::compute_daily_metrics()
+    M10::get_current_plan()
+        ↓ (writes)
+    M3::write_yaml("plans/pending_suggestions.yaml")
+```
+
 ### 7.1 Called By
 
 | Module | When |
@@ -1222,7 +1266,7 @@ adaptations:
 
 | Module | Data |
 |--------|------|
-| M12 | Suggestions for user display |
+| M12 - Data Enrichment | Suggestions with interpretations for Claude Code |
 | M13 | Override patterns for memory extraction |
 
 ## 8. Test Scenarios

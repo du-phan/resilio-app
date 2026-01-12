@@ -6,10 +6,15 @@
 |-------|-------|
 | **Module ID** | M3 |
 | **Module Name** | Repository I/O |
-| **Version** | 1.0.0 |
+| **Code Module** | `core/repository.py` |
+| **Version** | 1.0.1 |
 | **Status** | Draft |
 | **Complexity** | Medium |
 | **Last Updated** | 2026-01-12 |
+
+### Changelog
+- **1.0.1** (2026-01-12): Added code module path (`core/repository.py`) and API layer integration notes. Note that this module is also exposed for direct file access by Claude Code for exploration.
+- **1.0.0** (initial): Initial draft with core repository I/O operations
 
 ---
 
@@ -67,7 +72,9 @@ All data schemas (ActivitySchema, ProfileSchema, etc.) are defined in a separate
 
 ---
 
-## 3. Public Interface
+## 3. Internal Interface
+
+**Note:** This module is called internally by all core modules for file operations. **Additionally, this module IS exposed for direct access** by Claude Code for exploration and debugging via `from sports_coach_engine.core.repository import RepositoryIO`.
 
 ### 3.1 Type Definitions
 
@@ -999,10 +1006,22 @@ def format_repo_error(error: RepoError) -> str:
 
 ## 7. Integration Points
 
-### 7.1 Module Usage Patterns
+### 7.1 Integration with API Layer
+
+This module is used by all core modules for file operations. **Additionally, this module is exposed for direct access by Claude Code** for exploration and debugging.
+
+```
+# Internal use by core modules
+API Layer → M1 (workflows) → M4/M9/M10 → M3::read_yaml/write_yaml()
+
+# Direct use by Claude Code for exploration
+Claude Code → core.repository::RepositoryIO → read_yaml(), list_files()
+```
+
+### 7.2 Module Usage Patterns
 
 ```python
-from sports_coach_engine.m03_repository import (
+from sports_coach_engine.core.repository import (
     read_yaml, write_yaml, list_files, with_lock,
     get_activity_path, RepoError
 )
@@ -1016,7 +1035,7 @@ if isinstance(profile, RepoError):
 
 write_yaml("athlete/profile.yaml", updated_profile)
 
-# M5 (Activity Ingestion) - Write activities with lock
+# M5 (Strava Integration) - Write activities with lock
 with with_lock("sync", ["activities/", "metrics/"]) as lock:
     if isinstance(lock, RepoError):
         print(f"Could not acquire lock: {lock.message}")
@@ -1045,14 +1064,21 @@ append_text(
     "conversations/2025-11-15_session.md",
     f"\n## User\n{message}\n"
 )
+
+# Claude Code - Direct file access for exploration
+repo = RepositoryIO()
+profile = repo.read_yaml("athlete/profile.yaml")
+activities = repo.list_files("activities/**/*.yaml")
 ```
 
-### 7.2 Module Dependencies (Who Calls M3)
+### 7.3 Module Dependencies (Who Calls M3)
 
 | Module | Operations Used |
 |--------|-----------------|
+| Claude Code (direct) | `read_yaml`, `list_files` (for exploration) |
+| API Layer | `read_yaml` (for initialization) |
 | M4 (Profile) | `read_yaml`, `write_yaml` |
-| M5 (Ingestion) | `write_yaml`, `get_activity_path`, `acquire_lock` |
+| M5 (Strava Integration) | `write_yaml`, `get_activity_path`, `acquire_lock` |
 | M6 (Normalization) | `write_yaml` |
 | M9 (Metrics) | `read_yaml`, `write_yaml`, `list_files` |
 | M10 (Plan Generator) | `read_yaml`, `write_yaml`, `get_workout_path` |
@@ -1060,7 +1086,7 @@ append_text(
 | M13 (Memory) | `read_yaml`, `write_yaml` |
 | M14 (Conversation) | `append_text`, `read_text` |
 
-### 7.3 Concurrency Model
+### 7.4 Concurrency Model
 
 - **Reads**: Safe for concurrent access (no locking needed)
 - **Writes**: Must acquire lock for batch operations

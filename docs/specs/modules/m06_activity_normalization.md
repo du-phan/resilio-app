@@ -6,9 +6,10 @@
 |-------|-------|
 | Module ID | M6 |
 | Name | Activity Normalization |
-| Version | 1.0.1 |
+| Code Module | `core/normalization.py` |
+| Version | 1.0.2 |
 | Status | Draft |
-| Dependencies | M3 (Repository I/O), M5 (Activity Ingestion), M7 (Notes & RPE Analyzer) |
+| Dependencies | M3 (Repository I/O), M5 (Strava Integration), M7 (Notes & RPE Analyzer) |
 
 ## 2. Purpose
 
@@ -38,7 +39,7 @@ Transform raw activity data from various sources into a consistent, validated sc
 | Module | Usage |
 |--------|-------|
 | M3 | Persist normalized activities to activities/ directory |
-| M5 | Receives RawActivity objects as input |
+| M5 (Strava Integration) | Receives RawActivity objects as input |
 | M7 | Receives treadmill detection results for surface_type |
 
 ### 3.2 External Libraries
@@ -48,7 +49,9 @@ pydantic>=2.0        # Data validation and serialization
 pyyaml>=6.0          # YAML output
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows as part of the sync pipeline. Claude Code should NOT import from `core/normalization.py` directly.
 
 **Note on Async Operations**: This specification shows `normalize_and_persist` as async for completeness. However, **v0 implementation should use synchronous I/O** to avoid over-engineering. Replace `async def` with `def` and remove `await` keywords. Async can be added in future versions if performance requires it.
 
@@ -898,30 +901,46 @@ def fill_required_defaults(raw: "RawActivity") -> "RawActivity":
 
 ## 8. Integration Points
 
-### 8.1 Called By
+### 8.1 Integration with API Layer
+
+This module is called internally by M1 workflows as part of the sync pipeline. Claude Code does NOT call M6 directly.
+
+```
+Claude Code → api.sync.sync_strava()
+                    │
+                    ▼
+              M1::run_sync_workflow()
+                    │
+                    ├─► M5::fetch_activities() → RawActivity[]
+                    ├─► M6::normalize_activity() → NormalizedActivity[]
+                    ├─► M7::analyze_notes()
+                    └─► M8::calculate_loads()
+```
+
+### 8.2 Called By
 
 | Module | When |
 |--------|------|
-| M1 | After M5 returns raw activities from sync |
+| M1 (Workflows) | After M5 returns raw activities from sync |
 
-### 8.2 Calls To
+### 8.3 Calls To
 
 | Module | Purpose |
 |--------|---------|
 | M3 | Write normalized activities to disk |
 | M7 | (Receives input) Treadmill detection results |
 
-### 8.3 Returns To
+### 8.4 Returns To
 
 | Module | Data |
 |--------|------|
 | M7 | Normalized activities for RPE extraction |
 | M8 | Normalized activities for load calculation |
 
-### 8.4 Data Flow
+### 8.5 Data Flow
 
 ```
-[M5 Ingestion]
+[M5 Strava Integration]
       │
       ▼ RawActivity[]
 [M6 Normalization] ◄── TreadmillDetection ──[M7 Notes Analyzer]
@@ -1107,5 +1126,6 @@ NORMALIZATION_CONFIG = {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.0.2 | 2026-01-12 | Added code module path (`core/normalization.py`) and API layer integration notes. Updated M5 references to "Strava Integration". |
 | 1.0.1 | 2026-01-12 | **Fixed type consistency and over-engineering**: (1) Converted `NormalizationResult` from `@dataclass` to `BaseModel` for Pydantic consistency. (2) Removed `dataclass` import. (3) Added note about v0 using synchronous I/O instead of async for `normalize_and_persist()` to avoid over-engineering. |
 | 1.0.0 | 2026-01-12 | Initial specification |

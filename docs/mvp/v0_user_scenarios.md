@@ -25,6 +25,7 @@ Each scenario is broken down into precise steps, mapped to technical modules (M1
 - **Single-user**: v0 assumes one athlete per repository. Multi-user support deferred to future versions.
 - **Strava required**: Activity data comes exclusively from Strava. Manual logging not supported in v0.
 - **Plan stability**: Adaptations are suggested, not auto-applied. The plan is a stable reference that changes only with user consent.
+- **Claude Code as Interface**: Claude Code (the AI) runs in the repository as the coach. It handles all natural language understanding, conversation management, and response formatting. The `sports-coach-engine` package provides callable Python functions that return structured data. Claude Code naturally understands user intent—no keyword matching or intent parsing logic is needed in the package.
 
 ### 1.4 Formatting Conventions
 
@@ -195,6 +196,18 @@ The athlete has a training plan and is actively training. During a typical week,
 **Key insight:** The user already HAS the plan. They don't ask "what should I do today?" They need status visibility and adjustment capability.
 
 ### 3.2 Interaction Patterns
+
+**Claude Code's Role in Patterns:**
+
+In all interaction patterns below, Claude Code (the AI running in the terminal) serves as the coach:
+
+1. **User speaks naturally** - No rigid command syntax required (e.g., "sync my Strava" or "update activities" both work)
+2. **Claude Code understands intent** - Uses natural language understanding to determine what the user wants
+3. **Claude Code calls package functions** - Invokes appropriate functions from `sports_coach_engine.api` (e.g., `sync_strava()`, `get_weekly_status()`)
+4. **Package returns structured data** - Functions return Pydantic models with enriched data (e.g., `SyncResult`, `EnrichedMetrics`, `WorkoutRecommendation`)
+5. **Claude Code formats response** - Crafts conversational response using the returned data, adapting to context and conversation history
+
+The package does NOT parse intent, match keywords, or generate formatted text responses—that's all Claude Code. The package focuses on training science, calculations, and data management.
 
 #### Pattern A: Sync Strava (2-3x per week)
 
@@ -648,11 +661,12 @@ Type "confirm reset" to proceed, or anything else to cancel.
 
 ### 5.1 Gaps Requiring Resolution Before Implementation
 
+**Note:** The "M1 intent parsing" gap identified in earlier drafts has been **resolved** by the "Claude Code as Interface" architecture. Claude Code (the AI) handles all natural language understanding and intent recognition. The package provides callable Python functions—no keyword matching or intent parsing logic is needed.
+
 | Gap                                    | Severity | Module(s) | Description                                                                                              |
 | -------------------------------------- | -------- | --------- | -------------------------------------------------------------------------------------------------------- |
-| **M1 intent parsing**                  | BLOCKING | M1        | No specification for how user input is interpreted. Need: intent classification rules, fallback handling |
 | **Pending suggestions data structure** | BLOCKING | M11       | New concept not in tech spec. Need: schema for suggestions queue, status transitions                     |
-| **Onboarding dialogue flow**           | HIGH     | M1, M12   | Sequence of questions undefined. Need: state machine for onboarding                                      |
+| **Onboarding dialogue flow**           | HIGH     | M1        | Sequence of questions undefined. Need: state machine for onboarding                                      |
 | **Memory deduplication**               | HIGH     | M13       | "Semantic similarity" undefined. Need: concrete matching algorithm                                       |
 | **Weekly refinement trigger**          | HIGH     | M10       | When/how does Tier 2 refinement happen? Need: explicit trigger and flow                                  |
 | **Conflict policy + safety override**  | MEDIUM   | M11       | Which takes precedence? Need: priority matrix                                                            |
@@ -661,40 +675,33 @@ Type "confirm reset" to proceed, or anything else to cancel.
 
 ### 5.2 Proposed Solutions
 
-#### M1 Intent Parsing
+#### M1 Intent Parsing (RESOLVED)
 
-Since v0 runs within Claude Code, intent parsing leverages Claude's natural language understanding. However, define canonical intents:
+**Status:** ✅ Resolved by Claude Code architecture.
 
-```yaml
-intents:
-  sync:
-    patterns: ["sync", "sync strava", "update activities", "import"]
-    action: trigger_strava_sync
+Claude Code (the AI) handles all intent understanding through natural language processing. No keyword matching or pattern rules are needed in the package.
 
-  status:
-    patterns: ["show my week", "where am i", "weekly status", "status"]
-    action: show_weekly_status
+**How it works:**
 
-  adjust:
-    patterns: ["move", "reschedule", "skip", "missed", "tired", "feeling"]
-    action: initiate_adjustment_dialogue
+1. User speaks naturally: "sync my Strava", "update activities", or "pull new workouts"
+2. Claude Code understands the intent (no keyword matching required)
+3. Claude Code calls the appropriate API function: `api.sync.sync_strava()`
+4. Package returns structured data: `SyncResult` with enriched metrics
+5. Claude Code formats conversational response based on context
 
-  next_week:
-    patterns: ["next week", "plan next week", "what's coming"]
-    action: show_or_generate_next_week
+**API Functions for Common Intents:**
 
-  summary:
-    patterns: ["how did my week go", "weekly summary", "review"]
-    action: generate_weekly_summary
+| User Intent      | Claude Code Calls                    | Returns                   |
+| ---------------- | ------------------------------------ | ------------------------- |
+| Sync activities  | `api.sync.sync_strava()`             | `SyncResult`              |
+| Show week status | `api.coach.get_weekly_status()`      | `WeeklyStatus`            |
+| Get today's plan | `api.coach.get_todays_workout()`     | `WorkoutRecommendation`   |
+| Check metrics    | `api.metrics.get_current_metrics()`  | `EnrichedMetrics`         |
+| View plan        | `api.plan.get_current_plan()`        | `TrainingPlan`            |
+| Accept change    | `api.plan.accept_suggestion(id)`     | `AcceptResult`            |
+| Change goal      | `api.profile.set_goal(...)`          | `Goal`                    |
 
-  goal_change:
-    patterns: ["change goal", "new goal", "switch to"]
-    action: initiate_goal_change
-
-  reset:
-    patterns: ["reset", "start fresh", "new athlete", "start over"]
-    action: initiate_reset_dialogue
-```
+All functions are documented in `CLAUDE.md` for Claude Code's reference.
 
 #### Pending Suggestions Schema
 

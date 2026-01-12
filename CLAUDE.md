@@ -78,28 +78,50 @@ systemic_load_au = base_effort_au × systemic_multiplier
 lower_body_load_au = base_effort_au × lower_body_multiplier
 ```
 
-### 4. Modular Architecture (v0)
+### 4. Claude Code as Interface
 
-The technical spec defines 14 modules with clear responsibilities:
+**Claude Code (the AI) is the user interface.** The sports-coach-engine package provides an API layer designed for Claude Code to call. Claude Code handles:
+- Understanding user intent (natural language)
+- Managing conversation flow and context
+- Formatting responses appropriately for the user
 
-| Module | Responsibility |
-|--------|---------------|
-| M1 - CLI Orchestrator | Parse user intent, orchestrate workflows |
-| M2 - Config & Secrets | Load settings, validate secrets |
-| M3 - Repository I/O | Centralized YAML/JSON read/write |
-| M4 - Profile Service | CRUD for athlete profile |
-| M5 - Activity Ingestion | Import from Strava + manual logging |
-| M6 - Activity Normalization | Normalize sport types, units |
-| M7 - Notes & RPE Analyzer | Extract wellness/effort from text |
-| M8 - Load Engine | Compute systemic + lower-body loads |
-| M9 - Metrics Engine | Compute CTL/ATL/TSB/ACWR/readiness |
-| M10 - Plan Generator | Build plans with training guardrails |
-| M11 - Adaptation Engine | Apply rules to adjust workouts |
-| M12 - Coach Response Formatter | Render user-facing outputs |
-| M13 - Memory & Insights | Extract durable athlete facts |
-| M14 - Conversation Logger | Persist session transcripts |
+**The package provides:**
+- `sports_coach_engine.api` — Public functions for all operations
+- Rich return types with interpretations (CTL=44 → "solid recreational level")
+- Direct file access via `RepositoryIO` for exploration
 
-### 5. Training Science Guardrails
+### 5. Modular Architecture (v0)
+
+The technical spec defines 14 modules. Claude Code calls the API layer, which internally orchestrates the modules.
+
+**API Layer (Public):**
+| Module | Code Path | Purpose |
+|--------|-----------|---------|
+| api/coach.py | `api.coach` | Workouts, weekly status |
+| api/sync.py | `api.sync` | Strava sync, manual logging |
+| api/metrics.py | `api.metrics` | CTL/ATL/TSB/ACWR/readiness |
+| api/plan.py | `api.plan` | Plans, suggestions |
+| api/profile.py | `api.profile` | Athlete profile management |
+
+**Internal Modules:**
+| Module | Code Path | Responsibility |
+|--------|-----------|---------------|
+| M1 - Internal Workflows | `core/workflows.py` | Orchestrate multi-step operations |
+| M2 - Config & Secrets | `core/config.py` | Load settings, validate secrets |
+| M3 - Repository I/O | `core/repository.py` | Centralized YAML/JSON read/write |
+| M4 - Profile Service | `core/profile.py` | CRUD for athlete profile |
+| M5 - Strava Integration | `core/strava.py` | Import from Strava + manual logging |
+| M6 - Activity Normalization | `core/normalization.py` | Normalize sport types, units |
+| M7 - Notes & RPE Analyzer | `core/notes.py` | Extract wellness/effort from text |
+| M8 - Load Engine | `core/load.py` | Compute systemic + lower-body loads |
+| M9 - Metrics Engine | `core/metrics.py` | Compute CTL/ATL/TSB/ACWR/readiness |
+| M10 - Plan Generator | `core/plan.py` | Build plans with training guardrails |
+| M11 - Adaptation Engine | `core/adaptation.py` | Apply rules to adjust workouts |
+| M12 - Data Enrichment | `core/enrichment.py` | Add interpretive context to raw data |
+| M13 - Memory & Insights | `core/memory.py` | Extract durable athlete facts |
+| M14 - Conversation Logger | `core/logger.py` | Persist session transcripts |
+
+### 6. Training Science Guardrails
 
 The system enforces evidence-based training principles:
 
@@ -110,13 +132,13 @@ The system enforces evidence-based training principles:
 - **T/I/R volume limits**: Threshold ≤10%, Intervals ≤8%, Repetition ≤5% of weekly mileage
 - **Conflict policy**: User-defined rules for when running and primary sport collide
 
-### 6. User Interaction Model
+### 7. User Interaction Model
 
-Users interact via natural conversation:
-- "Sync my Strava" → imports activities, recalculates metrics
-- "What should I do today?" → gets workout with rationale based on current data
-- "I'm feeling tired" → triggers adaptation logic
-- "Change my goal to 10K in March" → regenerates plan
+Users interact via natural conversation. Claude Code understands intent and calls the appropriate API functions:
+- "Sync my Strava" → `sync_strava()` → imports activities, recalculates metrics
+- "What should I do today?" → `get_todays_workout()` → gets workout with rationale
+- "I'm feeling tired" → triggers adaptation logic via `get_todays_workout(wellness_override=...)`
+- "Change my goal to 10K in March" → `set_goal()` + `regenerate_plan()`
 
 ## Training Methodologies
 
@@ -156,20 +178,47 @@ Automatic adaptations fire when:
 
 ### Typical "Sync Strava" Flow
 ```
-M1 (CLI) → M2 (config) → M5 (Strava API) → M6 (normalize)
-→ M7 (analyze RPE/notes) → M8 (compute loads)
-→ M13 (update memories) → M9 (recalculate metrics)
-→ M11 (check adaptations) → M12 (format response)
-→ M14 (log conversation)
+User: "sync my Strava"
+    │
+    ▼
+Claude Code: understands intent
+    │
+    ▼ calls
+api.sync.sync_strava()
+    │
+    ▼ internally orchestrates
+M1 (workflows) → M5 (Strava) → M6 (normalize) → M7 (notes)
+    → M8 (loads) → M9 (metrics) → M11 (adaptations) → M13 (memories)
+    │
+    ▼ returns
+SyncSummary (enriched by M12)
+    │
+    ▼
+Claude Code: crafts natural response from structured data
 ```
 
 ### Typical "What should I do today?" Flow
 ```
-M1 → M3/M4/M10 (read profile + plan)
-→ M9 (compute current status if stale)
-→ M11 (check if adaptation needed)
-→ M12 (render workout + rationale)
-→ M14 (log)
+User: "what should I do today?"
+    │
+    ▼
+Claude Code: understands intent
+    │
+    ▼ calls
+api.coach.get_todays_workout()
+    │
+    ▼ internally orchestrates
+M1 (workflows) → M9 (metrics) → M10 (plan) → M11 (adaptations)
+    │
+    ▼ returns
+EnrichedWorkout (enriched by M12) with:
+    - workout prescription
+    - rationale (why this workout today)
+    - current metrics context
+    - any pending suggestions
+    │
+    ▼
+Claude Code: crafts natural response from structured data
 ```
 
 ## Key Metrics
@@ -263,8 +312,88 @@ The AI coach should be:
 | Yoga (flow) | 0.35 | 0.10 |
 | Yoga (restorative) | 0.00 | 0.00 |
 
+## API Reference for Claude Code
+
+### Quick Start
+```python
+from sports_coach_engine.api import sync_strava, get_todays_workout, get_current_metrics
+
+result = sync_strava()
+workout = get_todays_workout()
+metrics = get_current_metrics()
+```
+
+### Available Functions
+
+#### Sync Operations (api.sync)
+| Function | Purpose | When to Use |
+|----------|---------|-------------|
+| `sync_strava()` | Import activities from Strava | User says "sync", "update activities", "import from Strava" |
+| `log_activity(sport_type, duration_minutes, ...)` | Log manual activity | User logs a workout manually |
+
+#### Coach Operations (api.coach)
+| Function | Purpose | When to Use |
+|----------|---------|-------------|
+| `get_todays_workout(target_date=None)` | Get workout for a day | User asks "what should I do today?", "what's my workout?" |
+| `get_weekly_status()` | Get week overview with activities | User asks "show my week", "weekly summary" |
+| `get_training_status()` | Get CTL/ATL/TSB/ACWR/readiness | User asks "how am I doing?", "my fitness" |
+
+#### Metrics Operations (api.metrics)
+| Function | Purpose | When to Use |
+|----------|---------|-------------|
+| `get_current_metrics()` | Get current metrics with interpretations | User asks about CTL, TSB, form, fitness |
+| `get_readiness()` | Get readiness score with breakdown | User asks "am I ready?", "should I train hard?" |
+
+#### Plan Operations (api.plan)
+| Function | Purpose | When to Use |
+|----------|---------|-------------|
+| `get_current_plan()` | Get full training plan | User asks to see their plan |
+| `regenerate_plan(goal=None)` | Generate new plan | User wants fresh plan, changes goal |
+| `get_pending_suggestions()` | Get adaptation suggestions | User asks about adjustments |
+| `accept_suggestion(id)` | Accept an adaptation | User says "yes", "accept" to suggestion |
+| `decline_suggestion(id)` | Decline an adaptation | User says "no", "decline" to suggestion |
+
+#### Profile Operations (api.profile)
+| Function | Purpose | When to Use |
+|----------|---------|-------------|
+| `get_profile()` | Get athlete profile | User asks about their settings |
+| `update_profile(**fields)` | Update profile fields | User changes preferences |
+| `set_goal(race_type, target_date, ...)` | Set a race goal | User sets a new goal |
+
+### Return Types
+
+All API functions return **rich Pydantic models** with interpretive context:
+
+```python
+# EnrichedMetrics example
+metrics.ctl.value          # 44 (raw number)
+metrics.ctl.interpretation # "solid recreational level"
+metrics.ctl.zone           # MetricZone.RECREATIONAL
+metrics.ctl.trend          # "+2 from last week"
+
+# EnrichedWorkout example
+workout.workout_type_display  # "Tempo Run"
+workout.duration_formatted    # "45 minutes"
+workout.rationale.primary_reason  # "Form is good"
+workout.rationale.training_purpose  # "lactate threshold improvement"
+workout.current_readiness.interpretation  # "ready for normal training"
+```
+
+### Direct Data Access
+
+For exploration or custom queries, use RepositoryIO directly:
+```python
+from sports_coach_engine.core.repository import RepositoryIO
+
+repo = RepositoryIO()
+profile = repo.read_yaml("athlete/profile.yaml")
+activities = repo.list_files("activities/**/*.yaml")
+raw_metrics = repo.read_yaml("metrics/daily/2026-01-12.yaml")
+```
+
 ## Resources
 
 - Full PRD: `docs/mvp/v0_product_requirements_document.md` (comprehensive, read this for complete understanding)
 - Technical spec: `docs/mvp/v0_technical_specification.md` (architecture and modules)
+- API layer spec: `docs/specs/api_layer.md` (detailed API design)
 - 80/20 methodology: `docs/training_books/80_20_matt_fitzgerald.md` (core training philosophy)

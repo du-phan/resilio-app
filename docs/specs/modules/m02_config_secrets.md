@@ -6,12 +6,14 @@
 |-------|-------|
 | **Module ID** | M2 |
 | **Module Name** | Config & Secrets |
-| **Version** | 1.0.1 |
+| **Code Module** | `core/config.py` |
+| **Version** | 1.0.2 |
 | **Status** | Draft |
 | **Complexity** | Low |
 | **Last Updated** | 2026-01-12 |
 
 ### Changelog
+- **1.0.2** (2026-01-12): Added code module path (`core/config.py`) and API layer integration notes
 - **1.0.1** (2026-01-12): Added `ConversationLoggerSettings` for M14 configuration (two-tier retention, summary generation settings)
 - **1.0.0** (initial): Initial draft with core config/secrets types
 
@@ -64,7 +66,9 @@ M2 is responsible for loading, validating, and providing access to application c
 
 ---
 
-## 3. Public Interface
+## 3. Internal Interface
+
+**Note:** This module is called internally by other core modules and the API layer. Claude Code should NOT import from `core/config.py` directly for configuration access.
 
 ### 3.1 Type Definitions
 
@@ -884,10 +888,19 @@ def format_error(error: ConfigError) -> str:
 
 ## 7. Integration Points
 
-### 7.1 How Other Modules Call M2
+### 7.1 Integration with API Layer
+
+This module is called internally by core modules and the API layer. Claude Code does NOT call M2 directly.
+
+```
+API Layer → M1 (workflows) → M5 (strava) → M2::get_valid_strava_token()
+                           → M9 (metrics) → M2::load_config()
+```
+
+### 7.2 How Other Modules Call M2
 
 ```python
-from sports_coach_engine.m02_config import load_config, get_valid_strava_token, ConfigError
+from sports_coach_engine.core.config import load_config, get_valid_strava_token, ConfigError
 
 # M1, M5, and others call load_config() at startup
 config = load_config()
@@ -895,7 +908,7 @@ if isinstance(config, ConfigError):
     # Handle error
     raise ConfigurationException(format_error(config))
 
-# M5 (Activity Ingestion) gets Strava token
+# M5 (Strava Integration) gets Strava token
 token = await get_valid_strava_token(config)
 if isinstance(token, ConfigError):
     # Handle token error - may need re-auth
@@ -906,16 +919,17 @@ api_base_url = config.settings.strava.api_base_url
 ctl_time_constant = config.settings.training_defaults.ctl_time_constant
 ```
 
-### 7.2 Module Dependencies (Who Calls M2)
+### 7.3 Module Dependencies (Who Calls M2)
 
 | Module | Usage |
 |--------|-------|
-| M1 (CLI Orchestrator) | Load config at startup |
+| API Layer | Initialize configuration for API functions |
+| M1 (Workflows) | Load config at workflow startup |
 | M3 (Repository I/O) | Get path settings |
-| M5 (Activity Ingestion) | Get Strava tokens and API config |
+| M5 (Strava Integration) | Get Strava tokens and API config |
 | M9 (Metrics Engine) | Get CTL/ATL time constants |
 
-### 7.3 Events/Hooks
+### 7.4 Events/Hooks
 
 M2 does not emit events. It is a synchronous configuration provider (except for async token refresh).
 

@@ -6,11 +6,13 @@
 |-------|-------|
 | Module ID | M13 |
 | Name | Memory & Insights |
-| Version | 1.0.1 |
+| Code Module | `core/memory.py` |
+| Version | 1.0.2 |
 | Status | Draft |
 | Dependencies | M3 (Repository I/O), M7 (Notes & RPE Analyzer) |
 
 ### Changelog
+- **1.0.2** (2026-01-12): Added code module path (`core/memory.py`) and API layer integration notes.
 - **1.0.1** (2026-01-12): Converted all dataclass types to BaseModel for consistency. Added complete algorithms for `process_user_message()`, `merge_memories()`, `get_memories_by_type()`, `archive_memory()`, and `cleanup_archived()` to remove `...` placeholders and make spec LLM-implementable.
 - **1.0.0** (initial): Initial draft with comprehensive memory extraction and deduplication algorithms
 
@@ -30,7 +32,7 @@ Extract and persist durable athlete facts from activity notes and conversations.
 
 **Out of Scope:**
 - Analyzing activity notes for RPE (M7)
-- Rendering memories for display (M12)
+- Enriching memories with interpretations (M12 - Data Enrichment)
 - Storing conversation transcripts (M14)
 
 ## 3. Dependencies
@@ -48,7 +50,9 @@ Extract and persist durable athlete facts from activity notes and conversations.
 pydantic>=2.0        # Data models
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows and the API layer. Claude Code should NOT import from `core/memory.py` directly—memories are accessed through enriched data returned by API functions (e.g., `WorkoutRecommendation.relevant_memories`).
 
 ### 4.1 Type Definitions
 
@@ -976,6 +980,45 @@ archived:
 
 ## 7. Integration Points
 
+**Integration with API Layer:**
+
+This module is called internally by M1 workflows during sync and conversation processing. Claude Code receives memories indirectly through enriched API responses.
+
+**Memory Flow:**
+
+```
+Automatic extraction (during sync):
+    M1::run_sync_workflow()
+        ↓
+    M7::analyze_notes() → extracts injury flags, wellness signals
+        ↓
+    M13::process_activity_notes() → extracts memories
+        ↓
+    M13::merge_memories() → deduplicate and persist
+        ↓
+    M3::write_yaml("athlete/memories.yaml")
+
+User message processing:
+    Claude Code (receives user message)
+        ↓
+    M1::process_conversation()
+        ↓
+    M13::process_user_message() → extract memories
+        ↓
+    M13::merge_memories() → deduplicate and persist
+
+Memory usage in responses:
+    Claude Code → api.coach.get_todays_workout()
+        ↓
+    M10::get_todays_workout()
+        ↓
+    M13::get_relevant_memories(context="today's workout")
+        ↓
+    M12::enrich_workout(workout, memories) → WorkoutRecommendation
+        ↓ (includes)
+    WorkoutRecommendation.relevant_memories
+```
+
 ### 7.1 Called By
 
 | Module | When |
@@ -996,7 +1039,7 @@ archived:
 |--------|------|
 | M1 | Context for personalized responses |
 | M11 | Pattern insights for adaptation |
-| M12 | Memories for display |
+| M12 - Data Enrichment | Memories for inclusion in enriched responses |
 
 ## 8. Test Scenarios
 

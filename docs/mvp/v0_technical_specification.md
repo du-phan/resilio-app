@@ -59,24 +59,58 @@ This section organizes v0 features into **clean modules** with explicit responsi
 inputs/outputs, and data ownership. The goal is to keep the system maintainable and
 easy to evolve while avoiding overengineering.
 
+### 4.0 Claude Code as Interface
+
+**Architectural Decision:** Claude Code (the AI) is the user interface. The package provides an **API layer** (`sports_coach_engine/api/`) that Claude Code calls. This means:
+
+- **Claude Code handles:** Intent understanding, conversation management, response formatting
+- **Package provides:** Callable Python functions that return rich, structured data
+- **No keyword-based intent parsing:** Claude naturally understands user intent
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Claude Code                              │
+│  (Intent understanding, conversation, response formatting)       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ calls
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    API Layer (PUBLIC)                            │
+│  sports_coach_engine.api.*                                       │
+│  - sync_strava(), get_todays_workout(), get_current_metrics()    │
+│  - Returns: EnrichedWorkout, SyncSummary, EnrichedMetrics        │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ calls internally
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Internal Modules (M1-M14)                       │
+│  Pure domain logic, no intent parsing, no prose generation       │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+See `docs/specs/api_layer.md` for full API documentation.
+
 ### 4.1 Module Map (v0)
 
-| Module ID | Name                            | Primary Responsibility                                    | Inputs                                 | Outputs                                  | Owned Data                 |
-| --------- | ------------------------------- | --------------------------------------------------------- | -------------------------------------- | ---------------------------------------- | -------------------------- |
-| M1        | CLI / Conversation Orchestrator | Interpret user intent and orchestrate workflows           | User command, config                   | Console response, module calls           | None                       |
-| M2        | Config & Secrets                | Read/validate settings and secrets                        | `config/` files, env vars              | Config object                            | `config/` files            |
-| M3        | Repository I/O                  | Read/write YAML/JSON, resolve paths, ensure atomic writes | File paths, data objects               | Persisted files                          | All persisted files        |
-| M4        | Athlete Profile Service         | CRUD for profile + preferences + conflict policy          | Profile updates                        | `athlete/profile.yaml`                   | `athlete/profile.yaml`     |
-| M5        | Activity Ingestion              | Import activities (Strava + manual)                       | Strava data / user input               | Raw activity objects + sync state update | None                       |
-| M6        | Activity Normalization          | Normalize sport types, units, structure                   | Raw activity objects                   | Normalized activity objects              | `activities/` (normalized) |
-| M7        | Notes & RPE Analyzer            | Extract RPE, soreness, wellness, and red flags            | Activity notes                         | Estimated RPE + flags                    | Derived fields in activity |
-| M8        | Load Engine                     | Compute systemic + lower-body loads                       | Normalized activity + RPE              | `calculated.*` fields                    | Derived fields in activity |
-| M9        | Metrics Engine                  | Compute daily/weekly metrics + intensity distribution     | Activity loads                         | `metrics/daily/*.yaml`, summary          | `metrics/`                 |
-| M10       | Plan Generator                  | Build plan/workouts with guardrails                       | Profile + constraints                  | `plans/current_plan.yaml`, workouts      | `plans/`                   |
-| M11       | Adaptation Engine               | Apply rules to adjust workouts and protect recovery       | Plan + metrics + flags                 | Updated plan/workouts + logs             | `plans/`                   |
-| M12       | Coach Response Formatter        | Render outputs for the user                               | Plan + metrics + context               | Console responses                        | None                       |
-| M13       | Memory & Insights               | Extract durable athlete facts                             | Activity notes + conversation snippets | Updated memories                         | `athlete/memories.yaml`    |
-| M14       | Conversation Logger             | Persist session transcripts                               | User/coach messages                    | Markdown logs                            | `conversations/`           |
+| Module ID | Name                    | Code Path              | Primary Responsibility                               | Owned Data                 |
+| --------- | ----------------------- | ---------------------- | ---------------------------------------------------- | -------------------------- |
+| API       | API Layer               | `api/*.py`             | Public interface for Claude Code                     | None                       |
+| M1        | Internal Workflows      | `core/workflows.py`    | Orchestrate multi-step operations                    | None                       |
+| M2        | Config & Secrets        | `core/config.py`       | Read/validate settings and secrets                   | `config/` files            |
+| M3        | Repository I/O          | `core/repository.py`   | Read/write YAML/JSON, atomic writes                  | All persisted files        |
+| M4        | Athlete Profile Service | `core/profile.py`      | CRUD for profile + preferences                       | `athlete/profile.yaml`     |
+| M5        | Strava Integration      | `core/strava.py`       | Import activities from Strava + manual logging       | None                       |
+| M6        | Activity Normalization  | `core/normalization.py`| Normalize sport types, units, structure              | `activities/` (normalized) |
+| M7        | Notes & RPE Analyzer    | `core/notes.py`        | Extract RPE, soreness, wellness, red flags           | Derived fields in activity |
+| M8        | Load Engine             | `core/load.py`         | Compute systemic + lower-body loads                  | Derived fields in activity |
+| M9        | Metrics Engine          | `core/metrics.py`      | Compute CTL/ATL/TSB/ACWR, readiness                  | `metrics/`                 |
+| M10       | Plan Generator          | `core/plan.py`         | Build plan/workouts with guardrails                  | `plans/`                   |
+| M11       | Adaptation Engine       | `core/adaptation.py`   | Apply rules to adjust workouts                       | `plans/`                   |
+| M12       | Data Enrichment         | `core/enrichment.py`   | Add interpretive context to raw data                 | None                       |
+| M13       | Memory & Insights       | `core/memory.py`       | Extract durable athlete facts                        | `athlete/memories.yaml`    |
+| M14       | Conversation Logger     | `core/logger.py`       | Persist session transcripts                          | `conversations/`           |
 
 #### Initialization Sequence (Cold Start)
 
@@ -110,46 +144,47 @@ When an athlete first connects with no training history, the system must handle 
 Each module has a narrow, testable contract. Modules do **not** mutate each other’s data directly.
 All persistence flows through `M3 Repository I/O`.
 
-#### M1 — CLI / Conversation Orchestrator
+#### M1 — Internal Workflows
 
 **Responsibilities**
 
-- Parse user intent (sync, log activity, show plan, ask for today’s workout).
-- Invoke the minimal set of modules to fulfill the request.
-- Handle user confirmation questions (e.g., conflict policy set to `ask_each_time`).
+- Orchestrate multi-step operations by chaining modules
+- Coordinate transactional operations (rollback on failure)
+- Handle inter-module data flow (output of M5 feeds M6 feeds M7...)
+
+**Note:** M1 is an **internal module** called by the API layer. Claude Code does NOT call M1 directly—it calls API functions (`sync_strava()`, `get_todays_workout()`, etc.) which delegate to M1 workflows internally.
+
+**What M1 Does NOT Do:**
+
+- Intent parsing (Claude Code handles this naturally)
+- Response formatting (Claude Code handles this conversationally)
+- User interaction (the API layer handles this)
 
 **Inputs**
 
-- User text input
+- Repository instance
 - Config object (from M2)
+- Parameters from API layer
 
 **Outputs**
 
-- Human-readable response (via M12)
-- Module calls to M4–M11
+- Structured workflow results (`SyncWorkflowResult`, `MetricsRefreshResult`, etc.)
+- These are enriched by M12 before returning to Claude Code
+
+**Key Workflows**
+
+| Workflow | Pipeline | Called by API |
+| -------- | -------- | ------------- |
+| `run_sync_workflow()` | M5 → M6 → M7 → M8 → M9 → M11 → M13 | `api.sync.sync_strava()` |
+| `run_metrics_refresh()` | M9 → M11 | `api.metrics.get_current_metrics()` |
+| `run_plan_generation()` | M4 → M9 → M10 | `api.plan.regenerate_plan()` |
+| `run_adaptation_check()` | M9 → M10 → M11 | `api.coach.get_todays_workout()` |
 
 **Depends on**
 
 - M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13, M14
 
-#### M1 Intent Classification (v0)
-
-Since v0 runs within Claude Code, intent parsing leverages Claude's natural language understanding.
-However, the following canonical intents and their patterns are defined for consistency:
-
-| Intent        | Example Patterns                                           | Action                         |
-| ------------- | ---------------------------------------------------------- | ------------------------------ |
-| `sync`        | "sync", "sync strava", "update activities", "import"       | `trigger_strava_sync`          |
-| `status`      | "show my week", "where am I", "weekly status", "status"    | `show_weekly_status`           |
-| `adjust`      | "move", "reschedule", "skip", "missed", "tired", "feeling" | `initiate_adjustment_dialogue` |
-| `next_week`   | "next week", "plan next week", "what's coming"             | `show_or_generate_next_week`   |
-| `summary`     | "how did my week go", "weekly summary", "review"           | `generate_weekly_summary`      |
-| `goal_change` | "change goal", "new goal", "switch to"                     | `initiate_goal_change`         |
-| `reset`       | "reset", "start fresh", "new athlete", "start over"        | `initiate_reset_dialogue`      |
-
-**Fallback behavior:** If intent is ambiguous, M1 asks a clarifying question before proceeding.
-
-**Multi-intent handling:** If user message contains multiple intents (e.g., "sync and show my week"), execute in logical order: sync first, then status.
+See `docs/specs/modules/m01_workflows.md` for full specification.
 
 #### Cross-Cutting Concerns (Validation & Resilience)
 
@@ -231,13 +266,14 @@ On profile save, M4 must validate:
 
 - M3
 
-#### M5 — Activity Ingestion
+#### M5 — Strava Integration
 
 **Responsibilities**
 
-- Strava sync (manual trigger, idempotent).
-- Manual activity logging (user-provided).
-- Update sync state (`last_strava_sync_at`, `last_strava_activity_id`).
+- Strava sync (manual trigger, idempotent)
+- Manual activity logging (user-provided)
+- Update sync state (`last_strava_sync_at`, `last_strava_activity_id`)
+- Handle Strava OAuth token refresh
 
 **Inputs**
 
@@ -252,12 +288,22 @@ On profile save, M4 must validate:
 
 - M2 (secrets), M3 (persistence)
 
+**Integration with API Layer**
+
+This module is called internally by M1 workflows. Claude Code should NOT import from `core/strava.py` directly.
+
+```
+Claude Code → api/sync.py::sync_strava() → M1::run_sync_workflow() → M5::fetch_activities()
+```
+
 **Strava API Limitations:**
 
 - **Best Efforts/PRs**: Available via `best_efforts` field in DetailedActivity, but requires fetching each activity individually (rate-limited). No dedicated PR/best-effort endpoint.
 - **Strategy**: Ask users for PRs at onboarding; build `best_efforts` cache incrementally from synced activities.
 - **Race Detection**: `workout_type=1` indicates race (undocumented field, values 0-3 for running). Many users don't tag races.
 - **Strategy**: Check `workout_type=1` as signal; also parse descriptions for race keywords ("race", "5K", "PB", "PR").
+
+See `docs/specs/modules/m05_strava.md` for full specification.
 
 #### M6 — Activity Normalization
 
@@ -455,70 +501,88 @@ When multiple concerns apply, resolve in this order:
    - If `ask_each_time`: present suggestion and wait for response
    - If `primary_sport_wins` or `running_goal_wins`: apply policy logic
 
-#### M12 — Coach Response Formatter
+#### M12 — Data Enrichment
 
 **Responsibilities**
 
-- Render concise, actionable responses in terminal.
-- Explain the “why” using metrics and the athlete’s context.
+- Add interpretive context to raw metric values (CTL=44 → "solid recreational level")
+- Provide training zone classifications ("safe", "productive", "high_risk")
+- Calculate trends and deltas with context
+- Enrich workout prescriptions with rationale and guidance
+- Return structured data models with interpretive fields
+
+**Note:** M12 does NOT generate prose or formatted text. It returns **structured data** that Claude Code uses to craft natural responses.
 
 **Inputs**
 
-- Plan + metrics + recent activities
+- Raw metrics from M9
+- Raw workout prescriptions from M10
+- Historical data for trend calculation
 
 **Outputs**
 
-- User-facing output text
+- `EnrichedMetrics` — metrics with interpretations and zones
+- `EnrichedWorkout` — workout with rationale and current context
+- `SyncSummary` — sync result with metric changes
+- Other enriched data models
 
 **Depends on**
 
 - M3, M9, M10, M11
 
-**Multi-Sport Display Requirements:**
+**Integration with API Layer**
 
-When rendering weekly status or sync responses, M12 must:
-
-1. **Show ALL activities** (not just running) — include running, climbing, cycling, yoga, etc.
-2. **Include load breakdown** (systemic + lower-body) for each activity
-3. **Explain cross-sport impact** on running readiness (e.g., "climbing was upper-body focused, so legs are fresh")
-4. **Reference conflict policy** when relevant (e.g., "Given your Thursday bouldering session is fixed...")
-5. **Use full dates** in activity references: "Tuesday January 7th" not "Tuesday"
-
-**Metric Accessibility Requirements:**
-
-When rendering metrics, M12 must:
-
-1. **Always include parenthetical context**: "CTL: 44 (solid recreational level)" not "CTL: 44"
-2. **Show trends where available**: "(+2 this week)" not just static value
-3. **Translate status zones**: "TSB: -8 (productive training zone)" not "TSB: -8"
-4. **Connect metrics to recommendations**: "ACWR is safe, so tempo run is good to go"
-5. **Apply progressive disclosure**:
-   - Weeks 1-2: Focus on volume and easy/hard distribution
-   - Weeks 3-4: Introduce CTL/ATL/TSB
-   - Week 5+: Add ACWR (after 28-day baseline)
-
-**Example Weekly Status Display:**
+This module is called by the API layer to enrich workflow results before returning to Claude Code.
 
 ```
-Week 3 of 14 (Build Phase) — January 13-19
-
-Mon Jan 13: Bouldering (2h) ✓ — load: 630 AU systemic | 105 AU lower-body
-Tue Jan 14: Tempo 45min → Done (48min @ 5:08/km, felt strong!)
-            → Systemic: 336 AU | Lower-body: 336 AU
-Wed Jan 15: Easy 35min → Done (35min)
-Thu Jan 16: Bouldering (2h) + Easy 30min → TODAY
-Fri Jan 17: Rest
-Sat Jan 18: Long run 14km → Scheduled
-Sun Jan 19: Cycling 90min (planned, weather dependent)
-
-Running Progress: 2/4 complete
-Total Week Load: 1,106 AU systemic | 581 AU lower-body (so far)
-
-Current Status:
-- Fitness (CTL): 44 (+2 this week) — solid recreational level
-- Form (TSB): -8 (productive training zone)
-- ACWR: 1.15 (safe)
+M1 Workflow returns: DailyMetrics (raw numbers)
+        │
+        ▼
+API Layer calls: enrich_metrics(raw_metrics)
+        │
+        ▼
+M12 returns: EnrichedMetrics (numbers + interpretations)
+        │
+        ▼
+API Layer returns to Claude Code: EnrichedMetrics
+        │
+        ▼
+Claude Code crafts: Natural conversational response
 ```
+
+**Key Enrichment Functions:**
+
+- `enrich_metrics()` — Add context to CTL/ATL/TSB/ACWR/readiness
+- `enrich_workout()` — Add rationale and guidance to workout prescription
+- `enrich_sync_result()` — Summarize sync with metric changes
+- `interpret_metric()` — Get zone and interpretation for a single metric
+
+**Example Enriched Data:**
+
+```python
+# EnrichedMetrics returned to Claude Code
+{
+    "ctl": {
+        "value": 44,
+        "formatted_value": "44",
+        "zone": "recreational",
+        "interpretation": "solid recreational level",
+        "trend": "+2 from last week"
+    },
+    "tsb": {
+        "value": -8,
+        "formatted_value": "-8",
+        "zone": "productive",
+        "interpretation": "productive training zone",
+        "trend": None
+    },
+    "disclosure_level": "intermediate",  # Progressive disclosure
+    "low_intensity_percent": 82.5,
+    "intensity_on_target": True
+}
+```
+
+See `docs/specs/modules/m12_enrichment.md` for full specification.
 
 #### M13 — Memory & Insights
 

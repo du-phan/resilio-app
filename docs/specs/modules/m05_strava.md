@@ -1,18 +1,21 @@
-# M5 — Activity Ingestion
+# M5 — Strava Integration
 
 ## 1. Metadata
 
 | Field        | Value                                                            |
 | ------------ | ---------------------------------------------------------------- |
 | Module ID    | M5                                                               |
-| Name         | Activity Ingestion                                               |
-| Version      | 1.0.1                                                            |
+| Name         | Strava Integration                                               |
+| Code Module  | `core/strava.py`                                                 |
+| Version      | 1.1.0                                                            |
 | Status       | Draft                                                            |
 | Dependencies | M2 (Config & Secrets), M3 (Repository I/O), M4 (Athlete Profile) |
 
 ## 2. Purpose
 
-Import activities from external sources (Strava API) and manual user input. Produces raw activity objects passed to M6 for normalization. Maintains sync state to support idempotent, incremental syncs.
+Import activities from Strava API and handle manual user input. Produces raw activity objects passed to M6 for normalization. Maintains sync state to support idempotent, incremental syncs.
+
+**Architectural Role:** This module is called internally by the Workflows module (M1) as part of the sync pipeline. The API layer (`api/sync.py`) initiates syncs by calling M1 workflows, which then call M5.
 
 ### 2.1 Scope Boundaries
 
@@ -800,39 +803,53 @@ async def sync_strava_safe(
 
 ## 8. Integration Points
 
-### 8.1 Called By
+### 8.1 Integration with API Layer
 
-| Module | When                                |
-| ------ | ----------------------------------- |
-| M1     | User triggers "sync strava" command |
-| M1     | User manually logs an activity      |
+This module is called internally by M1 workflows. Claude Code should NOT import from `core/strava.py` directly.
 
-### 8.2 Calls To
+```
+Claude Code → api/sync.py::sync_strava() → M1::run_sync_workflow() → M5::fetch_activities()
+```
+
+### 8.2 Called By
+
+| Module | When                                                |
+| ------ | --------------------------------------------------- |
+| M1     | `run_sync_workflow()` calls `fetch_activities()`    |
+| M1     | `run_manual_activity_workflow()` uses manual input  |
+
+### 8.3 Calls To
 
 | Module | Purpose                               |
 | ------ | ------------------------------------- |
 | M2     | Get Strava credentials, refresh token |
 | M3     | Read/write training_history.yaml      |
 
-### 8.3 Returns To
+### 8.4 Returns To
 
 | Module | Data                                  |
 | ------ | ------------------------------------- |
 | M6     | List of RawActivity for normalization |
 
-### 8.4 Sync Pipeline Position
+### 8.5 Sync Pipeline Position
 
 ```
-User Request
+Claude Code
     │
-    ▼
-[M1 CLI] ──> [M5 Ingestion] ──> [M6 Normalization] ──> [M7 RPE Analyzer]
-                  │                                             │
-                  │                                             ▼
-                  └── RawActivity[] ──────────────────> [M8 Load Engine]
-                                                                │
-                                                                ▼
-                                                        [M9 Metrics]
+    ▼ calls
+[API Layer: sync_strava()]
+    │
+    ▼ delegates to
+[M1 Workflows: run_sync_workflow()]
+    │
+    ▼ calls
+[M5 Strava] ──> [M6 Normalization] ──> [M7 RPE Analyzer]
+      │                                         │
+      │                                         ▼
+      └── RawActivity[] ─────────────> [M8 Load Engine]
+                                                │
+                                                ▼
+                                        [M9 Metrics]
 ```
 
 ## 9. Test Scenarios
@@ -1058,5 +1075,6 @@ STRAVA_FETCH_DETAILS=false
 
 | Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1.0   | 2026-01-12 | **Renamed to Strava Integration**: Renamed from "Activity Ingestion" to "Strava Integration" for clarity. Added code module path (`core/strava.py`). Updated integration points to reflect API layer architecture - this module is called by M1 workflows, not directly by Claude Code. |
 | 1.0.1   | 2026-01-12 | **Fixed cross-module consistency and over-engineering**: (1) Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (RawActivity, SyncState, SyncResult). (2) **CRITICAL FIX**: Aligned SyncState field names with M4's training_history.yaml schema - changed `last_sync_at` → `last_strava_sync_at`, `last_activity_id` → `last_strava_activity_id`, removed `last_activity_timestamp` (not in M4 schema). (3) Updated training_history.yaml example to match M4's schema exactly (removed nested "strava_sync" key). (4) Added M4 to dependencies (sync state managed by M4). (5) Added note about v0 using synchronous I/O instead of async to avoid over-engineering. (6) Added complete algorithms for `get_sync_state()` and `update_sync_state()` functions. (7) Updated sync date range algorithm and tests to use corrected field names. |
 | 1.0.0   | 2026-01-12 | Initial specification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |

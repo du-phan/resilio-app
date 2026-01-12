@@ -6,12 +6,14 @@
 | ------------ | ------------------- |
 | Module ID    | M14                 |
 | Name         | Conversation Logger |
-| Version      | 1.0.2               |
+| Code Module  | `core/logger.py`    |
+| Version      | 1.0.3               |
 | Status       | Draft               |
 | Dependencies | M3 (Repository I/O) |
 
 ### Changelog
 
+- **1.0.3** (2026-01-12): Added code module path (`core/logger.py`) and API layer integration notes.
 - **1.0.2** (2026-01-12): Added two-tier logging system (session summaries + full transcripts) for efficient context loading. Summary generation uses Claude Code session (no external API). Dynamic retention policies (60 days transcripts, 180 days summaries). New functions: `generate_session_summary()`, `persist_summary()`, `list_session_summaries()`, `get_summary_by_date()`, `get_transcript_by_date()`. Modified `end_session()` to return both paths.
 - **1.0.1** (2026-01-12): Converted all dataclass types to BaseModel for consistency. Added complete algorithm for `get_session_by_date()` to remove `...` placeholder and make spec LLM-implementable.
 - **1.0.0** (initial): Initial draft with comprehensive conversation logging algorithms
@@ -33,7 +35,7 @@ Persist conversation sessions between user and coach for auditability, context r
 **Out of Scope:**
 
 - Parsing user intent (M1)
-- Generating coach responses (M12)
+- Enriching data for responses (M12 - Data Enrichment)
 - Extracting memories from conversations (M13)
 
 ## 3. Dependencies
@@ -50,7 +52,9 @@ Persist conversation sessions between user and coach for auditability, context r
 pydantic>=2.0        # Data models (minimal)
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows to log conversations. Claude Code does NOT import from `core/logger.py` directly—logging happens automatically as part of M1's orchestration.
 
 ### 4.1 Type Definitions
 
@@ -902,6 +906,45 @@ conversations/
 - Full transcripts available on-demand for user recall or debugging
 
 ## 7. Integration Points
+
+**Integration with API Layer:**
+
+This module is called internally by M1 workflows to automatically log all user interactions. Conversation logging is transparent to Claude Code and happens behind the scenes.
+
+**Logging Flow:**
+
+```
+User interaction:
+    Claude Code (receives user message)
+        ↓
+    M1::process_message()
+        ↓ (automatic)
+    M14::log_message(role=USER, content=message)
+        ↓
+    M14::log_message(role=COACH, content=response)
+        ↓
+    Session maintained in memory
+
+Session end:
+    M1::end_conversation_session()
+        ↓
+    M14::end_session()
+        ↓
+    M14::persist_transcript() → conversations/transcripts/YYYY-MM-DD_session.md
+        ↓
+    M14::generate_session_summary() → uses Claude Code to summarize
+        ↓
+    M14::persist_summary() → conversations/summaries/YYYY-MM-DD_summary.md
+
+Future sessions (context loading):
+    M1::load_recent_context()
+        ↓
+    M14::list_session_summaries(limit=5) → returns summaries
+        ↓ (efficient)
+    M1 includes summaries in system context
+```
+
+**Note:** Summaries are used for efficient context loading (10x token reduction vs full transcripts).
 
 ### 7.1 Called By
 

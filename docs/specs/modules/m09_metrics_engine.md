@@ -6,7 +6,8 @@
 |-------|-------|
 | Module ID | M9 |
 | Name | Metrics Engine |
-| Version | 1.0.1 |
+| Code Module | `core/metrics.py` |
+| Version | 1.0.2 |
 | Status | Draft |
 | Dependencies | M3 (Repository I/O), M8 (Load Engine) |
 
@@ -29,7 +30,7 @@ Aggregate activity loads into meaningful training metrics. Computes CTL (fitness
 - Computing activity-level loads (M8)
 - Making adaptation decisions (M11)
 - Generating plans (M10)
-- Formatting metrics for display (M12)
+- Formatting metrics for display (M12 - Data Enrichment)
 
 ## 3. Dependencies
 
@@ -47,7 +48,9 @@ pydantic>=2.0        # Data models
 numpy>=1.24          # Efficient array computations (optional, for batch)
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows and the API layer. Claude Code should NOT import from `core/metrics.py` directly—use API functions like `api.metrics.get_current_metrics()`.
 
 ### 4.1 Type Definitions
 
@@ -1115,29 +1118,45 @@ def check_baseline_status(daily_metrics: list["DailyMetrics"]) -> dict:
 
 ## 8. Integration Points
 
-### 8.1 Called By
+### 8.1 Integration with API Layer
+
+This module is called internally by M1 workflows and directly by the API layer. Claude Code calls API functions which use M9 internally.
+
+```
+Claude Code → api.metrics.get_current_metrics()
+                    │
+                    ▼
+              M9::compute_daily_metrics()
+                    │
+                    ▼
+              M12::enrich_metrics() → EnrichedMetrics
+```
+
+### 8.2 Called By
 
 | Module | When |
 |--------|------|
-| M1 | After sync pipeline completes (M5→M6→M7→M8) |
-| M1 | On "status" or "what should I do today" queries |
+| API Layer (`api.metrics`) | `get_current_metrics()`, `get_readiness()` |
+| API Layer (`api.coach`) | `get_todays_workout()`, `get_training_status()` |
+| M1 (Workflows) | After sync pipeline completes (M5→M6→M7→M8) |
 | M11 | Before generating adaptation suggestions |
 
-### 8.2 Calls To
+### 8.3 Calls To
 
 | Module | Purpose |
 |--------|---------|
 | M3 | Read activity files, write metrics files |
 
-### 8.3 Returns To
+### 8.4 Returns To
 
 | Module | Data |
 |--------|------|
+| API Layer | Raw metrics (enriched by M12 before returning to Claude Code) |
 | M10 | CTL/ATL/TSB for plan generation |
 | M11 | All metrics for adaptation triggers |
-| M12 | Formatted metrics for user display |
+| M12 (Data Enrichment) | Raw metrics for enrichment with interpretations |
 
-### 8.4 Pipeline Position
+### 8.5 Pipeline Position
 
 ```
 [M8 Load Engine]
@@ -1153,7 +1172,7 @@ def check_baseline_status(daily_metrics: list["DailyMetrics"]) -> dict:
         │
         ├── ACWR + Readiness ──► [M11 Adaptation Engine]
         │
-        └── Formatted metrics ─► [M12 Response Formatter]
+        └── Raw metrics ───────► [M12 Data Enrichment] → EnrichedMetrics → API Layer
 ```
 
 ## 9. Test Scenarios
@@ -1355,5 +1374,6 @@ Final_score = min(Base_score, Flag_caps)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.0.2 | 2026-01-12 | Added code module path (`core/metrics.py`) and API layer integration notes. Updated M12 reference to "Data Enrichment". |
 | 1.0.1 | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (DailyLoad, CTLATLMetrics, ACWRMetrics, ReadinessScore, IntensityDistribution, DailyMetrics, WeeklySummary - 7 types converted). Removed `dataclass` and `field` imports, added `Field` for default factories. Algorithms were already complete and correct (CTL/ATL formulas: τ=42d/7d, ACWR formula: 7d avg / 28d avg, readiness weights: TSB 20%, trend 25%, sleep 25%, wellness 30%). |
 | 1.0.0 | 2026-01-12 | Initial specification |

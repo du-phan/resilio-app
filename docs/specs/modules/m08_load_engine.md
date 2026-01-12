@@ -6,7 +6,8 @@
 |-------|-------|
 | Module ID | M8 |
 | Name | Load Engine |
-| Version | 1.0.1 |
+| Code Module | `core/load.py` |
+| Version | 1.0.2 |
 | Status | Draft |
 | Dependencies | M3 (Repository I/O), M6 (Activity Normalization), M7 (Notes & RPE Analyzer) |
 
@@ -46,7 +47,9 @@ Compute training load values for each activity using the two-channel load model.
 pydantic>=2.0        # Data models
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows as part of the sync pipeline. Claude Code should NOT import from `core/load.py` directly.
 
 ### 4.1 Type Definitions
 
@@ -671,25 +674,42 @@ calculated:
 
 ## 7. Integration Points
 
-### 7.1 Called By
+### 7.1 Integration with API Layer
+
+This module is called internally by M1 workflows as part of the sync pipeline. Claude Code does NOT call M8 directly.
+
+```
+Claude Code → api.sync.sync_strava()
+                    │
+                    ▼
+              M1::run_sync_workflow()
+                    │
+                    ├─► M5::fetch_activities()
+                    ├─► M6::normalize_activity()
+                    ├─► M7::analyze_notes()
+                    ├─► M8::calculate_loads() ← HERE
+                    └─► M9::compute_daily_metrics()
+```
+
+### 7.2 Called By
 
 | Module | When |
 |--------|------|
-| M1 | During sync pipeline after M7 analysis |
+| M1 (Workflows) | During sync pipeline after M7 analysis |
 
-### 7.2 Calls To
+### 7.3 Calls To
 
 | Module | Purpose |
 |--------|---------|
 | M3 | Update activity files with calculated fields |
 
-### 7.3 Returns To
+### 7.4 Returns To
 
 | Module | Data |
 |--------|------|
 | M9 | Load values for metrics computation |
 
-### 7.4 Pipeline Position
+### 7.5 Pipeline Position
 
 ```
 [M6 Normalization]
@@ -921,5 +941,6 @@ lower_body = 450 × 0.35 = 157.5 AU
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.0.2 | 2026-01-12 | Added code module path (`core/load.py`) and API layer integration notes. |
 | 1.0.1 | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (SportMultipliers, LoadCalculation, MultiplierAdjustment - 3 types converted). Removed `dataclass` import, added `Field` for default factories. Algorithms were already complete and correct. |
 | 1.0.0 | 2026-01-12 | Initial specification |

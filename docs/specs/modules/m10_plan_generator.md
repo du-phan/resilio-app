@@ -6,11 +6,13 @@
 |-------|-------|
 | Module ID | M10 |
 | Name | Plan Generator |
-| Version | 1.0.1 |
+| Code Module | `core/plan.py` |
+| Version | 1.0.2 |
 | Status | Draft |
 | Dependencies | M3 (Repository I/O), M4 (Athlete Profile), M9 (Metrics Engine) |
 
 ### Changelog
+- **1.0.2** (2026-01-12): Added code module path (`core/plan.py`) and API layer integration notes.
 - **1.0.1** (2026-01-12): Converted all dataclass types to BaseModel for consistency. Added complete algorithms for `generate_week_plan()`, `persist_plan()`, and `archive_current_plan()` to remove `...` placeholders and make spec LLM-implementable.
 - **1.0.0** (initial): Initial draft with comprehensive plan generation algorithms
 
@@ -32,7 +34,7 @@ Generate structured training plans based on athlete goals, constraints, and curr
 **Out of Scope:**
 - Real-time adaptation (M11)
 - Workout execution tracking (M11)
-- Rendering plans for display (M12)
+- Enriching plans with interpretations (M12 - Data Enrichment)
 - Fitness/metrics computation (M9)
 
 ## 3. Dependencies
@@ -51,7 +53,9 @@ Generate structured training plans based on athlete goals, constraints, and curr
 pydantic>=2.0        # Data models
 ```
 
-## 4. Public Interface
+## 4. Internal Interface
+
+**Note:** This module is called internally by M1 workflows and the API layer. Claude Code should NOT import from `core/plan.py` directly—use API functions like `api.plan.regenerate_plan()`, `api.plan.get_current_plan()`.
 
 ### 4.1 Type Definitions
 
@@ -1317,6 +1321,36 @@ execution: null  # Filled when completed
 ```
 
 ## 7. Integration Points
+
+**Integration with API Layer:**
+
+This module is called internally by the API layer and M1 workflows. Claude Code does not call `core/plan.py` functions directly.
+
+**API Functions → M10 Mapping:**
+
+```
+Claude Code → api.plan.regenerate_plan(goal)
+                  ↓
+            M1::run_plan_generation()
+                  ↓
+            M10::generate_master_plan() → M9 (current metrics)
+                  ↓                        M4 (athlete profile)
+            M10::persist_plan()
+
+Claude Code → api.plan.get_current_plan()
+                  ↓
+            M3::read_yaml("plans/current_plan.yaml")
+                  ↓
+            M12::enrich_plan() (add interpretations)
+
+Claude Code → api.coach.get_todays_workout()
+                  ↓
+            M1::get_todays_workout_workflow()
+                  ↓
+            M10::get_todays_workout() (from plan)
+                  ↓
+            M12::enrich_workout() (add rationale)
+```
 
 ### 7.1 Called By
 
