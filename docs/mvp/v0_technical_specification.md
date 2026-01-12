@@ -27,9 +27,9 @@
 
 1. **Setup**
    - Create athlete profile.
-   - Configure Strava (optional).
+   - Configure Strava connection (required for v0).
 2. **Sync / Log Training**
-   - Pull activities from Strava and/or log manual activities.
+   - Pull activities from Strava (manual logging deferred to future versions).
    - Normalize activities into YAML files.
 3. **Compute Metrics**
    - Compute daily loads (systemic + lower-body).
@@ -78,6 +78,33 @@ easy to evolve while avoiding overengineering.
 | M13       | Memory & Insights               | Extract durable athlete facts                             | Activity notes + conversation snippets | Updated memories                         | `athlete/memories.yaml`    |
 | M14       | Conversation Logger             | Persist session transcripts                               | User/coach messages                    | Markdown logs                            | `conversations/`           |
 
+#### Initialization Sequence (Cold Start)
+
+When an athlete first connects with no training history, the system must handle the "cold start" gracefully:
+
+1. **If `metrics/daily/` is empty (new user):**
+
+   - M10 generates plan assuming CTL = 0, ATL = 0, TSB = 0
+   - Use conservative defaults: lower volume, no high-intensity sessions in first week
+   - Set `baseline_established: false` in `athlete/training_history.yaml`
+
+2. **After first 8–12 weeks of history is imported (Strava sync or manual logging):**
+
+   - Recompute CTL/ATL/TSB (M9) with actual historical data
+   - Set `baseline_established: true`
+   - Regenerate plan with adjusted volume/intensity (M10)
+   - Notify user: "I now have enough training history to calibrate your plan. I'm adjusting upcoming workouts based on your actual fitness."
+
+3. **ACWR Safeguard:**
+
+   - If 28-day average systemic load = 0: ACWR is undefined (do NOT divide by zero)
+   - Skip ACWR-based adaptations until at least 28 days of data exist
+   - Rely on readiness score and conservative defaults during this bootstrap period
+
+4. **Lower-body load threshold fallback:**
+   - If < 14 days of data: use absolute threshold (300 AU) instead of relative threshold
+   - See Section 9.2 for full threshold specification
+
 ### 4.2 Module Contracts (Responsibilities + Interfaces)
 
 Each module has a narrow, testable contract. Modules do **not** mutate each other’s data directly.
@@ -104,6 +131,25 @@ All persistence flows through `M3 Repository I/O`.
 **Depends on**
 
 - M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13, M14
+
+#### M1 Intent Classification (v0)
+
+Since v0 runs within Claude Code, intent parsing leverages Claude's natural language understanding.
+However, the following canonical intents and their patterns are defined for consistency:
+
+| Intent        | Example Patterns                                           | Action                         |
+| ------------- | ---------------------------------------------------------- | ------------------------------ |
+| `sync`        | "sync", "sync strava", "update activities", "import"       | `trigger_strava_sync`          |
+| `status`      | "show my week", "where am I", "weekly status", "status"    | `show_weekly_status`           |
+| `adjust`      | "move", "reschedule", "skip", "missed", "tired", "feeling" | `initiate_adjustment_dialogue` |
+| `next_week`   | "next week", "plan next week", "what's coming"             | `show_or_generate_next_week`   |
+| `summary`     | "how did my week go", "weekly summary", "review"           | `generate_weekly_summary`      |
+| `goal_change` | "change goal", "new goal", "switch to"                     | `initiate_goal_change`         |
+| `reset`       | "reset", "start fresh", "new athlete", "start over"        | `initiate_reset_dialogue`      |
+
+**Fallback behavior:** If intent is ambiguous, M1 asks a clarifying question before proceeding.
+
+**Multi-intent handling:** If user message contains multiple intents (e.g., "sync and show my week"), execute in logical order: sync first, then status.
 
 #### Cross-Cutting Concerns (Validation & Resilience)
 
@@ -160,6 +206,7 @@ All persistence flows through `M3 Repository I/O`.
 - Create/update profile fields.
 - Enforce required fields and default values.
 - Store conflict policy and constraints.
+- Validate constraints for logical consistency.
 
 **Inputs**
 
@@ -168,6 +215,17 @@ All persistence flows through `M3 Repository I/O`.
 **Outputs**
 
 - Updated `athlete/profile.yaml`
+
+**Constraint Validation Rules**
+
+On profile save, M4 must validate:
+
+| Validation                                                      | Action                                                                                                                            |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `max_run_days < min_run_days`                                   | Error: "Max run days cannot be less than min run days"                                                                            |
+| `len(available_run_days) < min_run_days`                        | Warning: "Insufficient available run days to meet min_run_days_per_week. Consider adjusting constraints."                         |
+| `len(available_run_days) = 0` AND `goal.type ≠ general_fitness` | Error: "Cannot create a race-focused plan with 0 available run days. Add at least one run day or switch to general_fitness goal." |
+| All `available_run_days` are consecutive (e.g., Sat+Sun only)   | Warning: "Back-to-back run days detected. Plan will enforce hard/easy separation (one day must be easy)."                         |
 
 **Depends on**
 
@@ -194,6 +252,13 @@ All persistence flows through `M3 Repository I/O`.
 
 - M2 (secrets), M3 (persistence)
 
+**Strava API Limitations:**
+
+- **Best Efforts/PRs**: Available via `best_efforts` field in DetailedActivity, but requires fetching each activity individually (rate-limited). No dedicated PR/best-effort endpoint.
+- **Strategy**: Ask users for PRs at onboarding; build `best_efforts` cache incrementally from synced activities.
+- **Race Detection**: `workout_type=1` indicates race (undocumented field, values 0-3 for running). Many users don't tag races.
+- **Strategy**: Check `workout_type=1` as signal; also parse descriptions for race keywords ("race", "5K", "PB", "PR").
+
 #### M6 — Activity Normalization
 
 **Responsibilities**
@@ -201,18 +266,22 @@ All persistence flows through `M3 Repository I/O`.
 - Normalize sport types and units.
 - Derive core fields (date, duration, distance).
 - Enforce activity schema shape.
+- Set `surface_type` based on M7 detection results.
+- Set `data_quality` fields based on surface type and GPS availability.
 
 **Inputs**
 
 - Raw activity objects
+- Treadmill detection result from M7
 
 **Outputs**
 
 - Normalized activity objects persisted to `activities/`
+- Includes `surface_type`, `surface_type_confidence`, and `data_quality` fields
 
 **Depends on**
 
-- M3
+- M3, M7
 
 #### M7 — Notes & RPE Analyzer
 
@@ -220,14 +289,20 @@ All persistence flows through `M3 Repository I/O`.
 
 - Extract perceived effort, soreness, sleep, and injury/illness/overtraining flags from notes.
 - Provide RPE estimate when HR data is missing.
+- Detect treadmill/indoor runs from activity metadata (title, description, GPS absence).
+- Extract wellness indicators and contextual factors.
 
 **Inputs**
 
 - `description` / `private_note`
+- Activity `name` (title)
+- GPS polyline availability
+- Device metadata (sport_type, indoor flag)
 
 **Outputs**
 
 - `estimated_rpe`, wellness flags, injury/illness flags
+- Treadmill detection result: `(is_treadmill: bool, confidence: "high"|"low", signals: list)`
 
 **Depends on**
 
@@ -302,10 +377,10 @@ All persistence flows through `M3 Repository I/O`.
 
 **Responsibilities**
 
-- Apply adaptation rules based on metrics and flags.
+- Generate adaptation **suggestions** based on metrics and flags.
 - Protect recovery by preventing stacked hard sessions.
 - Respect `conflict_policy`.
-- Log adaptations for auditability.
+- Log all suggestions and their outcomes for auditability.
 
 **Inputs**
 
@@ -315,11 +390,70 @@ All persistence flows through `M3 Repository I/O`.
 
 **Outputs**
 
-- Updated plan/workouts + adaptation log entries
+- Suggestion objects written to `plans/pending_suggestions.yaml`
+- Updated plan/workouts (only after user accepts suggestion or safety override)
+- Adaptation log entries
 
 **Depends on**
 
 - M3, M4, M9, M10
+
+#### M11 Adaptation Philosophy: Suggest, Don't Auto-Modify
+
+M11 generates **suggestions** rather than directly modifying the plan. This ensures:
+
+- **Plan stability:** No "churn" with each sync—the plan is a stable reference
+- **Athlete autonomy:** User decides what changes to accept
+- **Transparency:** All suggestions visible with rationale in `pending_suggestions.yaml`
+
+**Core Functions:**
+
+| Function                                                | Purpose                                         |
+| ------------------------------------------------------- | ----------------------------------------------- |
+| `generate_adaptation_suggestions(metrics, plan, flags)` | Analyze current state, return `Suggestion[]`    |
+| `apply_suggestion(suggestion_id)`                       | Called when user accepts; modifies workout file |
+| `decline_suggestion(suggestion_id)`                     | Logs decline; plan unchanged                    |
+| `expire_stale_suggestions()`                            | Runs on each sync; marks expired suggestions    |
+
+**Suggestion Generation Flow:**
+
+```
+On sync completion:
+1. M9 provides current metrics (CTL, ATL, TSB, ACWR, readiness)
+2. M11.generate_adaptation_suggestions() evaluates triggers
+3. For each triggered condition → create Suggestion object
+4. Write to plans/pending_suggestions.yaml
+5. M12 presents pending suggestions to user
+```
+
+**Safety-Critical Exceptions (auto-apply with notification):**
+
+Some conditions are too dangerous to await user approval. These auto-apply immediately but notify the user:
+
+| Condition                            | Auto-Action              | User Can Override?       |
+| ------------------------------------ | ------------------------ | ------------------------ |
+| Injury flag detected in notes        | Force rest day           | Yes, with warning        |
+| ACWR > 1.5 AND readiness < 35        | Auto-downgrade intensity | Yes, with strong warning |
+| Illness flag (fever, chest symptoms) | Force rest 48-72h        | No (safety)              |
+
+**Override Workflow:**
+
+If user overrides a safety suggestion:
+
+1. Log override with timestamp
+2. Show warning: "I strongly recommend rest. Proceeding with [workout] increases injury risk."
+3. Add `user_override: true` flag to workout execution
+4. Track for pattern analysis (repeated overrides → memory insight)
+
+**Conflict Policy + Safety Override Priority:**
+
+When multiple concerns apply, resolve in this order:
+
+1. **Safety overrides** (illness, injury) → always apply, bypass conflict policy
+2. **ACWR > 1.5** → apply with notification, bypass conflict policy
+3. **All other triggers** → respect conflict policy setting
+   - If `ask_each_time`: present suggestion and wait for response
+   - If `primary_sport_wins` or `running_goal_wins`: apply policy logic
 
 #### M12 — Coach Response Formatter
 
@@ -340,6 +474,50 @@ All persistence flows through `M3 Repository I/O`.
 
 - M3, M9, M10, M11
 
+**Multi-Sport Display Requirements:**
+
+When rendering weekly status or sync responses, M12 must:
+1. **Show ALL activities** (not just running) — include running, climbing, cycling, yoga, etc.
+2. **Include load breakdown** (systemic + lower-body) for each activity
+3. **Explain cross-sport impact** on running readiness (e.g., "climbing was upper-body focused, so legs are fresh")
+4. **Reference conflict policy** when relevant (e.g., "Given your Thursday bouldering session is fixed...")
+5. **Use full dates** in activity references: "Tuesday January 7th" not "Tuesday"
+
+**Metric Accessibility Requirements:**
+
+When rendering metrics, M12 must:
+1. **Always include parenthetical context**: "CTL: 44 (solid recreational level)" not "CTL: 44"
+2. **Show trends where available**: "(+2 this week)" not just static value
+3. **Translate status zones**: "TSB: -8 (productive training zone)" not "TSB: -8"
+4. **Connect metrics to recommendations**: "ACWR is safe, so tempo run is good to go"
+5. **Apply progressive disclosure**:
+   - Weeks 1-2: Focus on volume and easy/hard distribution
+   - Weeks 3-4: Introduce CTL/ATL/TSB
+   - Week 5+: Add ACWR (after 28-day baseline)
+
+**Example Weekly Status Display:**
+
+```
+Week 3 of 14 (Build Phase) — January 13-19
+
+Mon Jan 13: Bouldering (2h) ✓ — load: 630 AU systemic | 105 AU lower-body
+Tue Jan 14: Tempo 45min → Done (48min @ 5:08/km, felt strong!)
+            → Systemic: 336 AU | Lower-body: 336 AU
+Wed Jan 15: Easy 35min → Done (35min)
+Thu Jan 16: Bouldering (2h) + Easy 30min → TODAY
+Fri Jan 17: Rest
+Sat Jan 18: Long run 14km → Scheduled
+Sun Jan 19: Cycling 90min (planned, weather dependent)
+
+Running Progress: 2/4 complete
+Total Week Load: 1,106 AU systemic | 581 AU lower-body (so far)
+
+Current Status:
+- Fitness (CTL): 44 (+2 this week) — solid recreational level
+- Form (TSB): -8 (productive training zone)
+- ACWR: 1.15 (safe)
+```
+
 #### M13 — Memory & Insights
 
 **Responsibilities**
@@ -358,6 +536,61 @@ All persistence flows through `M3 Repository I/O`.
 **Depends on**
 
 - M3, M7
+
+**Memory Extraction Algorithm (v0):**
+
+1. **TRIGGER:** After each activity note analysis (M7) and after each user message
+
+2. **EXTRACTION PATTERNS:**
+
+   - **injury_history:** keywords (pain, tight, sore, injured, hurts) + body part → type: injury_history
+   - **preference:** explicit statements ("I prefer...", "I like...", "morning works best") → type: preference
+   - **context:** training background, life situation, sport-specific facts → type: context
+   - **insight:** patterns observed over multiple sessions → type: insight
+   - **training_response:** how athlete handles specific stimuli → type: training_response
+
+3. **DEDUPLICATION (Concrete Algorithm v0):**
+
+   Memory deduplication uses deterministic matching (no fuzzy/semantic matching in v0):
+
+   **Step 1: Exact Match Check**
+
+   - Normalize: lowercase, collapse whitespace, strip punctuation
+   - If new memory content matches existing memory content → UPDATE existing (don't create)
+
+   **Step 2: Type + Entity Match**
+
+   - If same `type` AND same key entity mentioned:
+     - `injury_history`: same body part (knee, ankle, calf, etc.) → UPDATE
+     - `preference`: same topic (time-of-day, intensity, workout-type) → UPDATE
+     - `context`: same subject (job, family, sport commitment) → UPDATE
+   - Entity extraction: simple keyword matching against predefined lists
+
+   **Step 3: Recency Rule**
+
+   - If conflicting information (same type+entity but different content):
+     - Newer memory supersedes older
+     - Archive old memory with `superseded_by: <new_memory_id>`
+
+   **Step 4: No Match**
+
+   - If neither exact match nor type+entity match → create new memory
+
+   **Entity Lists (v0):**
+
+   - Body parts: knee, ankle, calf, shin, hip, hamstring, quad, achilles, foot, back, shoulder
+   - Time preferences: morning, evening, afternoon, lunch, early, late
+   - Intensity topics: easy, hard, tempo, intervals, long run, recovery
+
+4. **CONFIDENCE SCORING:**
+
+   - `high`: Explicit statement or consistent pattern (3+ occurrences)
+   - `medium`: Inferred from single clear instance
+   - `low`: Inferred from ambiguous text
+
+5. **ARCHIVAL:**
+   - If new memory contradicts existing: archive old with `superseded_by` reference
+   - Keep archived memories for 90 days, then delete
 
 #### M14 — Conversation Logger
 
@@ -389,13 +622,77 @@ All persistence flows through `M3 Repository I/O`.
 5. M12 summarizes results
 6. M14 logs the session transcript
 
-**“What should I do today?” flow**
+**"What should I do today?" flow**
 
 1. M1 reads profile + plan (M3/M4/M10)
 2. M9 computes current status (if stale)
 3. M11 checks if adaptation needed
-4. M12 renders today’s workout + rationale
+4. M12 renders today's workout + rationale
 5. M14 logs the session transcript
+
+### 4.4 Transaction Model (v0)
+
+The sync pipeline (M5→M9) involves multiple file writes that must succeed or fail together. v0 uses a simple transaction model to prevent partial writes:
+
+**Sync Transaction Boundary:**
+
+```
+1. BEGIN: Acquire write lock on activities/, metrics/, plans/
+2. M5: Fetch activities from Strava (network I/O)
+3. M6: Normalize all activities in memory (no disk writes yet)
+4. M7: Extract RPE and flags in memory
+5. M8: Calculate loads in memory
+6. M9: Compute metrics in memory
+7. COMMIT: Write all files atomically (temp file + rename for each)
+8. RELEASE: Release lock
+9. ON FAILURE at any step: Discard all in-memory changes; no partial writes
+```
+
+**Single-Workout Transaction:**
+
+For updates to individual workouts (e.g., user skips a workout):
+
+- Smaller scope: lock only the affected workout file + daily metrics for that date
+- Same temp-file-then-rename pattern
+
+**Lock Implementation (v0 Simplified):**
+
+- Use a lockfile (`config/.sync_lock`) with PID and timestamp
+- If lock exists and is < 5 minutes old: wait or abort
+- If lock exists and is ≥ 5 minutes old: assume stale, break and acquire
+- All M3 writes must check lock before proceeding
+
+**Lock Retry Strategy (v0):**
+
+```
+1. Attempt to acquire lock
+2. If lock held by another process (PID valid AND lock < 5 min old):
+   - Wait 2 seconds
+   - Retry (max 3 retries = 6 seconds total wait)
+   - On failure after retries: abort with message
+     "Another sync in progress. Try again in a moment."
+3. If lock stale (> 5 min old OR PID not running):
+   - Log warning: "Breaking stale lock from PID {pid}"
+   - Delete lock file
+   - Acquire new lock
+4. Always release lock in finally block (even on error)
+```
+
+**Lock File Format:**
+
+```yaml
+pid: 12345
+acquired_at: "2025-03-15T10:30:00Z"
+operation: "sync" # sync | plan_update | workout_update
+```
+
+**Idempotency Guarantee:**
+
+Re-running sync with the same date range produces identical state. This is ensured by:
+
+- Activity deduplication by `(source, id)`
+- Metric recomputation from activity files (not deltas)
+- Adaptation rules are deterministic given inputs
 
 ---
 
@@ -435,6 +732,29 @@ conversations/YYYY-MM-DD_session.md
 
 v0 uses YAML for human readability and easy diffing.
 
+### 6.0 Schema Versioning (All File Types)
+
+All persisted YAML files must include a schema header for future migration support:
+
+```yaml
+_schema:
+  format_version: "1.0.0" # Semantic versioning
+  schema_type: "activity" # activity|profile|daily_metrics|plan|workout|memories|training_history
+```
+
+**Migration Rules:**
+
+- On read, M3 must check `format_version` and apply migrations if schema is outdated
+- If file version is newer than supported code version: fail with clear error
+- If file has no `_schema` field: assume version "0.0.0" and migrate to current
+- Migrations must be idempotent (safe to run multiple times)
+
+**Version History (v0):**
+
+| Version | Date    | Changes          |
+| ------- | ------- | ---------------- |
+| 1.0.0   | Initial | v0 launch schema |
+
 ### 6.1 Athlete Profile (`athlete/profile.yaml`)
 
 **Required (minimum)**
@@ -454,12 +774,16 @@ v0 uses YAML for human readability and easy diffing.
 - `injury_history: str`
 - `age: int` (for recovery guidance)
 - PRs + VDOT estimate fields + `vdot_last_updated`
-- `estimated_lthr: int` (if known)
 - `recent_race` (distance, time, date for current fitness)
 - `current_weekly_run_km: float`
 - `current_run_days_per_week: int`
 - `preferences.intensity_metric: enum(pace|hr|rpe)`
 - `other_sports[]` commitments
+- `vital_signs.max_hr: int` - maximum heart rate
+- `vital_signs.resting_hr: int` - baseline resting heart rate
+- `vital_signs.lthr: int` - lactate threshold heart rate
+- `vital_signs.lthr_method: enum(field_test|race_derived|estimated)`
+- `derived_paces{}` - cached VDOT-derived training paces (see PRD for structure)
 
 ### 6.2 Training History (`athlete/training_history.yaml`)
 
@@ -475,7 +799,30 @@ v0 uses YAML for human readability and easy diffing.
 - `baseline.tsb: float`
 - `baseline.period_days: int`
 
-### 6.3 Activity File (`activities/YYYY-MM/YYYY-MM-DD_<sport>_<slug>.yaml`)
+### 6.3 Activity File (`activities/YYYY-MM/YYYY-MM-DD_<sport>_<HHmm>.yaml`)
+
+**File Naming Convention (Updated):**
+
+To prevent filename collisions when multiple activities occur on the same day:
+
+```
+Format: YYYY-MM-DD_<sport_type>_<HHmm>.yaml
+
+Examples:
+- 2025-11-05_run_1230.yaml      (run at 12:30)
+- 2025-11-05_run_1830.yaml      (run at 18:30)
+- 2025-11-05_climb_1900.yaml    (climb at 19:00)
+
+Fallback (if no start_time):
+- 2025-11-05_run_1.yaml         (first run of day)
+- 2025-11-05_run_2.yaml         (second run of day)
+```
+
+**Collision Handling:**
+
+- If exact filename exists: check if same activity (by id) → update; else append index
+- On Strava sync: use `start_date_local` to extract time
+- On manual log: require start_time or auto-assign based on creation order
 
 **Required**
 
@@ -490,6 +837,7 @@ v0 uses YAML for human readability and easy diffing.
 - `distance_km: float`
 - `average_hr/max_hr/has_hr_data`
 - `description/private_note`
+- `surface_type: enum(road|track|trail|grass|treadmill|mixed)` - running surface (optional)
 
 **Derived fields (computed)**
 
@@ -571,6 +919,97 @@ No special additions required in v0 beyond what the PRD already defines. The sou
 - Timestamped, role-tagged lines (user/coach/assistant).
 - Include a short session header (date + athlete name).
 
+### 6.9 Load Multipliers Configuration
+
+**Location:** Hardcoded in M8 (Load Engine) for v0. Future versions may move to `config/multipliers.yaml` for user customization.
+
+**Default Multipliers:** See PRD Section 1 "Default Multipliers (v0)" table.
+
+#### Unknown Sport Handling
+
+When an activity has a `sport_type` not in the multiplier table:
+
+1. **Apply conservative fallback:** `{ systemic: 0.70, lower_body: 0.30 }`
+2. **Log a warning:** "Unknown sport '{sport_type}'; using conservative multipliers."
+3. **Ask user in next conversation (if a key run follows):**
+   "I classified your '{sport_type}' activity with conservative load estimates. Was it:
+   A) Mostly cardio/full-body (like rowing, skiing)
+   B) Mostly upper-body (like kayaking, rock climbing)
+   C) Leg-heavy (like skating, skiing with lots of turns)
+   This helps me count it correctly toward your fatigue."
+
+**Known sport aliases to normalize:**
+
+- "indoor_cycling" → "cycling"
+- "virtual_ride" → "cycling"
+- "rock_climb" / "indoor_climb" → "climbing"
+- "walk" → "walking"
+- "hike" → "hiking"
+- "crossfit" / "functional_fitness" → "crossfit"
+
+### 6.10 Pending Suggestions (`plans/pending_suggestions.yaml`)
+
+The Pending Suggestions queue stores adaptation recommendations that await user approval. This supports the "Suggest, Don't Auto-Modify" philosophy where the plan remains stable until the user explicitly accepts changes.
+
+**Schema:**
+
+```yaml
+_schema:
+  format_version: "1.0.0"
+  schema_type: "pending_suggestions"
+
+pending_suggestions:
+  - id: str # "sugg_YYYY-MM-DD_NNN" (e.g., "sugg_2025-03-15_001")
+    created_at: datetime
+    trigger: str # acwr_elevated | low_readiness | high_lower_body | injury_flag | hard_session_cap
+    trigger_value: float # The metric value that triggered (e.g., ACWR=1.42)
+    affected_workout:
+      file: str # "week_03/tuesday_tempo.yaml"
+      date: date
+    suggestion_type: str # downgrade | skip | move | substitute
+    original:
+      type: str # e.g., "tempo"
+      duration_minutes: int
+      intensity: str # e.g., "moderate"
+    proposed:
+      type: str # e.g., "easy"
+      duration_minutes: int
+      intensity: str # e.g., "low"
+    rationale: str # Human-readable explanation
+    status: str # pending | accepted | declined | expired
+    expires_at: datetime
+    user_response: str | null # Optional user comment on accept/decline
+    response_at: datetime | null
+```
+
+**Status Transitions:**
+
+- `pending` → `accepted` (user approves via M1)
+- `pending` → `declined` (user rejects via M1)
+- `pending` → `expired` (`expires_at` passed without response)
+
+**Expiration Rules:**
+
+- Suggestions expire at end of the affected workout's scheduled date (23:59 local)
+- On each sync, M11 runs `expire_stale_suggestions()` to clean up
+- Expired suggestions are logged for analytics but not shown to user
+
+**Trigger Types:**
+
+| Trigger            | Condition                                      | Typical Suggestion           |
+| ------------------ | ---------------------------------------------- | ---------------------------- |
+| `acwr_elevated`    | ACWR > 1.3                                     | Downgrade intensity or skip  |
+| `low_readiness`    | Readiness < 50                                 | Reduce duration or intensity |
+| `high_lower_body`  | Lower-body load > threshold before quality run | Move or substitute           |
+| `injury_flag`      | Pain/injury detected in notes                  | Force rest or easy-only      |
+| `hard_session_cap` | 2+ hard sessions in 7 days                     | Downgrade to easy            |
+
+**Deduplication:**
+
+- Only one pending suggestion per workout file at a time
+- If new trigger fires for same workout: update existing suggestion (don't create duplicate)
+- Track original suggestion ID in `superseded_by` if replaced
+
 ---
 
 ## 7. Load & Fatigue Computation (v0)
@@ -587,6 +1026,61 @@ RPE sources, in priority order:
 
 For short intervals or hill reps, prefer RPE over HR (HR lags).
 
+#### RPE Conflict Resolution
+
+When multiple sources provide conflicting RPE estimates (differ by >2 points):
+
+**Resolution Priority (in order):**
+
+1. **Explicit user RPE always wins** (they entered it intentionally in Strava via `perceived_exertion` field)
+
+   - If present: use this value; ignore all other estimates
+
+2. **If no explicit user RPE, determine if session is high-intensity:**
+
+   - High-intensity indicators: HR > 85% of `vital_signs.max_hr` OR `sub_type ∈ {intervals, tempo, race}` OR keywords in notes (intervals, tempo, threshold, race-pace)
+   - If high-intensity: use `MAX(HR-based, text-based)` RPE
+   - If NOT high-intensity: use text-based RPE (HR may be elevated by heat, dehydration, stress)
+
+3. **If spread > 3 points after step 2:**
+   - Use `MAX(all estimates)` as the final RPE (conservative = higher load)
+   - Log warning: "RPE estimates differ significantly; using conservative value"
+   - Flag for user clarification in next conversation
+
+**"Conservative" Definition:**
+
+- Conservative = MAX (not average, not median)
+- Rationale: Overestimating load is safer than underestimating (prevents overtraining)
+
+**Example:**
+
+- HR-based estimate: RPE 5 (moderate)
+- Text-based estimate: RPE 8 ("hard", "challenging", "tired after")
+- Spread: 3 points → conflict detected
+- Session type from notes: intervals (high-intensity indicator)
+- Resolution: MAX(5, 8) = RPE 8 (trust text since notes explicitly describe difficulty)
+
+#### Treadmill-Specific RPE Estimation
+
+For activities where `surface_type == "treadmill"`, modify the standard RPE priority to account for unreliable pace data:
+
+**Modified priority for treadmill runs:**
+
+1. Explicit user RPE (`strava_perceived_exertion`) — unchanged, always wins
+2. HR-based estimate — **elevated priority** (most reliable for treadmill)
+3. Strava relative effort (suffer_score) — **elevated priority** (HR-derived)
+4. Text-based estimate from notes
+5. Duration heuristic (conservative default: RPE 6)
+
+**Key differences:**
+
+- **Skip pace-based RPE estimation entirely** for treadmill runs (pace is unreliable)
+- **Prioritize HR over text** when both available (reverse of outdoor logic for non-high-intensity)
+- If no HR data and no text signals: default to RPE 6 (moderate effort assumption)
+
+**Rationale:**
+Treadmill pace/distance derives from accelerometer algorithms with 5-15% variance. Heart rate remains a reliable effort indicator regardless of surface, making it the primary signal for treadmill sessions.
+
 ### 7.2 Two-Channel Load Model
 
 For each activity:
@@ -599,10 +1093,19 @@ For each activity:
 
 **Strength/CrossFit rule (v0, minimal):**
 
-- Default multipliers assume “mixed” stimulus.
+- Default multipliers assume "mixed" stimulus.
 - If notes clearly indicate lower-body dominance, bump `lower_body_multiplier`.
 - If notes clearly indicate upper-body dominance, reduce `lower_body_multiplier`.
 - If unclear and a key run is imminent, ask the athlete.
+
+**Treadmill multiplier adjustment:**
+
+For running activities where `surface_type == "treadmill"`:
+
+- `systemic_multiplier = 1.00` (unchanged - cardio effort is equivalent)
+- `lower_body_multiplier = 0.90` (10% reduction for reduced impact)
+
+**Rationale:** Treadmill belts absorb ~10% of impact force compared to road/track running. This reduces lower-body stress while maintaining aerobic stimulus. The adjustment helps accurately model treadmill's role as a lower-impact training option for multi-sport athletes.
 
 ### 7.3 CTL/ATL/TSB (Systemic)
 
@@ -639,20 +1142,186 @@ This is the minimum weekly running stimulus needed to progress with low run freq
 
 ### 8.3 Conflict Policy (User-Defined)
 
-When a plan decision conflicts with the athlete’s primary sport or reality:
+When a plan decision conflicts with the athlete's primary sport or reality:
 
 - `primary_sport_wins`: adjust running first.
 - `running_goal_wins`: preserve key running sessions unless injury risk is high.
 - `ask_each_time`: present options with trade-offs and ask.
 
-### 8.4 Training Guardrails (v0)
+#### Conflict Policy Application During Plan Generation
+
+| Policy               | Plan Generation Behavior                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `primary_sport_wins` | When scheduling running workouts, check for collisions with `other_sports[]` commitments. If collision: move running workout to a different day.                    |
+| `running_goal_wins`  | Protect key running workouts (long run, quality run). Schedule them first, then fit other sports around them.                                                       |
+| `ask_each_time`      | Generate plan assuming ideal running days (ignore conflicts). When Claude detects a conflict at runtime, ask user to choose. Store user's choice in adaptation log. |
+
+### 8.4 Goal Change Mid-Plan
+
+When `athlete.goal` changes (type, target_date, or target_time):
+
+1. **Archive current plan:**
+
+   ```
+   plans/archive/plan_<old_goal>_<timestamp>.yaml
+   ```
+
+2. **Calculate new timeline:**
+
+   - If new goal has a specific `race_target_date`: count backwards for periodization
+   - If `race_target_date` is < 4 weeks away: warn user that timeline is very short for optimal prep
+
+3. **Cutover timing (Partial Week Handling):**
+
+   **If goal changes on Monday-Wednesday:**
+
+   - New plan starts THIS Monday (retroactive adjustment of current week)
+   - Mark already-completed workouts as "completed (old goal)"
+   - Adjust remaining days of current week to match new plan
+
+   **If goal changes on Thursday-Sunday:**
+
+   - New plan starts NEXT Monday (complete current week as-is)
+   - No changes to current week; old plan remains active until Sunday
+
+   **Edge case - Last Day of Current Plan:**
+
+   - If today is the LAST DAY of current plan (race day):
+   - Archive immediately
+   - New plan starts tomorrow if Monday, else next Monday
+
+4. **Notify user:**
+   "Your goal changed from {old_goal} to {new_goal}. I've archived your previous plan and generated a fresh one starting [date]."
+
+5. **Do NOT delete old workouts** until new plan is ready (user can compare if needed)
+
+### 8.5 Training Guardrails (v0)
 
 - Long run caps: <= 25-30% of weekly run volume and <= 2.5 hours.
 - Limit quality sessions to 2 per 7 days across all sports.
 - Avoid back-to-back high-intensity days; keep at least 1 easy day between.
 - VDOT updates no more than every 3-4 weeks, or after a new race.
+- **Treadmill exclusion:** Activities where `surface_type == "treadmill"` are EXCLUDED from VDOT recalculation and personal record updates (pace data is unreliable for fitness assessment).
 - Apply running pace/zone prescriptions only to running; other sports use RPE/HR/time guidance.
 - Cross-training can replace aerobic stimulus but not running economy/impact tolerance.
+
+### 8.6 Two-Tier Plan Architecture (v0)
+
+v0 uses a two-tier approach to balance long-term visibility with weekly adaptability:
+
+**Tier 1: Master Plan (generated at onboarding or goal change)**
+
+- Covers all weeks from start to goal date
+- Contains:
+  - Periodization phases (base → build → peak → taper)
+  - Weekly volume progression
+  - Workout types per week (e.g., "1 long run, 1 tempo, 2 easy")
+  - Recovery week scheduling (typically every 3-4 weeks)
+- Purpose: Athlete visibility into the full training journey
+- Generated by: M10 during initial setup or goal change
+- Stored in: `plans/current_plan.yaml` (meta) + `plans/workouts/week_##/` (workout files)
+
+**Tier 2: Weekly Refinement (at week boundary)**
+
+- Takes pre-planned structure for next week from Master Plan
+- Refines specific details based on current state:
+  - Adjust pace targets if fitness improved (higher CTL)
+  - Reduce duration if fatigue accumulated (negative TSB)
+  - Swap days if schedule changed (user request)
+  - Add recovery elements if ACWR elevated
+- **STRUCTURE stays consistent** with Master Plan
+- **DETAILS adapt** to current reality
+- Triggered by: Sunday sync (proactive offer) OR explicit request ("plan next week")
+- Generated by: M10 with M9 metrics input
+
+**Weekly Refinement Workflow:**
+
+```
+End of week (Sunday sync or explicit request):
+1. M9 generates weekly summary (what was completed, CTL delta, ACWR)
+2. M10 reads Master Plan week_N+1 structure
+3. M10 refines: adjust paces, durations, intensity based on current metrics
+4. M12 presents refined week to user: "Here's next week based on how training went"
+5. User confirms OR requests adjustments
+6. M3 writes refined workout files
+```
+
+**Refinement Rules:**
+
+| Condition                        | Refinement Action                                   |
+| -------------------------------- | --------------------------------------------------- |
+| `execution_rate < 80%`           | Reduce next week volume by 10%                      |
+| `CTL_delta > 3` (fitness gain)   | Can increase intensity slightly                     |
+| `ACWR > 1.3`                     | Cap intensity at moderate; no quality sessions      |
+| Missed quality session this week | Offer to add quality elements to long run (if safe) |
+| `TSB < -25` (deep fatigue)       | Reduce volume by 15%; prioritize easy runs          |
+
+**Master Plan Regeneration Triggers:**
+
+The Master Plan is regenerated (not just refined) when:
+
+- Goal changes (distance, race date, goal time)
+- Major injury requiring 2+ weeks off
+- User explicitly requests "new plan" or "reset"
+
+### 8.7 Reset Workflows (v0)
+
+v0 supports three levels of reset to handle different scenarios:
+
+#### 8.7.1 Goal Change (preserves data)
+
+**Use case:** Athlete changes race distance, goal time, or race date.
+
+**Workflow:**
+
+1. Archive current plan to `plans/archive/YYYY-MM-DD_goal_change/`
+2. Update `athlete/profile.yaml` with new goal
+3. M10 generates new Master Plan using existing CTL/ATL/TSB
+4. Preserve all activities, metrics, and memories
+
+**Data preserved:** Everything (activities, metrics, memories, profile)
+
+#### 8.7.2 Soft Reset (new training block)
+
+**Use case:** Athlete returning after long break, wants fresh start but same identity.
+
+**Workflow:**
+
+1. Archive plan, activities, metrics to `backup/YYYY-MM-DD_HH-MM_soft_reset/`
+2. Keep `athlete/profile.yaml` and `athlete/memories.yaml` (same athlete)
+3. Clear `athlete/training_history.yaml` sync state
+4. M10 generates new plan with cold-start approach (baseline from Strava if available)
+
+**Data preserved:** Profile, memories
+**Data archived:** Plan, activities, metrics
+
+**Trigger phrases:** "start fresh", "new training block", "returning after break"
+
+#### 8.7.3 Hard Reset (new athlete)
+
+**Use case:** Different person using the system, or complete clean slate.
+
+**Workflow:**
+
+1. Archive ALL data to `backup/YYYY-MM-DD_HH-MM_hard_reset/`
+2. Clear `athlete/` directory
+3. Return to Scenario 1 (new user setup flow)
+4. Requires explicit double-confirmation
+
+**Data preserved:** None (all archived)
+**Data archived:** Everything
+
+**Confirmation requirement:**
+
+```
+Coach: This will archive ALL your data and start completely fresh.
+       Your training history, memories, and profile will be backed up
+       but no longer active. Type "confirm hard reset" to proceed.
+User: confirm hard reset
+Coach: Done. Let's start fresh. What's your name?
+```
+
+**Trigger phrases:** "hard reset", "new athlete", "different person", "start over completely"
 
 ---
 
@@ -670,10 +1339,71 @@ v0 adaptation is rule-based, explainable, and conservative:
 
 ### 9.2 High Lower-Body Load (Definition)
 
-v0 should define “high lower-body load” using a simple, athlete-relative threshold:
+v0 uses a tiered threshold system to handle both established and new athletes:
 
-- Preferred: `yesterday_lower_body > 1.5 × median(lower_body_daily_load last 14 days)`
-- Fallback (new user / little history): absolute threshold tuned conservatively (and later refined)
+#### Tier 1: Sufficient History (≥14 days of data)
+
+```
+high_lower_body = yesterday_lower_body_au > 1.5 × median(lower_body_daily_load last 14 days)
+```
+
+#### Tier 2: Insufficient History (<14 days of data)
+
+```
+high_lower_body = yesterday_lower_body_au > 300 AU
+```
+
+(300 AU is a conservative absolute threshold, e.g., RPE 6 × 50 min or RPE 5 × 60 min)
+
+#### Sport-Adjusted Thresholds
+
+| Condition                                                                                  | Threshold Adjustment                                   |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------ |
+| `primary_sport` is leg-dominant (climbing with high heel hooks, cycling, CrossFit, skiing) | +20% threshold (they're accustomed to higher leg load) |
+| `running_priority = "primary"`                                                             | -10% threshold (protect running more aggressively)     |
+
+#### Cumulative Window Check (v0 Enhancement)
+
+To catch consecutive moderate-load days that compound fatigue, also check the 3-day rolling average:
+
+```
+rolling_3d = (day0_lower_body + day1_lower_body + day2_lower_body) / 3
+If rolling_3d > 1.3 × median(14d): trigger adaptation
+```
+
+#### Threshold Evaluation Order (Precise)
+
+Evaluate thresholds in this order; stop on first trigger:
+
+```
+1. Check single-day threshold (Tier 1 or Tier 2):
+   - If ≥14 days data: yesterday_lower_body_au > 1.5 × median(14d) → TRIGGER
+   - If <14 days data: yesterday_lower_body_au > 300 AU → TRIGGER
+
+2. Check cumulative threshold:
+   - If ≥14 days data: rolling_3d_avg > 1.3 × median(14d) → TRIGGER
+   - If <14 days data: rolling_3d_avg > 250 AU → TRIGGER
+
+3. Apply sport adjustment BEFORE comparison:
+   - Leg-dominant primary sport (cycling, climbing, CrossFit): threshold × 1.2
+   - Running is primary sport: threshold × 0.9
+
+4. Trigger condition: ANY check fires → adaptation triggered
+   (These are OR conditions, not AND)
+```
+
+**Example:**
+
+- Athlete: bouldering primary, 14 days history, median lower_body = 150 AU
+- Yesterday lower_body = 240 AU
+- Base threshold = 1.5 × 150 = 225 AU
+- Sport adjustment: +20% → 270 AU
+- Is 240 > 270? No → do NOT trigger adaptation (athlete is accustomed to this load)
+
+**Edge Case: Tier Transition**
+
+- When data crosses from 13 to 14 days: use Tier 1 from day 14 onward
+- No retroactive recalculation; thresholds apply going forward
 
 ### 9.3 Adaptation Outcomes
 
@@ -691,6 +1421,121 @@ Every adaptation must write:
 - `reason` (metrics + notes)
 - `conflict_policy_applied` (if relevant)
 
+### 9.4 Workout Execution Assessment (Treadmill Handling)
+
+When assessing whether a completed activity met the prescribed workout (for compliance tracking and adaptation decisions):
+
+**Standard assessment (outdoor runs):**
+
+- Duration compliance: Compare actual vs prescribed duration
+- Pace zone compliance: Compare actual pace vs prescribed pace zones
+- HR zone compliance: Compare actual HR vs prescribed HR zones (if HR data available)
+- Overall compliance: Derive from all three metrics
+
+**Treadmill-specific assessment:**
+
+For activities where `surface_type == "treadmill"`:
+
+| Metric    | Assessment Method                                          | Confidence  |
+| --------- | ---------------------------------------------------------- | ----------- |
+| Duration  | Compare actual vs prescribed                               | High        |
+| HR zone   | Compare actual HR vs prescribed HR zones (if HR available) | High        |
+| Pace zone | Mark as `"unverifiable_treadmill"`                         | N/A         |
+| Overall   | Derive from duration + HR only (exclude pace)              | Medium-High |
+
+**Rationale:** Treadmill pace data is unreliable (5-15% variance) and should not be used to assess workout execution. Heart rate remains the primary effort indicator for treadmill sessions.
+
+**Coach feedback template:**
+
+```
+For treadmill tempo run:
+"Your treadmill tempo session:
+- Duration: 30 min ✓ (prescribed: 30 min)
+- Heart rate: Avg 165 bpm ✓ (tempo zone: 160-170 bpm)
+- Pace: 5:10/km displayed (treadmill calibration varies; using HR as primary indicator)
+
+Overall: Good execution—HR confirms you hit tempo effort correctly."
+```
+
+### 9.5 Injury/Illness Flag Duration (v0)
+
+When M7 detects injury or illness signals from activity notes, the system applies protective constraints. This section defines how long those constraints remain active.
+
+#### Injury Flag
+
+**Detection triggers:** Keywords like "pain", "injured", "hurts", "strain", "pulled" + body part
+
+**Duration:** 3 days from detection OR until user explicitly reports improvement
+
+**Constraints while active:**
+
+- Readiness score capped at 25 (easy runs only)
+- Quality sessions blocked
+- Auto-suggestion: "I noticed you mentioned [injury]. Taking it easy for a few days."
+
+**User override:** Allowed with warning
+
+```
+User: "I want to do my tempo run anyway"
+Coach: "I recommend rest given your [knee pain]. Running through pain can
+        extend recovery time. If you proceed, I'll note this as an override.
+        Do you want to continue with the tempo run?"
+```
+
+**Clearing the flag:**
+
+- User says: "feeling better", "pain is gone", "it's fine now", "cleared to run"
+- M13 creates memory: "Recovered from [injury] on [date]"
+- Readiness returns to calculated value
+
+#### Illness Flag
+
+**Detection triggers:** Keywords like "sick", "fever", "flu", "cold", "chest congestion", "covid"
+
+**Duration:** 48-72 hours minimum from detection (based on severity)
+
+| Severity                                  | Duration                     | Override?         |
+| ----------------------------------------- | ---------------------------- | ----------------- |
+| Mild (cold, sniffles)                     | 48 hours                     | Yes, with warning |
+| Moderate (fever, flu-like)                | 72 hours                     | No                |
+| Severe (chest symptoms, breathing issues) | Until user confirms recovery | No                |
+
+**Constraints while active:**
+
+- Readiness score capped at 20 (force rest)
+- ALL training blocked (not just quality)
+- Auto-message: "Rest is critical when sick. Exercise while ill can prolong recovery and has cardiac risks."
+
+**Cannot override (safety):**
+
+- Fever or chest symptoms require mandatory rest
+- User must wait for flag expiration OR explicitly confirm recovery
+
+**Clearing the flag:**
+
+- Flag auto-expires after duration
+- OR user confirms: "fever gone", "feeling much better", "recovered"
+- For severe: require explicit "I'm fully recovered and ready to train"
+
+#### Flag State Storage
+
+Flags are stored in `metrics/daily/YYYY-MM-DD.yaml`:
+
+```yaml
+flags:
+  injury:
+    active: true
+    body_part: "left_knee"
+    detected_at: "2025-03-15T10:30:00Z"
+    expires_at: "2025-03-18T10:30:00Z"
+    source: "activity_note" # activity_note | user_message
+  illness:
+    active: false
+    severity: null
+    detected_at: null
+    expires_at: null
+```
+
 ---
 
 ## 10. Strava Integration (v0)
@@ -702,9 +1547,63 @@ v0 additional constraints:
 - Tokens/credentials are read from `config/secrets.local.yaml` (or environment variables).
 - The sync process must be idempotent: re-running sync should not duplicate activity files.
 
+### 10.1 Activity Deduplication
+
+**Primary Key:** `(source, id)`
+
+- Strava activities: `(source="strava", id=strava_activity_id)`
+- Manual activities: `(source="manual", id=generated_uuid)`
+
+**On Sync:**
+
+1. Check if `activities/YYYY-MM/` contains a file with matching `(source, id)`
+2. If found AND Strava's `updated_at` matches local file: **skip** (no changes)
+3. If found AND Strava's `updated_at` is newer: **update** local file (user re-edited in Strava)
+4. If not found: **create** new activity file
+
+**Fallback Key** (if `id` is missing or corrupted): `(date, sport_type, start_time ±30min, duration_minutes ±5min)`
+
+**Fallback Matching Rules:**
+
+- If multiple activities match fallback key: DO NOT auto-merge; ask user to confirm
+- Source precedence if forced to choose: Strava > manual (Strava has more accurate data)
+- Warn user: "Found a similar activity by date/time/duration. Is this the same session? [Y/N]"
+- Log all fallback matches for debugging: `config/.dedup_warnings.log`
+
+**Idempotency Guarantee:** Re-running sync with the same date range produces identical state.
+
+**Track Last Sync Timestamp:**
+
+- Update `athlete/training_history.yaml` with `last_strava_sync_at` after successful sync
+- On next sync, fetch only activities since `last_strava_sync_at` (reduces API calls)
+
+### 10.2 Strava Sync Error Handling
+
+**Transaction Model:**
+
+1. Fetch activity list (cheap API call)
+2. For each new activity, fetch full details including `private_note` (expensive)
+3. Collect all activities in memory (do NOT write yet)
+4. Write all files in single batch to `activities/`
+5. Update `training_history.yaml` with `last_strava_sync_at` ONLY after all writes succeed
+
+**On Failure:**
+
+| Failure Type                       | Action                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| API timeout during fetch           | Retry up to 2× with exponential backoff (2s, 4s), then abort            |
+| Strava rate limit (429)            | Wait for `Retry-After` header duration, then retry once                 |
+| Partial write failure (disk error) | Roll back all files written in this sync batch                          |
+| Token expired (401)                | Attempt token refresh; if refresh fails, prompt user to re-authenticate |
+
+**Critical:** Never update `last_strava_sync_at` on failure. This ensures next sync will retry the same range.
+
+**User Message on Failure:**
+"Strava sync failed. Your existing data is safe. Please try again in a moment, or check your internet connection."
+
 ---
 
-## 11. Prompting / “AI Coach” Integration (v0)
+## 11. Prompting / "AI Coach" Integration (v0)
 
 This spec assumes the coaching agent can read/write the repository files.
 
@@ -719,5 +1618,85 @@ Minimum prompt inputs for “What should I do today?”:
 Minimum prompt outputs:
 
 - Workout prescription (time/distance, intensity guidance)
-- If adapted: explicit “changed X → Y because …”
-- One question if a key ambiguity blocks the decision (e.g., “Was yesterday’s CrossFit leg-heavy?”)
+- If adapted: explicit "changed X → Y because …"
+- One question if a key ambiguity blocks the decision (e.g., "Was yesterday's CrossFit leg-heavy?")
+
+---
+
+## 12. Backup & Recovery (v0)
+
+### 12.1 Automatic Backup
+
+After each successful Strava sync:
+
+1. Copy modified directories to backup:
+   ```
+   backup/YYYY-MM-DD_HH-MM/
+     activities/
+     metrics/
+     plans/
+   ```
+2. Retain last 3 backups per month
+3. Delete older backups automatically (on next sync)
+
+**What's backed up:**
+
+- `activities/` - all activity files
+- `metrics/` - daily metrics and weekly summary
+- `plans/` - current plan and workout files
+
+**What's NOT backed up (can be regenerated):**
+
+- `athlete/training_history.yaml` - sync state only
+- `conversations/` - logs, not critical
+
+### 12.2 Manual Recovery Commands
+
+**Recompute Metrics:**
+
+```
+rollback_metrics --date YYYY-MM-DD
+```
+
+- Clears all metrics from the specified date forward
+- Recomputes CTL/ATL/TSB/ACWR from activity files
+- Useful when activity data was corrected
+
+**Restore from Backup:**
+
+```
+restore_backup --timestamp YYYY-MM-DD_HH-MM
+```
+
+- Copies backed-up files over current files
+- Triggers full metric recomputation afterward
+
+### 12.3 Data Integrity Checks
+
+On startup (before any operation):
+
+1. **Parse Validation:** Validate all YAML files parse correctly
+2. **Required Fields:** Flag files with missing required fields (warn, don't block)
+3. **Staleness Check:** Warn if metrics are >24h older than latest activity
+4. **Schema Version:** Check `_schema.format_version` on all files; migrate if needed
+
+**Integrity Report Format:**
+
+```
+[INFO] Validated 47 files
+[WARN] metrics/daily/2025-11-10.yaml missing 'readiness' field
+[WARN] Metrics stale by 36 hours; recommend running sync
+[OK] All files pass schema validation
+```
+
+### 12.4 Corruption Recovery
+
+If a YAML file is corrupted (won't parse):
+
+1. Check for recent backup containing the file
+2. If found: offer to restore from backup
+3. If not found:
+   - For activity files: offer to re-fetch from Strava (if source=strava)
+   - For metrics files: regenerate from activities
+   - For plan files: warn user; may need to regenerate plan
+4. Log corruption event to `config/.corruption_log`
