@@ -2,23 +2,24 @@
 
 **Version**: 0.1.0
 **Last Updated**: 2026-01-12
-**Status**: Phase 2 Data Ingestion - In Progress (M7 ✅, M6 ✅)
+**Status**: Phase 2 Data Ingestion - In Progress (M7 ✅, M6 ✅, M8 ✅)
 
 ---
 
-## Overall Progress: 55%
+## Overall Progress: 60%
 
 - [x] Documentation complete
 - [x] Repository structure designed
 - [x] Package scaffolding created
-- [x] Module implementations (5/14 complete: M2, M3, M4, M6, M7)
+- [x] Module implementations (6/14 complete: M2, M3, M4, M6, M7, M8)
 - [ ] API layer implementations (0/5 modules)
 - [x] Schema definitions (4/6 modules: config, repository, profile, activity)
-- [x] Testing infrastructure (pytest configured, 106 tests passing)
-- [x] Integration testing (verified M7↔M4, M6↔M7 integration)
+- [x] Testing infrastructure (pytest configured, 129 tests passing)
+- [x] Integration testing (verified M7↔M4, M6↔M7, M8↔M6 integration)
 - [x] Phase 1 end-to-end validation complete
 - [x] Phase 2 M7 complete with 84% test coverage
 - [x] Phase 2 M6 complete with 83% test coverage
+- [x] Phase 2 M8 complete with 84% test coverage
 
 ---
 
@@ -85,7 +86,7 @@
 
 ---
 
-## Phase 2: Data Ingestion & Processing (50% - M7 ✅, M6 ✅)
+## Phase 2: Data Ingestion & Processing (75% - M7 ✅, M6 ✅, M8 ✅)
 
 ### M7 - Notes & RPE Analyzer (100% ✅)
 
@@ -142,17 +143,27 @@
 - **Priority**: P0
 - **Estimate**: 2-3 days
 
-### M8 - Load Engine (0%)
+### M8 - Load Engine (100% ✅)
 
-- [ ] Base effort calculation (RPE × duration)
-- [ ] Systemic load calculation
-- [ ] Lower-body load calculation
-- [ ] Sport multipliers application
-- [ ] Workout-type adjustments
-- [ ] Session type classification
-- **Depends on**: M3
+- [x] Base effort calculation (RPE × duration)
+- [x] Systemic load calculation with sport multipliers
+- [x] Lower-body load calculation with sport multipliers
+- [x] Sport multiplier table (13 canonical sports)
+- [x] Multiplier adjustments (leg day, elevation, long duration, race effort)
+- [x] Session type classification (easy/moderate/quality/race)
+- [x] Batch load computation
+- [x] Load validation (sanity checks)
+- **Depends on**: M3, M6, M7
 - **Priority**: P0
 - **Estimate**: 1-2 days
+- **Actual**: 1 day
+- **Tests**: 23/23 passing (84% coverage)
+- **Files**:
+  - `sports_coach_engine/core/load.py` (449 lines - complete implementation)
+  - `tests/unit/test_load.py` (625 lines, 23 comprehensive tests)
+  - Two-channel model: systemic (cardio/fatigue) + lower-body (leg impact)
+  - Sport multipliers: Running (1.0,1.0), Trail (1.05,1.10), Treadmill (1.0,0.9), Cycle (0.85,0.35), Climb (0.6,0.1)
+  - Dynamic adjustments: Leg day (+0.25 lower-body), High elevation (+0.05 systemic, +0.10 lower-body)
 
 ---
 
