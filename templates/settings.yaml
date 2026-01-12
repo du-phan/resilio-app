@@ -1,60 +1,38 @@
-_schema:
-  format_version: "1.0.0"
-  schema_type: "settings"
+# Sports Coach Engine Configuration
+# Non-secret settings for the application
 
-# Repository paths
+# File paths (relative to repository root)
 paths:
-  data_root: "data"
-  activities: "activities"
-  metrics: "metrics"
-  plans: "plans"
-  athlete: "athlete"
-  conversations: "conversations"
-  backup: "backup"
+  athlete_dir: "athlete"
+  activities_dir: "activities"
+  metrics_dir: "metrics"
+  plans_dir: "plans"
+  conversations_dir: "conversations"
+  backup_dir: "backup"
 
-# File locking
-locks:
-  enabled: true
-  timeout_seconds: 300
-  stale_threshold_seconds: 300
+# Strava API configuration
+strava:
+  api_base_url: "https://www.strava.com/api/v3"
+  token_url: "https://www.strava.com/oauth/token"
+  auth_url: "https://www.strava.com/oauth/authorize"
+  scopes:
+    - "read"
+    - "activity:read_all"
+  history_import_weeks: 12  # How many weeks to import on first setup
 
-# Backup settings
-backup:
-  enabled: true
-  auto_backup_on_sync: true
-  max_backups_per_month: 3
+# Training calculation defaults
+training_defaults:
+  ctl_time_constant: 42      # days (Chronic Training Load)
+  atl_time_constant: 7       # days (Acute Training Load)
+  acwr_acute_window: 7       # days
+  acwr_chronic_window: 28    # days
+  baseline_days_threshold: 14  # days before baseline_established = true
+  acwr_minimum_days: 28      # minimum days before ACWR is calculated
 
-# Metrics computation
-metrics:
-  ctl_time_constant_days: 42
-  atl_time_constant_days: 7
-  acwr_safe_min: 0.8
-  acwr_safe_max: 1.3
-  acwr_caution_max: 1.5
-  readiness_thresholds:
-    rest: 35
-    easy_only: 50
-    moderate_ok: 65
-
-# Training guardrails
-training:
-  long_run_max_percent_weekly: 0.30
-  long_run_max_duration_minutes: 150
-  max_high_intensity_sessions_7d: 2
-  threshold_volume_max_percent: 0.10
-  interval_volume_max_percent: 0.08
-  repetition_volume_max_percent: 0.05
-
-# Load multipliers (sport-specific)
-load_multipliers:
-  running_road: { systemic: 1.00, lower_body: 1.00 }
-  running_treadmill: { systemic: 1.00, lower_body: 0.90 }
-  running_trail: { systemic: 1.05, lower_body: 1.10 }
-  cycling: { systemic: 0.85, lower_body: 0.35 }
-  swimming: { systemic: 0.70, lower_body: 0.10 }
-  climbing: { systemic: 0.60, lower_body: 0.10 }
-  strength: { systemic: 0.55, lower_body: 0.40 }
-  hiking: { systemic: 0.60, lower_body: 0.50 }
-  crossfit: { systemic: 0.75, lower_body: 0.55 }
-  yoga_flow: { systemic: 0.35, lower_body: 0.10 }
-  yoga_restorative: { systemic: 0.00, lower_body: 0.00 }
+# System settings
+system:
+  lock_timeout_ms: 300000    # 5 minutes
+  lock_retry_count: 3
+  lock_retry_delay_ms: 2000
+  backup_retention_count: 3  # per month
+  metrics_stale_hours: 24
