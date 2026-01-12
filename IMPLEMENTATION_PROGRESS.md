@@ -2,21 +2,22 @@
 
 **Version**: 0.1.0
 **Last Updated**: 2026-01-12
-**Status**: Phase 1 Core Infrastructure - Complete ✅
+**Status**: Phase 2 Data Ingestion - In Progress (M7 ✅)
 
 ---
 
-## Overall Progress: 40%
+## Overall Progress: 50%
 
 - [x] Documentation complete
 - [x] Repository structure designed
 - [x] Package scaffolding created
-- [x] Module implementations (3/14 complete: M2, M3, M4)
+- [x] Module implementations (4/14 complete: M2, M3, M4, M7)
 - [ ] API layer implementations (0/5 modules)
-- [x] Schema definitions (3/6 modules: config, repository, profile)
-- [x] Testing infrastructure (pytest configured, 55 tests passing)
-- [x] Integration testing (5 tests passing)
+- [x] Schema definitions (4/6 modules: config, repository, profile, activity)
+- [x] Testing infrastructure (pytest configured, 81 tests passing)
+- [x] Integration testing (verified M7↔M4 integration)
 - [x] Phase 1 end-to-end validation complete
+- [x] Phase 2 M7 complete with 84% test coverage
 
 ---
 
@@ -83,19 +84,29 @@
 
 ---
 
-## Phase 2: Data Ingestion & Processing (0%)
+## Phase 2: Data Ingestion & Processing (25% - M7 ✅)
 
-### M5 - Strava Integration (0%)
+### M7 - Notes & RPE Analyzer (100% ✅)
 
-- [ ] OAuth flow implementation
-- [ ] Token refresh logic
-- [ ] Fetch activities endpoint
-- [ ] Activity deduplication
-- [ ] Rate limit handling
-- [ ] Error recovery
-- **Depends on**: M2, M3
+- [x] RPE estimation from HR (HR zones → RPE mapping)
+- [x] RPE estimation from text (40+ keywords)
+- [x] Strava suffer_score normalization
+- [x] RPE conflict resolution (high-intensity uses MAX, easy trusts text)
+- [x] Treadmill detection (multi-signal: sub_type, title, GPS, device)
+- [x] Wellness extraction (sleep quality/hours, soreness, stress, fatigue, energy)
+- [x] Injury flag detection (17 keywords, 11 body parts, severity classification)
+- [x] Illness flag detection (12 patterns with rest day recommendations)
+- [x] Contextual factors (fasted, heat, cold, altitude, time of day)
+- **Depends on**: M3, M4
 - **Priority**: P0
 - **Estimate**: 2-3 days
+- **Actual**: 1.5 days
+- **Tests**: 31/31 passing (84% coverage)
+- **Files**:
+  - `sports_coach_engine/core/notes.py` (1,142 lines - complete implementation)
+  - `sports_coach_engine/schemas/activity.py` (458 lines - expanded with Phase 2 models)
+  - `sports_coach_engine/schemas/profile.py` (added VitalSigns model)
+  - `tests/unit/test_notes.py` (621 lines, 31 comprehensive tests)
 
 ### M6 - Activity Normalization (0%)
 
@@ -108,16 +119,15 @@
 - **Priority**: P0
 - **Estimate**: 1-2 days
 
-### M7 - Notes & RPE Analyzer (0%)
+### M5 - Strava Integration (0%)
 
-- [ ] RPE estimation from HR
-- [ ] RPE estimation from text
-- [ ] Strava suffer_score normalization
-- [ ] Treadmill detection
-- [ ] Wellness extraction (sleep, soreness)
-- [ ] Injury/illness flag detection
-- [ ] Conflict resolution logic
-- **Depends on**: M3
+- [ ] OAuth flow implementation
+- [ ] Token refresh logic
+- [ ] Fetch activities endpoint
+- [ ] Activity deduplication
+- [ ] Rate limit handling
+- [ ] Error recovery
+- **Depends on**: M2, M3
 - **Priority**: P0
 - **Estimate**: 2-3 days
 

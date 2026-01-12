@@ -88,6 +88,16 @@ class IntensityMetric(str, Enum):
 # ============================================================
 
 
+class VitalSigns(BaseModel):
+    """Athlete vital signs and HR zones."""
+
+    resting_hr: Optional[int] = Field(default=None, ge=30, le=100)
+    max_hr: Optional[int] = Field(default=None, ge=120, le=220)
+    lthr: Optional[int] = Field(
+        default=None, ge=100, le=200
+    )  # Lactate threshold heart rate
+
+
 class Goal(BaseModel):
     """Training goal."""
 
@@ -150,6 +160,9 @@ class AthleteProfile(BaseModel):
     email: Optional[str] = None
     created_at: str  # ISO date string
     age: Optional[int] = Field(default=None, ge=0, le=120)
+
+    # Vital Signs
+    vital_signs: Optional[VitalSigns] = None
 
     # Strava Connection
     strava: Optional[StravaConnection] = None

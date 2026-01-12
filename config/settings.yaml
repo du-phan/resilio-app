@@ -1,0 +1,38 @@
+# Sports Coach Engine Configuration
+# Non-secret settings for the application
+
+# File paths (relative to repository root)
+paths:
+  athlete_dir: "athlete"
+  activities_dir: "activities"
+  metrics_dir: "metrics"
+  plans_dir: "plans"
+  conversations_dir: "conversations"
+  backup_dir: "backup"
+
+# Strava API configuration
+strava:
+  api_base_url: "https://www.strava.com/api/v3"
+  token_url: "https://www.strava.com/oauth/token"
+  auth_url: "https://www.strava.com/oauth/authorize"
+  scopes:
+    - "read"
+    - "activity:read_all"
+  history_import_weeks: 12  # How many weeks to import on first setup
+
+# Training calculation defaults
+training_defaults:
+  ctl_time_constant: 42      # days (Chronic Training Load)
+  atl_time_constant: 7       # days (Acute Training Load)
+  acwr_acute_window: 7       # days
+  acwr_chronic_window: 28    # days
+  baseline_days_threshold: 14  # days before baseline_established = true
+  acwr_minimum_days: 28      # minimum days before ACWR is calculated
+
+# System settings
+system:
+  lock_timeout_ms: 300000    # 5 minutes
+  lock_retry_count: 3
+  lock_retry_delay_ms: 2000
+  backup_retention_count: 3  # per month
+  metrics_stale_hours: 24
