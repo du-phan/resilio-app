@@ -477,6 +477,7 @@ When multiple concerns apply, resolve in this order:
 **Multi-Sport Display Requirements:**
 
 When rendering weekly status or sync responses, M12 must:
+
 1. **Show ALL activities** (not just running) — include running, climbing, cycling, yoga, etc.
 2. **Include load breakdown** (systemic + lower-body) for each activity
 3. **Explain cross-sport impact** on running readiness (e.g., "climbing was upper-body focused, so legs are fresh")
@@ -486,6 +487,7 @@ When rendering weekly status or sync responses, M12 must:
 **Metric Accessibility Requirements:**
 
 When rendering metrics, M12 must:
+
 1. **Always include parenthetical context**: "CTL: 44 (solid recreational level)" not "CTL: 44"
 2. **Show trends where available**: "(+2 this week)" not just static value
 3. **Translate status zones**: "TSB: -8 (productive training zone)" not "TSB: -8"
