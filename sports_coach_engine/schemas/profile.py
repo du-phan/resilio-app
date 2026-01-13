@@ -7,6 +7,8 @@ from typing import Optional, List
 from datetime import date
 from enum import Enum
 
+from sports_coach_engine.schemas.adaptation import AdaptationThresholds
+
 
 # ============================================================
 # ENUMS
@@ -175,6 +177,12 @@ class AthleteProfile(BaseModel):
     recent_race: Optional[RecentRace] = None
     current_weekly_run_km: Optional[float] = Field(default=None, ge=0)
     current_run_days_per_week: Optional[int] = Field(default=None, ge=0, le=7)
+    vdot: Optional[float] = Field(
+        default=None,
+        ge=30.0,
+        le=85.0,
+        description="Jack Daniels VDOT (calculated from recent_race or estimated)"
+    )
 
     # Training Constraints
     constraints: TrainingConstraints
@@ -195,4 +203,10 @@ class AthleteProfile(BaseModel):
     # Communication Preferences
     preferences: CommunicationPreferences = Field(
         default_factory=CommunicationPreferences
+    )
+
+    # Adaptation Thresholds (Phase 5: Toolkit Paradigm)
+    adaptation_thresholds: AdaptationThresholds = Field(
+        default_factory=AdaptationThresholds,
+        description="Athlete-specific thresholds for adaptation triggers"
     )

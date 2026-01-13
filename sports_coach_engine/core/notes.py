@@ -1,102 +1,32 @@
 """
-M7 - Notes & RPE Analyzer
+M7 - Notes & RPE Analyzer (Toolkit Paradigm)
 
-Extract structured data from unstructured activity notes and metadata.
-Provides RPE estimates when direct input is unavailable, detects treadmill/indoor
-activities, and identifies wellness flags (injury, illness, fatigue) for
-downstream processing.
+Provides quantitative toolkit functions for activity analysis.
 
-This module handles:
-- RPE estimation from multiple sources (HR, text, Strava relative effort)
-- RPE conflict resolution when sources disagree
-- Treadmill/indoor activity detection
-- Injury and illness flag extraction
-- Wellness indicator parsing (sleep, soreness, stress)
-- Contextual factor extraction (heat, altitude, fasted)
+Toolkit Functions (Return Data, Not Decisions):
+- RPE estimation from multiple quantitative sources (HR, pace, Strava, duration)
+- Treadmill/indoor activity detection using multi-signal scoring
+
+Claude Code Responsibilities (Uses Context to Decide):
+- RPE conflict resolution: "HR says 7, pace says 5 → which to trust?"
+- Wellness extraction: Parse injury/illness naturally during conversation
+- Final RPE selection: Choose estimate based on athlete context
+
+The toolkit paradigm separates quantitative computation (this module)
+from qualitative reasoning (Claude Code with athlete context).
 """
 
-import re
 from datetime import datetime, timezone
 from typing import Optional
 
 from sports_coach_engine.schemas.activity import (
     AnalysisResult,
-    BodyPart,
-    ContextualFactors,
-    FlagSeverity,
-    IllnessFlag,
-    InjuryFlag,
     NormalizedActivity,
-    RPEConflict,
     RPEEstimate,
     RPESource,
     TreadmillDetection,
-    WellnessIndicators,
 )
 from sports_coach_engine.schemas.profile import AthleteProfile
-
-
-# ============================================================
-# RPE KEYWORD MAPPING
-# ============================================================
-
-# Keywords mapped to RPE values (1-10 scale)
-RPE_KEYWORDS = {
-    # Very easy (1-3)
-    "recovery": 2,
-    "very easy": 2,
-    "super easy": 2,
-    "shake out": 2,
-    "shakeout": 2,
-    "walk": 2,
-    "stroll": 2,
-    # Easy (4)
-    "easy": 4,
-    "comfortable": 4,
-    "relaxed": 4,
-    "light": 4,
-    "conversational": 4,
-    "zone 2": 4,
-    "z2": 4,
-    # Moderate (5-6)
-    "moderate": 5,
-    "steady": 5,
-    "tempo": 6,
-    "threshold": 6,
-    "comfortably hard": 6,
-    "zone 3": 5,
-    "z3": 5,
-    "zone 4": 6,
-    "z4": 6,
-    # Hard (7-8)
-    "hard": 7,
-    "tough": 7,
-    "challenging": 7,
-    "intervals": 7,
-    "vo2max": 8,
-    "vo2": 8,
-    "race pace": 8,
-    "fast": 7,
-    "struggled": 7,
-    "suffered": 8,
-    # Very hard (9-10)
-    "all out": 9,
-    "max effort": 10,
-    "sprint": 9,
-    "race": 8,
-    "pr": 8,
-    "pb": 8,
-    "destroyed": 9,
-    "wrecked": 9,
-    "brutal": 9,
-    "hell": 9,
-}
-
-# Positive modifiers (reduce RPE by 1)
-POSITIVE_MODIFIERS = ["felt great", "felt good", "strong", "fresh", "energized"]
-
-# Negative modifiers (increase RPE by 1)
-NEGATIVE_MODIFIERS = ["tired", "fatigued", "legs heavy", "sluggish", "struggled"]
 
 
 # ============================================================
@@ -123,72 +53,6 @@ INDOOR_DEVICE_NAMES = [
     "proform",
     "sole",
 ]
-
-
-# ============================================================
-# INJURY DETECTION
-# ============================================================
-
-INJURY_KEYWORDS = {
-    "pain": FlagSeverity.MODERATE,
-    "painful": FlagSeverity.MODERATE,
-    "hurts": FlagSeverity.MODERATE,
-    "hurt": FlagSeverity.MODERATE,
-    "ache": FlagSeverity.MILD,
-    "aching": FlagSeverity.MILD,
-    "tight": FlagSeverity.MILD,
-    "tightness": FlagSeverity.MILD,
-    "sore": FlagSeverity.MILD,
-    "soreness": FlagSeverity.MILD,
-    "strain": FlagSeverity.MODERATE,
-    "strained": FlagSeverity.MODERATE,
-    "pulled": FlagSeverity.MODERATE,
-    "injured": FlagSeverity.SEVERE,
-    "injury": FlagSeverity.SEVERE,
-    "sharp pain": FlagSeverity.SEVERE,
-    "stabbing": FlagSeverity.SEVERE,
-}
-
-BODY_PART_PATTERNS = {
-    BodyPart.KNEE: ["knee", "knees"],
-    BodyPart.ANKLE: ["ankle", "ankles"],
-    BodyPart.CALF: ["calf", "calves", "calf muscle"],
-    BodyPart.SHIN: ["shin", "shins", "shin splint"],
-    BodyPart.HIP: ["hip", "hips", "hip flexor"],
-    BodyPart.HAMSTRING: ["hamstring", "hamstrings", "hammie"],
-    BodyPart.QUAD: ["quad", "quads", "quadricep"],
-    BodyPart.ACHILLES: ["achilles", "achilles tendon"],
-    BodyPart.FOOT: ["foot", "feet", "plantar", "heel"],
-    BodyPart.BACK: ["back", "lower back", "spine"],
-    BodyPart.SHOULDER: ["shoulder", "shoulders"],
-}
-
-
-# ============================================================
-# ILLNESS DETECTION
-# ============================================================
-
-ILLNESS_PATTERNS = {
-    # Mild - 48 hours rest recommended
-    "cold": (FlagSeverity.MILD, 48),
-    "sniffles": (FlagSeverity.MILD, 48),
-    "runny nose": (FlagSeverity.MILD, 48),
-    "slight cold": (FlagSeverity.MILD, 48),
-    # Moderate - 72 hours rest recommended
-    "sick": (FlagSeverity.MODERATE, 72),
-    "flu": (FlagSeverity.MODERATE, 72),
-    "fever": (FlagSeverity.MODERATE, 72),
-    "chills": (FlagSeverity.MODERATE, 72),
-    "body aches": (FlagSeverity.MODERATE, 72),
-    "nausea": (FlagSeverity.MODERATE, 72),
-    # Severe - 96 hours rest recommended
-    "chest congestion": (FlagSeverity.SEVERE, 96),
-    "chest infection": (FlagSeverity.SEVERE, 96),
-    "breathing issues": (FlagSeverity.SEVERE, 96),
-    "difficulty breathing": (FlagSeverity.SEVERE, 96),
-    "covid": (FlagSeverity.SEVERE, 96),
-    "pneumonia": (FlagSeverity.SEVERE, 96),
-}
 
 
 # ============================================================
@@ -221,59 +85,39 @@ def analyze_activity(
     athlete_profile: AthleteProfile,
 ) -> AnalysisResult:
     """
-    Perform complete analysis on an activity.
+    Analyze activity using quantitative toolkit functions (Toolkit Paradigm).
 
-    This is the main entry point. Calls all sub-analyzers and combines results.
+    Returns multiple RPE estimates from quantitative sources and treadmill
+    detection. Claude Code handles qualitative extraction (wellness, injury,
+    illness) naturally through conversation.
 
     Args:
         activity: Normalized activity with notes
         athlete_profile: Profile with vital signs for HR-based RPE
 
     Returns:
-        Complete analysis including RPE, flags, and wellness
+        AnalysisResult with multiple RPE estimates and treadmill detection
     """
-    # Detect treadmill first (needed by RPE estimation)
+    # Detect treadmill using multi-signal scoring
     treadmill = detect_treadmill(
         activity_name=activity.name,
         description=activity.description,
-        has_gps=activity.has_polyline,
+        has_gps=activity.has_gps_data,
         sport_type=activity.sport_type,
         sub_type=activity.sub_type,
         device_name=activity.gear_id,  # Using gear_id as proxy for device
     )
 
-    # Estimate RPE from all sources
-    final_rpe, all_estimates, conflict = estimate_rpe(activity, athlete_profile)
+    # Get all available RPE estimates (no resolution)
+    rpe_estimates = estimate_rpe(activity, athlete_profile)
 
-    # Extract injury flags
-    injury_flags = extract_injury_flags(activity.description, activity.private_note)
-
-    # Extract illness flags
-    illness_flags = extract_illness_flags(activity.description, activity.private_note)
-
-    # Extract wellness indicators
-    wellness = extract_wellness_indicators(
-        activity.description, activity.private_note
-    )
-
-    # Extract contextual factors
-    context = extract_contextual_factors(
-        activity.description, activity.private_note, activity.start_time
-    )
-
-    # Check if any notes are present
+    # Check if any notes are present (Claude Code can parse if needed)
     notes_present = bool(activity.description or activity.private_note)
 
     return AnalysisResult(
         activity_id=activity.id,
-        estimated_rpe=final_rpe,
-        rpe_conflict=conflict,
-        all_rpe_estimates=all_estimates,
+        rpe_estimates=rpe_estimates,
         treadmill_detection=treadmill,
-        injury_flags=injury_flags,
-        illness_flags=illness_flags,
-        wellness=wellness,
-        context=context,
         analyzed_at=datetime.now(timezone.utc),
         notes_present=notes_present,
     )
@@ -287,27 +131,32 @@ def analyze_activity(
 def estimate_rpe(
     activity: NormalizedActivity,
     athlete_profile: AthleteProfile,
-) -> tuple[RPEEstimate, list[RPEEstimate], Optional[RPEConflict]]:
+) -> list[RPEEstimate]:
     """
-    Estimate RPE from all available sources and resolve conflicts.
+    Estimate RPE from all available quantitative sources (Toolkit Paradigm).
 
-    Priority Order:
-    1. Explicit user input (Strava perceived_exertion) - always wins
+    Returns ALL available RPE estimates without resolution. Claude Code
+    uses these estimates with conversation context to determine final RPE.
+
+    Sources checked:
+    1. Explicit user input (Strava perceived_exertion)
     2. HR-based estimate (when reliable HR present)
-    3. Text-based estimate from notes
-    4. Strava relative effort normalization
-    5. Duration + sport heuristic (fallback)
+    3. Strava relative effort normalization
+    4. Duration + sport heuristic (always available)
+
+    Note: Text-based extraction removed - Claude Code extracts RPE from
+    notes naturally during conversation.
 
     Args:
         activity: Activity with HR, notes, suffer_score
         athlete_profile: Profile with max_hr, lthr
 
     Returns:
-        (final_estimate, all_estimates, conflict if detected)
+        List of all available RPE estimates (Claude Code decides which to use)
     """
     estimates: list[RPEEstimate] = []
 
-    # 1. User input - highest priority (always wins)
+    # 1. User input (if explicitly entered)
     if activity.perceived_exertion:
         user_estimate = RPEEstimate(
             value=activity.perceived_exertion,
@@ -315,8 +164,7 @@ def estimate_rpe(
             confidence="high",
             reasoning="User explicitly entered RPE in Strava",
         )
-        # User input is absolute - return immediately
-        return (user_estimate, [user_estimate], None)
+        estimates.append(user_estimate)
 
     # 2. HR-based estimate
     if activity.has_hr_data and activity.average_hr:
@@ -334,16 +182,7 @@ def estimate_rpe(
         if hr_estimate:
             estimates.append(hr_estimate)
 
-    # 3. Text-based estimate
-    text_estimate = estimate_rpe_from_text(
-        description=activity.description,
-        private_note=activity.private_note,
-        activity_name=activity.name,
-    )
-    if text_estimate:
-        estimates.append(text_estimate)
-
-    # 4. Strava relative effort
+    # 3. Strava relative effort
     if activity.suffer_score:
         rel_estimate = estimate_rpe_from_strava_relative(
             suffer_score=activity.suffer_score,
@@ -352,58 +191,35 @@ def estimate_rpe(
         if rel_estimate:
             estimates.append(rel_estimate)
 
-    # 5. Duration heuristic fallback
+    # 4. Pace-based estimate (for running activities with pace data)
+    if activity.sport_type in ["run", "trail_run", "treadmill_run", "track_run"]:
+        # Calculate average pace if distance and duration available
+        if activity.distance_km and activity.distance_km > 0:
+            avg_pace_seconds = (activity.duration_seconds / activity.distance_km)
+
+            # Get VDOT from athlete profile
+            athlete_vdot = None
+            if athlete_profile and hasattr(athlete_profile, 'vdot'):
+                athlete_vdot = athlete_profile.vdot
+
+            # Estimate RPE from pace if VDOT available
+            if athlete_vdot:
+                pace_estimate = estimate_rpe_from_pace(
+                    avg_pace_per_km=avg_pace_seconds,
+                    athlete_vdot=athlete_vdot,
+                    sport_type=activity.sport_type,
+                )
+                if pace_estimate:
+                    estimates.append(pace_estimate)
+
+    # 5. Duration heuristic (always available as fallback)
     duration_estimate = estimate_rpe_from_duration(
         sport_type=activity.sport_type,
         duration_minutes=activity.duration_seconds // 60,
     )
     estimates.append(duration_estimate)
 
-    # Resolve if we have estimates
-    if not estimates:
-        # Should never happen (duration fallback always works)
-        return (
-            RPEEstimate(
-                value=5,
-                source=RPESource.DURATION_HEURISTIC,
-                confidence="low",
-                reasoning="No data available",
-            ),
-            [],
-            None,
-        )
-
-    # Check for conflicts
-    conflict = None
-    values = [e.value for e in estimates]
-    spread = max(values) - min(values)
-
-    if spread > 2 and len(estimates) > 1:
-        # Conflict detected
-        is_high_intensity = is_high_intensity_session(
-            activity,
-            athlete_profile.vital_signs.max_hr
-            if athlete_profile and athlete_profile.vital_signs
-            else None,
-        )
-        resolved_value, method = resolve_rpe_conflict(estimates, is_high_intensity)
-        conflict = RPEConflict(
-            estimates=estimates,
-            spread=spread,
-            resolved_value=resolved_value,
-            resolution_method=method,
-        )
-        final = RPEEstimate(
-            value=resolved_value,
-            source=RPESource.HR_BASED if "HR" in method else RPESource.TEXT_BASED,
-            confidence="medium",
-            reasoning=f"Resolved conflict: {method}",
-        )
-    else:
-        # Use highest priority estimate (first in list with user_input priority)
-        final = _select_best_estimate(estimates)
-
-    return final, estimates, conflict
+    return estimates
 
 
 def estimate_rpe_from_hr(
@@ -475,75 +291,6 @@ def estimate_rpe_from_hr(
         source=RPESource.HR_BASED,
         confidence=confidence,
         reasoning=f"HR {average_hr} = {hr_percent:.0f}% of max ({max_hr})",
-    )
-
-
-def estimate_rpe_from_text(
-    description: Optional[str],
-    private_note: Optional[str],
-    activity_name: Optional[str],
-) -> Optional[RPEEstimate]:
-    """
-    Extract RPE from activity text content.
-
-    Combines title, description, and private note for analysis.
-
-    Args:
-        description: Public description
-        private_note: Private notes
-        activity_name: Activity title
-
-    Returns:
-        RPE estimate or None if no keywords found
-    """
-    # Combine all text sources
-    text_parts = [
-        activity_name or "",
-        description or "",
-        private_note or "",
-    ]
-    combined_text = " ".join(text_parts).lower()
-
-    if not combined_text.strip():
-        return None
-
-    # Find matching keywords
-    found_keywords = []
-    rpe_values = []
-
-    for keyword, rpe in RPE_KEYWORDS.items():
-        if keyword in combined_text:
-            found_keywords.append(keyword)
-            rpe_values.append(rpe)
-
-    if not rpe_values:
-        return None
-
-    # Base RPE from keywords (use max for conservative estimate)
-    base_rpe = max(rpe_values)
-
-    # Apply modifiers
-    modifier = 0
-    for pos in POSITIVE_MODIFIERS:
-        if pos in combined_text:
-            modifier -= 1  # Felt good = slightly easier than expected
-            break
-
-    for neg in NEGATIVE_MODIFIERS:
-        if neg in combined_text:
-            modifier += 1  # Struggled = harder than expected
-            break
-
-    final_rpe = max(1, min(10, base_rpe + modifier))
-
-    # Confidence based on keyword specificity
-    confidence = "high" if len(found_keywords) > 1 else "medium"
-
-    return RPEEstimate(
-        value=final_rpe,
-        source=RPESource.TEXT_BASED,
-        confidence=confidence,
-        reasoning=f"Keywords: {', '.join(found_keywords[:3])}",
     )
 
 
@@ -640,135 +387,78 @@ def estimate_rpe_from_duration(
     )
 
 
-def resolve_rpe_conflict(
-    estimates: list[RPEEstimate],
-    is_high_intensity_session: bool,
-) -> tuple[int, str]:
+def estimate_rpe_from_pace(
+    avg_pace_per_km: float,
+    athlete_vdot: float,
+    sport_type: str = "run",
+) -> Optional[RPEEstimate]:
     """
-    Resolve conflicting RPE estimates using decision tree.
+    Estimate RPE from running pace using VDOT training zones (Toolkit Paradigm).
 
-    Resolution Priority:
-    1. User input always wins (should not reach here)
-    2. For high-intensity sessions: use MAX(HR, text) - trust higher signal
-    3. For non-high-intensity: use text-based (HR can be elevated by stress)
-    4. If spread > 3: use MAX (conservative = higher load)
+    Maps actual pace to VDOT-based training zones:
+    - Easy pace (Zone 2): RPE 4
+    - Marathon pace (Zone 3): RPE 6
+    - Threshold/Tempo pace (Zone 4): RPE 7
+    - Interval pace (Zone 5): RPE 8
+    - Repetition pace (faster): RPE 9
 
     Args:
-        estimates: All available estimates
-        is_high_intensity_session: Whether session appears high-intensity
+        avg_pace_per_km: Average pace in seconds per km
+        athlete_vdot: Athlete's VDOT from profile
+        sport_type: "run" or "trail_run" (adds +1 RPE for trails)
 
     Returns:
-        (resolved_value, resolution_method)
+        RPEEstimate with pace-based RPE, or None if pace unavailable
     """
-    # Filter by source type
-    hr_estimates = [e for e in estimates if e.source == RPESource.HR_BASED]
-    text_estimates = [e for e in estimates if e.source == RPESource.TEXT_BASED]
+    if not avg_pace_per_km or not athlete_vdot:
+        return None
 
-    hr_value = hr_estimates[0].value if hr_estimates else None
-    text_value = text_estimates[0].value if text_estimates else None
+    # Calculate VDOT zone paces using corrected formulas
+    # Zone 2 (Easy): VDOT 40→6:00/km (360s), 45→5:30 (330s), 50→5:00 (300s)
+    easy_pace = int(360 - (athlete_vdot - 40) * 6)
 
-    # Calculate spread
-    all_values = [e.value for e in estimates]
-    spread = max(all_values) - min(all_values)
+    # Zone 4 (Tempo): VDOT 40→5:30/km (330s), 45→5:00 (300s), 50→4:40 (280s)
+    tempo_pace = int(330 - (athlete_vdot - 40) * 5)
 
-    # Resolution logic
-    if spread > 3:
-        # Large disagreement - be conservative (higher load is safer)
-        return max(all_values), f"Large spread ({spread}); using MAX for safety"
+    # Zone 5 (Intervals): VDOT 40→5:00/km (300s), 45→4:30 (270s), 50→4:05 (245s)
+    interval_pace = int(300 - (athlete_vdot - 40) * 5.5)
 
-    if is_high_intensity_session:
-        # High intensity: trust whichever is higher
-        if hr_value and text_value:
-            return (
-                max(hr_value, text_value),
-                "High-intensity session; MAX(HR, text)",
-            )
-        elif hr_value:
-            return hr_value, "High-intensity session; HR-based"
-        elif text_value:
-            return text_value, "High-intensity session; text-based"
-    else:
-        # Non-high intensity: trust text over HR (HR can be elevated)
-        if text_value:
-            return (
-                text_value,
-                "Non-high-intensity; text-based (HR may be elevated)",
-            )
-        elif hr_value:
-            return hr_value, "Non-high-intensity; HR-based (only source)"
+    # Zone 3 (Marathon): Roughly between easy and tempo
+    marathon_pace = (easy_pace + tempo_pace) // 2
 
-    # Fallback: average
-    avg = sum(all_values) // len(all_values)
-    return avg, "Fallback: average of estimates"
+    # Repetition pace: Faster than intervals
+    repetition_pace = interval_pace - 30  # ~30s/km faster
 
+    # Determine RPE based on pace (faster = higher RPE)
+    if avg_pace_per_km <= repetition_pace:
+        rpe = 9
+        zone_name = "repetition"
+    elif avg_pace_per_km <= interval_pace:
+        rpe = 8
+        zone_name = "interval"
+    elif avg_pace_per_km <= tempo_pace:
+        rpe = 7
+        zone_name = "tempo/threshold"
+    elif avg_pace_per_km <= marathon_pace:
+        rpe = 6
+        zone_name = "marathon"
+    else:  # Slower than marathon pace
+        rpe = 4
+        zone_name = "easy"
 
-def is_high_intensity_session(
-    activity: NormalizedActivity,
-    athlete_max_hr: Optional[int],
-) -> bool:
-    """
-    Detect if session appears to be high-intensity.
+    # Adjust for trail running (+1 RPE)
+    if "trail" in sport_type.lower():
+        rpe = min(10, rpe + 1)
+        zone_name += " (trail)"
 
-    Indicators:
-    - HR > 85% of max
-    - Workout type indicates intervals/tempo/race
-    - Keywords in title/notes
+    pace_str = f"{int(avg_pace_per_km // 60)}:{int(avg_pace_per_km % 60):02d}"
 
-    Args:
-        activity: Normalized activity
-        athlete_max_hr: Athlete's known max HR
-
-    Returns:
-        True if session appears high-intensity
-    """
-    # HR indicator
-    if athlete_max_hr and activity.average_hr:
-        hr_percent = (activity.average_hr / athlete_max_hr) * 100
-        if hr_percent > 85:
-            return True
-
-    # Workout type indicator
-    if activity.workout_type in {1, 3}:  # Race or Workout
-        return True
-
-    # Keyword indicator
-    high_intensity_keywords = [
-        "interval",
-        "tempo",
-        "threshold",
-        "race",
-        "vo2",
-        "speed",
-        "track",
-        "fartlek",
-    ]
-    combined = f"{activity.name or ''} {activity.description or ''}".lower()
-    if any(kw in combined for kw in high_intensity_keywords):
-        return True
-
-    return False
-
-
-def _select_best_estimate(estimates: list[RPEEstimate]) -> RPEEstimate:
-    """
-    Select best estimate by source priority.
-
-    Priority: USER_INPUT > HR_BASED > TEXT_BASED > STRAVA_RELATIVE > DURATION_HEURISTIC
-
-    Args:
-        estimates: List of estimates
-
-    Returns:
-        Highest priority estimate
-    """
-    priority = {
-        RPESource.USER_INPUT: 0,
-        RPESource.HR_BASED: 1,
-        RPESource.TEXT_BASED: 2,
-        RPESource.STRAVA_RELATIVE: 3,
-        RPESource.DURATION_HEURISTIC: 4,
-    }
-    return min(estimates, key=lambda e: priority[e.source])
+    return RPEEstimate(
+        value=rpe,
+        source=RPESource.PACE_BASED,
+        confidence="high",
+        reasoning=f"Pace {pace_str}/km maps to {zone_name} pace for VDOT {athlete_vdot}",
+    )
 
 
 # ============================================================
@@ -856,7 +546,7 @@ def detect_treadmill(
 
     # Determine result
     is_treadmill = confidence_score >= 2
-    confidence = "high" if confidence_score >= 4 else "low"
+    confidence = "high" if confidence_score >= 2 else "low"
 
     return TreadmillDetection(
         is_treadmill=is_treadmill,
@@ -865,278 +555,3 @@ def detect_treadmill(
     )
 
 
-# ============================================================
-# INJURY FLAG EXTRACTION
-# ============================================================
-
-
-def extract_injury_flags(
-    description: Optional[str],
-    private_note: Optional[str],
-) -> list[InjuryFlag]:
-    """
-    Extract injury/pain mentions with body part and severity.
-
-    Args:
-        description: Public description
-        private_note: Private notes
-
-    Returns:
-        List of injury flags
-    """
-    combined = f"{description or ''} {private_note or ''}".lower()
-    if not combined.strip():
-        return []
-
-    flags = []
-
-    for keyword, severity in INJURY_KEYWORDS.items():
-        if keyword not in combined:
-            continue
-
-        # Find associated body part
-        body_part = BodyPart.GENERAL
-        for part, patterns in BODY_PART_PATTERNS.items():
-            if any(p in combined for p in patterns):
-                body_part = part
-                break
-
-        # Extract surrounding context (for source_text)
-        idx = combined.find(keyword)
-        start = max(0, idx - 30)
-        end = min(len(combined), idx + len(keyword) + 30)
-        context = combined[start:end].strip()
-
-        # Determine if rest is required
-        requires_rest = severity in {FlagSeverity.MODERATE, FlagSeverity.SEVERE}
-
-        flags.append(
-            InjuryFlag(
-                body_part=body_part,
-                severity=severity,
-                keywords_found=[keyword],
-                source_text=f"...{context}...",
-                requires_rest=requires_rest,
-            )
-        )
-
-    # Deduplicate by body part (keep highest severity)
-    seen_parts = {}
-    for flag in flags:
-        key = flag.body_part
-        if key not in seen_parts or _severity_rank(flag.severity) > _severity_rank(
-            seen_parts[key].severity
-        ):
-            seen_parts[key] = flag
-
-    return list(seen_parts.values())
-
-
-def _severity_rank(severity: FlagSeverity) -> int:
-    """Rank severity for comparison."""
-    return {
-        FlagSeverity.MILD: 1,
-        FlagSeverity.MODERATE: 2,
-        FlagSeverity.SEVERE: 3,
-    }[severity]
-
-
-# ============================================================
-# ILLNESS FLAG EXTRACTION
-# ============================================================
-
-
-def extract_illness_flags(
-    description: Optional[str],
-    private_note: Optional[str],
-) -> list[IllnessFlag]:
-    """
-    Detect illness signals with severity classification.
-
-    Args:
-        description: Public description
-        private_note: Private notes
-
-    Returns:
-        List of illness flags (usually 0 or 1)
-    """
-    combined = f"{description or ''} {private_note or ''}".lower()
-    if not combined.strip():
-        return []
-
-    found_symptoms = []
-    max_severity = FlagSeverity.MILD
-    max_rest_days = 0
-    keywords_found = []
-
-    for pattern, (severity, rest_hours) in ILLNESS_PATTERNS.items():
-        if pattern in combined:
-            found_symptoms.append(pattern)
-            keywords_found.append(pattern)
-            if _severity_rank(severity) > _severity_rank(max_severity):
-                max_severity = severity
-            rest_days = rest_hours // 24
-            if rest_days > max_rest_days:
-                max_rest_days = rest_days
-
-    if not found_symptoms:
-        return []
-
-    # Extract context
-    first_keyword = keywords_found[0]
-    idx = combined.find(first_keyword)
-    start = max(0, idx - 30)
-    end = min(len(combined), idx + len(first_keyword) + 30)
-    context = combined[start:end].strip()
-
-    return [
-        IllnessFlag(
-            severity=max_severity,
-            symptoms=found_symptoms,
-            keywords_found=keywords_found,
-            source_text=f"...{context}...",
-            rest_days_recommended=max_rest_days,
-        )
-    ]
-
-
-# ============================================================
-# WELLNESS INDICATORS
-# ============================================================
-
-
-def extract_wellness_indicators(
-    description: Optional[str],
-    private_note: Optional[str],
-) -> WellnessIndicators:
-    """
-    Extract wellness signals (sleep, soreness, stress).
-
-    Args:
-        description: Public description
-        private_note: Private notes
-
-    Returns:
-        WellnessIndicators object
-    """
-    combined = f"{description or ''} {private_note or ''}".lower()
-
-    wellness = WellnessIndicators()
-
-    if not combined.strip():
-        return wellness
-
-    # Sleep quality
-    if any(kw in combined for kw in ["slept well", "good sleep", "rested", "well rested"]):
-        wellness.sleep_quality = "good"
-    elif any(
-        kw in combined
-        for kw in ["bad sleep", "poor sleep", "slept poorly", "slept bad", "didn't sleep", "insomnia"]
-    ):
-        wellness.sleep_quality = "poor"
-    elif any(
-        kw in combined for kw in ["disrupted sleep", "woke up", "restless night", "restless sleep"]
-    ):
-        wellness.sleep_quality = "disrupted"
-
-    # Sleep hours (look for patterns like "5 hours sleep", "only 6 hours", "6h")
-    # Try with "sleep" keyword first
-    sleep_match = re.search(r"(\d+)\s*(hours?|hrs?|h)\s*(?:of\s*)?sleep", combined)
-    if not sleep_match:
-        # Try without "sleep" if context suggests sleep (slept, sleep quality keywords)
-        if any(kw in combined for kw in ["slept", "sleep", "rested", "woke"]):
-            sleep_match = re.search(r"(\d+)\s*(hours?|hrs?|h)", combined)
-    if sleep_match:
-        wellness.sleep_hours = float(sleep_match.group(1))
-
-    # Soreness level (1-10 scale)
-    if "very sore" in combined or "extremely sore" in combined:
-        wellness.soreness_level = 8
-    elif "quite sore" in combined or "pretty sore" in combined:
-        wellness.soreness_level = 6
-    elif "sore" in combined or "soreness" in combined:
-        wellness.soreness_level = 4
-    elif "slightly sore" in combined:
-        wellness.soreness_level = 2
-
-    # Stress level
-    if any(kw in combined for kw in ["stressed", "stressful", "high stress"]):
-        wellness.stress_level = "high"
-    elif any(kw in combined for kw in ["moderate stress", "some stress"]):
-        wellness.stress_level = "moderate"
-    elif any(kw in combined for kw in ["relaxed", "calm", "low stress"]):
-        wellness.stress_level = "low"
-
-    # Fatigue
-    wellness.fatigue_mentioned = any(
-        kw in combined for kw in ["fatigued", "fatigue", "exhausted", "worn out"]
-    )
-
-    # Energy level
-    if any(kw in combined for kw in ["high energy", "energized", "felt great"]):
-        wellness.energy_level = "high"
-    elif any(kw in combined for kw in ["low energy", "tired", "sluggish"]):
-        wellness.energy_level = "low"
-    else:
-        wellness.energy_level = "normal"
-
-    return wellness
-
-
-# ============================================================
-# CONTEXTUAL FACTORS
-# ============================================================
-
-
-def extract_contextual_factors(
-    description: Optional[str],
-    private_note: Optional[str],
-    start_time: Optional[datetime],
-) -> ContextualFactors:
-    """
-    Extract environmental and situational context.
-
-    Args:
-        description: Public description
-        private_note: Private notes
-        start_time: Activity start time
-
-    Returns:
-        ContextualFactors object
-    """
-    combined = f"{description or ''} {private_note or ''}".lower()
-
-    context = ContextualFactors()
-
-    if not combined.strip():
-        return context
-
-    # Fasted
-    context.is_fasted = any(
-        kw in combined
-        for kw in ["fasted", "fasting", "no breakfast", "empty stomach"]
-    )
-
-    # Weather conditions
-    context.heat_mentioned = any(kw in combined for kw in ["hot", "heat", "humid"])
-    context.cold_mentioned = any(
-        kw in combined for kw in ["cold", "freezing", "chilly"]
-    )
-    context.altitude_mentioned = any(
-        kw in combined for kw in ["altitude", "elevation", "thin air", "mountains"]
-    )
-
-    # Travel
-    context.travel_mentioned = any(
-        kw in combined for kw in ["traveling", "travel", "trip", "vacation"]
-    )
-
-    # Time of day
-    context.after_work = any(kw in combined for kw in ["after work", "evening run"])
-
-    # Early morning detection from start_time
-    if start_time:
-        hour = start_time.hour
-        context.early_morning = 4 <= hour <= 6
-
-    return context

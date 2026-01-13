@@ -2,605 +2,556 @@
 
 **Version**: 0.1.0
 **Last Updated**: 2026-01-13
-**Status**: Phase 2 Complete & Production Ready (M7 ✅, M6 ✅, M8 ✅, M5 ✅)
+**Status**: Phase 5 Complete ✅ | Toolkit Paradigm Refactoring Implemented
 
 ---
 
-## Overall Progress: 72%
+## Overall Progress: 95%
 
-- [x] Documentation complete & updated with real data insights
-- [x] Repository structure designed
-- [x] Package scaffolding created
-- [x] Module implementations (7/14 complete: M2, M3, M4, M5, M6, M7, M8)
-- [ ] API layer implementations (0/5 modules)
-- [x] Schema definitions (4/6 modules: config, repository, profile, activity) - updated with real Strava types
-- [x] Testing infrastructure (pytest configured, 107 Phase 2 tests passing)
-- [x] Integration testing (verified M5→M7→M6→M8 pipeline with real Strava data)
-- [x] Phase 1 end-to-end validation complete
-- [x] Phase 2 complete: M7 (84%), M6 (83%), M8 (84%), M5 (94%)
-- [x] Real Strava data validation: 17 activities processed (7 climbing, 5 running, 5 yoga)
-- [x] Documentation aligned with actual Strava API behavior
+### Summary
 
----
+- ✅ **12 of 14 core modules complete** (M2-M13, excluding M1 workflows and M14 logger)
+- ✅ **315 tests passing** across all modules
+- ✅ **Toolkit paradigm refactored** in M7, M10, M11 (57% code reduction)
+- ✅ **Real Strava data validated** with 17 multi-sport activities
+- ✅ **Full pipeline operational**: Strava → Normalize → Analyze → Metrics → Planning → Adaptation
+- ⏳ **Remaining**: M1 orchestration workflows, M14 conversation logger, API layer
 
-## Phase 1: Core Infrastructure (100% - M2 ✅, M3 ✅, M4 ✅)
+### Completed Modules (12/14)
 
-### M2 - Config & Secrets (100% ✅)
+| Phase | Module                    | Status | Tests | Coverage | Notes                                  |
+| ----- | ------------------------- | ------ | ----- | -------- | -------------------------------------- |
+| 1     | M2 - Config & Secrets     | ✅     | 8     | 94%      | Core infrastructure                    |
+| 1     | M3 - Repository I/O       | ✅     | 18    | 95%      | File operations with atomic writes     |
+| 1     | M4 - Profile Service      | ✅     | 24    | 90%      | VDOT calculation, constraints          |
+| 2     | M5 - Strava Integration   | ✅     | 28    | 94%      | OAuth, sync, deduplication             |
+| 2     | M6 - Normalization        | ✅     | 25    | 83%      | 40+ sport aliases → 13 canonical       |
+| 2     | M7 - Notes & RPE Analyzer | ✅     | 26    | 84%      | **Toolkit refactored** (65% reduction) |
+| 2     | M8 - Load Engine          | ✅     | 23    | 84%      | Two-channel load model                 |
+| 3     | M9 - Metrics Engine       | ✅     | 32    | 94%      | CTL/ATL/TSB/ACWR/readiness             |
+| 4     | M10 - Plan Toolkit        | ✅     | 51    | 88%      | **Toolkit refactored** (52% reduction) |
+| 4     | M11 - Adaptation Toolkit  | ✅     | 26    | 85%      | **Toolkit refactored** (55% reduction) |
+| 4     | M12 - Data Enrichment     | ✅     | 31    | 87%      | Metric interpretations                 |
+| 4     | M13 - Memory & Insights   | ✅     | 23    | 82%      | AI-driven extraction                   |
 
-- [x] Config loading from YAML
-- [x] Secret validation
-- [x] Error handling for missing configs
-- [ ] Environment variable support (deferred - not needed for v0)
-- [ ] Token refresh (deferred to Phase 2 with M5 Strava integration)
-- **Depends on**: None
-- **Priority**: P0 (blocks everything)
-- **Estimate**: 1 day
-- **Actual**: 1 day
-- **Tests**: 8/8 passing
-- **Files**:
-  - `sports_coach_engine/schemas/config.py` (created)
-  - `sports_coach_engine/core/config.py` (implemented)
-  - `tests/unit/test_config.py` (created)
-  - `config/settings.yaml` (created from template)
-  - `config/secrets.local.yaml` (created from template)
+### Pending Modules (2/14)
 
-### M3 - Repository I/O (100% ✅)
-
-- [x] YAML read/write with validation
-- [x] Atomic write operations (temp + rename)
-- [x] File locking mechanism (PID-based, cross-platform)
-- [x] Path resolution
-- [x] List files with glob patterns
-- [ ] Schema migration support (deferred - not needed for v0)
-- **Depends on**: M2
-- **Priority**: P0 (blocks everything)
-- **Estimate**: 2-3 days
-- **Actual**: 1.5 days
-- **Tests**: 18/18 passing
-- **Files**:
-  - `sports_coach_engine/schemas/repository.py` (created)
-  - `sports_coach_engine/core/repository.py` (implemented)
-  - `tests/unit/test_repository.py` (created)
-
-### M4 - Athlete Profile Service (100% ✅)
-
-- [x] Profile CRUD operations (load, save, update, delete)
-- [x] Complete profile schema with all fields (enums, constraints, goals, preferences)
-- [x] Constraint validation logic (4 validation rules per M4 spec)
-- [x] VDOT calculation from race times (Jack Daniels' formula)
-- [ ] Pace derivation (deferred to Phase 3 when M10 Plan Generator needs it)
-- **Depends on**: M2, M3
-- **Priority**: P0
-- **Estimate**: 1-2 days
-- **Actual Phase 1E+1F**: 3 hours total
-- **Status**: Complete
-- **Tests**: 24/24 passing
-  - 11 CRUD tests (load, save, update, delete, validation)
-  - 6 VDOT calculation tests (including time parsing)
-  - 7 constraint validation tests (errors, warnings, edge cases)
-- **Files**:
-  - `sports_coach_engine/schemas/profile.py` (expanded with full schema)
-  - `sports_coach_engine/core/profile.py` (implemented CRUD, VDOT, constraints)
-  - `tests/unit/test_profile.py` (created with 24 tests)
-  - `sports_coach_engine/core/repository.py` (fixed serialization: mode='json')
+| Module                    | Status     | Dependencies | Estimated Effort |
+| ------------------------- | ---------- | ------------ | ---------------- |
+| M1 - Internal Workflows   | ⏳ Pending | All modules  | 2-3 days         |
+| M14 - Conversation Logger | ⏳ Pending | M3           | 1 day            |
 
 ---
 
-## Phase 2: Data Ingestion & Processing (100% - M7 ✅, M6 ✅, M8 ✅, M5 ✅)
+## Phase 1: Core Infrastructure (100% ✅)
 
-### M7 - Notes & RPE Analyzer (100% ✅)
+### M2 - Config & Secrets
 
-- [x] RPE estimation from HR (HR zones → RPE mapping)
-- [x] RPE estimation from text (40+ keywords)
-- [x] Strava suffer_score normalization
-- [x] RPE conflict resolution (high-intensity uses MAX, easy trusts text)
-- [x] Treadmill detection (multi-signal: sub_type, title, GPS, device)
-- [x] Wellness extraction (sleep quality/hours, soreness, stress, fatigue, energy)
-- [x] Injury flag detection (17 keywords, 11 body parts, severity classification)
-- [x] Illness flag detection (12 patterns with rest day recommendations)
-- [x] Contextual factors (fasted, heat, cold, altitude, time of day)
-- **Depends on**: M3, M4
-- **Priority**: P0
-- **Estimate**: 2-3 days
-- **Actual**: 1.5 days
-- **Tests**: 31/31 passing (84% coverage)
-- **Files**:
-  - `sports_coach_engine/core/notes.py` (1,142 lines - complete implementation)
-  - `sports_coach_engine/schemas/activity.py` (458 lines - expanded with Phase 2 models)
-  - `sports_coach_engine/schemas/profile.py` (added VitalSigns model)
-  - `tests/unit/test_notes.py` (621 lines, 31 comprehensive tests)
+- ✅ YAML config loading with validation
+- ✅ Secret management (Strava tokens)
+- ✅ Error handling for missing configs
+- **Tests**: 8/8 passing (94% coverage)
+- **Files**: `schemas/config.py`, `core/config.py`
 
-### M6 - Activity Normalization (100% ✅)
+### M3 - Repository I/O
 
-- [x] Sport type normalization (40+ Strava aliases → 13 canonical types)
-- [x] Surface type detection using M7 treadmill detection
-- [x] Data quality assessment (HIGH/MEDIUM/LOW/TREADMILL)
-- [x] Unit conversions (meters→km, seconds→minutes)
-- [x] Filename generation with collision handling
-- [x] Activity validation (duration, pace, HR sanity checks)
-- [x] File persistence via M3 Repository I/O
-- **Depends on**: M3, M7
-- **Priority**: P0
-- **Estimate**: 1-2 days
-- **Actual**: 1 day
-- **Tests**: 25/25 passing (83% coverage)
-- **Files**:
-  - `sports_coach_engine/core/normalization.py` (557 lines - complete implementation)
-  - `tests/unit/test_normalization.py` (489 lines, 25 comprehensive tests)
-  - Sport type mapping: 40+ aliases covering running variants, cycling, strength, climbing, etc.
-  - Surface detection: Multi-priority decision tree (explicit sport type → M7 detection → GPS heuristics)
-  - Filename format: `activities/YYYY-MM/YYYY-MM-DD_sport_HHmm.yaml` with automatic collision handling
+- ✅ YAML read/write with Pydantic validation
+- ✅ Atomic writes (temp file + rename)
+- ✅ PID-based file locking (cross-platform)
+- ✅ Glob pattern support for file discovery
+- **Tests**: 18/18 passing (95% coverage)
+- **Files**: `schemas/repository.py`, `core/repository.py`
 
-### M5 - Strava Integration (100% ✅)
+### M4 - Profile Service
 
-- [x] OAuth flow implementation (manual authorization)
-- [x] Token refresh logic (automatic when <5min remaining)
-- [x] Fetch activities endpoint with pagination
-- [x] Fetch activity details (including private notes)
-- [x] Two-tier deduplication (primary key + fuzzy match)
-- [x] Rate limit handling with exponential backoff (tenacity)
-- [x] Error recovery (partial syncs, graceful degradation)
-- [x] Manual activity creation
-- [x] Strava → RawActivity mapping
-- **Depends on**: M2, M3
-- **Priority**: P0
-- **Estimate**: 2-3 days
-- **Actual**: 1.5 days
+- ✅ Profile CRUD operations
+- ✅ VDOT calculation from race PRs (Jack Daniels' formula)
+- ✅ Training constraint validation (4 rules)
+- ✅ Goal management with target dates/times
+- **Tests**: 24/24 passing (90% coverage)
+- **Files**: `schemas/profile.py`, `core/profile.py`
+
+---
+
+## Phase 2: Data Ingestion & Processing (100% ✅)
+
+### M5 - Strava Integration
+
+- ✅ OAuth 2.0 flow (authorization + token refresh)
+- ✅ Activity sync with pagination and rate limiting
+- ✅ Two-tier deduplication (primary key + fuzzy match)
+- ✅ Manual activity creation (`manual_{uuid}` IDs)
+- ✅ **Real data validation**: 17 activities synced successfully
 - **Tests**: 28/28 passing (94% coverage)
-- **Files**:
-  - `sports_coach_engine/core/strava.py` (662 lines - complete implementation)
-  - `tests/unit/test_strava.py` (710 lines, 28 comprehensive tests)
-  - OAuth flow: Authorization URL → Code exchange → Token refresh
-  - Rate limiting: 3 retries, exponential backoff (2s-8s)
-  - Deduplication: Tier 1 (source+id) → Tier 2 (fuzzy fingerprint)
-  - Manual activities: Generated ID format `manual_{uuid}`
+- **Files**: `core/strava.py` (662 lines)
 
-### M8 - Load Engine (100% ✅)
+### M6 - Activity Normalization
 
-- [x] Base effort calculation (RPE × duration)
-- [x] Systemic load calculation with sport multipliers
-- [x] Lower-body load calculation with sport multipliers
-- [x] Sport multiplier table (13 canonical sports)
-- [x] Multiplier adjustments (leg day, elevation, long duration, race effort)
-- [x] Session type classification (easy/moderate/quality/race)
-- [x] Batch load computation
-- [x] Load validation (sanity checks)
-- **Depends on**: M3, M6, M7
-- **Priority**: P0
-- **Estimate**: 1-2 days
-- **Actual**: 1 day
+- ✅ Sport type normalization (40+ Strava aliases → 13 canonical types)
+- ✅ Surface detection (road/trail/treadmill) using M7
+- ✅ Unit conversions (meters→km, seconds→minutes)
+- ✅ Data quality assessment (HIGH/MEDIUM/LOW/TREADMILL)
+- ✅ Filename generation with collision handling
+- **Tests**: 25/25 passing (83% coverage)
+- **Files**: `core/normalization.py` (557 lines)
+
+### M7 - Notes & RPE Analyzer ✨ **TOOLKIT REFACTORED**
+
+- ✅ **Refactored to toolkit paradigm** (1,142 → ~400 lines, 65% reduction)
+- ✅ Returns multiple RPE estimates (HR, pace, Strava, duration)
+- ✅ Treadmill detection (multi-signal scoring)
+- ❌ **Removed**: Pattern extraction, conflict resolution (→ Claude Code)
+- ❌ **Removed**: Injury/illness extraction (→ Claude Code via conversation)
+- **Tests**: 26/26 passing (84% coverage)
+- **Files**: `core/notes.py` (~400 lines)
+
+**Key Change**: Module computes quantitative RPE estimates; Claude Code resolves conflicts using athlete context.
+
+### M8 - Load Engine
+
+- ✅ Two-channel load model (systemic + lower-body)
+- ✅ Sport multipliers for 13 canonical sports
+- ✅ Dynamic adjustments (leg day, elevation, duration, race effort)
+- ✅ Session type classification (easy/moderate/quality/race)
+- ✅ **Validated with real multi-sport data** (run: 301/301 AU, climb: 315/52 AU)
 - **Tests**: 23/23 passing (84% coverage)
-- **Files**:
-  - `sports_coach_engine/core/load.py` (449 lines - complete implementation)
-  - `tests/unit/test_load.py` (625 lines, 23 comprehensive tests)
-  - Two-channel model: systemic (cardio/fatigue) + lower-body (leg impact)
-  - Sport multipliers: Running (1.0,1.0), Trail (1.05,1.10), Treadmill (1.0,0.9), Cycle (0.85,0.35), Climb (0.6,0.1)
-  - Dynamic adjustments: Leg day (+0.25 lower-body), High elevation (+0.05 systemic, +0.10 lower-body)
+- **Files**: `core/load.py` (449 lines)
 
 ---
 
-## Phase 2 Validation & Production Readiness ✅
+## Phase 3: Metrics & Analysis (100% ✅)
 
-### Real Strava Data Testing (2026-01-13)
+### M9 - Metrics Engine
 
-**Test Scope**: 17 real activities from user's Strava account (last 30 days)
+- ✅ CTL calculation (42-day EWMA, α=0.024)
+- ✅ ATL calculation (7-day EWMA, α=0.133)
+- ✅ TSB calculation (CTL - ATL)
+- ✅ ACWR calculation (7-day / 28-day ratio)
+- ✅ Readiness score (weighted: TSB 20%, trend 25%, sleep 25%, wellness 30%)
+- ✅ Weekly summary with 80/20 intensity distribution
+- ✅ Zone classifications (CTL, TSB, ACWR, readiness levels)
+- ✅ Cold start handling (<14 days baseline, <28 days ACWR)
+- **Tests**: 32 unit + 4 integration = 36 tests passing (94% coverage)
+- **Files**: `core/metrics.py` (979 lines), `schemas/metrics.py` (327 lines)
+
+---
+
+## Phase 4: Planning, Adaptation & Enrichment (100% ✅)
+
+### M10 - Plan Toolkit ✨ **TOOLKIT REFACTORED**
+
+- ✅ **Refactored to toolkit paradigm** (1,249 → ~600 lines, 52% reduction)
+- ✅ Periodization calculations (Base/Build/Peak/Taper phases)
+- ✅ Volume progression with recovery weeks (every 4th at 70%)
+- ✅ Volume recommendations (CTL-based safe ranges)
+- ✅ Workout creation (VDOT paces + HR zones)
+- ✅ Guardrail validation (80/20, long run caps, hard/easy separation)
+- ✅ Workout modification helpers (downgrade, shorten, recovery estimation)
+- ❌ **Removed**: Auto-scheduling, conflict resolution, complete plan generation
+- **Tests**: 51/51 passing (88% coverage)
+- **Files**: `core/plan.py` (~600 lines), `schemas/plan.py` (300 lines)
+
+**Key Change**: Provides planning tools; Claude Code designs plans workout-by-workout considering athlete schedule and context.
+
+### M11 - Adaptation Toolkit ✨ **TOOLKIT REFACTORED**
+
+- ✅ **Refactored to toolkit paradigm** (1,018 → 459 lines, 55% reduction)
+- ✅ Trigger detection (ACWR, readiness, TSB, lower-body load, session density)
+- ✅ Risk assessment (injury probability calculation)
+- ✅ Recovery time estimation (days needed per trigger)
+- ✅ Thresholds moved to AthleteProfile (customizable per athlete)
+- ❌ **Removed**: Suggestion generation, auto-override logic, generic rationales
+- **Tests**: 26/26 passing (85% coverage)
+- **Files**: `core/adaptation.py` (459 lines), `schemas/adaptation.py` (330 lines)
+
+**Key Change**: Detects triggers and assesses risk; Claude Code decides adaptations with athlete using M13 memories.
+
+### M12 - Data Enrichment
+
+- ✅ Metric interpretations (CTL 44 → "solid recreational level")
+- ✅ Zone classifications (beginner/recreational/competitive/elite)
+- ✅ Trend calculations (+2 from last week)
+- ✅ Context tables for CTL, ACWR, readiness levels
+- ❌ **Removed**: Generic workout rationales (→ Claude Code)
+- **Tests**: 31/31 passing (87% coverage)
+- **Files**: `core/enrichment.py`, `schemas/enrichment.py`
+
+### M13 - Memory & Insights
+
+- ✅ AI-driven memory extraction from notes/conversations
+- ✅ Deduplication with confidence scoring
+- ✅ Pattern detection (injury history, override preferences)
+- ✅ Tag-based retrieval (body:knee, preference:morning-runs)
+- ✅ Memory archival with importance decay
+- **Tests**: 23/23 passing (82% coverage)
+- **Files**: `core/memory.py` (562 lines), `schemas/memory.py` (158 lines)
+
+---
+
+## Phase 5: Toolkit Paradigm Refactoring (100% ✅)
+
+**Duration**: 2026-01-13 (1 day)
+**Goal**: Transform from "Algorithm Generator" to "Computational Toolkit"
+
+### The Core Innovation
+
+**Fundamental Principle**:
+
+> Modules compute (formulas, lookups), Claude Code coaches (judgment, context, personalization)
+
+**Decision Framework**:
+
+- **Quantitative** (modules) → Pure math, lookup tables, deterministic logic
+- **Qualitative** (Claude Code) → Pattern recognition, conflict resolution, personalization, rationale
+
+### Implementation Complete ✅
+
+#### 1. Schema Updates
+
+- ✅ `schemas/activity.py`: Simplified AnalysisResult, removed flags
+- ✅ `schemas/plan.py`: Added VolumeRecommendation, GuardrailViolation, PhaseAllocation, WeeklyVolume
+- ✅ `schemas/adaptation.py`: Added OverrideRiskAssessment, RecoveryEstimate, AdaptationThresholds
+- ✅ `schemas/profile.py`: Added AdaptationThresholds field with defaults
+
+#### 2. M7 - Notes & RPE Analyzer Refactored
+
+**Lines**: 1,142 → ~400 (65% reduction)
+
+**Removed** (~800 lines):
+
+- ❌ `resolve_rpe_conflict()` - Algorithmic conflict resolution
+- ❌ `extract_injury_flags()`, `extract_illness_flags()`, `extract_wellness_indicators()`
+- ❌ `RPE_KEYWORDS`, `INJURY_KEYWORDS`, `ILLNESS_PATTERNS` dictionaries
+- ❌ Text-based pattern extraction
+
+**Kept** (quantitative only):
+
+- ✅ `estimate_rpe_from_hr()` - HR zone mapping formula
+- ✅ `estimate_rpe_from_pace()` - VDOT pace zones
+- ✅ `estimate_rpe_from_strava_relative()` - Suffer score normalization
+- ✅ `estimate_rpe_from_duration()` - Sport + duration heuristic
+- ✅ `detect_treadmill()` - Multi-signal scoring
+
+**Result**: Returns list of RPE estimates with reasoning; Claude Code decides which to use.
+
+#### 3. M10 - Plan Toolkit Refactored
+
+**Lines**: 1,249 → ~600 (52% reduction)
+
+**Removed** (~800 lines):
+
+- ❌ `generate_master_plan()` - Complete plan generation
+- ❌ `assign_workouts_to_days()` - Auto-scheduling with conflict resolution
+- ❌ `_resolve_conflicts()`, `_find_best_day()` - Day selection algorithms
+- ❌ Auto-enforcement of guardrails (now detects only)
+
+**Added** (toolkit functions):
+
+- ✅ `suggest_volume_adjustment()` - CTL-based volume recommendations
+- ✅ `validate_guardrails()` - Detects violations (does NOT auto-fix)
+- ✅ `validate_week()` - Single week validation
+- ✅ `create_downgraded_workout()` - Workout modification helper
+- ✅ `create_shortened_workout()` - Duration reduction helper
+- ✅ `estimate_recovery_days()` - Recovery time estimation
+
+**Result**: Provides planning tools; Claude Code designs plans considering athlete schedule, preferences, knee history, etc.
+
+#### 4. M11 - Adaptation Toolkit Refactored
+
+**Lines**: 1,018 → 459 (55% reduction)
+
+**Removed** (~600 lines):
+
+- ❌ `generate_adaptation_suggestions()` - Auto-suggestion generation
+- ❌ `_create_suggestion()` - Proposes changes algorithmically
+- ❌ `_generate_rationale()` - Template-based rationales
+- ❌ `_apply_safety_override()` - Auto-modifications
+
+**Added** (toolkit functions):
+
+- ✅ `detect_adaptation_triggers()` - Structured trigger detection with zones
+- ✅ `assess_override_risk()` - Injury probability calculation
+- ✅ `estimate_recovery_time()` - Days needed per trigger type
+
+**Refactored**:
+
+- ✅ Moved thresholds to `AthleteProfile.adaptation_thresholds` (Claude-adjustable)
+- ✅ Enhanced trigger detection with full context (value, threshold, zone, applies_to)
+
+**Result**: Returns trigger data + risk assessment; Claude Code interprets with athlete context and decides adaptations.
+
+#### 5. Documentation & Cleanup
+
+- ✅ Updated `CLAUDE.md`: Added Section 5 "The Core Innovation"
+- ✅ Updated module docstrings: M7, M10, M11 reflect toolkit paradigm
+- ✅ Removed 7 legacy schema tests (~180 lines) - codebase hygiene
+- ✅ Verified all 315 tests passing
+
+### Impact Summary
+
+| Module           | Before      | After       | Reduction | Tests          |
+| ---------------- | ----------- | ----------- | --------- | -------------- |
+| M7 (Notes)       | 1,142 lines | ~400 lines  | 65%       | 26/26 ✅       |
+| M10 (Plan)       | 1,249 lines | ~600 lines  | 52%       | 51/51 ✅       |
+| M11 (Adaptation) | 1,018 lines | 459 lines   | 55%       | 26/26 ✅       |
+| **Total**        | 3,409 lines | 1,459 lines | **57%**   | **103/103 ✅** |
+
+### Before vs After Examples
+
+#### M7: RPE Conflict Resolution
+
+**Before (Algorithm Decides)**:
+
+```python
+if is_high_intensity_session(workout_type):
+    return max(hr_rpe, text_rpe)  # Trust HR
+else:
+    return text_rpe  # Trust user
+```
+
+**After (Claude Decides)**:
+
+```python
+# M7 returns multiple estimates
+estimates = [
+    RPEEstimate(7, "hr_based", "Zone 3 (78% max HR)"),
+    RPEEstimate(5, "pace_based", "Easy pace for VDOT 45"),
+    RPEEstimate(4, "text", "User said 'felt easy'")
+]
+# Claude: "HR says 7, pace says 5. High HR could be from heat/caffeine.
+#          Your pace was easy for your VDOT. Trusting pace → RPE 5"
+```
+
+#### M10: Training Plan Design
+
+**Before (Algorithm Decides)**:
+
+```python
+plan = generate_master_plan(profile, goal="half_marathon", weeks=12)
+# Returns: Complete plan with workouts assigned to days
+# Problem: Can't handle "I climb Tuesdays", "knee flares >18km"
+```
+
+**After (Claude Designs)**:
+
+```python
+# Claude uses toolkit conversationally
+phases = calculate_periodization(12, "half_marathon")
+vol_rec = suggest_volume_adjustment(35, 44, 21.1, 12)
+volumes = calculate_volume_progression(35, 55, 12, [4, 8], phases)
+
+# For each week, Claude decides:
+# "You climb Tuesdays → quality Wednesday + long run Saturday"
+# "Knee history → cap long runs at 18km"
+workout = create_workout("tempo", 40, profile)
+violations = validate_guardrails(plan, profile)
+# Claude reviews violations and enforces selectively
+```
+
+#### M11: Workout Adaptation
+
+**Before (Algorithm Decides)**:
+
+```python
+if acwr > 1.5:
+    return Suggestion(type="DOWNGRADE", message="Reduce tempo to easy run")
+```
+
+**After (Claude Decides)**:
+
+```python
+triggers = detect_adaptation_triggers(workout, metrics, profile)
+# Returns: [ACWR_ELEVATED(1.45), LOWER_BODY_LOAD_HIGH(340 AU)]
+
+risk = assess_override_risk(triggers, workout, athlete_memories)
+# Returns: OverrideRiskAssessment(risk="moderate", probability=0.15)
+
+# Claude reasons with context:
+# "ACWR 1.45 + climbed yesterday + knee history. Options:
+#  A) Easy run (safest) B) Move to Thursday C) Proceed (15% risk)"
+```
+
+---
+
+## Phase 6: Schemas (100% ✅)
+
+All schema modules complete and integrated:
+
+| Schema        | Lines | Key Models                                                  | Status |
+| ------------- | ----- | ----------------------------------------------------------- | ------ |
+| config.py     | 83    | AppSettings, StravaConfig, SecretsConfig                    | ✅     |
+| repository.py | 37    | SchemaMetadata, LockInfo, ReadOptions                       | ✅     |
+| profile.py    | 210   | AthleteProfile, Goal, TrainingConstraints, VitalSigns       | ✅     |
+| activity.py   | 458   | RawActivity, NormalizedActivity, AnalysisResult             | ✅     |
+| metrics.py    | 327   | DailyMetrics, CTLATLMetrics, ACWRMetrics, ReadinessScore    | ✅     |
+| plan.py       | 300   | MasterPlan, WeekPlan, WorkoutPrescription, toolkit models   | ✅     |
+| adaptation.py | 330   | AdaptationTrigger, OverrideRiskAssessment, RecoveryEstimate | ✅     |
+| enrichment.py | ~150  | EnrichedMetrics, MetricInterpretation, context tables       | ✅     |
+| memory.py     | 158   | Memory, MemoryTag, pattern models                           | ✅     |
+
+---
+
+## Testing Infrastructure (100% ✅)
+
+### Unit Tests: 315 passing
+
+| Module             | Tests   | Coverage    | Notes                       |
+| ------------------ | ------- | ----------- | --------------------------- |
+| M2 (Config)        | 8       | 94%         | Config loading, validation  |
+| M3 (Repository)    | 18      | 95%         | Atomic writes, file locking |
+| M4 (Profile)       | 24      | 90%         | CRUD, VDOT, constraints     |
+| M5 (Strava)        | 28      | 94%         | OAuth, sync, deduplication  |
+| M6 (Normalization) | 25      | 83%         | 40+ sport aliases           |
+| M7 (Notes)         | 26      | 84%         | RPE estimation toolkit      |
+| M8 (Load)          | 23      | 84%         | Two-channel model           |
+| M9 (Metrics)       | 32      | 94%         | CTL/ATL/TSB/ACWR            |
+| M10 (Plan)         | 51      | 88%         | Planning toolkit            |
+| M11 (Adaptation)   | 26      | 85%         | Trigger detection, risk     |
+| M12 (Enrichment)   | 31      | 87%         | Metric interpretations      |
+| M13 (Memory)       | 23      | 82%         | AI extraction               |
+| **Total**          | **315** | **88% avg** | **All passing ✅**          |
+
+### Integration Tests: 4 passing
+
+1. **Phase 1 E2E**: M2 → M3 → M4 pipeline
+2. **Phase 2 Sync**: M5 → M6 → M7 → M8 → M9 full pipeline (17 real activities)
+3. **Phase 3 Metrics**: 30-day multi-sport simulation, CTL/ATL convergence
+4. **Phase 4 Planning**: M10 → M11 integration, multi-sport conflict handling
+
+### Real Strava Data Validation ✅
+
+**17 activities synced and processed** (last 30 days):
 
 - 7 Rock Climbing sessions
 - 5 Running sessions
 - 5 Yoga sessions
 
-**Full Pipeline Validation**: M5 → M7 → M6 → M8
+**Key Validations**:
 
-| Activity | Duration | RPE Source         | Load (Systemic / Lower-body) | Session Type |
-| -------- | -------- | ------------------ | ---------------------------- | ------------ |
-| Running  | 43 min   | HR-based (158 bpm) | 301 / 301 AU                 | QUALITY      |
-| Climbing | 105 min  | User input (5)     | 315 / 52 AU                  | MODERATE     |
-| Yoga     | 28 min   | Duration heuristic | 20 / 6 AU                    | EASY         |
-
-**Key Discoveries**:
-
-- ✅ Strava returns HR as floats (158.1, 175.7) not ints - Fixed schema
-- ✅ Strava uses undocumented workout_type values (28, 31) - Updated docs
-- ✅ User-entered perceived_exertion properly extracted - RPE 5, 4
-- ✅ Injury keywords detected in notes ("right ankle")
-- ✅ Two-channel model validates correctly with real multi-sport data
-
-**Documentation Updates**:
-
-- Updated `m05_strava.md`: HR field types (int→float), workout_type enum (28, 31 added)
-- Updated `v0_product_requirements_document.md`: HR example (158.1 instead of 158)
-- Updated `CLAUDE.md`: Added real-world validation data with load calculations
-- Created `STRAVA_TESTING_RESULTS.md`: Complete test report
-
-**Files Created**:
-
-- `oauth_helper.py` - OAuth authorization helper
-- `get_strava_token.py` - Token exchange script
-- `sync_strava.py` - Activity sync utility
-- `test_pipeline.py` - End-to-end pipeline test
-- `data_samples/` - 3 sample activities for inspection
-
-**Status**: Phase 2 **PRODUCTION READY** - All modules validated with real data
+- ✅ Two-channel load model: Running (301/301 AU), Climbing (315/52 AU), Yoga (20/6 AU)
+- ✅ HR data as floats: 158.1 bpm (not ints)
+- ✅ User-entered RPE extraction: perceived_exertion field
+- ✅ Undocumented Strava workout_type values: 28, 31
+- ✅ Multi-sport metrics aggregation
 
 ---
 
-## Phase 3: Metrics & Analysis (0%)
+## Remaining Work
 
-### M9 - Metrics Engine (0%)
+### Phase 7: Orchestration & API (2-4 days)
 
-- [ ] Daily load aggregation
-- [ ] CTL calculation (42-day EWMA)
-- [ ] ATL calculation (7-day EWMA)
-- [ ] TSB calculation (CTL - ATL)
-- [ ] ACWR calculation
-- [ ] Readiness score computation
-- [ ] Weekly intensity distribution
-- [ ] High-intensity session counting
-- [ ] Cold start handling
-- **Depends on**: M3, M8
-- **Priority**: P0
-- **Estimate**: 2-3 days
+#### M1 - Internal Workflows ⏳
 
----
+**Purpose**: Orchestrate multi-step operations
 
-## Phase 4: Planning & Adaptation (0%)
+**Functions Needed**:
 
-### M10 - Plan Generator (0%)
+- `sync_workflow()`: M5→M6→M7→M8→M9 with error handling
+- `plan_workflow()`: M10 toolkit orchestration
+- `adaptation_workflow()`: M11 toolkit orchestration
+- `metrics_refresh_workflow()`: Recompute metrics for date range
 
-- [ ] Master plan generation
-- [ ] Weekly structure by run days
-- [ ] Goal-specific minimum specificity
-- [ ] Periodization phases
-- [ ] Conflict policy application
-- [ ] Training guardrail enforcement
-- [ ] Long run caps
-- [ ] Intensity limits (T/I/R)
-- [ ] Weekly refinement
-- [ ] Goal change handling
-- [ ] Reset workflows (soft/hard)
-- **Depends on**: M3, M4, M9
-- **Priority**: P1
-- **Estimate**: 4-5 days
+**Estimate**: 2-3 days
 
-### M11 - Adaptation Engine (0%)
+#### M14 - Conversation Logger ⏳
 
-- [ ] Suggestion generation (not auto-modify)
-- [ ] Adaptation triggers (ACWR, readiness, etc.)
-- [ ] High lower-body load detection
-- [ ] Hard session spacing checks
-- [ ] Safety overrides (illness, injury)
-- [ ] Conflict policy integration
-- [ ] Suggestion acceptance/decline
-- [ ] Adaptation logging
-- [ ] Injury/illness flag duration
-- **Depends on**: M3, M9, M10
-- **Priority**: P1
-- **Estimate**: 3-4 days
+**Purpose**: Session transcript persistence
 
----
+**Functions Needed**:
 
-## Phase 5: Enrichment & UX (0%)
+- `log_message()`: Append to JSONL file
+- `get_session_transcript()`: Retrieve session history
+- `search_conversations()`: Query past sessions
 
-### M12 - Data Enrichment (0%)
+**Estimate**: 1 day
 
-- [ ] Metric interpretations (CTL → "solid recreational level")
-- [ ] Zone classifications
-- [ ] Trend calculations
-- [ ] Workout rationale generation
-- [ ] Progressive disclosure levels
-- [ ] Sync summary enrichment
-- [ ] Suggestion enrichment
-- **Depends on**: M9, M10, M11
-- **Priority**: P1
-- **Estimate**: 2-3 days
+#### API Layer (0/5 modules)
 
-### M13 - Memory & Insights (0%)
+**Purpose**: Public interface for Claude Code
 
-- [ ] Memory extraction from notes
-- [ ] Deduplication algorithm
-- [ ] Confidence scoring
-- [ ] Memory archival
-- [ ] Entity recognition (body parts, etc.)
-- **Depends on**: M3, M7
-- **Priority**: P2
-- **Estimate**: 2 days
+**Modules**:
 
-### M14 - Conversation Logger (0%)
+1. `api.sync`: `sync_strava()`, `log_activity()`
+2. `api.coach`: `get_todays_workout()`, `get_weekly_status()`
+3. `api.metrics`: `get_current_metrics()`, `get_readiness()`
+4. `api.plan`: Toolkit function exposure + `get_current_plan()`
+5. `api.profile`: `get_profile()`, `update_profile()`, `set_goal()`
 
-- [ ] Session transcript persistence
-- [ ] Timestamped message logging
-- [ ] Markdown formatting
-- **Depends on**: M3
-- **Priority**: P3
-- **Estimate**: 1 day
+**Estimate**: 2 days (lightweight wrappers around modules)
+
+### Timeline Estimate
+
+**Remaining Effort**: ~4-6 days
+
+- M1 Internal Workflows: 2-3 days
+- M14 Conversation Logger: 1 day
+- API Layer: 2 days
+
+**After completion**: System ready for Claude Code integration and user testing
 
 ---
 
-## Phase 6: Orchestration & API (0%)
-
-### M1 - Internal Workflows (0%)
-
-- [ ] Sync workflow (M5→M6→M7→M8→M9→M11→M13)
-- [ ] Metrics refresh workflow
-- [ ] Plan generation workflow
-- [ ] Adaptation check workflow
-- [ ] Manual activity workflow
-- [ ] Error aggregation
-- [ ] Transaction handling
-- **Depends on**: All other modules
-- **Priority**: P1
-- **Estimate**: 2-3 days
-
-### API Layer - Coach (0%)
-
-- [ ] get_todays_workout()
-- [ ] get_weekly_status()
-- [ ] get_training_status()
-- **Depends on**: M1, M12
-- **Priority**: P1
-- **Estimate**: 1 day
-
-### API Layer - Sync (0%)
-
-- [ ] sync_strava()
-- [ ] log_activity()
-- **Depends on**: M1
-- **Priority**: P1
-- **Estimate**: 1 day
-
-### API Layer - Metrics (0%)
-
-- [ ] get_current_metrics()
-- [ ] get_readiness()
-- [ ] get_intensity_distribution()
-- **Depends on**: M9, M12
-- **Priority**: P1
-- **Estimate**: 1 day
-
-### API Layer - Plan (0%)
-
-- [ ] get_current_plan()
-- [ ] regenerate_plan()
-- [ ] get_pending_suggestions()
-- [ ] accept_suggestion()
-- [ ] decline_suggestion()
-- **Depends on**: M10, M11
-- **Priority**: P1
-- **Estimate**: 1 day
-
-### API Layer - Profile (0%)
-
-- [ ] get_profile()
-- [ ] update_profile()
-- [ ] set_goal()
-- **Depends on**: M4
-- **Priority**: P1
-- **Estimate**: 1 day
-
----
-
-## Phase 7: Schemas & Data Models (0%)
-
-### Schemas - Common (0%)
-
-- [ ] SchemaHeader
-- [ ] SchemaType enum
-- [ ] MetricZone enum
-- [ ] Error types
-- **Priority**: P0
-- **Estimate**: 0.5 day
-
-### Schemas - Activity (0%)
-
-- [ ] Activity base model
-- [ ] NormalizedActivity
-- [ ] ProcessedActivity
-- [ ] ActivityLoads
-- [ ] NotesAnalysis
-- **Priority**: P0
-- **Estimate**: 1 day
-
-### Schemas - Profile (0%)
-
-- [ ] AthleteProfile
-- [ ] Goal
-- [ ] Constraints
-- [ ] VitalSigns
-- [ ] PersonalRecords
-- **Priority**: P0
-- **Estimate**: 1 day
-
-### Schemas - Metrics (0%)
-
-- [ ] DailyMetrics
-- [ ] EnrichedMetrics
-- [ ] MetricInterpretation
-- [ ] ReadinessScore
-- [ ] IntensityDistribution
-- **Priority**: P0
-- **Estimate**: 1 day
-
-### Schemas - Plan (0%)
-
-- [ ] TrainingPlan
-- [ ] PlanPhase
-- [ ] WeeklyTarget
-- [ ] Adaptation
-- **Priority**: P0
-- **Estimate**: 1 day
-
-### Schemas - Workout (0%)
-
-- [ ] WorkoutPrescription
-- [ ] WorkoutRecommendation
-- [ ] WorkoutRationale
-- [ ] PaceGuidance
-- [ ] HRGuidance
-- **Priority**: P0
-- **Estimate**: 1 day
-
----
-
-## Phase 8: Testing & Quality (0%)
-
-### Unit Tests (0%)
-
-- [ ] M2 config tests
-- [ ] M3 repository tests
-- [ ] M7 RPE analyzer tests
-- [ ] M8 load engine tests
-- [ ] M9 metrics engine tests
-- [ ] M10 plan generator tests
-- [ ] M11 adaptation engine tests
-- **Estimate**: 5-7 days
-
-### Integration Tests (0%)
-
-- [ ] Sync workflow end-to-end
-- [ ] Plan generation → adaptation flow
-- [ ] API layer integration
-- **Estimate**: 3-4 days
-
-### Fixtures & Test Data (0%)
-
-- [ ] Sample profile
-- [ ] Sample activities (3 activities)
-- [ ] Sample metrics
-- [ ] Sample plan
-- **Estimate**: 1-2 days
-
----
-
-## Critical Path
+## Critical Path Summary
 
 ```
-Phase 1 (M2, M3, M4) → Phase 2 (M5, M6, M7, M8) → Phase 3 (M9)
-  → Phase 4 (M10, M11) → Phase 5 (M12) → Phase 6 (M1, API)
-  → Phase 8 (Testing)
+✅ Phase 1 (M2, M3, M4) - Infrastructure
+  ↓
+✅ Phase 2 (M5, M6, M7, M8) - Data Ingestion
+  ↓
+✅ Phase 3 (M9) - Metrics Engine
+  ↓
+✅ Phase 4 (M10, M11, M12, M13) - Planning, Adaptation, Enrichment, Memory
+  ↓
+✅ Phase 5 - Toolkit Paradigm Refactoring
+  ↓
+⏳ Phase 7 (M1, M14, API) - Orchestration & API
+  ↓
+🎯 Ready for Claude Code Integration
 ```
-
-**Estimated Total**: 35-50 days of focused development
 
 ---
 
-## Next Steps
+## Key Achievements
 
-### ✅ Phase 1 & 2: COMPLETE (Jan 1-13)
+### Architectural Innovation ✨
 
-- [x] M2, M3, M4 (Core Infrastructure)
-- [x] M5, M6, M7, M8 (Data Ingestion & Processing)
-- [x] 107 Phase 2 tests passing (86% avg coverage)
-- [x] Real Strava data validation (17 activities)
-- [x] Documentation updated with real API insights
+- **Toolkit Paradigm**: Modules compute, Claude Code coaches
+- **57% code reduction** in core modules (M7, M10, M11)
+- **Qualitative reasoning → AI**: Pattern extraction, conflict resolution, plan design
+- **Quantitative computation → Modules**: Formulas, lookup tables, detection
 
-### ⏭️ Phase 3: Ready to Start (Week 2)
+### Production Readiness ✅
 
-**Immediate (Next)**:
+- **315 tests passing** with 88% average coverage
+- **Real data validated** with 17 Strava activities
+- **Full pipeline operational** from sync to adaptation
+- **Multi-sport awareness** throughout (two-channel load model)
 
-1. **Implement M9 - Metrics Engine**
+### Data Quality 📊
 
-   - Daily load aggregation from Phase 2 loads
-   - CTL calculation (42-day EWMA)
-   - ATL calculation (7-day EWMA)
-   - TSB calculation (CTL - ATL)
-   - ACWR calculation (7-day / 28-day)
-   - Readiness score computation
-   - Dependency: M8 (load data)
-   - Estimate: 2-3 days
-
-2. **Define Metrics Schemas**
-
-   - DailyMetrics (CTL, ATL, TSB, ACWR, readiness)
-   - MetricInterpretation (contextual meanings)
-   - ReadinessScore (0-100 with factors)
-
-3. **M9 Testing**
-   - Unit tests with real load data
-   - Validation of EWMA calculations
-   - Edge cases (cold start, gaps)
-   - Estimate: 1 day
-
-### Short-term (Week 3-4):
-
-- Implement M10 (Plan Generator)
-- Implement M11 (Adaptation Engine)
-- Schema definitions for plans and adaptations
-
-### Mid-term (Week 5+):
-
-- Implement M12 (Data Enrichment)
-- Implement M1 (Internal Workflows)
-- Implement API layer (5 modules)
-- Complete testing suite
+- **Comprehensive schema validation** (9 Pydantic modules)
+- **Atomic file operations** (temp + rename pattern)
+- **File locking** (PID-based, cross-platform)
+- **Integration testing** at every phase
 
 ---
 
 ## Notes
 
-- **Modular approach**: Each module can be developed and tested independently
-- **Test-driven**: Write unit tests alongside implementation
-- **Schema-first**: Define Pydantic schemas before implementing modules
-- **Incremental**: Start with simplest modules (M2, M3) and build up
-- **Documentation**: Keep module docstrings aligned with specs
+- **Modular architecture**: Each module independently testable
+- **Test-driven**: Unit tests alongside implementation
+- **Schema-first**: Pydantic models before implementation
+- **Incremental progress**: Phase-by-phase validation
+- **Real data testing**: Strava integration validated with actual activities
+- **Clean codebase**: No dead code, legacy tests removed
+- **Documentation aligned**: CLAUDE.md reflects actual implementation
 
 ---
 
-## Risks & Mitigations
+## Version History
 
-### Risk: Strava API rate limits
-
-**Mitigation**: Implement exponential backoff, cache activities locally
-
-### Risk: Data corruption from concurrent access
-
-**Mitigation**: File locking in M3, atomic writes, backup system
-
-### Risk: Cold start edge cases
-
-**Mitigation**: Comprehensive testing with fixture data at different history lengths
-
-### Risk: Schema evolution breaking old data
-
-**Mitigation**: Schema versioning + migration system in M3
-
-```
-
----
-
-## Phase 5: Testing Infrastructure
-
-### 5.1 Test Directory Structure
-
-```
-
-tests/
-├── **init**.py
-├── conftest.py # Pytest fixtures
-├── unit/
-│ ├── **init**.py
-│ ├── test_config.py # M2 tests
-│ ├── test_repository.py # M3 tests
-│ ├── test_profile.py # M4 tests
-│ ├── test_strava.py # M5 tests
-│ ├── test_normalization.py # M6 tests
-│ ├── test_notes.py # M7 tests
-│ ├── test_load.py # M8 tests
-│ ├── test_metrics.py # M9 tests
-│ ├── test_plan.py # M10 tests
-│ ├── test_adaptation.py # M11 tests
-│ └── test_enrichment.py # M12 tests
-├── integration/
-│ ├── **init**.py
-│ ├── test_sync_workflow.py
-│ ├── test_plan_workflow.py
-│ └── test_api_layer.py
-└── fixtures/
-├── profile_sample.yaml
-├── activity_run.yaml
-├── activity_climb.yaml
-├── metrics_sample.yaml
-└── plan_sample.yaml
-
-```
-
-```
+- **v0.1.0** (2026-01-13): Phase 5 complete, toolkit paradigm refactored in code
+  - M7, M10, M11 refactored (57% code reduction)
+  - 315 tests passing
+  - All schemas updated
+  - Documentation updated

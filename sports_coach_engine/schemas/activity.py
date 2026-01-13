@@ -223,6 +223,9 @@ class NormalizedActivity(BaseModel):
     updated_at: datetime
     synced_at: Optional[datetime] = None
 
+    # Calculated load (added by M8 Load Engine)
+    calculated: Optional["LoadCalculation"] = None
+
     model_config = ConfigDict(
         use_enum_values=True,
         populate_by_name=True,  # Allow both field name and alias
@@ -248,6 +251,7 @@ class RPESource(str, Enum):
 
     USER_INPUT = "user_input"  # Explicit Strava perceived_exertion
     HR_BASED = "hr_based"  # Derived from HR zones
+    PACE_BASED = "pace_based"  # Derived from pace vs VDOT zones (running only)
     TEXT_BASED = "text_based"  # Extracted from notes
     STRAVA_RELATIVE = "strava_relative"  # Normalized suffer_score
     DURATION_HEURISTIC = "duration_heuristic"  # Sport + duration fallback
@@ -348,31 +352,27 @@ class ContextualFactors(BaseModel):
 
 
 class AnalysisResult(BaseModel):
-    """Complete analysis result for an activity."""
+    """
+    Complete analysis result for an activity (Toolkit Paradigm).
+
+    Returns multiple RPE estimates from quantitative sources.
+    Claude Code uses these estimates with conversation context to
+    determine final RPE. Wellness, injury, and illness extraction
+    are handled by Claude Code via natural conversation.
+    """
 
     activity_id: str
 
-    # RPE
-    estimated_rpe: RPEEstimate
-    rpe_conflict: Optional[RPEConflict] = None
-    all_rpe_estimates: list[RPEEstimate] = Field(default_factory=list)
+    # RPE estimates from all available quantitative sources
+    # Claude Code chooses which to use based on context
+    rpe_estimates: list[RPEEstimate] = Field(default_factory=list)
 
-    # Treadmill
+    # Treadmill detection (multi-signal scoring)
     treadmill_detection: TreadmillDetection
-
-    # Health flags
-    injury_flags: list[InjuryFlag] = Field(default_factory=list)
-    illness_flags: list[IllnessFlag] = Field(default_factory=list)
-
-    # Wellness
-    wellness: WellnessIndicators
-
-    # Context
-    context: ContextualFactors
 
     # Metadata
     analyzed_at: datetime
-    notes_present: bool
+    notes_present: bool  # Whether notes/description available for Claude to parse
 
 
 # ============================================================

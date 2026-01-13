@@ -2,14 +2,14 @@
 
 ## 1. Metadata
 
-| Field        | Value                                      |
-| ------------ | ------------------------------------------ |
-| Module ID    | M1                                         |
-| Name         | Internal Workflows                         |
-| Code Module  | `core/workflows.py`                        |
-| Version      | 2.0.0                                      |
-| Status       | Draft                                      |
-| Dependencies | M2-M14 (all modules)                       |
+| Field        | Value                |
+| ------------ | -------------------- |
+| Module ID    | M1                   |
+| Name         | Internal Workflows   |
+| Code Module  | `core/workflows.py`  |
+| Version      | 2.0.0                |
+| Status       | Draft                |
+| Dependencies | M2-M14 (all modules) |
 
 ### Changelog
 
@@ -59,21 +59,21 @@ Orchestrate multi-step operations by chaining internal modules together in the c
 
 ### 3.1 Internal Dependencies
 
-| Module | Usage                                    |
-| ------ | ---------------------------------------- |
-| M2     | Load configuration and secrets           |
-| M3     | Repository I/O operations                |
-| M4     | Profile service                          |
-| M5     | Strava sync                              |
-| M6     | Activity normalization                   |
-| M7     | Notes & RPE analysis                     |
-| M8     | Load calculation                         |
-| M9     | Metrics computation                      |
-| M10    | Plan generation                          |
-| M11    | Adaptation engine                        |
-| M12    | Data enrichment                          |
-| M13    | Memory & insights                        |
-| M14    | Conversation logging                     |
+| Module | Usage                          |
+| ------ | ------------------------------ |
+| M2     | Load configuration and secrets |
+| M3     | Repository I/O operations      |
+| M4     | Profile service                |
+| M5     | Strava sync                    |
+| M6     | Activity normalization         |
+| M7     | Notes & RPE analysis           |
+| M8     | Load calculation               |
+| M9     | Metrics computation            |
+| M10    | Plan generation                |
+| M11    | Adaptation engine              |
+| M12    | Data enrichment                |
+| M13    | Memory & insights              |
+| M14    | Conversation logging           |
 
 ### 3.2 External Libraries
 
@@ -757,13 +757,13 @@ This module is called internally by the API layer functions. Claude Code should 
 
 ### 6.1 API to Workflow Mapping
 
-| API Function (public) | Workflow Function (internal) |
-| --------------------- | ---------------------------- |
-| `api.sync.sync_strava()` | `run_sync_workflow()` |
-| `api.metrics.get_current_metrics()` | `run_metrics_refresh()` |
-| `api.plan.regenerate_plan()` | `run_plan_generation()` |
-| `api.coach.get_todays_workout()` | `run_adaptation_check()` |
-| `api.sync.log_activity()` | `run_manual_activity_workflow()` |
+| API Function (public)               | Workflow Function (internal)     |
+| ----------------------------------- | -------------------------------- |
+| `api.sync.sync_strava()`            | `run_sync_workflow()`            |
+| `api.metrics.get_current_metrics()` | `run_metrics_refresh()`          |
+| `api.plan.regenerate_plan()`        | `run_plan_generation()`          |
+| `api.coach.get_todays_workout()`    | `run_adaptation_check()`         |
+| `api.sync.log_activity()`           | `run_manual_activity_workflow()` |
 
 ### 6.2 Data Flow Example
 
@@ -1015,6 +1015,7 @@ Workflows support partial success. If one activity fails to process during sync,
 ### 10.2 Idempotency
 
 All workflows are designed to be idempotent:
+
 - Sync skips already-imported activities
 - Metrics refresh overwrites rather than appending
 - Plan generation replaces the current plan
@@ -1026,6 +1027,7 @@ Each workflow function is a transactional unit. If a critical step fails, the wo
 ### 10.4 Separation from API Layer
 
 This module focuses purely on orchestration logic. It:
+
 - Does NOT format responses for users (API layer + Claude Code do this)
 - Does NOT parse user intent (Claude Code does this)
 - Does NOT manage conversation state (API layer does this)

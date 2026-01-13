@@ -2,17 +2,18 @@
 
 ## Module Metadata
 
-| Field | Value |
-|-------|-------|
-| **Module ID** | M4 |
-| **Module Name** | Athlete Profile Service |
-| **Code Module** | `core/profile.py` |
-| **Version** | 1.0.2 |
-| **Status** | Draft |
-| **Complexity** | Medium |
-| **Last Updated** | 2026-01-12 |
+| Field            | Value                   |
+| ---------------- | ----------------------- |
+| **Module ID**    | M4                      |
+| **Module Name**  | Athlete Profile Service |
+| **Code Module**  | `core/profile.py`       |
+| **Version**      | 1.0.2                   |
+| **Status**       | Draft                   |
+| **Complexity**   | Medium                  |
+| **Last Updated** | 2026-01-12              |
 
 ### Changelog
+
 - **1.0.2** (2026-01-12): Added code module path (`core/profile.py`) and API layer integration notes
 - **1.0.1** (prior): Previous updates
 - **1.0.0** (initial): Initial draft
@@ -28,6 +29,7 @@ M4 manages the athlete's profile data, including personal information, training 
 ### 1.2 Scope Boundaries
 
 **This module DOES:**
+
 - Create and update the athlete profile
 - Validate training constraints for logical consistency
 - Calculate and cache VDOT and derived training paces
@@ -36,6 +38,7 @@ M4 manages the athlete's profile data, including personal information, training 
 - Handle training history metadata (sync state, baseline status)
 
 **This module does NOT:**
+
 - Compute training metrics (CTL/ATL/TSB) - that's M9
 - Store individual activities - that's M6
 - Extract athlete facts from conversations - that's M13
@@ -47,15 +50,15 @@ M4 manages the athlete's profile data, including personal information, training 
 
 ### 2.1 Internal Module Dependencies
 
-| Module | Dependency Type | Purpose |
-|--------|-----------------|---------|
-| M3 | File I/O | Read/write profile.yaml and training_history.yaml |
+| Module | Dependency Type | Purpose                                           |
+| ------ | --------------- | ------------------------------------------------- |
+| M3     | File I/O        | Read/write profile.yaml and training_history.yaml |
 
 ### 2.2 External Libraries
 
-| Library | Version | Purpose |
-|---------|---------|---------|
-| `pydantic` | ^2.5 | Schema validation |
+| Library    | Version | Purpose           |
+| ---------- | ------- | ----------------- |
+| `pydantic` | ^2.5    | Schema validation |
 
 ### 2.3 Environment Requirements
 
@@ -761,9 +764,9 @@ def get_fixed_sports_on_day(day: Weekday) -> list[OtherSport]:
 
 ### 4.1 File Paths
 
-| File | Path | Purpose |
-|------|------|---------|
-| Profile | `athlete/profile.yaml` | Athlete profile data |
+| File             | Path                            | Purpose                         |
+| ---------------- | ------------------------------- | ------------------------------- |
+| Profile          | `athlete/profile.yaml`          | Athlete profile data            |
 | Training History | `athlete/training_history.yaml` | Sync state and baseline metrics |
 
 ### 4.2 Profile Schema (`athlete/profile.yaml`)
@@ -1117,18 +1120,18 @@ ERROR_MESSAGES: dict[ProfileErrorType, str] = {
 
 ### 6.2 Error Scenarios
 
-| Scenario | Error Type | Recovery Strategy |
-|----------|-----------|------------------|
-| Profile file doesn't exist | Return None (not error) | Trigger onboarding flow |
-| Profile file corrupted/invalid YAML | IO_ERROR | Display error, suggest restore from backup |
-| Schema version mismatch | IO_ERROR from M3 | M3 handles migration automatically |
-| Constraint validation fails | VALIDATION_ERROR | Return errors to user, request correction |
-| Invalid race time format | INVALID_RACE_TIME | Prompt user for correct format |
-| VDOT calculation fails | VDOT_CALCULATION_ERROR | Use existing VDOT or prompt for manual entry |
-| Lock timeout when saving | IO_ERROR from M3 | Retry with exponential backoff (handled by M3) |
-| Concurrent modification | IO_ERROR from M3 | Last write wins (M3 atomic writes prevent corruption) |
-| Training history file missing | Return None (not error) | Create new history on first update |
-| Update to non-existent profile | PROFILE_NOT_FOUND | Suggest creating profile first |
+| Scenario                            | Error Type              | Recovery Strategy                                     |
+| ----------------------------------- | ----------------------- | ----------------------------------------------------- |
+| Profile file doesn't exist          | Return None (not error) | Trigger onboarding flow                               |
+| Profile file corrupted/invalid YAML | IO_ERROR                | Display error, suggest restore from backup            |
+| Schema version mismatch             | IO_ERROR from M3        | M3 handles migration automatically                    |
+| Constraint validation fails         | VALIDATION_ERROR        | Return errors to user, request correction             |
+| Invalid race time format            | INVALID_RACE_TIME       | Prompt user for correct format                        |
+| VDOT calculation fails              | VDOT_CALCULATION_ERROR  | Use existing VDOT or prompt for manual entry          |
+| Lock timeout when saving            | IO_ERROR from M3        | Retry with exponential backoff (handled by M3)        |
+| Concurrent modification             | IO_ERROR from M3        | Last write wins (M3 atomic writes prevent corruption) |
+| Training history file missing       | Return None (not error) | Create new history on first update                    |
+| Update to non-existent profile      | PROFILE_NOT_FOUND       | Suggest creating profile first                        |
 
 ---
 
@@ -1152,6 +1155,7 @@ M3:                read_yaml("athlete/profile.yaml")
 ```
 
 **API Functions that use M4:**
+
 - `api.profile.get_profile()` → `M4::load_profile()`
 - `api.profile.update_profile(**fields)` → `M4::update_profile()`
 - `api.profile.set_goal(...)` → `M4::update_goal()`
@@ -1186,12 +1190,12 @@ if profile.conflict_policy == ConflictPolicy.ASK_EACH_TIME:
 
 ### 7.3 Module Dependencies (Who Calls M4)
 
-| Module | Usage |
-|--------|-------|
-| API Layer (`api.profile`) | All profile operations |
-| API Layer (`api.plan`) | Load profile for plan generation |
-| M10 (Plan Generator) | Get constraints, paces, goal |
-| M11 (Adaptation Engine) | Check conflict policy |
+| Module                    | Usage                            |
+| ------------------------- | -------------------------------- |
+| API Layer (`api.profile`) | All profile operations           |
+| API Layer (`api.plan`)    | Load profile for plan generation |
+| M10 (Plan Generator)      | Get constraints, paces, goal     |
+| M11 (Adaptation Engine)   | Check conflict policy            |
 
 ---
 
@@ -1486,7 +1490,7 @@ sports_coach_engine/
 
 ## 10. Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.1 | 2026-01-12 | **Improved for LLM implementation**: (1) Converted all `@dataclass` types to `BaseModel` for consistency with Pydantic ecosystem (ConstraintError, ConstraintWarning, ConstraintValidationResult, ProfileError, NewProfileInput). (2) Added complete algorithms for all CRUD functions: load_profile, save_profile, update_profile, create_profile, profile_exists, training history functions (load_training_history, update_sync_state, set_baseline_established, is_baseline_established), goal management (update_goal, get_weeks_to_goal), and other sports functions (upsert_other_sport, remove_other_sport, get_fixed_sports_on_day). (3) Added comprehensive test scenarios: profile CRUD tests, pace derivation tests, training history tests, goal management tests, other sports tests (8 new test classes). (4) Added error scenarios table with recovery strategies for all failure modes. (5) Added file paths table and training_history.yaml schema example. (6) Added notes: VDOT_PACES table is simplified subset, pace ranges explained (±15s easy, ±5s other zones). |
-| 1.0.0 | 2026-01-12 | Initial specification (Python) |
+| Version | Date       | Changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0.1   | 2026-01-12 | **Improved for LLM implementation**: (1) Converted all `@dataclass` types to `BaseModel` for consistency with Pydantic ecosystem (ConstraintError, ConstraintWarning, ConstraintValidationResult, ProfileError, NewProfileInput). (2) Added complete algorithms for all CRUD functions: load_profile, save_profile, update_profile, create_profile, profile_exists, training history functions (load_training_history, update_sync_state, set_baseline_established, is_baseline_established), goal management (update_goal, get_weeks_to_goal), and other sports functions (upsert_other_sport, remove_other_sport, get_fixed_sports_on_day). (3) Added comprehensive test scenarios: profile CRUD tests, pace derivation tests, training history tests, goal management tests, other sports tests (8 new test classes). (4) Added error scenarios table with recovery strategies for all failure modes. (5) Added file paths table and training_history.yaml schema example. (6) Added notes: VDOT_PACES table is simplified subset, pace ranges explained (±15s easy, ±5s other zones). |
+| 1.0.0   | 2026-01-12 | Initial specification (Python)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |

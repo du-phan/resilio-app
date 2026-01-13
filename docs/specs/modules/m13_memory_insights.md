@@ -2,35 +2,41 @@
 
 ## 1. Metadata
 
-| Field | Value |
-|-------|-------|
-| Module ID | M13 |
-| Name | Memory & Insights |
-| Code Module | `core/memory.py` |
-| Version | 1.0.2 |
-| Status | Draft |
-| Dependencies | M3 (Repository I/O), M7 (Notes & RPE Analyzer) |
+| Field        | Value                                          |
+| ------------ | ---------------------------------------------- |
+| Module ID    | M13                                            |
+| Name         | Memory & Insights                              |
+| Code Module  | `core/memory.py`                               |
+| Version      | 2.0.0                                          |
+| Status       | Draft                                          |
+| Dependencies | M3 (Repository I/O)                            |
 
 ### Changelog
+
+- **2.0.0** (2026-01-13): **MAJOR CHANGE - Simplified to storage-only layer**. Removed pattern-based extraction logic (Claude Code now handles extraction using AI intelligence). M13 now focuses on: storage with `save_memory()`, smart deduplication, retrieval by type/tag/relevance, pattern analysis on stored data. Removed sections: 4.2 (entity lists), 5.1 (extraction patterns), 5.3 (processing pipeline), 8.1 (extraction tests). Added `CLAUDE_CODE` to MemorySource enum. This architectural change reduces complexity, improves flexibility, and leverages Claude Code's sports training expertise for nuanced fact extraction.
 - **1.0.2** (2026-01-12): Added code module path (`core/memory.py`) and API layer integration notes.
 - **1.0.1** (2026-01-12): Converted all dataclass types to BaseModel for consistency. Added complete algorithms for `process_user_message()`, `merge_memories()`, `get_memories_by_type()`, `archive_memory()`, and `cleanup_archived()` to remove `...` placeholders and make spec LLM-implementable.
 - **1.0.0** (initial): Initial draft with comprehensive memory extraction and deduplication algorithms
 
 ## 2. Purpose
 
-Extract and persist durable athlete facts from activity notes and conversations. Builds a long-term memory of preferences, injury history, training responses, and contextual factors that inform personalized coaching.
+**Persist and retrieve durable athlete facts extracted by Claude Code.** M13 provides a storage layer with smart deduplication, confidence scoring, and pattern detection. Claude Code handles fact extraction using its sports training expertise to understand nuance and context.
+
+**Design Philosophy:** Leverage Claude Code's AI intelligence for extraction (understands "knee pain after long runs" vs "slight knee soreness") rather than rigid regex patterns. M13 focuses on robust storage, preventing duplicate memories, and efficient retrieval.
 
 ### 2.1 Scope Boundaries
 
 **In Scope:**
-- Extracting facts from activity notes
-- Extracting facts from user messages
-- Memory deduplication and updates
-- Confidence scoring
+
+- Storing memories with automatic deduplication
+- Confidence scoring and upgrades (3+ occurrences → HIGH)
 - Memory archival when superseded
-- Pattern detection across multiple sessions
+- Retrieval by type, tag, and relevance
+- Pattern detection from stored memories (3+ mentions = pattern)
 
 **Out of Scope:**
+
+- Extracting facts from text (Claude Code handles this)
 - Analyzing activity notes for RPE (M7)
 - Enriching memories with interpretations (M12 - Data Enrichment)
 - Storing conversation transcripts (M14)
@@ -39,10 +45,9 @@ Extract and persist durable athlete facts from activity notes and conversations.
 
 ### 3.1 Internal Dependencies
 
-| Module | Usage |
-|--------|-------|
-| M3 | Read/write memories.yaml |
-| M7 | Receives analysis results with extracted signals |
+| Module | Usage                    |
+| ------ | ------------------------ |
+| M3     | Read/write memories.yaml |
 
 ### 3.2 External Libraries
 
@@ -83,6 +88,7 @@ class MemorySource(str, Enum):
     """Where the memory was extracted from"""
     ACTIVITY_NOTE = "activity_note"
     USER_MESSAGE = "user_message"
+    CLAUDE_CODE = "claude_code"           # AI-extracted by Claude Code
     PATTERN_ANALYSIS = "pattern_analysis"
     MANUAL = "manual"
 
@@ -125,214 +131,98 @@ class PatternInsight(BaseModel):
     confidence: MemoryConfidence
 ```
 
-### 4.2 Entity Lists for Matching
+### 4.2 Function Signatures
 
 ```python
-# Body parts for injury tracking
-BODY_PARTS = [
-    "knee", "ankle", "calf", "shin", "hip", "hamstring",
-    "quad", "achilles", "foot", "heel", "back", "shoulder",
-    "it band", "plantar", "glute"
-]
+# ============================================================
+# STORAGE FUNCTIONS
+# ============================================================
 
-# Time preferences
-TIME_PREFERENCES = [
-    "morning", "evening", "afternoon", "lunch",
-    "early", "late", "before work", "after work"
-]
-
-# Intensity preferences
-INTENSITY_TOPICS = [
-    "easy", "hard", "tempo", "intervals", "long run",
-    "recovery", "speed work", "hill repeats"
-]
-
-# Context topics
-CONTEXT_TOPICS = [
-    "job", "work", "travel", "family", "kids",
-    "commute", "gym", "climbing", "cycling"
-]
-```
-
-### 4.3 Function Signatures
-
-```python
-def extract_memories(
-    text: str,
-    source: MemorySource,
-    source_reference: Optional[str] = None,
-) -> list[Memory]:
+def save_memory(
+    memory: Memory,
+    repo: "RepositoryIO",
+) -> tuple[Memory, Optional[ArchivedMemory]]:
     """
-    Extract durable facts from text.
-
-    Args:
-        text: Activity note or user message
-        source: Where the text came from
-        source_reference: Activity ID or timestamp
-
-    Returns:
-        List of extracted memories
-    """
-    ...
-
-
-def process_activity_notes(
-    activity: "NormalizedActivity",
-    analysis: "AnalysisResult",
-) -> ExtractionResult:
-    """
-    Extract memories from activity notes and analysis.
-
-    Called after M7 analysis completes.
-    """
-    ...
-
-
-def process_user_message(
-    message: str,
-    timestamp: datetime,
-) -> ExtractionResult:
-    """
-    Extract memories from conversational user message.
+    Save a single memory with automatic deduplication.
+    Called by Claude Code after extraction.
 
     Process:
-        1. Extract memories using pattern matching
-        2. Source is USER_MESSAGE with timestamp reference
-        3. Deduplicate against existing memories
-        4. Return extraction result
+        1. Load existing memories from athlete/memories.yaml
+        2. Deduplicate against existing using three-step algorithm
+        3. Write updated memories back to file
+        4. Return final memory and archived memory (if superseded)
 
     Args:
-        message: User's conversational message
-        timestamp: When the message was sent
+        memory: Memory to save (extracted by Claude Code)
+        repo: RepositoryIO instance
 
     Returns:
-        ExtractionResult with new/updated/archived memories
+        (final_memory, archived_memory_if_superseded)
     """
-    # Extract memories from message
-    extracted = extract_memories(
-        text=message,
-        source=MemorySource.USER_MESSAGE,
-        source_reference=timestamp.isoformat(),
-    )
+    ...
 
-    if not extracted:
-        return ExtractionResult([], [], [])
 
-    # Deduplicate against existing
-    repo = get_repo()  # Injected dependency
-    existing = load_memories(repo)
+def load_memories(repo: "RepositoryIO") -> list[Memory]:
+    """
+    Load all active memories from athlete/memories.yaml.
 
-    new_memories = []
-    updated_memories = []
-    archived_memories = []
+    Returns:
+        List of all active (non-archived) memories
+    """
+    ...
 
-    for memory in extracted:
-        result, archived = deduplicate_memory(memory, existing)
 
-        if archived:
-            archived_memories.append(archived)
-            updated_memories.append(result)
-            # Update existing list
-            existing = [m for m in existing if m.id != archived.id]
-            existing.append(result)
-        elif result.id == memory.id:
-            # Truly new
-            new_memories.append(result)
-            existing.append(result)
-        else:
-            # Updated existing
-            updated_memories.append(result)
+def load_archived_memories(repo: "RepositoryIO") -> list[ArchivedMemory]:
+    """
+    Load all archived memories from athlete/memories.yaml.
 
-    return ExtractionResult(
-        new_memories=new_memories,
-        updated_memories=updated_memories,
-        archived_memories=archived_memories,
-    )
+    Returns:
+        List of archived memories
+    """
+    ...
 
+
+# ============================================================
+# DEDUPLICATION
+# ============================================================
 
 def deduplicate_memory(
     new_memory: Memory,
     existing_memories: list[Memory],
 ) -> tuple[Memory, Optional[ArchivedMemory]]:
     """
-    Check if memory duplicates or updates existing.
+    Three-step deduplication algorithm:
+    1. Exact content match → increment occurrences
+    2. Same type + overlapping tags → update content (supersede old)
+    3. No match → return as new memory
 
-    Strategy:
-    1. Exact match → increment occurrences
-    2. Same type + entity → update content
-    3. No match → create new
+    Args:
+        new_memory: Memory to check
+        existing_memories: List of existing memories
 
     Returns:
-        (result_memory, archived if replaced)
+        (result_memory, archived_memory_if_replaced)
     """
     ...
 
 
-def merge_memories(
-    memories: list[Memory],
-    repo: "RepositoryIO",
-) -> ExtractionResult:
+def _normalize_for_comparison(content: str) -> str:
     """
-    Merge new memories into persistent storage.
-
-    Process:
-        1. Load existing memories from athlete/memories.yaml
-        2. Deduplicate each new memory against existing
-        3. Track new, updated, and archived memories
-        4. Write updated memories.yaml
-        5. Return ExtractionResult
+    Normalize content for exact comparison.
+    Lowercases, removes extra whitespace, strips punctuation.
 
     Args:
-        memories: List of new memories to merge
-        repo: RepositoryIO instance
+        content: Memory content string
 
     Returns:
-        ExtractionResult with new/updated/archived counts
+        Normalized string for comparison
     """
-    # Load existing memories
-    existing = load_memories(repo)
+    ...
 
-    new_memories = []
-    updated_memories = []
-    archived_memories = []
 
-    # Deduplicate each memory
-    for memory in memories:
-        result, archived = deduplicate_memory(memory, existing)
-
-        if archived:
-            # Memory was superseded
-            archived_memories.append(archived)
-            updated_memories.append(result)
-            # Update existing list
-            existing = [m for m in existing if m.id != archived.id]
-            existing.append(result)
-        elif result.id == memory.id:
-            # Truly new memory
-            new_memories.append(result)
-            existing.append(result)
-        else:
-            # Existing memory updated (occurrences incremented)
-            updated_memories.append(result)
-
-    # Write back to file
-    memories_data = repo.read_yaml("athlete/memories.yaml")
-    memories_data["memories"] = [m.model_dump() for m in existing]
-
-    # Add archived records
-    existing_archived = memories_data.get("archived", [])
-    for archived in archived_memories:
-        existing_archived.append(archived.model_dump())
-    memories_data["archived"] = existing_archived
-
-    repo.write_yaml("athlete/memories.yaml", memories_data)
-
-    return ExtractionResult(
-        new_memories=new_memories,
-        updated_memories=updated_memories,
-        archived_memories=archived_memories,
-    )
-
+# ============================================================
+# RETRIEVAL FUNCTIONS
+# ============================================================
 
 def get_memories_by_type(
     memory_type: MemoryType,
@@ -380,28 +270,69 @@ def get_relevant_memories(
     limit: int = 5,
 ) -> list[Memory]:
     """
-    Get memories relevant to a given context.
+    Get memories relevant to current context using keyword matching.
 
-    Used to provide context for coaching responses.
+    Scoring:
+        - Content overlap (keyword matching)
+        - Tag matching
+        - Confidence level (HIGH > MEDIUM > LOW)
+        - Recency (more recent = higher score)
+
+    Args:
+        context: Context string to match against (e.g., "knee pain")
+        repo: RepositoryIO instance
+        limit: Maximum number of memories to return
+
+    Returns:
+        List of most relevant memories, sorted by relevance score
     """
     ...
 
 
-def analyze_patterns(
-    activities: list["NormalizedActivity"],
-    memories: list[Memory],
+def get_memories_with_tag(
+    tag: str,
+    repo: "RepositoryIO",
+) -> list[Memory]:
+    """
+    Get all memories with a specific tag.
+
+    Args:
+        tag: Tag to filter by (e.g., "body:knee")
+        repo: RepositoryIO instance
+
+    Returns:
+        List of memories with the specified tag
+    """
+    ...
+
+
+# ============================================================
+# PATTERN ANALYSIS
+# ============================================================
+
+def analyze_memory_patterns(
+    repo: "RepositoryIO",
 ) -> list[PatternInsight]:
     """
-    Analyze training history for patterns.
+    Detect patterns from stored memories.
 
     Patterns detected:
-    - Recurring injury triggers
-    - Recovery time patterns
-    - Performance correlations
-    - Override patterns (from M11)
+        - Recurring injury locations (3+ mentions)
+        - Training response patterns (consistent reactions)
+        - Preference consistency
+
+    Args:
+        repo: RepositoryIO instance
+
+    Returns:
+        List of pattern insights with evidence
     """
     ...
 
+
+# ============================================================
+# ARCHIVAL
+# ============================================================
 
 def archive_memory(
     memory_id: str,
@@ -531,151 +462,9 @@ class DuplicateMemoryError(MemoryError):
 
 ## 5. Core Algorithms
 
-### 5.1 Memory Extraction
+**Note**: Memory extraction is handled by Claude Code using AI intelligence. M13 provides storage, deduplication, and retrieval algorithms only.
 
-```python
-import re
-import uuid
-from datetime import datetime
-
-
-# Extraction patterns
-EXTRACTION_PATTERNS = {
-    MemoryType.INJURY_HISTORY: [
-        # "knee pain", "tight calf", "achilles issues"
-        (r'\b(knee|ankle|calf|shin|hip|hamstring|quad|achilles|foot|back|shoulder)\b.*?\b(pain|tight|sore|injury|issues?|problem|hurt)\b', "body_part_issue"),
-        (r'\b(pain|tight|sore|injury|issues?|problem|hurt)\b.*?\b(knee|ankle|calf|shin|hip|hamstring|quad|achilles|foot|back|shoulder)\b', "issue_body_part"),
-        # "history of X", "recurring X"
-        (r'\b(history of|recurring|chronic|old)\b.*?\b(injury|pain|issue)', "chronic_indicator"),
-    ],
-    MemoryType.PREFERENCE: [
-        # "I prefer morning runs"
-        (r'\bi prefer\b.*?(morning|evening|early|late|short|long|easy|hard)', "explicit_prefer"),
-        # "morning works best"
-        (r'\b(morning|evening|early|late)\b.*?\b(works? best|is best|suits me)', "time_preference"),
-        # "I like/love X"
-        (r'\bi (like|love|enjoy)\b.*?(running|tempo|intervals|long runs?|easy)', "positive_preference"),
-        # "I hate/dislike X"
-        (r'\bi (hate|dislike|don\'t like)\b.*?(running|tempo|intervals|long runs?|treadmill)', "negative_preference"),
-    ],
-    MemoryType.CONTEXT: [
-        # "I work as", "my job is"
-        (r'\b(i work as|my job is|i\'m a)\b\s+(\w+)', "job_context"),
-        # "I have X kids"
-        (r'\bi have\b.*?(\d+)\s*(kids?|children)', "family_context"),
-        # "I also do X"
-        (r'\bi also (do|train|practice)\b\s+(\w+)', "other_sport"),
-        # "I climb X times per week"
-        (r'\bi\s+(climb|cycle|swim)\b.*?(\d+)\s*(times?|days?)\s*(per|a)\s*week', "sport_frequency"),
-    ],
-    MemoryType.TRAINING_RESPONSE: [
-        # "I recover quickly/slowly"
-        (r'\bi recover\b\s*(quickly|slowly|fast|well)', "recovery_rate"),
-        # "X makes me tired/sore"
-        (r'(intervals?|tempo|long runs?|hills?)\b.*?\b(make me|leave me)\s*(tired|sore|exhausted)', "training_response"),
-    ],
-}
-
-
-def extract_memories(
-    text: str,
-    source: MemorySource,
-    source_reference: Optional[str] = None,
-) -> list[Memory]:
-    """
-    Extract memories from text using pattern matching.
-    """
-    if not text or not text.strip():
-        return []
-
-    text_lower = text.lower()
-    now = datetime.now()
-    memories = []
-
-    for memory_type, patterns in EXTRACTION_PATTERNS.items():
-        for pattern, pattern_name in patterns:
-            matches = re.finditer(pattern, text_lower, re.IGNORECASE)
-
-            for match in matches:
-                # Extract the matched content
-                content = _clean_extracted_content(match.group(0), memory_type)
-
-                # Determine confidence
-                confidence = _assess_confidence(match.group(0), pattern_name)
-
-                # Extract entity tags
-                tags = _extract_entity_tags(match.group(0), memory_type)
-
-                memory = Memory(
-                    id=f"mem_{uuid.uuid4().hex[:8]}",
-                    type=memory_type,
-                    content=content,
-                    source=source,
-                    source_reference=source_reference,
-                    created_at=now,
-                    updated_at=now,
-                    confidence=confidence,
-                    occurrences=1,
-                    tags=tags,
-                )
-
-                memories.append(memory)
-
-    return memories
-
-
-def _clean_extracted_content(raw: str, memory_type: MemoryType) -> str:
-    """Clean and normalize extracted content"""
-    # Capitalize first letter
-    content = raw.strip().capitalize()
-
-    # Remove filler words at start
-    for filler in ["i ", "my ", "the "]:
-        if content.lower().startswith(filler):
-            content = content[len(filler):].capitalize()
-
-    return content
-
-
-def _assess_confidence(text: str, pattern_name: str) -> MemoryConfidence:
-    """Assess confidence based on pattern type and explicitness"""
-    explicit_patterns = ["explicit_prefer", "chronic_indicator", "job_context"]
-
-    if pattern_name in explicit_patterns:
-        return MemoryConfidence.HIGH
-    elif "prefer" in pattern_name or "response" in pattern_name:
-        return MemoryConfidence.MEDIUM
-    else:
-        return MemoryConfidence.LOW
-
-
-def _extract_entity_tags(text: str, memory_type: MemoryType) -> list[str]:
-    """Extract entity tags for deduplication matching"""
-    tags = []
-    text_lower = text.lower()
-
-    if memory_type == MemoryType.INJURY_HISTORY:
-        for part in BODY_PARTS:
-            if part in text_lower:
-                tags.append(f"body:{part}")
-
-    elif memory_type == MemoryType.PREFERENCE:
-        for time_pref in TIME_PREFERENCES:
-            if time_pref in text_lower:
-                tags.append(f"time:{time_pref}")
-        for intensity in INTENSITY_TOPICS:
-            if intensity in text_lower:
-                tags.append(f"intensity:{intensity}")
-
-    elif memory_type == MemoryType.CONTEXT:
-        for topic in CONTEXT_TOPICS:
-            if topic in text_lower:
-                tags.append(f"context:{topic}")
-
-    return tags
-```
-
-### 5.2 Deduplication Algorithm
+### 5.1 Deduplication Algorithm
 
 ```python
 def deduplicate_memory(
@@ -743,92 +532,21 @@ def _normalize_for_comparison(content: str) -> str:
     return normalized.strip()
 ```
 
-### 5.3 Memory Processing Pipeline
+### 5.2 Pattern Analysis (on Stored Data)
 
 ```python
-def process_activity_notes(
-    activity: "NormalizedActivity",
-    analysis: "AnalysisResult",
-) -> ExtractionResult:
-    """
-    Process activity notes for memories.
-    """
-    new_memories = []
-    updated_memories = []
-    archived_memories = []
-
-    # Combine all text sources
-    text_sources = [
-        activity.name or "",
-        activity.description or "",
-        activity.private_note or "",
-    ]
-    combined_text = " ".join(text_sources)
-
-    if not combined_text.strip():
-        return ExtractionResult([], [], [])
-
-    # Extract memories from text
-    extracted = extract_memories(
-        text=combined_text,
-        source=MemorySource.ACTIVITY_NOTE,
-        source_reference=activity.id,
-    )
-
-    # Process injury flags from analysis
-    if analysis.injury_flags:
-        for flag in analysis.injury_flags:
-            injury_memory = Memory(
-                id=f"mem_{uuid.uuid4().hex[:8]}",
-                type=MemoryType.INJURY_HISTORY,
-                content=f"{flag.body_part.value} {flag.severity.value}: {flag.source_text}",
-                source=MemorySource.ACTIVITY_NOTE,
-                source_reference=activity.id,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-                confidence=MemoryConfidence.HIGH,
-                tags=[f"body:{flag.body_part.value}"],
-            )
-            extracted.append(injury_memory)
-
-    # Deduplicate against existing
-    repo = get_repo()  # Injected dependency
-    existing = load_memories(repo)
-
-    for memory in extracted:
-        result, archived = deduplicate_memory(memory, existing)
-
-        if archived:
-            archived_memories.append(archived)
-            updated_memories.append(result)
-            # Update existing list
-            existing = [m for m in existing if m.id != archived.id]
-            existing.append(result)
-        elif result.id == memory.id:
-            # Truly new
-            new_memories.append(result)
-            existing.append(result)
-        else:
-            # Updated existing
-            updated_memories.append(result)
-
-    return ExtractionResult(
-        new_memories=new_memories,
-        updated_memories=updated_memories,
-        archived_memories=archived_memories,
-    )
-```
-
-### 5.4 Pattern Analysis
-
-```python
-def analyze_patterns(
-    activities: list["NormalizedActivity"],
-    memories: list[Memory],
+def analyze_memory_patterns(
+    repo: "RepositoryIO",
 ) -> list[PatternInsight]:
     """
-    Detect patterns across training history.
+    Detect patterns from stored memories.
+
+    Patterns detected:
+        - Recurring injury locations (3+ mentions)
+        - Training response patterns (consistent reactions)
+        - Preference consistency
     """
+    memories = load_memories(repo)
     insights = []
 
     # Pattern 1: Recurring injury location
@@ -868,7 +586,7 @@ def analyze_patterns(
     return insights
 ```
 
-### 5.5 Relevant Memory Retrieval
+### 5.3 Relevant Memory Retrieval
 
 ```python
 def get_relevant_memories(
@@ -982,32 +700,23 @@ archived:
 
 **Integration with API Layer:**
 
-This module is called internally by M1 workflows during sync and conversation processing. Claude Code receives memories indirectly through enriched API responses.
+M13 provides storage/retrieval functions called by M1 workflows and Claude Code. **Claude Code handles memory extraction** using its AI intelligence to understand sports training context and athlete statements.
 
 **Memory Flow:**
 
 ```
-Automatic extraction (during sync):
-    M1::run_sync_workflow()
+Memory extraction and storage (Claude Code-driven):
+    Claude Code (reads activity note or user message)
         ↓
-    M7::analyze_notes() → extracts injury flags, wellness signals
+    Claude Code extracts facts using AI understanding
         ↓
-    M13::process_activity_notes() → extracts memories
+    Claude Code → M13::save_memory(memory, repo)
         ↓
-    M13::merge_memories() → deduplicate and persist
+    M13::deduplicate_memory() → smart deduplication
         ↓
     M3::write_yaml("athlete/memories.yaml")
 
-User message processing:
-    Claude Code (receives user message)
-        ↓
-    M1::process_conversation()
-        ↓
-    M13::process_user_message() → extract memories
-        ↓
-    M13::merge_memories() → deduplicate and persist
-
-Memory usage in responses:
+Memory retrieval for coaching responses:
     Claude Code → api.coach.get_todays_workout()
         ↓
     M10::get_todays_workout()
@@ -1017,53 +726,72 @@ Memory usage in responses:
     M12::enrich_workout(workout, memories) → WorkoutRecommendation
         ↓ (includes)
     WorkoutRecommendation.relevant_memories
+        ↓
+    Claude Code (crafts natural response using memories)
+
+Pattern analysis (periodic):
+    M1::analyze_training_patterns()
+        ↓
+    M13::analyze_memory_patterns(repo)
+        ↓
+    Returns list[PatternInsight] (e.g., "recurring knee issues")
 ```
 
 ### 7.1 Called By
 
-| Module | When |
-|--------|------|
-| M1 | After sync completes (process activity notes) |
-| M1 | During conversation (process user messages) |
-| M11 | Track override patterns |
+| Module      | When                                    |
+| ----------- | --------------------------------------- |
+| Claude Code | After extracting facts from text        |
+| M1          | For pattern analysis and memory cleanup |
+| M12         | For enriching responses with context    |
 
 ### 7.2 Calls To
 
-| Module | Purpose |
-|--------|---------|
-| M3 | Read/write memories.yaml |
+| Module | Purpose                  |
+| ------ | ------------------------ |
+| M3     | Read/write memories.yaml |
 
 ### 7.3 Returns To
 
-| Module | Data |
-|--------|------|
-| M1 | Context for personalized responses |
-| M11 | Pattern insights for adaptation |
+| Module                | Data                                         |
+| --------------------- | -------------------------------------------- |
+| M1                    | Context for personalized responses           |
+| M11                   | Pattern insights for adaptation              |
 | M12 - Data Enrichment | Memories for inclusion in enriched responses |
 
 ## 8. Test Scenarios
 
-### 8.1 Extraction Tests
+**Note**: Memory extraction is handled by Claude Code (not tested in M13). M13 tests focus on storage, deduplication, retrieval, and pattern analysis.
+
+### 8.1 Storage Tests
 
 ```python
-def test_extract_injury_pattern():
-    """Injury patterns are extracted"""
-    text = "Left knee pain started around km 15"
-    memories = extract_memories(text, MemorySource.ACTIVITY_NOTE)
+def test_save_memory_new():
+    """New memory is saved correctly"""
+    repo = MockRepo()
+    memory = Memory(
+        id="mem_123",
+        type=MemoryType.INJURY_HISTORY,
+        content="Knee pain after long runs",
+        source=MemorySource.CLAUDE_CODE,
+        source_reference=None,
+        created_at=datetime.now(),
+        updated_at=datetime.now(),
+        confidence=MemoryConfidence.MEDIUM,
+        occurrences=1,
+        tags=["body:knee"],
+    )
 
-    assert len(memories) >= 1
-    assert any(m.type == MemoryType.INJURY_HISTORY for m in memories)
-    assert any("body:knee" in m.tags for m in memories)
+    result, archived = save_memory(memory, repo)
+
+    assert result.id == "mem_123"
+    assert archived is None
+    assert repo.memories_written is True
 
 
-def test_extract_preference():
-    """Preferences are extracted"""
-    text = "I prefer morning runs, they energize me for the day"
-    memories = extract_memories(text, MemorySource.USER_MESSAGE)
+### 8.2 Deduplication Tests
 
-    assert any(m.type == MemoryType.PREFERENCE for m in memories)
-
-
+```python
 def test_dedup_exact_match():
     """Exact matches increment occurrences"""
     existing = [Memory(

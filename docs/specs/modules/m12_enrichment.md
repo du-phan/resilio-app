@@ -2,13 +2,13 @@
 
 ## 1. Metadata
 
-| Field        | Value                                                                     |
-| ------------ | ------------------------------------------------------------------------- |
-| Module ID    | M12                                                                       |
-| Name         | Data Enrichment                                                           |
-| Code Module  | `core/enrichment.py`                                                      |
-| Version      | 2.0.0                                                                     |
-| Status       | Draft                                                                     |
+| Field        | Value                                                                                   |
+| ------------ | --------------------------------------------------------------------------------------- |
+| Module ID    | M12                                                                                     |
+| Name         | Data Enrichment                                                                         |
+| Code Module  | `core/enrichment.py`                                                                    |
+| Version      | 2.0.0                                                                                   |
+| Status       | Draft                                                                                   |
 | Dependencies | M3 (Repository I/O), M9 (Metrics Engine), M10 (Plan Generator), M11 (Adaptation Engine) |
 
 ### Changelog
@@ -28,8 +28,8 @@ Add interpretive context to raw training data. Transform numbers into meaningful
 - Add human-readable interpretations to metric values (CTL=44 → "solid recreational level")
 - Provide training zone classifications ("safe", "productive", "high_risk")
 - Calculate trends and deltas with context
-- Enrich workout prescriptions with rationale and guidance
-- Return structured data models with interpretive fields
+- Enrich workout prescriptions with pace/HR guidance and readiness context
+- Return structured data models with interpretive fields (Claude Code crafts coaching messages)
 
 ### 2.2 What This Module Does NOT Do
 
@@ -45,7 +45,7 @@ Add interpretive context to raw training data. Transform numbers into meaningful
 - Metric contextualization (what does CTL=44 mean?)
 - Zone classification (is ACWR 1.4 safe?)
 - Trend interpretation (is +5 CTL good?)
-- Workout rationale generation (why this workout today?)
+- Workout enrichment (pace zones, HR zones, readiness context)
 - Progressive disclosure level determination
 
 **Out of Scope:**
@@ -59,12 +59,12 @@ Add interpretive context to raw training data. Transform numbers into meaningful
 
 ### 3.1 Internal Dependencies
 
-| Module | Usage                                    |
-| ------ | ---------------------------------------- |
-| M3     | Read data files for historical context   |
-| M9     | Get metric values for enrichment         |
-| M10    | Get plan context for workout rationale   |
-| M11    | Get suggestion context                   |
+| Module | Usage                                  |
+| ------ | -------------------------------------- |
+| M3     | Read data files for historical context |
+| M9     | Get metric values for enrichment       |
+| M10    | Get plan context for workout rationale |
+| M11    | Get suggestion context                 |
 
 ### 3.2 External Libraries
 
@@ -616,20 +616,15 @@ def enrich_workout(
             zone_name=intensity_desc,
         )
 
-    # Generate rationale
-    rationale = _generate_rationale(workout, metrics, profile)
-
-    # Current readiness
+    # Current readiness (interpret metric only)
     readiness = interpret_metric("readiness", metrics.readiness.score)
 
-    # Check for suggestions
+    # Check for suggestions (no summary generation - Claude Code crafts message)
     has_suggestion = False
-    suggestion_summary = None
     if suggestions:
         relevant = [s for s in suggestions if s.affected_workout.date == workout.date]
         if relevant:
             has_suggestion = True
-            suggestion_summary = _suggestion_summary(relevant[0])
 
     return EnrichedWorkout(
         workout_id=workout.id,
@@ -644,66 +639,11 @@ def enrich_workout(
         pace_guidance=pace_guidance,
         hr_guidance=hr_guidance,
         purpose=workout.purpose,
-        rationale=rationale,
         current_readiness=readiness,
         has_pending_suggestion=has_suggestion,
-        suggestion_summary=suggestion_summary,
         coach_notes=workout.notes,
-    )
-
-
-def _generate_rationale(
-    workout: "WorkoutPrescription",
-    metrics: "DailyMetrics",
-    profile: "AthleteProfile",
-) -> WorkoutRationale:
-    """Generate context-aware rationale for a workout."""
-
-    # TSB-based primary reason
-    tsb = metrics.ctl_atl.tsb
-    if tsb > 5:
-        primary = "You're feeling fresh"
-    elif tsb > -10:
-        primary = "Form is good"
-    elif tsb > -20:
-        primary = "Training load is building nicely"
-    else:
-        primary = "You've been working hard"
-
-    # Workout-specific purpose
-    purposes = {
-        "easy": "recovery and aerobic base maintenance",
-        "long_run": "endurance building and fat oxidation",
-        "tempo": "lactate threshold improvement",
-        "intervals": "VO2max development",
-        "fartlek": "neuromuscular coordination and fun",
-        "rest": "recovery and adaptation",
-    }
-    training_purpose = purposes.get(workout.workout_type, "general fitness")
-
-    # Phase context
-    phase_context = None
-    if workout.phase:
-        phases = {
-            "base": "Building your aerobic foundation",
-            "build": "Increasing intensity progressively",
-            "peak": "Race-specific sharpening",
-            "taper": "Reducing volume while staying sharp",
-        }
-        phase_context = phases.get(workout.phase)
-
-    # Safety notes
-    safety_notes = []
-    if metrics.acwr and metrics.acwr.acwr and metrics.acwr.acwr > 1.3:
-        safety_notes.append("ACWR approaching caution zone - listen to your body")
-    if metrics.readiness.score < 50:
-        safety_notes.append("Readiness is lower than usual - adjust if needed")
-
-    return WorkoutRationale(
-        primary_reason=primary,
-        training_purpose=training_purpose,
-        phase_context=phase_context,
-        safety_notes=safety_notes,
+        # Note: rationale removed - Claude Code generates coaching messages
+        # Note: suggestion_summary removed - Claude Code explains with context
     )
 
 
@@ -882,18 +822,6 @@ def _format_pace(min_per_km: float) -> str:
     return f"{minutes}:{seconds:02d}/km"
 
 
-def _suggestion_summary(suggestion: "Suggestion") -> str:
-    """Create brief summary of a suggestion."""
-    summaries = {
-        "downgrade": f"Consider reducing intensity on {suggestion.affected_workout.date}",
-        "skip": f"Consider skipping {suggestion.affected_workout.date} workout",
-        "move": f"Consider moving {suggestion.affected_workout.date} workout",
-        "force_rest": "Rest day recommended",
-    }
-    return summaries.get(
-        suggestion.suggestion_type,
-        f"Adjustment suggested for {suggestion.affected_workout.date}"
-    )
 ```
 
 ## 6. Integration with API Layer
@@ -902,11 +830,11 @@ This module is called by the API layer to enrich workflow results before returni
 
 ### 6.1 API to Enrichment Mapping
 
-| API Function | Enrichment Function |
-| ------------ | ------------------- |
-| `api.metrics.get_current_metrics()` | `enrich_metrics()` |
-| `api.coach.get_todays_workout()` | `enrich_workout()` |
-| `api.sync.sync_strava()` | `enrich_sync_result()` |
+| API Function                         | Enrichment Function    |
+| ------------------------------------ | ---------------------- |
+| `api.metrics.get_current_metrics()`  | `enrich_metrics()`     |
+| `api.coach.get_todays_workout()`     | `enrich_workout()`     |
+| `api.sync.sync_strava()`             | `enrich_sync_result()` |
 | `api.plan.get_pending_suggestions()` | `enrich_suggestions()` |
 
 ### 6.2 Data Flow
@@ -1082,6 +1010,7 @@ ENRICHMENT_CONFIG = {
 This module returns **structured data**, not formatted strings. Claude Code decides how to present information conversationally.
 
 **Correct pattern:**
+
 ```python
 return MetricInterpretation(
     value=44,
@@ -1091,6 +1020,7 @@ return MetricInterpretation(
 ```
 
 **Incorrect pattern (removed):**
+
 ```python
 return "Your CTL is 44, which is a solid recreational level."
 ```

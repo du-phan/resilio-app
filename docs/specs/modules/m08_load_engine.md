@@ -2,13 +2,13 @@
 
 ## 1. Metadata
 
-| Field | Value |
-|-------|-------|
-| Module ID | M8 |
-| Name | Load Engine |
-| Code Module | `core/load.py` |
-| Version | 1.0.2 |
-| Status | Draft |
+| Field        | Value                                                                       |
+| ------------ | --------------------------------------------------------------------------- |
+| Module ID    | M8                                                                          |
+| Name         | Load Engine                                                                 |
+| Code Module  | `core/load.py`                                                              |
+| Version      | 1.0.2                                                                       |
+| Status       | Draft                                                                       |
 | Dependencies | M3 (Repository I/O), M6 (Activity Normalization), M7 (Notes & RPE Analyzer) |
 
 ## 2. Purpose
@@ -18,6 +18,7 @@ Compute training load values for each activity using the two-channel load model.
 ### 2.1 Scope Boundaries
 
 **In Scope:**
+
 - Computing base_effort_au from RPE and duration
 - Applying sport-specific multipliers (systemic and lower-body)
 - Adjusting multipliers based on workout characteristics
@@ -26,6 +27,7 @@ Compute training load values for each activity using the two-channel load model.
 - Persisting calculated fields to activity files
 
 **Out of Scope:**
+
 - Aggregating daily/weekly loads (M9)
 - Computing CTL/ATL/TSB (M9)
 - Estimating RPE (M7)
@@ -35,11 +37,11 @@ Compute training load values for each activity using the two-channel load model.
 
 ### 3.1 Internal Dependencies
 
-| Module | Usage |
-|--------|-------|
-| M3 | Update activity files with calculated fields |
-| M6 | Receives normalized activities |
-| M7 | Receives RPE estimates |
+| Module | Usage                                        |
+| ------ | -------------------------------------------- |
+| M3     | Update activity files with calculated fields |
+| M6     | Receives normalized activities               |
+| M7     | Receives RPE estimates                       |
 
 ### 3.2 External Libraries
 
@@ -503,22 +505,24 @@ def classify_session_type(
     sport_type: str,
     rpe: int,
     workout_type: Optional[int],
-    notes_analysis: Optional["AnalysisResult"],
 ) -> SessionType:
     """
     Classify session for 80/20 intensity distribution tracking.
 
+    Uses objective inputs only (RPE value + Strava workout_type field).
+    Text-based classification is Claude Code's responsibility.
+
     Classification Rules:
     - Race (workout_type=1 or RPE 9-10): RACE
-    - Intervals/tempo (workout_type=3 or RPE 7-8): QUALITY
-    - Steady state (RPE 5-6): MODERATE
-    - Recovery (RPE 1-4): EASY
+    - Quality (workout_type=3 or RPE 7-8): QUALITY
+    - Moderate (RPE 5-6): MODERATE
+    - Easy (RPE 1-4): EASY
     """
-    # Check for explicit race
+    # Check for explicit race (Strava workout_type field)
     if workout_type == 1:
         return SessionType.RACE
 
-    # Check RPE-based classification
+    # RPE-based classification (quantitative)
     if rpe >= 9:
         return SessionType.RACE
     elif rpe >= 7:
@@ -527,39 +531,6 @@ def classify_session_type(
         return SessionType.MODERATE
     else:
         return SessionType.EASY
-
-
-# Extended classification with keyword support
-SESSION_TYPE_KEYWORDS = {
-    SessionType.RACE: ["race", "competition", "pr attempt", "time trial"],
-    SessionType.QUALITY: ["tempo", "threshold", "intervals", "fartlek",
-                          "speed work", "track workout", "vo2max"],
-    SessionType.MODERATE: ["steady", "aerobic", "long run", "endurance"],
-    SessionType.EASY: ["recovery", "easy", "shake out", "warm up", "cool down"],
-}
-
-
-def classify_with_keywords(
-    base_classification: SessionType,
-    activity_name: Optional[str],
-    description: Optional[str],
-) -> SessionType:
-    """
-    Refine classification using keyword analysis.
-    """
-    text = f"{activity_name or ''} {description or ''}".lower()
-
-    # Keywords can override RPE-based classification
-    for session_type, keywords in SESSION_TYPE_KEYWORDS.items():
-        if any(kw in text for kw in keywords):
-            # Quality/Race keywords can upgrade
-            if session_type in {SessionType.QUALITY, SessionType.RACE}:
-                return session_type
-            # Easy keywords can downgrade (even moderate sessions)
-            if session_type == SessionType.EASY:
-                return session_type
-
-    return base_classification
 ```
 
 ### 5.4 Unknown Sport Handling
@@ -637,11 +608,11 @@ def persist_load_to_activity(
 # Added to activities/YYYY-MM/*.yaml by M8
 calculated:
   estimated_rpe: 6
-  base_effort_au: 360.0         # 6 × 60 minutes
+  base_effort_au: 360.0 # 6 × 60 minutes
   systemic_multiplier: 1.05
   lower_body_multiplier: 1.10
-  systemic_load_au: 378.0       # 360 × 1.05
-  lower_body_load_au: 396.0     # 360 × 1.10
+  systemic_load_au: 378.0 # 360 × 1.05
+  lower_body_load_au: 396.0 # 360 × 1.10
   session_type: "moderate"
   multiplier_adjustments:
     - "Trail running: +0.05 systemic, +0.10 lower_body"
@@ -649,28 +620,28 @@ calculated:
 
 ### 6.2 Sport Multipliers Quick Reference
 
-| Sport | Systemic | Lower-Body | Notes |
-|-------|----------|------------|-------|
-| Run (road) | 1.00 | 1.00 | Baseline |
-| Run (trail) | 1.05 | 1.10 | More impact |
-| Run (treadmill) | 1.00 | 0.90 | Less impact |
-| Cycling | 0.85 | 0.35 | Low leg impact |
-| Swimming | 0.70 | 0.10 | Minimal legs |
-| Climbing | 0.60 | 0.10 | Upper-body |
-| Strength | 0.55 | 0.40 | Adjustable |
-| CrossFit | 0.75 | 0.55 | Mixed |
-| Hiking | 0.60 | 0.50 | Moderate |
-| Yoga (flow) | 0.35 | 0.10 | Low load |
-| Unknown | 0.70 | 0.30 | Conservative |
+| Sport           | Systemic | Lower-Body | Notes          |
+| --------------- | -------- | ---------- | -------------- |
+| Run (road)      | 1.00     | 1.00       | Baseline       |
+| Run (trail)     | 1.05     | 1.10       | More impact    |
+| Run (treadmill) | 1.00     | 0.90       | Less impact    |
+| Cycling         | 0.85     | 0.35       | Low leg impact |
+| Swimming        | 0.70     | 0.10       | Minimal legs   |
+| Climbing        | 0.60     | 0.10       | Upper-body     |
+| Strength        | 0.55     | 0.40       | Adjustable     |
+| CrossFit        | 0.75     | 0.55       | Mixed          |
+| Hiking          | 0.60     | 0.50       | Moderate       |
+| Yoga (flow)     | 0.35     | 0.10       | Low load       |
+| Unknown         | 0.70     | 0.30       | Conservative   |
 
 ### 6.3 Session Type Thresholds
 
-| RPE Range | Session Type | 80/20 Bucket |
-|-----------|--------------|--------------|
-| 1-4 | Easy | Low intensity (80%) |
-| 5-6 | Moderate | Moderate intensity |
-| 7-8 | Quality | High intensity (20%) |
-| 9-10 | Race | High intensity (20%) |
+| RPE Range | Session Type | 80/20 Bucket         |
+| --------- | ------------ | -------------------- |
+| 1-4       | Easy         | Low intensity (80%)  |
+| 5-6       | Moderate     | Moderate intensity   |
+| 7-8       | Quality      | High intensity (20%) |
+| 9-10      | Race         | High intensity (20%) |
 
 ## 7. Integration Points
 
@@ -693,21 +664,21 @@ Claude Code → api.sync.sync_strava()
 
 ### 7.2 Called By
 
-| Module | When |
-|--------|------|
+| Module         | When                                   |
+| -------------- | -------------------------------------- |
 | M1 (Workflows) | During sync pipeline after M7 analysis |
 
 ### 7.3 Calls To
 
-| Module | Purpose |
-|--------|---------|
-| M3 | Update activity files with calculated fields |
+| Module | Purpose                                      |
+| ------ | -------------------------------------------- |
+| M3     | Update activity files with calculated fields |
 
 ### 7.4 Returns To
 
-| Module | Data |
-|--------|------|
-| M9 | Load values for metrics computation |
+| Module | Data                                |
+| ------ | ----------------------------------- |
+| M9     | Load values for metrics computation |
 
 ### 7.5 Pipeline Position
 
@@ -854,15 +825,15 @@ def test_full_load_pipeline():
 
 ### 8.3 Edge Cases
 
-| Case | Expected Behavior |
-|------|-------------------|
-| RPE = 0 | Clamp to 1 |
-| RPE = 11 | Clamp to 10 |
-| Duration = 0 | Raise InvalidDurationError |
-| Duration = 600 (10h) | Valid, apply long duration adjustment |
+| Case                     | Expected Behavior                         |
+| ------------------------ | ----------------------------------------- |
+| RPE = 0                  | Clamp to 1                                |
+| RPE = 11                 | Clamp to 10                               |
+| Duration = 0             | Raise InvalidDurationError                |
+| Duration = 600 (10h)     | Valid, apply long duration adjustment     |
 | Unknown sport + high RPE | Conservative mults, suggest clarification |
-| Yoga (restorative) | Zero load |
-| Race with RPE 5 | Classify as RACE (workout_type wins) |
+| Yoga (restorative)       | Zero load                                 |
+| Race with RPE 5          | Classify as RACE (workout_type wins)      |
 
 ## 9. Configuration
 
@@ -903,6 +874,7 @@ lower_body_load_au = base_effort_au × lower_body_multiplier
 ### 10.2 Example Calculations
 
 **Easy 60-min road run (RPE 4):**
+
 ```
 base_effort = 4 × 60 = 240 AU
 systemic = 240 × 1.0 = 240 AU
@@ -910,6 +882,7 @@ lower_body = 240 × 1.0 = 240 AU
 ```
 
 **Hard 45-min tempo (RPE 7):**
+
 ```
 base_effort = 7 × 45 = 315 AU
 systemic = 315 × 1.0 = 315 AU
@@ -917,6 +890,7 @@ lower_body = 315 × 1.0 = 315 AU
 ```
 
 **2-hour climbing session (RPE 7):**
+
 ```
 base_effort = 7 × 120 = 840 AU
 systemic = 840 × 0.6 = 504 AU
@@ -924,6 +898,7 @@ lower_body = 840 × 0.1 = 84 AU
 ```
 
 **90-min cycling (RPE 5):**
+
 ```
 base_effort = 5 × 90 = 450 AU
 systemic = 450 × 0.85 = 382.5 AU
@@ -939,8 +914,8 @@ lower_body = 450 × 0.35 = 157.5 AU
 
 ## 12. Changelog
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0.2 | 2026-01-12 | Added code module path (`core/load.py`) and API layer integration notes. |
-| 1.0.1 | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (SportMultipliers, LoadCalculation, MultiplierAdjustment - 3 types converted). Removed `dataclass` import, added `Field` for default factories. Algorithms were already complete and correct. |
-| 1.0.0 | 2026-01-12 | Initial specification |
+| Version | Date       | Changes                                                                                                                                                                                                                                                                                            |
+| ------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.0.2   | 2026-01-12 | Added code module path (`core/load.py`) and API layer integration notes.                                                                                                                                                                                                                           |
+| 1.0.1   | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (SportMultipliers, LoadCalculation, MultiplierAdjustment - 3 types converted). Removed `dataclass` import, added `Field` for default factories. Algorithms were already complete and correct. |
+| 1.0.0   | 2026-01-12 | Initial specification                                                                                                                                                                                                                                                                              |
