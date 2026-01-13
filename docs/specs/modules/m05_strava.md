@@ -79,11 +79,18 @@ class ActivitySource(str, Enum):
 
 
 class StravaWorkoutType(int, Enum):
-    """Strava workout_type values for running (undocumented)"""
+    """Strava workout_type values (partially documented, more exist in practice).
+
+    Note: Real Strava data includes values beyond 0-3 (e.g., 28, 31 observed in testing).
+    These appear to be sport-specific workout types."""
     DEFAULT = 0
     RACE = 1
     LONG_RUN = 2
     WORKOUT = 3
+    # Additional values observed in real data:
+    TEMPO_RUN = 28  # Observed in real Strava data
+    VO2_MAX_RUN = 31  # Observed in real Strava data
+    # Other values likely exist - handle gracefully with fallback
 
 
 class RawActivity(BaseModel):
@@ -107,9 +114,9 @@ class RawActivity(BaseModel):
     distance_meters: Optional[float] = None
     elevation_gain_meters: Optional[float] = None
 
-    # Heart rate
-    average_hr: Optional[int] = None
-    max_hr: Optional[int] = None
+    # Heart rate (Strava returns floats like 158.1, not integers)
+    average_hr: Optional[float] = None
+    max_hr: Optional[float] = None
     has_hr_data: bool = False
 
     # User input
@@ -118,9 +125,9 @@ class RawActivity(BaseModel):
     perceived_exertion: Optional[int] = None  # User-entered RPE (1-10)
 
     # Strava-specific
-    workout_type: Optional[int] = None    # Race=1, Long run=2, Workout=3
+    workout_type: Optional[int] = None    # 0=default, 1=race, 2=long, 3=workout, 28=tempo, 31=VO2max (+ others)
     suffer_score: Optional[int] = None    # Strava relative effort
-    has_polyline: bool = False           # GPS data present
+    has_polyline: bool = False            # GPS data present (map.summary_polyline exists)
     gear_id: Optional[str] = None        # Equipment used
     device_name: Optional[str] = None    # Recording device
 

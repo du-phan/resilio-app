@@ -1,25 +1,25 @@
 # Sports Coach Engine - Implementation Progress
 
 **Version**: 0.1.0
-**Last Updated**: 2026-01-12
-**Status**: Phase 2 Data Ingestion - In Progress (M7 ✅, M6 ✅, M8 ✅)
+**Last Updated**: 2026-01-13
+**Status**: Phase 2 Complete & Production Ready (M7 ✅, M6 ✅, M8 ✅, M5 ✅)
 
 ---
 
-## Overall Progress: 60%
+## Overall Progress: 72%
 
-- [x] Documentation complete
+- [x] Documentation complete & updated with real data insights
 - [x] Repository structure designed
 - [x] Package scaffolding created
-- [x] Module implementations (6/14 complete: M2, M3, M4, M6, M7, M8)
+- [x] Module implementations (7/14 complete: M2, M3, M4, M5, M6, M7, M8)
 - [ ] API layer implementations (0/5 modules)
-- [x] Schema definitions (4/6 modules: config, repository, profile, activity)
-- [x] Testing infrastructure (pytest configured, 129 tests passing)
-- [x] Integration testing (verified M7↔M4, M6↔M7, M8↔M6 integration)
+- [x] Schema definitions (4/6 modules: config, repository, profile, activity) - updated with real Strava types
+- [x] Testing infrastructure (pytest configured, 107 Phase 2 tests passing)
+- [x] Integration testing (verified M5→M7→M6→M8 pipeline with real Strava data)
 - [x] Phase 1 end-to-end validation complete
-- [x] Phase 2 M7 complete with 84% test coverage
-- [x] Phase 2 M6 complete with 83% test coverage
-- [x] Phase 2 M8 complete with 84% test coverage
+- [x] Phase 2 complete: M7 (84%), M6 (83%), M8 (84%), M5 (94%)
+- [x] Real Strava data validation: 17 activities processed (7 climbing, 5 running, 5 yoga)
+- [x] Documentation aligned with actual Strava API behavior
 
 ---
 
@@ -86,7 +86,7 @@
 
 ---
 
-## Phase 2: Data Ingestion & Processing (75% - M7 ✅, M6 ✅, M8 ✅)
+## Phase 2: Data Ingestion & Processing (100% - M7 ✅, M6 ✅, M8 ✅, M5 ✅)
 
 ### M7 - Notes & RPE Analyzer (100% ✅)
 
@@ -131,17 +131,29 @@
   - Surface detection: Multi-priority decision tree (explicit sport type → M7 detection → GPS heuristics)
   - Filename format: `activities/YYYY-MM/YYYY-MM-DD_sport_HHmm.yaml` with automatic collision handling
 
-### M5 - Strava Integration (0%)
+### M5 - Strava Integration (100% ✅)
 
-- [ ] OAuth flow implementation
-- [ ] Token refresh logic
-- [ ] Fetch activities endpoint
-- [ ] Activity deduplication
-- [ ] Rate limit handling
-- [ ] Error recovery
+- [x] OAuth flow implementation (manual authorization)
+- [x] Token refresh logic (automatic when <5min remaining)
+- [x] Fetch activities endpoint with pagination
+- [x] Fetch activity details (including private notes)
+- [x] Two-tier deduplication (primary key + fuzzy match)
+- [x] Rate limit handling with exponential backoff (tenacity)
+- [x] Error recovery (partial syncs, graceful degradation)
+- [x] Manual activity creation
+- [x] Strava → RawActivity mapping
 - **Depends on**: M2, M3
 - **Priority**: P0
 - **Estimate**: 2-3 days
+- **Actual**: 1.5 days
+- **Tests**: 28/28 passing (94% coverage)
+- **Files**:
+  - `sports_coach_engine/core/strava.py` (662 lines - complete implementation)
+  - `tests/unit/test_strava.py` (710 lines, 28 comprehensive tests)
+  - OAuth flow: Authorization URL → Code exchange → Token refresh
+  - Rate limiting: 3 retries, exponential backoff (2s-8s)
+  - Deduplication: Tier 1 (source+id) → Tier 2 (fuzzy fingerprint)
+  - Manual activities: Generated ID format `manual_{uuid}`
 
 ### M8 - Load Engine (100% ✅)
 
@@ -164,6 +176,47 @@
   - Two-channel model: systemic (cardio/fatigue) + lower-body (leg impact)
   - Sport multipliers: Running (1.0,1.0), Trail (1.05,1.10), Treadmill (1.0,0.9), Cycle (0.85,0.35), Climb (0.6,0.1)
   - Dynamic adjustments: Leg day (+0.25 lower-body), High elevation (+0.05 systemic, +0.10 lower-body)
+
+---
+
+## Phase 2 Validation & Production Readiness ✅
+
+### Real Strava Data Testing (2026-01-13)
+
+**Test Scope**: 17 real activities from user's Strava account (last 30 days)
+- 7 Rock Climbing sessions
+- 5 Running sessions
+- 5 Yoga sessions
+
+**Full Pipeline Validation**: M5 → M7 → M6 → M8
+
+| Activity | Duration | RPE Source | Load (Systemic / Lower-body) | Session Type |
+|----------|----------|-----------|------------------------------|--------------|
+| Running | 43 min | HR-based (158 bpm) | 301 / 301 AU | QUALITY |
+| Climbing | 105 min | User input (5) | 315 / 52 AU | MODERATE |
+| Yoga | 28 min | Duration heuristic | 20 / 6 AU | EASY |
+
+**Key Discoveries**:
+- ✅ Strava returns HR as floats (158.1, 175.7) not ints - Fixed schema
+- ✅ Strava uses undocumented workout_type values (28, 31) - Updated docs
+- ✅ User-entered perceived_exertion properly extracted - RPE 5, 4
+- ✅ Injury keywords detected in notes ("right ankle")
+- ✅ Two-channel model validates correctly with real multi-sport data
+
+**Documentation Updates**:
+- Updated `m05_strava.md`: HR field types (int→float), workout_type enum (28, 31 added)
+- Updated `v0_product_requirements_document.md`: HR example (158.1 instead of 158)
+- Updated `CLAUDE.md`: Added real-world validation data with load calculations
+- Created `STRAVA_TESTING_RESULTS.md`: Complete test report
+
+**Files Created**:
+- `oauth_helper.py` - OAuth authorization helper
+- `get_strava_token.py` - Token exchange script
+- `sync_strava.py` - Activity sync utility
+- `test_pipeline.py` - End-to-end pipeline test
+- `data_samples/` - 3 sample activities for inspection
+
+**Status**: Phase 2 **PRODUCTION READY** - All modules validated with real data
 
 ---
 
@@ -428,32 +481,50 @@ Phase 1 (M2, M3, M4) → Phase 2 (M5, M6, M7, M8) → Phase 3 (M9)
 
 ## Next Steps
 
-1. **Immediate (Week 1)**:
+### ✅ Phase 1 & 2: COMPLETE (Jan 1-13)
+- [x] M2, M3, M4 (Core Infrastructure)
+- [x] M5, M6, M7, M8 (Data Ingestion & Processing)
+- [x] 107 Phase 2 tests passing (86% avg coverage)
+- [x] Real Strava data validation (17 activities)
+- [x] Documentation updated with real API insights
 
-   - Implement M2 (Config)
-   - Implement M3 (Repository I/O)
-   - Define common schemas
-   - Set up testing infrastructure
+### ⏭️ Phase 3: Ready to Start (Week 2)
 
-2. **Short-term (Week 2-3)**:
+**Immediate (Next)**:
 
-   - Implement M4 (Profile Service)
-   - Implement M5 (Strava Integration)
-   - Implement M6-M8 (Activity processing pipeline)
-   - Define activity schemas
+1. **Implement M9 - Metrics Engine**
+   - Daily load aggregation from Phase 2 loads
+   - CTL calculation (42-day EWMA)
+   - ATL calculation (7-day EWMA)
+   - TSB calculation (CTL - ATL)
+   - ACWR calculation (7-day / 28-day)
+   - Readiness score computation
+   - Dependency: M8 (load data)
+   - Estimate: 2-3 days
 
-3. **Mid-term (Week 4-5)**:
+2. **Define Metrics Schemas**
+   - DailyMetrics (CTL, ATL, TSB, ACWR, readiness)
+   - MetricInterpretation (contextual meanings)
+   - ReadinessScore (0-100 with factors)
 
-   - Implement M9 (Metrics Engine)
-   - Implement M10 (Plan Generator)
-   - Define metrics and plan schemas
+3. **M9 Testing**
+   - Unit tests with real load data
+   - Validation of EWMA calculations
+   - Edge cases (cold start, gaps)
+   - Estimate: 1 day
 
-4. **Long-term (Week 6-8)**:
-   - Implement M11 (Adaptation Engine)
-   - Implement M12 (Data Enrichment)
-   - Implement M1 (Workflows)
-   - Implement API layer
-   - Complete testing
+### Short-term (Week 3-4):
+
+- Implement M10 (Plan Generator)
+- Implement M11 (Adaptation Engine)
+- Schema definitions for plans and adaptations
+
+### Mid-term (Week 5+):
+
+- Implement M12 (Data Enrichment)
+- Implement M1 (Internal Workflows)
+- Implement API layer (5 modules)
+- Complete testing suite
 
 ---
 

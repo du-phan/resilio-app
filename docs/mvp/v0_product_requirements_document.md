@@ -441,9 +441,9 @@ distance_km: 10.2
 elevation_gain_m: 45
 average_pace_min_km: "5:05"
 
-# Heart Rate (if available)
-average_hr: 158
-max_hr: 175
+# Heart Rate (if available - Strava returns floats)
+average_hr: 158.1
+max_hr: 175.5
 has_hr_data: true
 
 # Strava Metrics

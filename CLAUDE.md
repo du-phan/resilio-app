@@ -78,6 +78,13 @@ systemic_load_au = base_effort_au × systemic_multiplier
 lower_body_load_au = base_effort_au × lower_body_multiplier
 ```
 
+**Validated with Real Strava Data** (Jan 2026):
+- Running (7km, 43min, RPE 7): 301 AU systemic + 301 AU lower-body ✓
+- Climbing (105min, RPE 5): 315 AU systemic, 52 AU lower-body ✓
+- Yoga (28min, RPE 2): 20 AU systemic, 6 AU lower-body ✓
+
+Two-channel model confirmed working correctly with real multi-sport activities.
+
 ### 4. Claude Code as Interface
 
 **Claude Code (the AI) is the user interface.** The sports-coach-engine package provides an API layer designed for Claude Code to call. Claude Code handles:

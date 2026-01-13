@@ -236,7 +236,7 @@ def analyze_activity(
     treadmill = detect_treadmill(
         activity_name=activity.name,
         description=activity.description,
-        has_gps=activity.has_gps_data,
+        has_gps=activity.has_polyline,
         sport_type=activity.sport_type,
         sub_type=activity.sub_type,
         device_name=activity.gear_id,  # Using gear_id as proxy for device
@@ -324,12 +324,12 @@ def estimate_rpe(
             average_hr=activity.average_hr,
             max_hr_activity=activity.max_hr,
             athlete_max_hr=athlete_profile.vital_signs.max_hr
-            if athlete_profile.vital_signs
+            if athlete_profile and athlete_profile.vital_signs
             else None,
             athlete_lthr=athlete_profile.vital_signs.lthr
-            if athlete_profile.vital_signs
+            if athlete_profile and athlete_profile.vital_signs
             else None,
-            duration_minutes=activity.duration_minutes,
+            duration_minutes=activity.duration_seconds // 60,
         )
         if hr_estimate:
             estimates.append(hr_estimate)
@@ -347,7 +347,7 @@ def estimate_rpe(
     if activity.suffer_score:
         rel_estimate = estimate_rpe_from_strava_relative(
             suffer_score=activity.suffer_score,
-            duration_minutes=activity.duration_minutes,
+            duration_minutes=activity.duration_seconds // 60,
         )
         if rel_estimate:
             estimates.append(rel_estimate)
@@ -355,7 +355,7 @@ def estimate_rpe(
     # 5. Duration heuristic fallback
     duration_estimate = estimate_rpe_from_duration(
         sport_type=activity.sport_type,
-        duration_minutes=activity.duration_minutes,
+        duration_minutes=activity.duration_seconds // 60,
     )
     estimates.append(duration_estimate)
 
@@ -383,7 +383,7 @@ def estimate_rpe(
         is_high_intensity = is_high_intensity_session(
             activity,
             athlete_profile.vital_signs.max_hr
-            if athlete_profile.vital_signs
+            if athlete_profile and athlete_profile.vital_signs
             else None,
         )
         resolved_value, method = resolve_rpe_conflict(estimates, is_high_intensity)

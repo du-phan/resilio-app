@@ -209,6 +209,14 @@ __marimo__/
 
 # Sports Coach Engine - LOCAL DATA (NEVER COMMIT)
 data/
+data_samples/
 config/secrets.local.yaml
 backup/
 *.bak
+.env.local
+
+# Testing utilities (one-time use)
+oauth_helper.py
+get_strava_token.py
+sync_strava.py
+test_pipeline.py

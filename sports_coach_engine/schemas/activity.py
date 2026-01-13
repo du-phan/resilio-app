@@ -58,9 +58,9 @@ class RawActivity(BaseModel):
     distance_meters: Optional[float] = None
     elevation_gain_meters: Optional[float] = None
 
-    # Heart rate
-    average_hr: Optional[int] = None
-    max_hr: Optional[int] = None
+    # Heart rate (Strava returns floats)
+    average_hr: Optional[float] = None
+    max_hr: Optional[float] = None
     has_hr_data: bool = False
 
     # User input
@@ -193,9 +193,9 @@ class NormalizedActivity(BaseModel):
     distance_meters: Optional[float] = None
     elevation_gain_m: Optional[float] = None
 
-    # Heart rate (optional)
-    average_hr: Optional[int] = None
-    max_hr: Optional[int] = None
+    # Heart rate (optional, Strava returns floats)
+    average_hr: Optional[float] = None
+    max_hr: Optional[float] = None
     has_hr_data: bool = False
 
     # User notes
