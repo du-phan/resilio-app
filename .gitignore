@@ -215,8 +215,6 @@ backup/
 *.bak
 .env.local
 
-# Testing utilities (one-time use)
-oauth_helper.py
-get_strava_token.py
-sync_strava.py
-test_pipeline.py
+# Development & testing scripts (local utilities)
+scripts/*
+!scripts/README.md
