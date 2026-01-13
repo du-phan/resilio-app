@@ -184,19 +184,21 @@
 ### Real Strava Data Testing (2026-01-13)
 
 **Test Scope**: 17 real activities from user's Strava account (last 30 days)
+
 - 7 Rock Climbing sessions
 - 5 Running sessions
 - 5 Yoga sessions
 
 **Full Pipeline Validation**: M5 → M7 → M6 → M8
 
-| Activity | Duration | RPE Source | Load (Systemic / Lower-body) | Session Type |
-|----------|----------|-----------|------------------------------|--------------|
-| Running | 43 min | HR-based (158 bpm) | 301 / 301 AU | QUALITY |
-| Climbing | 105 min | User input (5) | 315 / 52 AU | MODERATE |
-| Yoga | 28 min | Duration heuristic | 20 / 6 AU | EASY |
+| Activity | Duration | RPE Source         | Load (Systemic / Lower-body) | Session Type |
+| -------- | -------- | ------------------ | ---------------------------- | ------------ |
+| Running  | 43 min   | HR-based (158 bpm) | 301 / 301 AU                 | QUALITY      |
+| Climbing | 105 min  | User input (5)     | 315 / 52 AU                  | MODERATE     |
+| Yoga     | 28 min   | Duration heuristic | 20 / 6 AU                    | EASY         |
 
 **Key Discoveries**:
+
 - ✅ Strava returns HR as floats (158.1, 175.7) not ints - Fixed schema
 - ✅ Strava uses undocumented workout_type values (28, 31) - Updated docs
 - ✅ User-entered perceived_exertion properly extracted - RPE 5, 4
@@ -204,12 +206,14 @@
 - ✅ Two-channel model validates correctly with real multi-sport data
 
 **Documentation Updates**:
+
 - Updated `m05_strava.md`: HR field types (int→float), workout_type enum (28, 31 added)
 - Updated `v0_product_requirements_document.md`: HR example (158.1 instead of 158)
 - Updated `CLAUDE.md`: Added real-world validation data with load calculations
 - Created `STRAVA_TESTING_RESULTS.md`: Complete test report
 
 **Files Created**:
+
 - `oauth_helper.py` - OAuth authorization helper
 - `get_strava_token.py` - Token exchange script
 - `sync_strava.py` - Activity sync utility
@@ -482,6 +486,7 @@ Phase 1 (M2, M3, M4) → Phase 2 (M5, M6, M7, M8) → Phase 3 (M9)
 ## Next Steps
 
 ### ✅ Phase 1 & 2: COMPLETE (Jan 1-13)
+
 - [x] M2, M3, M4 (Core Infrastructure)
 - [x] M5, M6, M7, M8 (Data Ingestion & Processing)
 - [x] 107 Phase 2 tests passing (86% avg coverage)
@@ -493,6 +498,7 @@ Phase 1 (M2, M3, M4) → Phase 2 (M5, M6, M7, M8) → Phase 3 (M9)
 **Immediate (Next)**:
 
 1. **Implement M9 - Metrics Engine**
+
    - Daily load aggregation from Phase 2 loads
    - CTL calculation (42-day EWMA)
    - ATL calculation (7-day EWMA)
@@ -503,6 +509,7 @@ Phase 1 (M2, M3, M4) → Phase 2 (M5, M6, M7, M8) → Phase 3 (M9)
    - Estimate: 2-3 days
 
 2. **Define Metrics Schemas**
+
    - DailyMetrics (CTL, ATL, TSB, ACWR, readiness)
    - MetricInterpretation (contextual meanings)
    - ReadinessScore (0-100 with factors)
