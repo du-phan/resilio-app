@@ -314,7 +314,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     elif plan_result is not None:
         # Count workouts in current week
         for week in plan_result.weeks:
-            if week.week_start <= today <= week.week_end:
+            if week.start_date <= today <= week.end_date:
                 planned_workouts = len([w for w in week.workouts if w is not None])
                 break
 
