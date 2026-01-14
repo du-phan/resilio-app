@@ -29,10 +29,11 @@ from sports_coach_engine.schemas.enrichment import (
     SyncSummary,
     WorkoutRationale,
 )
-from sports_coach_engine.schemas.metrics import DailyMetrics
+from sports_coach_engine.schemas.metrics import DailyMetrics, WeeklySummary
 from sports_coach_engine.schemas.plan import WorkoutPrescription
 from sports_coach_engine.schemas.profile import AthleteProfile
 from sports_coach_engine.schemas.adaptation import Suggestion
+from sports_coach_engine.schemas.repository import ReadOptions
 
 
 # ============================================================
@@ -270,9 +271,23 @@ def enrich_metrics(
     disclosure = determine_disclosure_level(days_of_data)
 
     # Intensity distribution (from weekly summary if available)
-    # For now, use placeholder - will be properly computed when weekly summary exists
-    low_pct = 0.0
-    on_target = False
+    from sports_coach_engine.core.paths import weekly_metrics_summary_path
+
+    weekly_summary_path = weekly_metrics_summary_path()
+    weekly_summary = repo.read_yaml(
+        weekly_summary_path,
+        WeeklySummary,
+        options=ReadOptions(allow_missing=True),
+    )
+
+    if weekly_summary and isinstance(weekly_summary, WeeklySummary):
+        intensity = weekly_summary.intensity_distribution
+        low_pct = intensity.low_percent
+        on_target = intensity.is_compliant if intensity.is_compliant is not None else False
+    else:
+        # Fallback if no weekly summary exists yet
+        low_pct = 0.0
+        on_target = False
 
     # Weekly change
     ctl_change = None

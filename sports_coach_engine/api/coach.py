@@ -14,11 +14,13 @@ from sports_coach_engine.core.paths import (
     athlete_profile_path,
     current_plan_path,
     activities_month_dir,
+    weekly_metrics_summary_path,
 )
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_adaptation_check, WorkflowError
 from sports_coach_engine.core.enrichment import enrich_workout, enrich_metrics
+from sports_coach_engine.core.metrics import compute_weekly_summary
 from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
 from sports_coach_engine.schemas.metrics import DailyMetrics
@@ -302,6 +304,21 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     today = date.today()
     week_start = today - timedelta(days=today.weekday())  # Monday
     week_end = week_start + timedelta(days=6)  # Sunday
+
+    # Compute and store fresh weekly summary
+    # This ensures the status command and AI coach have up-to-date intensity distribution
+    try:
+        weekly_summary = compute_weekly_summary(week_start, repo)
+
+        # Store to weekly_summary.yaml
+        summary_path = weekly_metrics_summary_path()
+        repo.write_yaml(summary_path, weekly_summary, atomic=True)
+    except Exception as e:
+        # Non-critical - continue with stale or missing summary
+        # Log the error but don't fail the week command
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to refresh weekly summary: {e}")
 
     # Load current plan to count planned workouts
     planned_workouts = 0

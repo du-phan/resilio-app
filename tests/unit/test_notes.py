@@ -123,10 +123,10 @@ class TestRPEEstimation:
         assert "explicitly entered" in user_estimate.reasoning.lower()
 
     def test_hr_based_estimation_zone_mapping(self, basic_activity, basic_athlete):
-        """HR-based estimation should map % max HR to RPE zones."""
+        """HR-based estimation should use LTHR zones when available (more accurate)."""
         activity = basic_activity.model_copy()
         activity.perceived_exertion = None
-        activity.average_hr = 160.0  # 86.5% of max HR (185) → RPE 7
+        activity.average_hr = 160.0  # 97% of LTHR (165) → RPE 5 (tempo)
 
         estimates = estimate_rpe(activity, basic_athlete)
 
@@ -135,8 +135,9 @@ class TestRPEEstimation:
             (e for e in estimates if e.source == RPESource.HR_BASED), None
         )
         assert hr_estimate is not None
-        assert hr_estimate.value == 7
-        assert "86%" in hr_estimate.reasoning
+        assert hr_estimate.value == 5  # Tempo zone (95-100% LTHR)
+        assert hr_estimate.confidence == "high"  # LTHR-based is gold standard
+        assert "LTHR" in hr_estimate.reasoning  # Should reference LTHR, not max HR
 
     def test_pace_based_estimation_for_running(self, basic_activity, basic_athlete):
         """Pace-based estimation should work for running activities with VDOT."""
@@ -502,3 +503,204 @@ class TestErrorHandling:
         )
 
         assert estimate is None
+
+
+# ============================================================
+# CORRECTED HR ZONE TESTS (Fix for Bug #2)
+# ============================================================
+
+
+class TestCorrectedHRZones:
+    """
+    Tests for corrected HR → RPE mapping (Bug #2 fix).
+
+    These tests verify the fix for the Zone 2 boundary issue that caused
+    easy runs (70-78% max HR) to be miscoded as moderate (RPE 5) instead
+    of easy (RPE 4), violating the 80/20 training principle.
+    """
+
+    def test_max_hr_fallback_zone2_easy_run_77_percent(self):
+        """
+        Easy run at 77% max HR should be RPE 4 (Zone 2), not RPE 5.
+
+        User's Oct 26 example: 10km base run, avg HR 153 (77% of 198 max).
+        OLD: 77% → RPE 5 (moderate)
+        NEW: 77% → RPE 4 (easy, Zone 2)
+        """
+        # User has max_hr=198, no LTHR → uses max HR% fallback
+        estimate = estimate_rpe_from_hr(
+            average_hr=153,
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,  # No LTHR, uses max HR% fallback
+            duration_minutes=61,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 4  # Easy/aerobic (Zone 2)
+        assert estimate.confidence == "medium"  # Max HR% is proxy
+        assert "77%" in estimate.reasoning
+        assert "max" in estimate.reasoning.lower()
+
+    def test_max_hr_fallback_zone3_intervals_83_percent(self):
+        """
+        Run at 83% max HR should be RPE 5 (moderate/tempo).
+
+        User's Oct 21 example: 10x400m intervals, avg HR 164 (83% of 198 max).
+        The HR-based estimate gives RPE 5. The actual workout RPE would be
+        higher (6-7) due to interval structure, but HR mapping alone shows RPE 5.
+
+        This test verifies the HR zone mapping is correct. For interval
+        workouts, pace-based or user input would provide higher RPE estimates.
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=164,
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,
+            duration_minutes=49,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 5  # Moderate/tempo (78-85% max HR)
+        assert estimate.confidence == "medium"
+        assert "83%" in estimate.reasoning
+
+    def test_max_hr_fallback_zone2_boundary_78_percent(self):
+        """
+        Zone 2 boundary at 78% max HR should be RPE 4 (top of easy).
+
+        This is the key fix: Zone 2 ends at 78%, not 70%.
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=154,  # 78% of 198
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,
+            duration_minutes=45,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 4  # Still Zone 2 (easy)
+
+    def test_max_hr_fallback_zone3_starts_at_78_percent(self):
+        """
+        Zone 3 (moderate/tempo) starts at 78% max HR, not 70%.
+
+        Anything at or above 78% is moderate or harder.
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=155,  # 78.3% of 198
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,
+            duration_minutes=45,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 5  # Moderate/tempo (Zone 3)
+
+    def test_lthr_based_zone2_easy_run(self):
+        """
+        With LTHR available, Zone 2 uses 80-95% LTHR (gold standard).
+
+        This is more accurate than max HR% for individualization.
+        """
+        # Athlete with LTHR = 180 bpm
+        estimate = estimate_rpe_from_hr(
+            average_hr=162,  # 90% of LTHR 180
+            max_hr_activity=None,
+            athlete_max_hr=200,
+            athlete_lthr=180,  # LTHR-based zones used
+            duration_minutes=45,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 4  # Easy/aerobic (80-95% LTHR)
+        assert estimate.confidence == "high"  # LTHR is gold standard
+        assert "LTHR" in estimate.reasoning
+        assert "90%" in estimate.reasoning
+
+    def test_lthr_based_zone3_tempo_run(self):
+        """
+        Tempo run at 98% LTHR should be RPE 5 (lower LT zone).
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=176,  # 98% of LTHR 180
+            max_hr_activity=None,
+            athlete_max_hr=200,
+            athlete_lthr=180,
+            duration_minutes=30,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 5  # Tempo (95-100% LTHR)
+        assert estimate.confidence == "high"
+
+    def test_lthr_based_zone4_threshold_run(self):
+        """
+        Threshold run at 103% LTHR should be RPE 6 (lactate threshold).
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=185,  # 103% of LTHR 180
+            max_hr_activity=None,
+            athlete_max_hr=200,
+            athlete_lthr=180,
+            duration_minutes=20,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 6  # Lactate threshold (100-105% LTHR)
+
+    def test_max_hr_fallback_recovery_zone_67_percent(self):
+        """
+        Recovery run at 67% max HR should be RPE 3 (easy recovery).
+
+        OLD: 67% → RPE 4
+        NEW: 67% → RPE 3 (more accurate for recovery)
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=133,  # 67% of 198
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,
+            duration_minutes=30,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 3  # Easy recovery
+
+    def test_max_hr_fallback_vo2max_92_percent(self):
+        """
+        VO2max intervals at 92% max HR should be RPE 7.
+
+        OLD: 92% → RPE 8
+        NEW: 92% → RPE 7 (lower VO2max zone, 90-94%)
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=182,  # 92% of 198
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,
+            duration_minutes=15,
+        )
+
+        assert estimate is not None
+        assert estimate.value == 7  # VO2max (lower)
+
+    def test_duration_adjustment_long_run(self):
+        """
+        Long runs (>90min) at Zone 2 should get +1 RPE adjustment.
+
+        This accounts for fatigue accumulation during long sessions.
+        """
+        estimate = estimate_rpe_from_hr(
+            average_hr=150,  # 76% of 198 → base RPE 4
+            max_hr_activity=None,
+            athlete_max_hr=198,
+            athlete_lthr=None,
+            duration_minutes=120,  # 2 hours
+        )
+
+        assert estimate is not None
+        assert estimate.value == 5  # Base 4 + duration adjustment (+1)
