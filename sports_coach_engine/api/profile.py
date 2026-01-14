@@ -5,7 +5,7 @@ Provides functions for Claude Code to manage athlete profiles,
 goals, and constraints.
 """
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional, Union, Any
 from dataclasses import dataclass
 
@@ -13,8 +13,17 @@ from sports_coach_engine.core.paths import athlete_profile_path
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 from sports_coach_engine.core.logger import log_message, MessageRole
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
-from sports_coach_engine.api.plan import regenerate_plan, PlanError
+from sports_coach_engine.schemas.profile import (
+    AthleteProfile,
+    Goal,
+    GoalType,
+    TrainingConstraints,
+    Weekday,
+    RunningPriority,
+    ConflictPolicy,
+    TimePreference,
+    VitalSigns,
+)
 
 
 # ============================================================
@@ -33,6 +42,170 @@ class ProfileError:
 # ============================================================
 # PUBLIC API FUNCTIONS
 # ============================================================
+
+
+def create_profile(
+    name: str,
+    age: Optional[int] = None,
+    max_hr: Optional[int] = None,
+    resting_hr: Optional[int] = None,
+    running_priority: str = "equal",
+    conflict_policy: str = "ask_each_time",
+    min_run_days: int = 2,
+    max_run_days: int = 4,
+) -> Union[AthleteProfile, ProfileError]:
+    """
+    Create a new athlete profile with sensible defaults.
+
+    This is the initial profile creation function. Use update_profile()
+    to modify fields later.
+
+    Workflow:
+    1. Check if profile already exists
+    2. Create AthleteProfile with provided fields and defaults
+    3. Save profile to athlete_profile_path()
+    4. Log operation via M14
+    5. Return profile
+
+    Args:
+        name: Athlete name (required)
+        age: Age in years (optional)
+        max_hr: Maximum heart rate (optional)
+        resting_hr: Resting heart rate (optional)
+        running_priority: "primary", "secondary", or "equal" (default: "equal")
+        conflict_policy: "primary_sport_wins", "running_goal_wins", or "ask_each_time" (default: "ask_each_time")
+        min_run_days: Minimum run days per week (default: 2)
+        max_run_days: Maximum run days per week (default: 4)
+
+    Returns:
+        Created AthleteProfile
+
+        ProfileError if profile already exists or validation fails
+
+    Example:
+        >>> profile = create_profile(
+        ...     name="Alex",
+        ...     age=32,
+        ...     max_hr=190,
+        ...     running_priority="equal"
+        ... )
+        >>> if isinstance(profile, ProfileError):
+        ...     print(f"Error: {profile.message}")
+        ... else:
+        ...     print(f"Created profile for {profile.name}")
+    """
+    repo = RepositoryIO()
+
+    # Log user request
+    log_message(
+        repo,
+        MessageRole.USER,
+        f"create_profile(name={name}, age={age}, max_hr={max_hr})",
+    )
+
+    # Check if profile already exists
+    profile_path = athlete_profile_path()
+    existing_result = repo.read_yaml(
+        profile_path, AthleteProfile, ReadOptions(allow_missing=True)
+    )
+
+    # allow_missing=True returns None if file doesn't exist, RepoError on other errors
+    # So we need to check if it's an AthleteProfile (not None, not RepoError)
+    if existing_result is not None and not isinstance(existing_result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            "Profile already exists. Use update_profile() to modify it.",
+        )
+        return ProfileError(
+            error_type="validation",
+            message="Profile already exists. Use 'sce profile set' to update it or delete the existing profile first.",
+        )
+
+    # Parse enums
+    try:
+        priority_enum = RunningPriority(running_priority.lower())
+    except ValueError:
+        valid = ", ".join([p.value for p in RunningPriority])
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid running_priority '{running_priority}'. Valid values: {valid}",
+        )
+
+    try:
+        policy_enum = ConflictPolicy(conflict_policy.lower())
+    except ValueError:
+        valid = ", ".join([p.value for p in ConflictPolicy])
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid conflict_policy '{conflict_policy}'. Valid values: {valid}",
+        )
+
+    # Create vital signs if HR values provided
+    vital_signs = None
+    if max_hr is not None or resting_hr is not None:
+        vital_signs = VitalSigns(
+            max_hr=max_hr,
+            resting_hr=resting_hr,
+        )
+
+    # Create default constraints
+    # Start with all days available, user can refine later
+    all_days = [day for day in Weekday]
+    constraints = TrainingConstraints(
+        available_run_days=all_days,
+        min_run_days_per_week=min_run_days,
+        max_run_days_per_week=max_run_days,
+        time_preference=TimePreference.FLEXIBLE,
+    )
+
+    # Create default goal (general fitness)
+    goal = Goal(type=GoalType.GENERAL_FITNESS)
+
+    # Create profile
+    try:
+        profile = AthleteProfile(
+            name=name,
+            created_at=datetime.now().date().isoformat(),
+            age=age,
+            vital_signs=vital_signs,
+            constraints=constraints,
+            running_priority=priority_enum,
+            conflict_policy=policy_enum,
+            goal=goal,
+        )
+    except Exception as e:
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Validation failed: {str(e)}",
+        )
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid profile data: {str(e)}",
+        )
+
+    # Save profile
+    write_result = repo.write_yaml(profile_path, profile)
+    if isinstance(write_result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to save profile: {str(write_result)}",
+        )
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to save profile: {str(write_result)}",
+        )
+
+    # Log response
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"Created profile: {name}, priority={running_priority}",
+    )
+
+    return profile
 
 
 def get_profile() -> Union[AthleteProfile, ProfileError]:
@@ -72,7 +245,7 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
     log_message(repo, MessageRole.USER, "get_profile()")
 
     # Load profile
-    profile_path = "athlete_profile_path()"
+    profile_path = athlete_profile_path()
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
@@ -146,7 +319,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
     log_message(repo, MessageRole.USER, f"update_profile(fields={field_names})")
 
     # Load current profile
-    profile_path = "athlete_profile_path()"
+    profile_path = athlete_profile_path()
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
@@ -223,14 +396,17 @@ def set_goal(
     target_time: Optional[str] = None,
 ) -> Union[Goal, ProfileError]:
     """
-    Set a new race goal and regenerate the training plan.
+    Set a new race goal.
+
+    This updates the athlete's goal in their profile. Plan generation happens
+    separately when Claude Code is ready (after gathering constraints, schedule,
+    preferences, etc.).
 
     Workflow:
     1. Create Goal object from inputs
     2. Update athlete profile with new goal
-    3. Call regenerate_plan() to create new plan
-    4. Log operation via M14
-    5. Return goal
+    3. Log operation via M14
+    4. Return goal
 
     Args:
         race_type: Type of race. Valid values:
@@ -254,7 +430,7 @@ def set_goal(
         ...     print(f"Error: {goal.message}")
         ... else:
         ...     print(f"Goal set: {goal.type.value} on {goal.target_date}")
-        ...     print(f"New training plan generated")
+        ...     # Plan generation happens later via Claude Code conversation
     """
     repo = RepositoryIO()
 
@@ -291,7 +467,7 @@ def set_goal(
     )
 
     # Update profile with new goal
-    profile_path = "athlete_profile_path()"
+    profile_path = athlete_profile_path()
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(profile_result, RepoError):
@@ -321,25 +497,11 @@ def set_goal(
             message=f"Failed to save profile: {str(write_result)}",
         )
 
-    # Regenerate plan with new goal
-    plan_result = regenerate_plan(goal=goal)
-    if isinstance(plan_result, PlanError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to regenerate plan: {plan_result.message}",
-        )
-        return ProfileError(
-            error_type="unknown",
-            message=f"Goal set but plan generation failed: {plan_result.message}",
-        )
-
     # Log response
     log_message(
         repo,
         MessageRole.SYSTEM,
-        f"Set goal: {goal.type.value} on {goal.target_date}, "
-        f"generated {plan_result.total_weeks}-week plan",
+        f"Set goal: {goal.type.value} on {goal.target_date}",
     )
 
     return goal

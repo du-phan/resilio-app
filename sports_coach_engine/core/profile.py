@@ -75,7 +75,7 @@ class ProfileService:
             or ProfileError on failure
         """
         result = self.repo.read_yaml(
-            "athlete_profile_path()", AthleteProfile, ReadOptions(allow_missing=True)
+            athlete_profile_path(), AthleteProfile, ReadOptions(allow_missing=True)
         )
 
         if isinstance(result, RepoError):
@@ -95,7 +95,7 @@ class ProfileService:
         Returns:
             None on success, ProfileError on failure
         """
-        result = self.repo.write_yaml("athlete_profile_path()", profile)
+        result = self.repo.write_yaml(athlete_profile_path(), profile)
 
         if isinstance(result, RepoError):
             return ProfileError(
@@ -155,7 +155,7 @@ class ProfileService:
         """
         from pathlib import Path
 
-        profile_path = self.repo.resolve_path("athlete_profile_path()")
+        profile_path = self.repo.resolve_path(athlete_profile_path())
 
         if not profile_path.exists():
             return ProfileError(

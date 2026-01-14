@@ -57,7 +57,8 @@ from sports_coach_engine.core.adaptation import (
 from sports_coach_engine.core.memory import save_memory, Memory, MemoryType, MemorySource
 from sports_coach_engine.schemas.activity import RawActivity, NormalizedActivity
 from sports_coach_engine.schemas.metrics import DailyMetrics
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal
+from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
+from sports_coach_engine.schemas.plan import WeekPlan, MasterPlan, PlanPhase
 
 
 # ============================================================
@@ -657,7 +658,7 @@ def run_plan_generation(
         }
 
         # Save plan
-        repo.write_yaml(current_plan_path, plan_data)
+        repo.write_yaml(current_plan_path(), plan_data)
 
         result.success = True
         result.plan = plan_data

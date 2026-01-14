@@ -8,12 +8,67 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api import get_profile, update_profile
+from sports_coach_engine.api import create_profile, get_profile, update_profile
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json
 
 # Create subcommand app
 app = typer.Typer(help="Manage athlete profile")
+
+
+@app.command(name="create")
+def profile_create_command(
+    ctx: typer.Context,
+    name: str = typer.Option(..., "--name", help="Athlete name"),
+    age: Optional[int] = typer.Option(None, "--age", help="Age in years"),
+    max_hr: Optional[int] = typer.Option(None, "--max-hr", help="Maximum heart rate"),
+    resting_hr: Optional[int] = typer.Option(None, "--resting-hr", help="Resting heart rate"),
+    running_priority: str = typer.Option(
+        "equal",
+        "--running-priority",
+        help="Running priority: primary, secondary, or equal"
+    ),
+    conflict_policy: str = typer.Option(
+        "ask_each_time",
+        "--conflict-policy",
+        help="Conflict resolution: primary_sport_wins, running_goal_wins, or ask_each_time"
+    ),
+    min_run_days: int = typer.Option(2, "--min-run-days", help="Minimum run days per week"),
+    max_run_days: int = typer.Option(4, "--max-run-days", help="Maximum run days per week"),
+) -> None:
+    """Create a new athlete profile.
+
+    This creates an initial profile with sensible defaults. You can update
+    fields later using 'sce profile set'.
+
+    Examples:
+        sce profile create --name "Alex" --age 32 --max-hr 190
+        sce profile create --name "Sam" --running-priority primary
+    """
+    # Call API
+    result = create_profile(
+        name=name,
+        age=age,
+        max_hr=max_hr,
+        resting_hr=resting_hr,
+        running_priority=running_priority,
+        conflict_policy=conflict_policy,
+        min_run_days=min_run_days,
+        max_run_days=max_run_days,
+    )
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Created athlete profile for {name}",
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
 
 
 @app.command(name="get")

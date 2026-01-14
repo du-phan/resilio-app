@@ -54,6 +54,7 @@ from sports_coach_engine.api.plan import (
 )
 
 from sports_coach_engine.api.profile import (
+    create_profile,
     get_profile,
     update_profile,
     set_goal,
@@ -100,6 +101,7 @@ __all__ = [
     "detect_adaptation_triggers",
     "assess_override_risk",
     # Profile operations
+    "create_profile",
     "get_profile",
     "update_profile",
     "set_goal",

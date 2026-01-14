@@ -202,7 +202,7 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
 
     # Update profile with new goal if provided
     if goal:
-        profile_path = "athlete_profile_path()"
+        profile_path = athlete_profile_path()
         profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
         if isinstance(profile_result, RepoError):
@@ -277,7 +277,19 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
                 message=error_msg,
             )
 
-    plan = result.plan
+    # Parse plan dict to MasterPlan object
+    try:
+        plan = MasterPlan.model_validate(result.plan)
+    except Exception as e:
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to parse plan: {str(e)}",
+        )
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to parse generated plan: {str(e)}",
+        )
 
     # Log response
     log_message(
