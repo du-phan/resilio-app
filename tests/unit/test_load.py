@@ -71,11 +71,11 @@ class TestLoadCalculation:
     """Tests for core load calculation."""
 
     def test_base_effort_calculation(self, basic_run_activity):
-        """Base effort should be RPE × duration."""
+        """Base effort should be TSS: hours × IF² × 100."""
         load = compute_load(basic_run_activity, estimated_rpe=6)
 
-        # 6 RPE × 45 minutes = 270 AU
-        assert load.base_effort_au == 270.0
+        # 45min, RPE 6 (IF 0.88): 0.75h × 0.88² × 100 = 58.08 TSS
+        assert load.base_effort_au == pytest.approx(58.08, rel=0.01)
 
     def test_road_running_uses_standard_multipliers(self, basic_run_activity):
         """Road running should use 1.0/1.0 multipliers."""
@@ -83,8 +83,9 @@ class TestLoadCalculation:
 
         assert load.systemic_multiplier == 1.0
         assert load.lower_body_multiplier == 1.0
-        assert load.systemic_load_au == 270.0
-        assert load.lower_body_load_au == 270.0
+        # 45min, RPE 6: 0.75h × 0.88² × 100 = 58.08 TSS
+        assert load.systemic_load_au == pytest.approx(58.08, rel=0.01)
+        assert load.lower_body_load_au == pytest.approx(58.08, rel=0.01)
 
     def test_treadmill_reduces_lower_body_load(self):
         """Treadmill should reduce lower-body multiplier to 0.9."""
@@ -103,12 +104,12 @@ class TestLoadCalculation:
 
         load = compute_load(activity, estimated_rpe=5)
 
-        # 5 RPE × 60 min = 300 AU base
-        assert load.base_effort_au == 300.0
+        # 60min, RPE 5 (IF 0.82): 1.0h × 0.82² × 100 = 67.24 TSS base
+        assert load.base_effort_au == pytest.approx(67.24, rel=0.01)
         assert load.systemic_multiplier == 1.0
         assert load.lower_body_multiplier == 0.9
-        assert load.systemic_load_au == 300.0
-        assert load.lower_body_load_au == 270.0  # 300 × 0.9
+        assert load.systemic_load_au == pytest.approx(67.24, rel=0.01)
+        assert load.lower_body_load_au == pytest.approx(60.52, rel=0.01)  # 67.24 × 0.9
 
     def test_trail_running_increases_both_loads(self):
         """Trail running should increase both multipliers."""
@@ -127,12 +128,13 @@ class TestLoadCalculation:
 
         load = compute_load(activity, estimated_rpe=7)
 
-        # 7 RPE × 60 min = 420 AU base
-        assert load.base_effort_au == 420.0
+        # 60min, RPE 7 (IF 0.95): 1.0h × 0.95² × 100 = 90.25 TSS
+        # QUALITY session (RPE 7) gets -15% interval adjustment: 90.25 × 0.85 = 76.7125
+        assert load.base_effort_au == pytest.approx(76.7, rel=0.01)
         assert load.systemic_multiplier == 1.05
         assert load.lower_body_multiplier == 1.10
-        assert load.systemic_load_au == 441.0  # 420 × 1.05
-        assert load.lower_body_load_au == 462.0  # 420 × 1.10
+        assert load.systemic_load_au == pytest.approx(80.5, rel=0.01)  # 76.7 × 1.05
+        assert load.lower_body_load_au == pytest.approx(84.4, rel=0.01)  # 76.7 × 1.10
 
     def test_climbing_is_mostly_upper_body(self):
         """Climbing should have low lower-body multiplier."""
@@ -150,12 +152,12 @@ class TestLoadCalculation:
 
         load = compute_load(activity, estimated_rpe=6)
 
-        # 6 RPE × 120 min = 720 AU base
-        assert load.base_effort_au == 720.0
+        # 120min, RPE 6 (IF 0.88): 2.0h × 0.88² × 100 = 154.88 TSS base
+        assert load.base_effort_au == pytest.approx(154.88, rel=0.01)
         assert load.systemic_multiplier == 0.6
         assert load.lower_body_multiplier == 0.1
-        assert load.systemic_load_au == 432.0  # 720 × 0.6
-        assert load.lower_body_load_au == 72.0  # 720 × 0.1
+        assert load.systemic_load_au == pytest.approx(92.93, rel=0.01)  # 154.88 × 0.6
+        assert load.lower_body_load_au == pytest.approx(15.49, rel=0.01)  # 154.88 × 0.1
 
     def test_unknown_sports_use_conservative_defaults(self):
         """Unknown sports should use conservative multipliers."""
@@ -203,8 +205,8 @@ class TestMultiplierAdjustments:
 
         load = compute_load(activity, estimated_rpe=7)
 
-        # Base: 0.55 systemic, 0.40 lower-body
-        # Leg day: +0.25 lower-body
+        # Base multipliers: 0.55 systemic, 0.40 lower-body
+        # Leg day adjustment: +0.25 lower-body
         assert load.systemic_multiplier == 0.55
         assert load.lower_body_multiplier == 0.65  # 0.40 + 0.25
         assert "Leg-focused strength" in load.multiplier_adjustments[0]
@@ -226,8 +228,8 @@ class TestMultiplierAdjustments:
 
         load = compute_load(activity, estimated_rpe=6)
 
-        # Base: 0.55 systemic, 0.40 lower-body
-        # Upper-body: -0.15 lower-body (but minimum 0.15)
+        # Base multipliers: 0.55 systemic, 0.40 lower-body
+        # Upper-body adjustment: -0.15 lower-body (minimum 0.15)
         assert load.systemic_multiplier == 0.55
         assert load.lower_body_multiplier == 0.25  # 0.40 - 0.15
         assert "Upper-body strength" in load.multiplier_adjustments[0]
@@ -251,8 +253,8 @@ class TestMultiplierAdjustments:
 
         load = compute_load(activity, estimated_rpe=8)
 
-        # Base: 1.0, 1.0
-        # High elevation: +0.05 systemic, +0.10 lower-body
+        # Base multipliers: 1.0, 1.0
+        # High elevation adjustment: +0.05 systemic, +0.10 lower-body
         assert load.systemic_multiplier == 1.05
         assert load.lower_body_multiplier == 1.10
         assert any("High elevation" in adj for adj in load.multiplier_adjustments)
@@ -274,8 +276,8 @@ class TestMultiplierAdjustments:
 
         load = compute_load(activity, estimated_rpe=9)
 
-        # Base: 1.0, 1.0
-        # Race: +0.10 systemic
+        # Base multipliers: 1.0, 1.0
+        # Race adjustment: +0.10 systemic
         assert load.systemic_multiplier == 1.10
         assert load.lower_body_multiplier == 1.0
         assert "Race effort" in load.multiplier_adjustments[0]
@@ -373,8 +375,8 @@ class TestEdgeCases:
 
         load = compute_load(activity, estimated_rpe=5)
 
-        # Base: 1.0, 1.0
-        # Long duration: +0.05 systemic
+        # Base multipliers: 1.0, 1.0
+        # Long duration adjustment: +0.05 systemic
         assert load.systemic_multiplier == 1.05
         assert "Long duration" in load.multiplier_adjustments[0]
 
@@ -406,11 +408,11 @@ class TestLoadValidation:
             estimated_rpe=8,  # High RPE
             sport_type="run",
             surface_type="road",
-            base_effort_au=360.0,
+            base_effort_au=64.0,  # 45min, RPE 8 (IF 1.0): 0.75h × 1.0² × 100 = 75 TSS
             systemic_multiplier=1.0,
             lower_body_multiplier=1.0,
-            systemic_load_au=360.0,
-            lower_body_load_au=360.0,
+            systemic_load_au=64.0,
+            lower_body_load_au=64.0,
             session_type=SessionType.EASY,  # Inconsistent: marked EASY but RPE=8
             multiplier_adjustments=[],
         )
@@ -429,11 +431,11 @@ class TestLoadValidation:
             estimated_rpe=6,
             sport_type="run",
             surface_type="road",
-            base_effort_au=270.0,
+            base_effort_au=58.08,  # 45min, RPE 6: 0.75h × 0.88² × 100 = 58.08 TSS
             systemic_multiplier=2.5,  # Too high
             lower_body_multiplier=1.0,
-            systemic_load_au=675.0,
-            lower_body_load_au=270.0,
+            systemic_load_au=145.2,  # 58.08 × 2.5
+            lower_body_load_au=58.08,
             session_type=SessionType.MODERATE,
             multiplier_adjustments=[],
         )
@@ -488,9 +490,12 @@ class TestBatchOperations:
 
         assert len(loads) == 2
         assert loads[0].activity_id == "run_1"
-        assert loads[0].base_effort_au == 270.0
+        # 45min, RPE 6 (MODERATE): 0.75h × 0.88² × 100 = 58.08 TSS (no interval adjustment)
+        assert loads[0].base_effort_au == pytest.approx(58.08, rel=0.01)
         assert loads[1].activity_id == "climb_1"
-        assert loads[1].base_effort_au == 840.0
+        # 120min, RPE 7 (QUALITY): 2.0h × 0.95² × 100 = 180.5 TSS
+        # QUALITY session gets -15% interval adjustment: 180.5 × 0.85 = 153.425
+        assert loads[1].base_effort_au == pytest.approx(153.4, rel=0.01)
 
     def test_batch_skips_invalid_activities(self):
         """Batch should skip activities with invalid data."""
@@ -567,13 +572,17 @@ class TestLoadIntegration:
 
         # Verify all transformations
         assert load.activity_id == "integration_test"
-        assert load.base_effort_au == 630.0  # 7 × 90
+        # 90min, RPE 7 (IF 0.95): 1.5h × 0.95² × 100 = 135.375 TSS
+        # QUALITY session (RPE 7) gets -15% interval adjustment: 135.375 × 0.85 = 115.06875
+        assert load.base_effort_au == pytest.approx(115.1, rel=0.01)
         assert load.session_type == SessionType.QUALITY
         # Trail base (1.05, 1.10) + elevation adjustment
         assert load.systemic_multiplier == pytest.approx(1.10)  # 1.05 + 0.05
         assert load.lower_body_multiplier == pytest.approx(1.20)  # 1.10 + 0.10
-        assert load.systemic_load_au == pytest.approx(693.0)  # 630 × 1.10
-        assert load.lower_body_load_au == pytest.approx(756.0)  # 630 × 1.20
+        # 115.1 × 1.10 = 126.61
+        assert load.systemic_load_au == pytest.approx(126.6, rel=0.01)
+        # 115.1 × 1.20 = 138.12
+        assert load.lower_body_load_au == pytest.approx(138.1, rel=0.01)
         assert len(load.multiplier_adjustments) > 0
 
         # Validate
@@ -621,4 +630,6 @@ class TestLoadIntegration:
 
         # Even with lower RPE and shorter duration, run has higher lower-body load
         # because of multiplier difference
+        # Run: 30min, RPE 4 (IF 0.75): 0.5h × 0.75² × 100 = 28.125 TSS, multiplier 1.0 = 28.125 lower-body
+        # Climb: 90min, RPE 6 (IF 0.88): 1.5h × 0.88² × 100 = 116.16 TSS, multiplier 0.1 = 11.616 lower-body
         assert run_load.lower_body_load_au > climb_load.lower_body_load_au

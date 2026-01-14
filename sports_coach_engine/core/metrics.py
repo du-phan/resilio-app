@@ -76,9 +76,9 @@ class InvalidMetricsInputError(MetricsCalculationError):
 
 # EWMA decay constants
 CTL_DECAY = 0.976  # 42-day time constant: 1 - (1/42) ≈ 0.976
-ATL_DECAY = 0.867  # 7-day time constant: empirically 0.867 (slightly slower than 1 - 1/7)
+ATL_DECAY = 1 - (1/7)  # 0.8571 - 7-day time constant (standard EWMA)
 CTL_ALPHA = 1 - CTL_DECAY  # 0.024
-ATL_ALPHA = 1 - ATL_DECAY  # 0.133
+ATL_ALPHA = 1 - ATL_DECAY  # 0.1429 (1/7)
 
 # Data sufficiency thresholds
 BASELINE_DAYS_THRESHOLD = 14  # Days before baseline_established = True
@@ -114,6 +114,55 @@ RUNNING_SPORT_TYPES = {
 # ============================================================
 
 
+def estimate_baseline_ctl_atl(
+    target_date: date,
+    repo: RepositoryIO,
+    lookback_days: int = 14
+) -> tuple[float, float]:
+    """
+    Estimate baseline CTL/ATL from historical data to avoid cold start.
+
+    Uses first `lookback_days` of data to calculate average daily load,
+    then assumes athlete was at steady-state fitness before data collection.
+
+    At steady state: CTL = ATL = average daily load (mathematically proven)
+
+    This prevents the cold start problem where CTL starts at 0 and takes
+    42+ days to stabilize, causing metrics to depend on sync window start date.
+
+    Args:
+        target_date: Date to estimate baseline for (typically first day of data)
+        repo: Repository I/O instance
+        lookback_days: Days to average (default 14, minimum 7)
+
+    Returns:
+        Tuple of (estimated_ctl, estimated_atl)
+
+    Example:
+        If athlete averaged 60 TSS/day for first 14 days,
+        estimate initial CTL = 60, ATL = 60 (steady state)
+    """
+    # Read next lookback_days of data (forward from target_date)
+    daily_loads = []
+    for i in range(lookback_days):
+        check_date = target_date + timedelta(days=i)
+        day_load = aggregate_daily_load(check_date, repo)
+        daily_loads.append(day_load.systemic_load_au)
+
+    # Calculate average
+    if not daily_loads:
+        return 0.0, 0.0  # No data, use zero baseline
+
+    avg_daily_load = sum(daily_loads) / len(daily_loads)
+
+    # At steady state, CTL = ATL = average daily load
+    # This is mathematically exact for EWMA at equilibrium
+    estimated_ctl = avg_daily_load
+    estimated_atl = avg_daily_load
+
+    return round(estimated_ctl, 1), round(estimated_atl, 1)
+
+
 def compute_daily_metrics(
     target_date: date,
     repo: RepositoryIO,
@@ -146,8 +195,14 @@ def compute_daily_metrics(
     prev_date = target_date - timedelta(days=1)
     prev_metrics = _read_previous_metrics(prev_date, repo)
 
-    previous_ctl = prev_metrics.ctl_atl.ctl if prev_metrics else 0.0
-    previous_atl = prev_metrics.ctl_atl.atl if prev_metrics else 0.0
+    if prev_metrics:
+        # Continue EWMA chain from previous day
+        previous_ctl = prev_metrics.ctl_atl.ctl
+        previous_atl = prev_metrics.ctl_atl.atl
+    else:
+        # Cold start: estimate baseline from upcoming 14 days
+        # This prevents CTL starting at 0 and taking 42 days to stabilize
+        previous_ctl, previous_atl = estimate_baseline_ctl_atl(target_date, repo)
 
     # Step 3: Calculate CTL/ATL/TSB
     ctl_atl = calculate_ctl_atl(
@@ -186,6 +241,17 @@ def compute_daily_metrics(
     # Step 6: Build DailyMetrics object
     baseline_established = data_days >= BASELINE_DAYS_THRESHOLD
 
+    # Determine initialization method for transparency
+    if prev_metrics:
+        ctl_init_method = "chained"
+        estimated_days = None
+    elif previous_ctl > 0:
+        ctl_init_method = "estimated"
+        estimated_days = 14
+    else:
+        ctl_init_method = "zero_start"
+        estimated_days = None
+
     daily_metrics = DailyMetrics(
         date=target_date,
         calculated_at=datetime.now(),
@@ -196,6 +262,8 @@ def compute_daily_metrics(
         baseline_established=baseline_established,
         acwr_available=acwr_available,
         data_days_available=data_days,
+        ctl_initialization_method=ctl_init_method,
+        estimated_baseline_days=estimated_days,
         flags=flags_list,
     )
 

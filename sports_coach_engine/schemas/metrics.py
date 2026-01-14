@@ -221,6 +221,10 @@ class DailyMetrics(BaseModel):
     acwr_available: bool           # False if < 28 days
     data_days_available: int       # Total days with data
 
+    # Cold start handling metadata (optional, for transparency)
+    ctl_initialization_method: Optional[str] = None  # "zero_start" | "estimated" | "chained"
+    estimated_baseline_days: Optional[int] = None    # Days used for estimation (if applicable)
+
     # Activity flags (injury, illness, etc.)
     flags: list[str] = Field(default_factory=list)  # e.g., ["injury:knee", "illness:cold"]
 

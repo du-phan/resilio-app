@@ -53,7 +53,7 @@ from sports_coach_engine.core.strava import (
 from sports_coach_engine.core.normalization import normalize_activity
 from sports_coach_engine.core.notes import analyze_activity
 from sports_coach_engine.core.load import compute_load
-from sports_coach_engine.core.metrics import compute_daily_metrics, compute_weekly_summary
+from sports_coach_engine.core.metrics import compute_daily_metrics, compute_weekly_summary, _read_activities_for_date
 from sports_coach_engine.core.adaptation import (
     detect_adaptation_triggers,
     assess_override_risk,

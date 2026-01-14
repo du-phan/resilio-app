@@ -82,11 +82,11 @@ def sample_run_activity():
         estimated_rpe=6,
         sport_type=SportType.RUN,
         surface_type=SurfaceType.ROAD,
-        base_effort_au=270.0,  # 6 RPE × 45 minutes
+        base_effort_au=58.1,  # TSS: 0.75h × 0.88² × 100
         systemic_multiplier=1.0,
         lower_body_multiplier=1.0,
-        systemic_load_au=270.0,
-        lower_body_load_au=270.0,
+        systemic_load_au=58.1,
+        lower_body_load_au=58.1,
         session_type=SessionType.MODERATE,
         multiplier_adjustments=[],
     )
@@ -116,11 +116,11 @@ def sample_climb_activity():
         duration_minutes=90,
         estimated_rpe=6,
         sport_type=SportType.CLIMB,
-        base_effort_au=540.0,  # 6 RPE × 90 minutes
+        base_effort_au=116.2,  # TSS: 1.5h × 0.88² × 100
         systemic_multiplier=0.6,
         lower_body_multiplier=0.1,
-        systemic_load_au=324.0,  # 540 × 0.6
-        lower_body_load_au=54.0,  # 540 × 0.1
+        systemic_load_au=69.7,  # 116.2 × 0.6
+        lower_body_load_au=11.6,  # 116.2 × 0.1
         session_type=SessionType.MODERATE,
         multiplier_adjustments=[],
     )
@@ -146,8 +146,8 @@ def cold_start_scenario(tmp_path, monkeypatch, sample_run_activity):
 
         # Create activity file
         year_month = f"{current_date.year}-{current_date.month:02d}"
-        (tmp_path / "activities" / year_month).mkdir(parents=True, exist_ok=True)
-        activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+        (tmp_path / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
         repo.write_yaml(activity_path, activity)
 
     return repo, start_date, start_date + timedelta(days=4)
@@ -171,8 +171,8 @@ def full_history_scenario(tmp_path, monkeypatch, sample_run_activity):
 
         # Create activity file
         year_month = f"{current_date.year}-{current_date.month:02d}"
-        (tmp_path / "activities" / year_month).mkdir(parents=True, exist_ok=True)
-        activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+        (tmp_path / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
         repo.write_yaml(activity_path, activity)
 
     return repo, start_date, start_date + timedelta(days=49)
@@ -195,10 +195,10 @@ class TestCTLATLCalculation:
         )
 
         # First day: CTL = 0 * 0.976 + 300 * 0.024 = 7.2
-        # ATL = 0 * 0.867 + 300 * 0.133 = 39.9
+        # ATL = 0 * 0.8571 + 300 * 0.1429 = 42.9
         assert ctl_atl.ctl == pytest.approx(7.2, abs=0.1)
-        assert ctl_atl.atl == pytest.approx(39.9, abs=0.1)
-        assert ctl_atl.tsb == pytest.approx(7.2 - 39.9, abs=0.1)
+        assert ctl_atl.atl == pytest.approx(42.9, abs=0.1)
+        assert ctl_atl.tsb == pytest.approx(7.2 - 42.9, abs=0.1)
 
     def test_single_day_load_updates_atl_more_than_ctl(self):
         """ATL should increase faster than CTL (7-day vs 42-day constant)."""
@@ -299,7 +299,7 @@ class TestCTLATLCalculation:
         ctl = 40.0
         atl = 35.0
 
-        (temp_repo.repo_root / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
 
         for i in range(8):
             current_date = start_date + timedelta(days=i)
@@ -343,7 +343,7 @@ class TestCTLATLCalculation:
                 flags=[],
             )
 
-            temp_repo.write_yaml(f"metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
 
         # On day 8, should detect building trend
         assert ctl_atl.ctl_trend == "building"
@@ -361,7 +361,7 @@ class TestACWRCalculation:
         """Should return None if < 28 days of data."""
         # Create only 20 days of metrics
         start_date = date(2026, 1, 1)
-        (temp_repo.repo_root / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
 
         for i in range(20):
             current_date = start_date + timedelta(days=i)
@@ -403,7 +403,7 @@ class TestACWRCalculation:
                 flags=[],
             )
 
-            temp_repo.write_yaml(f"metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
 
         # Try to calculate ACWR on day 21 (insufficient)
         target_date = start_date + timedelta(days=20)
@@ -415,7 +415,7 @@ class TestACWRCalculation:
         """Should calculate ACWR correctly with 28+ days."""
         # Create 30 days of consistent load
         start_date = date(2026, 1, 1)
-        (temp_repo.repo_root / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
 
         for i in range(30):
             current_date = start_date + timedelta(days=i)
@@ -460,7 +460,7 @@ class TestACWRCalculation:
                 flags=[],
             )
 
-            temp_repo.write_yaml(f"metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
 
         # Calculate ACWR on day 30
         target_date = start_date + timedelta(days=29)
@@ -477,7 +477,7 @@ class TestACWRCalculation:
         """Should classify safe/caution/high_risk correctly."""
         # Create 30 days: low load for 28 days, then spike in last 7
         start_date = date(2026, 1, 1)
-        (temp_repo.repo_root / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
 
         for i in range(30):
             current_date = start_date + timedelta(days=i)
@@ -525,7 +525,7 @@ class TestACWRCalculation:
                 flags=[],
             )
 
-            temp_repo.write_yaml(f"metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
 
         # Calculate ACWR after spike
         target_date = start_date + timedelta(days=29)
@@ -545,7 +545,7 @@ class TestACWRCalculation:
         """Should set injury_risk_elevated when > 1.3."""
         # Create scenario with ACWR = 1.4 (caution zone)
         start_date = date(2026, 1, 1)
-        (temp_repo.repo_root / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
 
         for i in range(30):
             current_date = start_date + timedelta(days=i)
@@ -593,7 +593,7 @@ class TestACWRCalculation:
                 flags=[],
             )
 
-            temp_repo.write_yaml(f"metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
 
         target_date = start_date + timedelta(days=29)
         acwr = calculate_acwr(target_date, temp_repo)
@@ -606,7 +606,7 @@ class TestACWRCalculation:
         """Should handle divide-by-zero gracefully."""
         # Create 28 days of zero load
         start_date = date(2026, 1, 1)
-        (temp_repo.repo_root / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
 
         for i in range(30):
             current_date = start_date + timedelta(days=i)
@@ -648,7 +648,7 @@ class TestACWRCalculation:
                 flags=[],
             )
 
-            temp_repo.write_yaml(f"metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
 
         target_date = start_date + timedelta(days=29)
         acwr = calculate_acwr(target_date, temp_repo)
@@ -824,8 +824,8 @@ class TestDailyMetricsComputation:
 
         # Create activity file
         year_month = "2026-01"
-        (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
-        activity_path = f"activities/{year_month}/{target_date.isoformat()}_run.yaml"
+        (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        activity_path = f"data/activities/{year_month}/{target_date.isoformat()}_run.yaml"
         temp_repo.write_yaml(activity_path, sample_run_activity)
 
         # Compute metrics
@@ -833,7 +833,7 @@ class TestDailyMetricsComputation:
 
         assert metrics is not None
         assert metrics.date == target_date
-        assert metrics.daily_load.systemic_load_au == 270.0
+        assert metrics.daily_load.systemic_load_au == 58.1
         assert metrics.ctl_atl.ctl > 0
         assert metrics.ctl_atl.atl > 0
         assert metrics.baseline_established is False  # First day
@@ -844,15 +844,15 @@ class TestDailyMetricsComputation:
 
         # Create activity
         year_month = "2026-01"
-        (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
-        activity_path = f"activities/{year_month}/{target_date.isoformat()}_run.yaml"
+        (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        activity_path = f"data/activities/{year_month}/{target_date.isoformat()}_run.yaml"
         temp_repo.write_yaml(activity_path, sample_run_activity)
 
         # Compute metrics
         compute_daily_metrics(target_date, temp_repo)
 
         # Check file exists
-        metrics_path = f"metrics/daily/{target_date.isoformat()}.yaml"
+        metrics_path = f"data/metrics/daily/{target_date.isoformat()}.yaml"
         loaded = temp_repo.read_yaml(metrics_path, DailyMetrics)
 
         assert loaded is not None
@@ -862,11 +862,11 @@ class TestDailyMetricsComputation:
         """Should aggregate loads from multiple activities."""
         target_date = date(2026, 1, 12)
         year_month = "2026-01"
-        (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
         # Create two activities on same day
-        run_path = f"activities/{year_month}/{target_date.isoformat()}_run_0700.yaml"
-        climb_path = f"activities/{year_month}/{target_date.isoformat()}_climb_1800.yaml"
+        run_path = f"data/activities/{year_month}/{target_date.isoformat()}_run_0700.yaml"
+        climb_path = f"data/activities/{year_month}/{target_date.isoformat()}_climb_1800.yaml"
 
         temp_repo.write_yaml(run_path, sample_run_activity)
         temp_repo.write_yaml(climb_path, sample_climb_activity)
@@ -875,11 +875,11 @@ class TestDailyMetricsComputation:
         metrics = compute_daily_metrics(target_date, temp_repo)
 
         # Should aggregate both loads
-        # Run: 270 systemic, 270 lower-body
-        # Climb: 324 systemic, 54 lower-body
-        # Total: 594 systemic, 324 lower-body
-        assert metrics.daily_load.systemic_load_au == pytest.approx(594.0, abs=1.0)
-        assert metrics.daily_load.lower_body_load_au == pytest.approx(324.0, abs=1.0)
+        # Run: 58.1 systemic, 58.1 lower-body
+        # Climb: 69.7 systemic, 11.6 lower-body
+        # Total: 127.8 systemic, 69.7 lower-body
+        assert metrics.daily_load.systemic_load_au == pytest.approx(127.8, abs=1.0)
+        assert metrics.daily_load.lower_body_load_au == pytest.approx(69.7, abs=1.0)
         assert metrics.daily_load.activity_count == 2
 
     def test_daily_metrics_with_no_activities(self, temp_repo):
@@ -918,20 +918,20 @@ class TestWeeklySummary:
         for i in range(3):
             current_date = week_start + timedelta(days=i)
             year_month = f"{current_date.year}-{current_date.month:02d}"
-            (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             activity = sample_run_activity
             activity.id = f"test_run_{i}"
             activity.date = current_date
             activity.calculated.activity_id = f"test_run_{i}"
 
-            activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+            activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
 
         # Compute summary
         summary = compute_weekly_summary(week_start, temp_repo)
 
-        assert summary.total_systemic_load_au == pytest.approx(810.0, abs=1.0)  # 270 * 3
+        assert summary.total_systemic_load_au == pytest.approx(174.3, abs=1.0)  # 58.1 * 3
         assert summary.run_sessions == 3
         assert summary.total_activities == 3
 
@@ -943,7 +943,7 @@ class TestWeeklySummary:
         for i in range(5):
             current_date = week_start + timedelta(days=i)
             year_month = f"{current_date.year}-{current_date.month:02d}"
-            (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             # First 4 easy, last 1 quality
             session_type = SessionType.EASY if i < 4 else SessionType.QUALITY
@@ -961,21 +961,24 @@ class TestWeeklySummary:
                 updated_at=datetime.now(),
             )
 
+            # TSS: RPE 4 = 56.3 (1h × 0.75² × 100), RPE 8 = 100.0 (1h × 1.00² × 100)
+            tss_value = 56.3 if session_type == SessionType.EASY else 100.0
+
             activity.calculated = LoadCalculation(
                 activity_id=f"test_run_{i}",
                 duration_minutes=60,
                 estimated_rpe=4 if session_type == SessionType.EASY else 8,
                 sport_type=SportType.RUN,
-                base_effort_au=240.0,
+                base_effort_au=tss_value,
                 systemic_multiplier=1.0,
                 lower_body_multiplier=1.0,
-                systemic_load_au=240.0,
-                lower_body_load_au=240.0,
+                systemic_load_au=tss_value,
+                lower_body_load_au=tss_value,
                 session_type=session_type,
                 multiplier_adjustments=[],
             )
 
-            activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+            activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
 
         summary = compute_weekly_summary(week_start, temp_repo)
@@ -1001,7 +1004,7 @@ class TestWeeklySummary:
         for i, (sport, session_type) in enumerate(activities):
             current_date = week_start + timedelta(days=i)
             year_month = f"{current_date.year}-{current_date.month:02d}"
-            (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             activity = NormalizedActivity(
                 id=f"test_activity_{i}",
@@ -1030,7 +1033,7 @@ class TestWeeklySummary:
                 multiplier_adjustments=[],
             )
 
-            activity_path = f"activities/{year_month}/{current_date.isoformat()}_activity.yaml"
+            activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_activity.yaml"
             temp_repo.write_yaml(activity_path, activity)
 
         summary = compute_weekly_summary(week_start, temp_repo)
@@ -1066,14 +1069,14 @@ class TestEdgeCases:
         for i in range(20):
             current_date = start_date + timedelta(days=i)
             year_month = f"{current_date.year}-{current_date.month:02d}"
-            (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             activity = sample_run_activity
             activity.id = f"test_run_{i}"
             activity.date = current_date
             activity.calculated.activity_id = f"test_run_{i}"
 
-            activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+            activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
 
         # Compute metrics
@@ -1088,9 +1091,9 @@ class TestEdgeCases:
         # Create activity on day 10 (but no metrics for days 1-9)
         target_date = date(2026, 1, 10)
         year_month = "2026-01"
-        (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
-        activity_path = f"activities/{year_month}/{target_date.isoformat()}_run.yaml"
+        activity_path = f"data/activities/{year_month}/{target_date.isoformat()}_run.yaml"
         temp_repo.write_yaml(activity_path, sample_run_activity)
 
         # Should not crash
@@ -1099,6 +1102,47 @@ class TestEdgeCases:
         # Should treat as cold start
         assert metrics.ctl_atl.ctl > 0  # Has today's load
         assert metrics.baseline_established is False
+
+    def test_smart_initialization_estimates_baseline_from_future(self, temp_repo, sample_run_activity):
+        """Should estimate CTL/ATL from next 14 days on cold start instead of starting at zero."""
+        # Create 20 days of consistent activity data (60 TSS/day average)
+        start_date = date(2026, 1, 1)
+        daily_loads = [60, 55, 65, 70, 60, 50, 0, 0, 60, 65, 55, 70, 60, 65, 58, 62, 0, 68, 72, 55]
+
+        for i, load in enumerate(daily_loads):
+            current_date = start_date + timedelta(days=i)
+            year_month = f"{current_date.year}-{current_date.month:02d}"
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+
+            if load > 0:  # Only create activity if non-zero load
+                activity = sample_run_activity
+                activity.id = f"test_run_{i}"
+                activity.date = current_date
+                activity.calculated.activity_id = f"test_run_{i}"
+                activity.calculated.systemic_load_au = float(load)
+                activity.calculated.lower_body_load_au = float(load)
+
+                activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
+                temp_repo.write_yaml(activity_path, activity)
+
+        # Compute metrics for Day 1 (cold start - no previous day)
+        day1_metrics = compute_daily_metrics(start_date, temp_repo)
+
+        # Average of first 14 days: (60+55+65+70+60+50+0+0+60+65+55+70+60+65)/14 = 56.8
+        expected_avg = sum(daily_loads[:14]) / 14
+
+        # Should initialize from 14-day average, not zero
+        assert day1_metrics.ctl_atl.ctl == pytest.approx(expected_avg, rel=0.1)
+        assert day1_metrics.ctl_atl.atl == pytest.approx(expected_avg, rel=0.1)
+
+        # Metadata should reflect estimation method
+        assert day1_metrics.ctl_initialization_method == "estimated"
+        assert day1_metrics.estimated_baseline_days == 14
+
+        # Day 2 should chain from Day 1
+        day2_metrics = compute_daily_metrics(start_date + timedelta(days=1), temp_repo)
+        assert day2_metrics.ctl_initialization_method == "chained"
+        assert day2_metrics.estimated_baseline_days is None
 
     def test_handles_extreme_load_spike(self, temp_repo):
         """Should handle very high daily load without crashing."""
@@ -1123,24 +1167,24 @@ class TestEdgeCases:
             duration_minutes=600,
             estimated_rpe=8,
             sport_type=SportType.RUN,
-            base_effort_au=4800.0,  # 8 * 600
+            base_effort_au=1000.0,  # TSS: 10h × 1.00² × 100
             systemic_multiplier=1.0,
             lower_body_multiplier=1.0,
-            systemic_load_au=4800.0,
-            lower_body_load_au=4800.0,
+            systemic_load_au=1000.0,
+            lower_body_load_au=1000.0,
             session_type=SessionType.RACE,
             multiplier_adjustments=[],
         )
 
         year_month = "2026-01"
-        (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
-        activity_path = f"activities/{year_month}/{target_date.isoformat()}_run.yaml"
+        (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+        activity_path = f"data/activities/{year_month}/{target_date.isoformat()}_run.yaml"
         temp_repo.write_yaml(activity_path, activity)
 
         # Should not crash
         metrics = compute_daily_metrics(target_date, temp_repo)
 
-        assert metrics.daily_load.systemic_load_au == 4800.0
+        assert metrics.daily_load.systemic_load_au == 1000.0
         # Validation should flag as extreme but not fail
         warnings = validate_metrics(metrics)
         # CTL/ATL might be high but should be calculable
@@ -1216,14 +1260,14 @@ class TestBatchOperations:
         for i in range(5):
             current_date = start_date + timedelta(days=i)
             year_month = f"{current_date.year}-{current_date.month:02d}"
-            (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             activity = sample_run_activity
             activity.id = f"test_run_{i}"
             activity.date = current_date
             activity.calculated.activity_id = f"test_run_{i}"
 
-            activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+            activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
 
         # Batch compute
@@ -1241,14 +1285,14 @@ class TestBatchOperations:
         for i in [0, 2]:
             current_date = start_date + timedelta(days=i)
             year_month = f"{current_date.year}-{current_date.month:02d}"
-            (temp_repo.repo_root / "activities" / year_month).mkdir(parents=True, exist_ok=True)
+            (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             activity = sample_run_activity
             activity.id = f"test_run_{i}"
             activity.date = current_date
             activity.calculated.activity_id = f"test_run_{i}"
 
-            activity_path = f"activities/{year_month}/{current_date.isoformat()}_run.yaml"
+            activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
 
         # Batch compute (day 2 will have zero load but should not crash)

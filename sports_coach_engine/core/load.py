@@ -113,8 +113,8 @@ def compute_load(
     if not (1 <= estimated_rpe <= 10):
         raise InvalidLoadInputError(f"RPE must be 1-10, got {estimated_rpe}")
 
-    # Calculate base effort
-    base_effort_au = calculate_base_effort(estimated_rpe, activity.duration_minutes)
+    # Calculate base effort using TSS formula
+    base_effort_au = calculate_base_effort_tss(estimated_rpe, activity.duration_minutes)
 
     # Get sport multipliers
     systemic_mult, lower_body_mult = get_multipliers(
@@ -130,15 +130,22 @@ def compute_load(
         lower_body_mult=lower_body_mult,
     )
 
-    # Calculate final loads
-    systemic_load_au = base_effort_au * systemic_mult
-    lower_body_load_au = base_effort_au * lower_body_mult
-
     # Classify session type
     session_type = classify_session_type(
         rpe=estimated_rpe,
         workout_type=activity.workout_type,
     )
+
+    # Apply interval adjustment if applicable
+    base_effort_au, interval_note = adjust_tss_for_intervals(
+        base_effort_au, session_type, activity
+    )
+    if interval_note != "No interval adjustment":
+        adjustments.append(interval_note)
+
+    # Calculate final loads (after interval adjustment)
+    systemic_load_au = base_effort_au * systemic_mult
+    lower_body_load_au = base_effort_au * lower_body_mult
 
     return LoadCalculation(
         activity_id=activity.id,
@@ -154,6 +161,104 @@ def compute_load(
         lower_body_load_au=round(lower_body_load_au, 1),
         session_type=session_type,
     )
+
+
+def calculate_base_effort_tss(rpe: int, duration_minutes: int) -> float:
+    """
+    Calculate base effort using TSS-equivalent formula.
+
+    Formula: TSS = hours × IF² × 100
+    Where IF is intensity factor derived from RPE, anchored to threshold (RPE 7-8).
+
+    This replaces the previous RPE × duration formula which generated loads
+    3-5x higher than sport science standards (TrainingPeaks/Coggan).
+
+    References:
+    - Coggan & Allen: Training Stress Score (TSS)
+    - Foster et al. (2001): Session-RPE method
+    - TrainingPeaks: TSS calculation standards
+
+    Args:
+        rpe: Rate of Perceived Exertion (1-10)
+        duration_minutes: Activity duration in minutes
+
+    Returns:
+        TSS in arbitrary units (AU), matching TrainingPeaks standards
+
+    Examples:
+        >>> calculate_base_effort_tss(rpe=3, duration_minutes=60)
+        42.3  # Easy hour ≈ 42 TSS
+
+        >>> calculate_base_effort_tss(rpe=8, duration_minutes=60)
+        100.0  # Threshold hour = 100 TSS
+    """
+    # RPE-to-IF mapping (anchored at lactate threshold = RPE 7-8)
+    RPE_TO_IF = {
+        1: 0.50,   # Recovery (Zone 1)
+        2: 0.55,   # Very easy (Zone 1)
+        3: 0.65,   # Easy (Zone 2)
+        4: 0.75,   # Moderate easy (Zone 2)
+        5: 0.82,   # Steady state (Zone 3 lower)
+        6: 0.88,   # Tempo (Zone 3 upper)
+        7: 0.95,   # Threshold (Zone 4 - LT)
+        8: 1.00,   # Threshold high (Zone 4+)
+        9: 1.05,   # VO2max intervals (Zone 5)
+        10: 1.10,  # Max effort (Zone 5+)
+    }
+
+    intensity_factor = RPE_TO_IF.get(rpe, 0.70)  # Conservative default
+    hours = duration_minutes / 60.0
+
+    # Coggan's TSS formula: hours × IF² × 100
+    tss = hours * (intensity_factor ** 2) * 100
+
+    return round(tss, 1)
+
+
+def adjust_tss_for_intervals(
+    base_tss: float,
+    session_type: SessionType,
+    activity: NormalizedActivity,
+) -> tuple[float, str]:
+    """
+    Adjust TSS for interval training to account for recovery periods.
+
+    Traditional TSS calculation assumes continuous effort. Interval training
+    and intermittent activities (like climbing) include recovery periods where
+    intensity drops significantly, reducing the effective physiological stress.
+
+    Args:
+        base_tss: TSS calculated from RPE × duration
+        session_type: EASY/MODERATE/QUALITY/RACE
+        activity: Activity with name/description for interval detection
+
+    Returns:
+        Tuple of (adjusted_tss, explanation)
+
+    Detection heuristics:
+    - Keywords: "intervals", "repeats", "x", "reps", "@"
+    - Session type: QUALITY or RACE with high RPE
+    - Workout type: Strava structured workout flag
+    """
+    # Check for interval indicators
+    text = f"{activity.name} {activity.description or ''}".lower()
+    interval_keywords = ["interval", "repeat", "rep", "x ", "@ "]
+
+    is_intervals = (
+        any(kw in text for kw in interval_keywords)
+        or activity.workout_type == 3  # Strava "workout" type
+        or (session_type in [SessionType.QUALITY, SessionType.RACE])
+    )
+
+    if not is_intervals:
+        return base_tss, "No interval adjustment"
+
+    # Interval training typically has 1:1 to 2:1 work:rest ratio
+    # Effective intensity is lower than peak RPE suggests
+    # Conservative adjustment: -15% for intervals
+    adjusted_tss = base_tss * 0.85
+
+    return round(adjusted_tss, 1), "Interval training: -15% (work:rest recovery)"
 
 
 def calculate_base_effort(rpe: int, duration_minutes: int) -> float:
