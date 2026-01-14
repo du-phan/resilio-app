@@ -201,7 +201,7 @@ class SyncSummary(BaseModel):
 
     # Metric changes
     metrics_before: Optional[EnrichedMetrics] = None
-    metrics_after: EnrichedMetrics
+    metrics_after: Optional[EnrichedMetrics] = None  # None if enrichment fails
     metric_changes: list[str]        # ["CTL +2", "TSB -5"]
 
     # Suggestions

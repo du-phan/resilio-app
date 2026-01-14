@@ -224,28 +224,32 @@ def determine_disclosure_level(days_of_data: int) -> DisclosureLevel:
 
 def enrich_metrics(
     metrics: DailyMetrics,
-    historical: Optional[list[DailyMetrics]] = None,
+    repo: "RepositoryIO",
 ) -> EnrichedMetrics:
     """
     Add interpretive context to raw metrics.
 
     Args:
         metrics: Raw metrics from M9
-        historical: Optional historical metrics for trend calculation
+        repo: Repository for loading historical metrics
 
     Returns:
         EnrichedMetrics with interpretations, zones, and trends
     """
+    from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+
     # Get previous values for trends (7 days ago)
     prev_ctl = None
     prev_tsb = None
-    if historical and len(historical) > 0:
-        # Find metrics from ~7 days ago
-        target_date = metrics.date - timedelta(days=7)
-        week_ago = [m for m in historical if m.date == target_date]
-        if week_ago:
-            prev_ctl = week_ago[0].ctl_atl.ctl
-            prev_tsb = week_ago[0].ctl_atl.tsb
+
+    # Try to load metrics from 7 days ago for trend calculation
+    target_date = metrics.date - timedelta(days=7)
+    week_ago_path = f"metrics/daily/{target_date}.yaml"
+    week_ago_result = repo.read_yaml(week_ago_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
+
+    if not isinstance(week_ago_result, Exception) and week_ago_result is not None:
+        prev_ctl = week_ago_result.ctl_atl.ctl
+        prev_tsb = week_ago_result.ctl_atl.tsb
 
     # Interpret each metric
     ctl = interpret_metric("ctl", metrics.ctl_atl.ctl, prev_ctl)

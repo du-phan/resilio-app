@@ -7,6 +7,7 @@ load interpretation, and context table logic.
 
 import pytest
 from datetime import date, timedelta
+from unittest.mock import Mock
 from sports_coach_engine.core.enrichment import (
     interpret_metric,
     determine_disclosure_level,
@@ -15,6 +16,7 @@ from sports_coach_engine.core.enrichment import (
     interpret_load,
     InvalidMetricNameError,
 )
+from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.enrichment import (
     DisclosureLevel,
     MetricInterpretation,
@@ -57,6 +59,17 @@ from sports_coach_engine.schemas.profile import (
 # ============================================================
 # TEST FIXTURES
 # ============================================================
+
+
+@pytest.fixture
+def mock_repo(tmp_path):
+    """Mock RepositoryIO for testing."""
+    repo = Mock(spec=RepositoryIO)
+    repo.repo_root = tmp_path
+    repo.resolve_path = lambda p: tmp_path / p
+    # Mock read_yaml to return None (no historical data)
+    repo.read_yaml.return_value = None
+    return repo
 
 
 @pytest.fixture
@@ -391,9 +404,9 @@ class TestDisclosureLevel:
 class TestEnrichMetrics:
     """Test full metrics enrichment."""
 
-    def test_enrich_metrics_basic(self, sample_metrics):
+    def test_enrich_metrics_basic(self, sample_metrics, mock_repo):
         """Enriched metrics should include all interpretations."""
-        enriched = enrich_metrics(sample_metrics)
+        enriched = enrich_metrics(sample_metrics, mock_repo)
 
         # Check all metric interpretations present
         assert enriched.ctl.value == sample_metrics.ctl_atl.ctl
@@ -410,9 +423,12 @@ class TestEnrichMetrics:
         assert isinstance(enriched.low_intensity_percent, float)
         assert isinstance(enriched.intensity_on_target, bool)
 
-    def test_enrich_metrics_with_trends(self, sample_metrics, sample_historical_metrics):
+    def test_enrich_metrics_with_trends(self, sample_metrics, sample_historical_metrics, mock_repo):
         """Enriched metrics should include trends when historical data provided."""
-        enriched = enrich_metrics(sample_metrics, historical=sample_historical_metrics)
+        # Configure mock to return historical metrics (7 days ago)
+        mock_repo.read_yaml.return_value = sample_historical_metrics[6]  # 7 days ago
+
+        enriched = enrich_metrics(sample_metrics, mock_repo)
 
         # Should have trend from 7 days ago
         assert enriched.ctl.trend is not None
@@ -424,7 +440,7 @@ class TestEnrichMetrics:
         # Should have load trend
         assert enriched.training_load_trend is not None
 
-    def test_enrich_metrics_no_acwr_when_insufficient_data(self):
+    def test_enrich_metrics_no_acwr_when_insufficient_data(self, mock_repo):
         """ACWR should be None when data_days < 28."""
         from datetime import datetime
         metrics_short_history = DailyMetrics(
@@ -463,7 +479,7 @@ class TestEnrichMetrics:
             flags=[],
         )
 
-        enriched = enrich_metrics(metrics_short_history)
+        enriched = enrich_metrics(metrics_short_history, mock_repo)
         assert enriched.acwr is None
         assert enriched.disclosure_level == DisclosureLevel.INTERMEDIATE
 
@@ -662,9 +678,12 @@ class TestLoadInterpretation:
 class TestEnrichmentIntegration:
     """Test end-to-end enrichment flows."""
 
-    def test_full_metrics_enrichment_pipeline(self, sample_metrics, sample_historical_metrics):
+    def test_full_metrics_enrichment_pipeline(self, sample_metrics, sample_historical_metrics, mock_repo):
         """Full pipeline from raw metrics to enriched metrics."""
-        enriched = enrich_metrics(sample_metrics, historical=sample_historical_metrics)
+        # Configure mock to return historical metrics (7 days ago)
+        mock_repo.read_yaml.return_value = sample_historical_metrics[6]
+
+        enriched = enrich_metrics(sample_metrics, mock_repo)
 
         # Verify all components present
         assert isinstance(enriched, EnrichedMetrics)

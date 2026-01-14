@@ -301,6 +301,221 @@ class RepositoryIO:
         if lock_path.exists():
             lock_path.unlink()
 
+    # ============================================================
+    # JSON OPERATIONS
+    # ============================================================
+
+    def read_json(
+        self,
+        path: str | Path,
+        schema: Optional[Type[T]] = None,
+    ) -> Union[T, dict, None, RepoError]:
+        """
+        Read and parse a JSON file.
+
+        Args:
+            path: Path to JSON file (relative to repo root)
+            schema: Optional Pydantic model class for validation
+
+        Returns:
+            Validated data model (if schema provided), raw dict, None (if missing), or RepoError
+        """
+        import json
+
+        resolved_path = self.resolve_path(path)
+
+        # Check file exists
+        if not resolved_path.exists():
+            return None
+
+        # Read and parse
+        try:
+            with open(resolved_path) as f:
+                data = json.load(f)
+        except json.JSONDecodeError as e:
+            return RepoError(
+                error_type=RepoErrorType.PARSE_ERROR,
+                message=str(e),
+                path=str(resolved_path),
+            )
+
+        # Validate against schema if provided
+        if schema:
+            try:
+                return schema.model_validate(data)
+            except Exception as e:
+                return RepoError(
+                    error_type=RepoErrorType.VALIDATION_ERROR,
+                    message=f"Validation failed: {e}",
+                    path=str(resolved_path),
+                )
+
+        return data
+
+    def write_json(
+        self,
+        path: str | Path,
+        data: Union[BaseModel, dict, list],
+        atomic: bool = True,
+    ) -> Optional[RepoError]:
+        """
+        Write data to a JSON file.
+
+        Args:
+            path: Path to JSON file (relative to repo root)
+            data: Pydantic model, dict, or list to serialize
+            atomic: Use atomic write (default: True)
+
+        Returns:
+            None on success, RepoError on failure
+        """
+        import json
+
+        resolved_path = self.resolve_path(path)
+
+        # Ensure parent directory exists
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Serialize to JSON
+        try:
+            if isinstance(data, BaseModel):
+                json_content = json.dumps(data.model_dump(mode='json'), indent=2)
+            else:
+                json_content = json.dumps(data, indent=2)
+        except Exception as e:
+            return RepoError(
+                error_type=RepoErrorType.VALIDATION_ERROR,
+                message=f"Serialization failed: {e}",
+            )
+
+        if atomic:
+            return self._atomic_write(resolved_path, json_content)
+        else:
+            try:
+                resolved_path.write_text(json_content)
+                return None
+            except Exception as e:
+                return RepoError(
+                    error_type=RepoErrorType.WRITE_ERROR,
+                    message=str(e),
+                    path=str(resolved_path),
+                )
+
+    # ============================================================
+    # FILE OPERATIONS
+    # ============================================================
+
+    def read_file(self, path: str | Path) -> Union[str, RepoError]:
+        """
+        Read a text file.
+
+        Args:
+            path: Path to file (relative to repo root)
+
+        Returns:
+            File contents as string, or RepoError
+        """
+        resolved_path = self.resolve_path(path)
+
+        if not resolved_path.exists():
+            return RepoError(
+                error_type=RepoErrorType.FILE_NOT_FOUND,
+                message=f"File not found",
+                path=str(resolved_path),
+            )
+
+        try:
+            return resolved_path.read_text()
+        except Exception as e:
+            return RepoError(
+                error_type=RepoErrorType.READ_ERROR,
+                message=str(e),
+                path=str(resolved_path),
+            )
+
+    def append_to_file(
+        self,
+        path: str | Path,
+        content: str,
+    ) -> Optional[RepoError]:
+        """
+        Append content to a file.
+
+        Args:
+            path: Path to file (relative to repo root)
+            content: Content to append
+
+        Returns:
+            None on success, RepoError on failure
+        """
+        resolved_path = self.resolve_path(path)
+
+        # Ensure parent directory exists
+        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            with open(resolved_path, 'a') as f:
+                f.write(content)
+            return None
+        except Exception as e:
+            return RepoError(
+                error_type=RepoErrorType.WRITE_ERROR,
+                message=str(e),
+                path=str(resolved_path),
+            )
+
+    def delete_file(self, path: str | Path) -> Optional[RepoError]:
+        """
+        Delete a file.
+
+        Args:
+            path: Path to file (relative to repo root)
+
+        Returns:
+            None on success, RepoError on failure
+        """
+        resolved_path = self.resolve_path(path)
+
+        if not resolved_path.exists():
+            return None  # Already deleted, success
+
+        try:
+            resolved_path.unlink()
+            return None
+        except Exception as e:
+            return RepoError(
+                error_type=RepoErrorType.WRITE_ERROR,
+                message=str(e),
+                path=str(resolved_path),
+            )
+
+    # ============================================================
+    # DIRECTORY OPERATIONS
+    # ============================================================
+
+    def directory_exists(self, path: str | Path) -> bool:
+        """
+        Check if a directory exists.
+
+        Args:
+            path: Path to directory (relative to repo root)
+
+        Returns:
+            True if directory exists, False otherwise
+        """
+        resolved_path = self.resolve_path(path)
+        return resolved_path.exists() and resolved_path.is_dir()
+
+    def ensure_directory(self, path: str | Path) -> None:
+        """
+        Ensure a directory exists, creating it if necessary.
+
+        Args:
+            path: Path to directory (relative to repo root)
+        """
+        resolved_path = self.resolve_path(path)
+        resolved_path.mkdir(parents=True, exist_ok=True)
+
     @staticmethod
     def _process_running(pid: int) -> bool:
         """

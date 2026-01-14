@@ -12,10 +12,74 @@ Modules:
     - profile: Athlete profile management
 """
 
-# Note: Re-exports commented out until modules are implemented
-# Re-export all public functions
-# from sports_coach_engine.api.coach import *
-# from sports_coach_engine.api.sync import *
-# from sports_coach_engine.api.metrics import *
-# from sports_coach_engine.api.plan import *
-# from sports_coach_engine.api.profile import *
+# Re-export all public functions for convenient access
+from sports_coach_engine.api.coach import (
+    get_todays_workout,
+    get_weekly_status,
+    get_training_status,
+    CoachError,
+    WeeklyStatus,
+)
+
+from sports_coach_engine.api.sync import (
+    sync_strava,
+    log_activity,
+    SyncError,
+)
+
+from sports_coach_engine.api.metrics import (
+    get_current_metrics,
+    get_readiness,
+    get_intensity_distribution,
+    MetricsError,
+)
+
+from sports_coach_engine.api.plan import (
+    get_current_plan,
+    regenerate_plan,
+    get_pending_suggestions,
+    accept_suggestion,
+    decline_suggestion,
+    PlanError,
+    AcceptResult,
+    DeclineResult,
+)
+
+from sports_coach_engine.api.profile import (
+    get_profile,
+    update_profile,
+    set_goal,
+    ProfileError,
+)
+
+__all__ = [
+    # Coach operations
+    "get_todays_workout",
+    "get_weekly_status",
+    "get_training_status",
+    "CoachError",
+    "WeeklyStatus",
+    # Sync operations
+    "sync_strava",
+    "log_activity",
+    "SyncError",
+    # Metrics operations
+    "get_current_metrics",
+    "get_readiness",
+    "get_intensity_distribution",
+    "MetricsError",
+    # Plan operations
+    "get_current_plan",
+    "regenerate_plan",
+    "get_pending_suggestions",
+    "accept_suggestion",
+    "decline_suggestion",
+    "PlanError",
+    "AcceptResult",
+    "DeclineResult",
+    # Profile operations
+    "get_profile",
+    "update_profile",
+    "set_goal",
+    "ProfileError",
+]

@@ -27,6 +27,7 @@ from sports_coach_engine.schemas.memory import (
     ArchivedMemory,
     Memory,
     MemoryConfidence,
+    MemorySource,
     MemoryType,
     PatternInsight,
 )

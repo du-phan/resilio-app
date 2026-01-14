@@ -1167,14 +1167,17 @@ Training metrics must be presented in ways athletes can intuitively understand. 
 #### Presentation Principles
 
 1. **Always include status labels:**
+
    - ❌ BAD: "CTL: 42"
    - ✅ GOOD: "Fitness (CTL): 42 — solid recreational level"
 
 2. **Use relative language:**
+
    - ❌ BAD: "TSB: -12"
    - ✅ GOOD: "Form (TSB): -12 — you're in the productive training zone, building fitness"
 
 3. **Show trends, not just snapshots:**
+
    - "Fitness up 3 points this week" not just "CTL: 45"
    - "ACWR trending toward caution zone" not just "ACWR: 1.28"
 
@@ -1184,14 +1187,14 @@ Training metrics must be presented in ways athletes can intuitively understand. 
 
 #### Metric Explainer Templates
 
-| Metric | What It Means | Good/Caution/Bad |
-|--------|---------------|------------------|
-| CTL | Your sustained training capacity (fitness level) | Higher = more fit; 20-40 recreational, 40-60 serious amateur, 60+ competitive |
-| ATL | How much stress you've absorbed recently (fatigue) | Higher = more tired; context-dependent |
-| TSB | How fresh you are (form = fitness minus fatigue) | -25 to -10: building, -10 to +5: ready for quality, +5 to +15: race-ready |
-| ACWR | Injury risk based on load spike | 0.8-1.3: safe, 1.3-1.5: caution, >1.5: high risk |
-| VDOT | Running efficiency score from race times | Higher = faster; 40 ≈ 50min 10K, 50 ≈ 40min 10K |
-| Readiness | Overall readiness score (0-100) | 80+: full send, 65-79: execute plan, 50-64: reduce intensity, <50: easy/rest |
+| Metric    | What It Means                                      | Good/Caution/Bad                                                              |
+| --------- | -------------------------------------------------- | ----------------------------------------------------------------------------- |
+| CTL       | Your sustained training capacity (fitness level)   | Higher = more fit; 20-40 recreational, 40-60 serious amateur, 60+ competitive |
+| ATL       | How much stress you've absorbed recently (fatigue) | Higher = more tired; context-dependent                                        |
+| TSB       | How fresh you are (form = fitness minus fatigue)   | -25 to -10: building, -10 to +5: ready for quality, +5 to +15: race-ready     |
+| ACWR      | Injury risk based on load spike                    | 0.8-1.3: safe, 1.3-1.5: caution, >1.5: high risk                              |
+| VDOT      | Running efficiency score from race times           | Higher = faster; 40 ≈ 50min 10K, 50 ≈ 40min 10K                               |
+| Readiness | Overall readiness score (0-100)                    | 80+: full send, 65-79: execute plan, 50-64: reduce intensity, <50: easy/rest  |
 
 #### Multi-Metric Conflict Resolution
 
@@ -1208,6 +1211,7 @@ outweighs the good TSB reading—injury prevention comes first.
 ```
 
 **Resolution Priority:**
+
 1. Safety flags (illness, injury) → always override all other metrics
 2. ACWR > 1.5 → strong caution signal
 3. Readiness < 50 → reduce intensity
@@ -1218,14 +1222,17 @@ outweighs the good TSB reading—injury prevention comes first.
 Don't overwhelm new athletes with all metrics at once:
 
 **Week 1-2 (First 2 syncs):**
+
 - Focus on weekly volume and easy/hard distribution
 - "You completed 3 runs this week for 25km total—good start!"
 
 **Week 3-4 (After 14+ days of data):**
+
 - Introduce CTL/ATL/TSB
 - "Your fitness (CTL) has increased from 35 to 38—you're building aerobic capacity!"
 
 **Week 5+ (After 28+ days of data):**
+
 - Add ACWR once 28-day baseline exists
 - "Your ACWR is 1.18 (safe)—this tracks how quickly you're ramping up training"
 
@@ -1286,25 +1293,26 @@ v0 adapts them for multi-sport athletes:
 Some athletes can handle two training sessions in one day (e.g., morning run + evening climbing, or quality run + yoga). During onboarding, capture this preference:
 
 **Profile fields:**
+
 - `double_days_enabled: bool` (default: false)
 - `double_day_preferences: list` (optional list of acceptable combinations)
 
 **Valid double-day combinations (safe by default):**
 
-| Morning | Evening | Load Consideration |
-|---------|---------|-------------------|
-| Quality run | Yoga/mobility | Recovery-supportive, encouraged |
-| Easy run | Climbing (upper-body) | Minimal interference |
-| Easy run | Easy cycling | Aerobic stacking, watch total systemic load |
-| Quality run | Easy swim | Active recovery, good combo |
+| Morning     | Evening               | Load Consideration                          |
+| ----------- | --------------------- | ------------------------------------------- |
+| Quality run | Yoga/mobility         | Recovery-supportive, encouraged             |
+| Easy run    | Climbing (upper-body) | Minimal interference                        |
+| Easy run    | Easy cycling          | Aerobic stacking, watch total systemic load |
+| Quality run | Easy swim             | Active recovery, good combo                 |
 
 **Combinations requiring caution:**
 
-| Morning | Evening | Warning |
-|---------|---------|---------|
-| Quality run | Hard climbing | Both high-intensity; check ACWR |
-| Quality run | Leg-heavy strength | Back-to-back leg stress |
-| Long run | Any high-intensity | Too much systemic load |
+| Morning     | Evening            | Warning                         |
+| ----------- | ------------------ | ------------------------------- |
+| Quality run | Hard climbing      | Both high-intensity; check ACWR |
+| Quality run | Leg-heavy strength | Back-to-back leg stress         |
+| Long run    | Any high-intensity | Too much systemic load          |
 
 **Plan display for double-days:**
 
@@ -1316,11 +1324,13 @@ Thu Jan 30:
 ```
 
 **Adaptation rules for double-days:**
+
 - If ACWR > 1.3: Block quality + hard combos on same day
 - If lower-body load elevated: Don't stack run + leg-heavy session
 - Always allow: Quality run + yoga/mobility (encouraged for recovery)
 
 **When NOT to schedule double-days:**
+
 - During taper weeks (prioritize rest)
 - When readiness < 50 (athlete is fatigued)
 - Back-to-back days with quality sessions (need recovery day)
@@ -1565,12 +1575,14 @@ On first setup:
 **Personal Records/Best Efforts:**
 
 Strava tracks best efforts at standard distances (400m, 800m, 1K, 5K, 10K, half marathon, marathon), but accessing them has limitations:
+
 - Available via `best_efforts` field in DetailedActivity, but requires fetching each activity individually
 - No dedicated endpoint for all-time PRs
 - Rate limits make bulk extraction inefficient (can't query all historical activities at once)
 - Only available for running activities
 
 **v0 Approach:**
+
 1. **Primary:** Ask user for recent race PRs during onboarding (one-time question): "What's your recent 5K or 10K time?"
 2. **Secondary:** Parse `best_efforts` from synced activities over time (builds automatically as activities sync)
 3. **Fallback:** Estimate VDOT from training paces if no race data available
@@ -1578,11 +1590,13 @@ Strava tracks best efforts at standard distances (400m, 800m, 1K, 5K, 10K, half 
 **Race Detection:**
 
 The `workout_type` field can indicate race activities:
+
 - `workout_type=1` indicates race (undocumented but functional for running)
 - Values: 0 = None, 1 = Race, 2 = Long Run, 3 = Workout
 - Many athletes don't tag races manually
 
 **v0 Approach:**
+
 - Check `workout_type=1` as a signal
 - Also parse descriptions for race-related keywords: "race", "5K", "10K", "HM", "PB", "PR", "time trial"
 - Ask user during onboarding if they have recent race results
