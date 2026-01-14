@@ -10,6 +10,7 @@ from typing import Optional, Union
 from dataclasses import dataclass, field
 
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_adaptation_check, WorkflowError
 from sports_coach_engine.core.enrichment import enrich_workout, enrich_metrics
 from sports_coach_engine.core.logger import log_message, MessageRole
@@ -182,7 +183,7 @@ def get_todays_workout(
     metrics_path = f"metrics/daily/{target_date}.yaml"
     metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
 
-    if isinstance(metrics_result, Exception) or metrics_result is None:
+    if isinstance(metrics_result, RepoError) or metrics_result is None:
         # No metrics available, return workout without enrichment
         log_message(
             repo,
@@ -200,7 +201,7 @@ def get_todays_workout(
     profile_path = "athlete/profile.yaml"
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
-    if isinstance(profile_result, Exception):
+    if isinstance(profile_result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -301,7 +302,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     plan_path = "plans/current_plan.yaml"
     plan_result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, validate=True))
 
-    if isinstance(plan_result, Exception):
+    if isinstance(plan_result, RepoError):
         # Plan load error
         pass  # Continue without plan data
     elif plan_result is not None:
@@ -329,7 +330,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
                 ReadOptions(allow_missing=True, validate=True),
             )
 
-            if isinstance(activity_result, Exception) or activity_result is None:
+            if isinstance(activity_result, RepoError) or activity_result is None:
                 continue
 
             activity = activity_result
@@ -366,7 +367,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     metrics_path = f"metrics/daily/{today}.yaml"
     metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
 
-    if not isinstance(metrics_result, Exception) and metrics_result is not None:
+    if not isinstance(metrics_result, RepoError) and metrics_result is not None:
         current_ctl = metrics_result.ctl_atl.ctl
         current_tsb = metrics_result.ctl_atl.tsb
         if metrics_result.readiness:
@@ -380,7 +381,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
             ReadOptions(allow_missing=True, validate=True),
         )
 
-        if not isinstance(week_ago_result, Exception) and week_ago_result is not None:
+        if not isinstance(week_ago_result, RepoError) and week_ago_result is not None:
             ctl_change = current_ctl - week_ago_result.ctl_atl.ctl
             tsb_change = current_tsb - week_ago_result.ctl_atl.tsb
 
@@ -465,7 +466,7 @@ def get_training_status() -> Union[EnrichedMetrics, CoachError]:
     metrics_path = f"metrics/daily/{latest_metrics_date}.yaml"
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
 
-    if isinstance(result, Exception):
+    if isinstance(result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,

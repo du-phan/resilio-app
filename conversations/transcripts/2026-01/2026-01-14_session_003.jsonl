@@ -1,0 +1,8 @@
+{"timestamp": "2026-01-14T10:24:20.848464+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.849171+00:00", "role": "system", "content": "Returned profile: Test Athlete, goal=half_marathon", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.849288+00:00", "role": "user", "content": "get_current_metrics()", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.849805+00:00", "role": "system", "content": "No metrics found - no training data available", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.849892+00:00", "role": "user", "content": "get_training_status()", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.850127+00:00", "role": "system", "content": "No training data available", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.850201+00:00", "role": "user", "content": "get_weekly_status()", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:20.850543+00:00", "role": "system", "content": "Weekly status: 0/0 workouts, 0 minutes, CTL=None", "metadata": {}}

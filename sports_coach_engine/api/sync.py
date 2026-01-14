@@ -10,6 +10,7 @@ from typing import Optional, Union
 from dataclasses import dataclass
 
 from sports_coach_engine.core.repository import RepositoryIO
+from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.config import load_config
 from sports_coach_engine.core.workflows import (
     run_sync_workflow,
@@ -99,7 +100,7 @@ def sync_strava(
     # Initialize repository and config
     repo = RepositoryIO()
     config_result = load_config(repo)
-    if isinstance(config_result, Exception):
+    if isinstance(config_result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,

@@ -806,10 +806,12 @@ def run_manual_activity_workflow(
 
         # Create RawActivity
         activity_id = f"manual_{uuid.uuid4()}"
+        activity_name = notes[:50] if notes else f"Manual {sport_type.title()} - {activity_date}"
         raw_activity = RawActivity(
             id=activity_id,
             source="manual",
             sport_type=sport_type,
+            name=activity_name,
             date=activity_date,
             duration_seconds=duration_minutes * 60,
             distance_meters=distance_km * 1000 if distance_km else None,
@@ -840,12 +842,12 @@ def run_manual_activity_workflow(
 
         # Save activity
         activity_path = _get_activity_path(normalized)
-        repo.write_yaml(activity_path, normalized.model_dump())
+        repo.write_yaml(activity_path, normalized)
 
         # M9: Recompute metrics for activity date
         metrics = compute_daily_metrics(activity_date, repo)
         metrics_path = f"metrics/daily/{activity_date.isoformat()}.yaml"
-        repo.write_yaml(metrics_path, metrics.model_dump())
+        repo.write_yaml(metrics_path, metrics)
 
         result.success = True
         result.activity = normalized

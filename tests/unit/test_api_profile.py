@@ -15,6 +15,7 @@ from sports_coach_engine.api.profile import (
     ProfileError,
 )
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
+from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -93,7 +94,7 @@ class TestGetProfile:
         mock_repo_cls.return_value = mock_repo
 
         # Mock file not found error
-        mock_repo.read_yaml.return_value = Exception("File not found")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "File not found")
 
         result = get_profile()
 
@@ -110,7 +111,7 @@ class TestGetProfile:
         mock_repo_cls.return_value = mock_repo
 
         # Mock validation error
-        mock_repo.read_yaml.return_value = Exception("Invalid profile data")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.VALIDATION_ERROR, "Invalid profile data")
 
         result = get_profile()
 
@@ -179,7 +180,7 @@ class TestUpdateProfile:
         mock_repo_cls.return_value = mock_repo
 
         # Mock file not found
-        mock_repo.read_yaml.return_value = Exception("File not found")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "File not found")
 
         result = update_profile(name="Updated Athlete")
 
@@ -226,7 +227,7 @@ class TestUpdateProfile:
         mock_profile_cls.model_validate.return_value = mock_profile
 
         # Mock save error
-        mock_repo.write_yaml.return_value = Exception("Write failed")
+        mock_repo.write_yaml.return_value = RepoError(RepoErrorType.WRITE_ERROR, "Write failed")
 
         result = update_profile(name="Updated")
 
@@ -302,7 +303,7 @@ class TestSetGoal:
         mock_repo_cls.return_value = mock_repo
 
         # Mock profile load error
-        mock_repo.read_yaml.return_value = Exception("Profile not found")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "Profile not found")
 
         result = set_goal(
             race_type="half_marathon",
@@ -324,7 +325,7 @@ class TestSetGoal:
         mock_repo.read_yaml.return_value = mock_profile
 
         # Mock save error
-        mock_repo.write_yaml.return_value = Exception("Write failed")
+        mock_repo.write_yaml.return_value = RepoError(RepoErrorType.WRITE_ERROR, "Write failed")
 
         result = set_goal(
             race_type="half_marathon",

@@ -10,6 +10,7 @@ from typing import Optional, Union
 from dataclasses import dataclass
 
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.enrichment import enrich_metrics
 from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.metrics import DailyMetrics, ReadinessScore, IntensityDistribution
@@ -98,7 +99,7 @@ def get_current_metrics() -> Union[EnrichedMetrics, MetricsError]:
     metrics_path = f"metrics/daily/{latest_metrics_date}.yaml"
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
 
-    if isinstance(result, Exception):
+    if isinstance(result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -194,7 +195,7 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
     metrics_path = f"metrics/daily/{latest_metrics_date}.yaml"
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
 
-    if isinstance(result, Exception):
+    if isinstance(result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -288,7 +289,7 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
         if result is None:
             # Missing metrics for this day, skip
             continue
-        elif isinstance(result, Exception):
+        elif isinstance(result, RepoError):
             # Error reading metrics, skip with warning
             continue
 

@@ -101,9 +101,10 @@ class TestProfileIntegration:
         assert profile.constraints.min_run_days_per_week == 3
         assert Weekday.SATURDAY in profile.constraints.preferred_run_days
 
-        # Update constraints
+        # Update constraints (must include all required fields)
         updated = update_profile(
             constraints={
+                "available_run_days": [Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SUNDAY],
                 "min_run_days_per_week": 4,
                 "max_run_days_per_week": 5,
                 "preferred_run_days": [Weekday.SUNDAY],
@@ -137,13 +138,13 @@ class TestProfileIntegration:
             )
 
             assert isinstance(goal, Goal)
-            assert goal.goal_type == GoalType.HALF_MARATHON
-            assert goal.target_date == target_date
+            assert goal.type == GoalType.HALF_MARATHON
+            assert goal.target_date == target_date.isoformat()  # Goal stores dates as ISO strings
 
             # Verify profile was updated
             profile_result = get_profile()
             assert profile_result.goal is not None
-            assert profile_result.goal.goal_type == GoalType.HALF_MARATHON
+            assert profile_result.goal.type == GoalType.HALF_MARATHON
 
         finally:
             # Restore original function
@@ -162,13 +163,10 @@ class TestManualActivityIntegration:
         """Test logging an activity through full pipeline."""
         # Mock necessary components
         monkeypatch.setattr("sports_coach_engine.api.sync.RepositoryIO", lambda: integration_repo)
-        monkeypatch.setattr("sports_coach_engine.core.workflows.RepositoryIO", lambda: integration_repo)
 
         # Mock workflow functions to simplify test
-        from sports_coach_engine.core import workflows
         from sports_coach_engine.core.workflows import ManualActivityResult
-        from sports_coach_engine.schemas.activity import NormalizedActivity, CalculatedLoads
-        from unittest.mock import Mock
+        from sports_coach_engine.schemas.activity import NormalizedActivity, LoadCalculation, SessionType
 
         def mock_manual_workflow(repo, sport_type, duration_minutes, **kwargs):
             # Create a realistic activity result
@@ -176,12 +174,23 @@ class TestManualActivityIntegration:
                 id="manual_" + date.today().isoformat(),
                 source="manual",
                 date=date.today(),
-                sport_type="Run",
+                sport_type="run",
+                name="Test Activity",
                 duration_minutes=duration_minutes,
-                calculated=CalculatedLoads(
+                duration_seconds=duration_minutes * 60,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+                calculated=LoadCalculation(
+                    activity_id="manual_" + date.today().isoformat(),
+                    duration_minutes=duration_minutes,
+                    estimated_rpe=6,
+                    sport_type="run",
+                    base_effort_au=300.0,
+                    systemic_multiplier=1.0,
+                    lower_body_multiplier=1.0,
                     systemic_load_au=300.0,
                     lower_body_load_au=300.0,
-                    base_effort_au=300.0,
+                    session_type=SessionType.MODERATE,
                 ),
             )
 
@@ -192,26 +201,21 @@ class TestManualActivityIntegration:
                 metrics_updated=None,
             )
 
-        original_workflow = workflows.run_manual_activity_workflow
-        workflows.run_manual_activity_workflow = mock_manual_workflow
+        # Patch at the import location in sync.py
+        monkeypatch.setattr("sports_coach_engine.api.sync.run_manual_activity_workflow", mock_manual_workflow)
 
-        try:
-            result = log_activity(
-                sport_type="run",
-                duration_minutes=45,
-                rpe=6,
-                notes="Felt good, easy pace",
-            )
+        result = log_activity(
+            sport_type="run",
+            duration_minutes=45,
+            rpe=6,
+            notes="Felt good, easy pace",
+        )
 
-            # Should return NormalizedActivity
-            assert isinstance(result, NormalizedActivity)
-            assert result.sport_type == "Run"
-            assert result.duration_minutes == 45
-            assert result.calculated.systemic_load_au == 300.0
-
-        finally:
-            # Restore original
-            workflows.run_manual_activity_workflow = original_workflow
+        # Should return NormalizedActivity
+        assert isinstance(result, NormalizedActivity)
+        assert result.sport_type == "run"
+        assert result.duration_minutes == 45
+        assert result.calculated.systemic_load_au == 300.0
 
 
 # ============================================================
@@ -267,9 +271,7 @@ class TestCoachIntegration:
         monkeypatch.setattr("sports_coach_engine.api.coach.RepositoryIO", lambda: integration_repo)
 
         # Mock workflow to avoid complex setup
-        from sports_coach_engine.core import workflows
         from sports_coach_engine.core.workflows import AdaptationCheckResult
-        from unittest.mock import Mock
 
         def mock_adaptation_check(repo, target_date):
             return AdaptationCheckResult(
@@ -279,18 +281,14 @@ class TestCoachIntegration:
                 triggers=[],
             )
 
-        original_workflow = workflows.run_adaptation_check
-        workflows.run_adaptation_check = mock_adaptation_check
+        # Patch at the import location in coach.py
+        monkeypatch.setattr("sports_coach_engine.api.coach.run_adaptation_check", mock_adaptation_check)
 
-        try:
-            result = get_todays_workout()
+        result = get_todays_workout()
 
-            # Should return CoachError
-            assert isinstance(result, CoachError)
-            assert result.error_type == "no_plan"
-
-        finally:
-            workflows.run_adaptation_check = original_workflow
+        # Should return CoachError
+        assert isinstance(result, CoachError)
+        assert result.error_type == "no_plan"
 
     def test_get_weekly_status_no_plan(self, integration_repo, tmp_path, monkeypatch):
         """Test getting weekly status when no plan exists."""
@@ -336,7 +334,6 @@ class TestPlanIntegration:
         monkeypatch.setattr("sports_coach_engine.api.plan.RepositoryIO", lambda: integration_repo)
 
         # Mock workflow
-        from sports_coach_engine.core import workflows
         from sports_coach_engine.core.workflows import PlanGenerationResult
 
         def mock_plan_generation(repo, goal):
@@ -346,18 +343,14 @@ class TestPlanIntegration:
                 plan=None,
             )
 
-        original_workflow = workflows.run_plan_generation
-        workflows.run_plan_generation = mock_plan_generation
+        # Patch at the import location in plan.py
+        monkeypatch.setattr("sports_coach_engine.api.plan.run_plan_generation", mock_plan_generation)
 
-        try:
-            result = regenerate_plan()
+        result = regenerate_plan()
 
-            # Should return PlanError
-            assert isinstance(result, PlanError)
-            assert result.error_type == "no_goal"
-
-        finally:
-            workflows.run_plan_generation = original_workflow
+        # Should return PlanError
+        assert isinstance(result, PlanError)
+        assert result.error_type == "no_goal"
 
 
 # ============================================================

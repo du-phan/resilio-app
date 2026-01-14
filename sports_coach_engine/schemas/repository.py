@@ -36,6 +36,12 @@ class RepoError:
         self.message = message
         self.path = path
 
+    def __str__(self) -> str:
+        """Return a human-readable string representation."""
+        if self.path:
+            return f"[{self.error_type.value}] {self.message} (path: {self.path})"
+        return f"[{self.error_type.value}] {self.message}"
+
 
 # ============================================================
 # READ OPTIONS

@@ -19,6 +19,7 @@ from sports_coach_engine.schemas.enrichment import EnrichedWorkout, EnrichedMetr
 from sports_coach_engine.schemas.metrics import DailyMetrics
 from sports_coach_engine.schemas.profile import AthleteProfile
 from sports_coach_engine.schemas.plan import WorkoutPrescription
+from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -306,7 +307,7 @@ class TestGetWeeklyStatus:
         # Mock no plan
         def mock_read_yaml(path, schema, options):
             if "plans/current_plan" in path:
-                return Exception("Plan not found")
+                return RepoError(RepoErrorType.FILE_NOT_FOUND, "Plan not found")
             elif "metrics/daily" in path:
                 metrics = Mock()
                 metrics.ctl_atl = Mock()
@@ -399,7 +400,7 @@ class TestGetTrainingStatus:
         mock_find_date.return_value = date.today()
 
         # Mock load error
-        mock_repo.read_yaml.return_value = Exception("Load failed")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.VALIDATION_ERROR, "Load failed")
 
         result = get_training_status()
 

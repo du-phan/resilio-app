@@ -21,6 +21,7 @@ from sports_coach_engine.api.plan import (
 )
 from sports_coach_engine.schemas.plan import MasterPlan
 from sports_coach_engine.schemas.profile import Goal, GoalType, AthleteProfile
+from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -101,7 +102,7 @@ class TestGetCurrentPlan:
         mock_repo_cls.return_value = mock_repo
 
         # Mock validation error
-        mock_repo.read_yaml.return_value = Exception("Invalid YAML")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.VALIDATION_ERROR, "Invalid YAML")
 
         result = get_current_plan()
 
@@ -195,7 +196,7 @@ class TestRegeneratePlan:
         mock_repo_cls.return_value = mock_repo
 
         # Mock profile loading error
-        mock_repo.read_yaml.return_value = Exception("Profile not found")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "Profile not found")
 
         target_date = (date.today() + timedelta(weeks=12)).isoformat()
         new_goal = Goal(

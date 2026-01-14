@@ -23,6 +23,7 @@ from sports_coach_engine.schemas.metrics import (
     CTLATLMetrics,
 )
 from sports_coach_engine.schemas.enrichment import EnrichedMetrics, MetricInterpretation
+from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -133,7 +134,7 @@ class TestGetCurrentMetrics:
         mock_find_date.return_value = date.today()
 
         # Mock validation error
-        mock_repo.read_yaml.return_value = Exception("Invalid YAML")
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.VALIDATION_ERROR, "Invalid YAML")
 
         result = get_current_metrics()
 
@@ -456,8 +457,8 @@ class TestEdgeCases:
             call_count += 1
 
             if call_count == 2:
-                # Return exception for second file
-                return Exception("Invalid YAML")
+                # Return error for second file
+                return RepoError(RepoErrorType.PARSE_ERROR, "Invalid YAML")
             elif call_count <= 4:
                 # Return valid data for other files
                 metrics = Mock()

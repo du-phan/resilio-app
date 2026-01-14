@@ -1,0 +1,2 @@
+{"timestamp": "2026-01-14T10:26:36.004904+00:00", "role": "user", "content": "log_activity(sport_type=running, duration=30min, rpe=5, date=2026-01-14)", "metadata": {}}
+{"timestamp": "2026-01-14T10:26:36.010065+00:00", "role": "system", "content": "Logged run: 150 AU systemic, 135 AU lower-body", "metadata": {}}

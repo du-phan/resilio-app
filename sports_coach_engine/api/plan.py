@@ -10,6 +10,7 @@ from typing import Optional, Union
 from dataclasses import dataclass
 
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_plan_generation, WorkflowError
 from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.plan import MasterPlan
@@ -124,7 +125,7 @@ def get_current_plan() -> Union[MasterPlan, PlanError]:
             message="No training plan found. Set a goal to generate a plan.",
         )
 
-    if isinstance(result, Exception):
+    if isinstance(result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -203,7 +204,7 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
         profile_path = "athlete/profile.yaml"
         profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
-        if isinstance(profile_result, Exception):
+        if isinstance(profile_result, RepoError):
             log_message(
                 repo,
                 MessageRole.SYSTEM,
@@ -219,7 +220,7 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
 
         # Save updated profile
         write_result = repo.write_yaml(profile_path, profile)
-        if isinstance(write_result, Exception):
+        if isinstance(write_result, RepoError):
             log_message(
                 repo,
                 MessageRole.SYSTEM,

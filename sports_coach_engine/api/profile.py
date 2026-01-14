@@ -10,6 +10,7 @@ from typing import Optional, Union, Any
 from dataclasses import dataclass
 
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
 from sports_coach_engine.api.plan import regenerate_plan, PlanError
@@ -73,14 +74,15 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
     profile_path = "athlete/profile.yaml"
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
-    if isinstance(result, Exception):
+    if isinstance(result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
             f"Failed to load profile: {str(result)}",
         )
+        error_type = "not_found" if result.error_type == RepoErrorType.FILE_NOT_FOUND else "validation"
         return ProfileError(
-            error_type="not_found" if "not found" in str(result).lower() else "validation",
+            error_type=error_type,
             message=f"Failed to load profile: {str(result)}",
         )
 
@@ -146,7 +148,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
     profile_path = "athlete/profile.yaml"
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
-    if isinstance(result, Exception):
+    if isinstance(result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -193,7 +195,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
 
     # Save updated profile
     write_result = repo.write_yaml(profile_path, profile)
-    if isinstance(write_result, Exception):
+    if isinstance(write_result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -291,7 +293,7 @@ def set_goal(
     profile_path = "athlete/profile.yaml"
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
-    if isinstance(profile_result, Exception):
+    if isinstance(profile_result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,
@@ -307,7 +309,7 @@ def set_goal(
 
     # Save updated profile
     write_result = repo.write_yaml(profile_path, profile)
-    if isinstance(write_result, Exception):
+    if isinstance(write_result, RepoError):
         log_message(
             repo,
             MessageRole.SYSTEM,

@@ -1,0 +1,18 @@
+_schema:
+  format_version: "1.0.0"
+  schema_type: "profile"
+
+name: "Test Athlete"
+created_at: "2026-01-12"
+running_priority: "secondary"
+primary_sport: "bouldering"
+conflict_policy: "ask_each_time"
+
+constraints:
+  available_run_days: ["tuesday", "saturday"]
+  min_run_days_per_week: 2
+  max_run_days_per_week: 3
+
+goal:
+  type: "half_marathon"
+  target_date: "2026-04-15"

@@ -1,0 +1,4 @@
+{"timestamp": "2026-01-14T10:24:46.848366+00:00", "role": "user", "content": "log_activity(sport_type=running, duration=45min, rpe=6, date=2026-01-14)", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:46.848983+00:00", "role": "system", "content": "Manual activity workflow failed: unknown - Manual activity logging failed: 1 validation error for RawActivity\nname\n  Field required [type=missing, input_value={'id': 'manual_64540783-8...6, 'has_hr_data': False}, input_type=dict]\n    For further information visit https://errors.pydantic.dev/2.11/v/missing", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:46.849170+00:00", "role": "user", "content": "get_training_status()", "metadata": {}}
+{"timestamp": "2026-01-14T10:24:46.849712+00:00", "role": "system", "content": "No training data available", "metadata": {}}

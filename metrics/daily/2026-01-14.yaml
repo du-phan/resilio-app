@@ -1,0 +1,47 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: daily_metrics
+date: '2026-01-14'
+calculated_at: '2026-01-14T11:27:56.460826'
+daily_load:
+  date: '2026-01-14'
+  systemic_load_au: 270.0
+  lower_body_load_au: 243.0
+  activity_count: 1
+  activities:
+  - id: manual_ae8d10fa-8ed7-4167-9c39-0937bdd3a98b
+    sport_type: run
+    systemic_load_au: 270.0
+    lower_body_load_au: 243.0
+    session_type: moderate
+ctl_atl:
+  ctl: 6.5
+  atl: 35.9
+  tsb: -29.4
+  ctl_zone: beginner
+  tsb_zone: overreached
+  ctl_trend: null
+  ctl_change_7d: null
+acwr: null
+readiness:
+  score: 23
+  level: rest_recommended
+  confidence: low
+  components:
+    tsb_contribution: 1.5
+    load_trend_contribution: 65.0
+    sleep_contribution: null
+    wellness_contribution: null
+    weights_used:
+      tsb: 0.3
+      load_trend: 0.35
+      sleep: 0.0
+      wellness: 0.0
+  recommendation: Rest is strongly recommended. Your body needs recovery.
+  injury_flag_override: false
+  illness_flag_override: false
+  override_reason: null
+baseline_established: false
+acwr_available: false
+data_days_available: 0
+flags: []
