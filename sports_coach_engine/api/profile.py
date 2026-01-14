@@ -73,7 +73,7 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
 
     # Load profile
     profile_path = "athlete_profile_path()"
-    result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
+    result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
         log_message(
@@ -147,7 +147,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
 
     # Load current profile
     profile_path = "athlete_profile_path()"
-    result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
+    result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
         log_message(
@@ -292,7 +292,7 @@ def set_goal(
 
     # Update profile with new goal
     profile_path = "athlete_profile_path()"
-    profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
+    profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(profile_result, RepoError):
         log_message(

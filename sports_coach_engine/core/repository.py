@@ -57,7 +57,7 @@ class RepositoryIO:
         Args:
             path: Path to YAML file (relative to repo root)
             schema: Pydantic model class for validation
-            options: Read options (defaults to validate=True, allow_missing=False)
+            options: Read options (defaults to should_validate=True, allow_missing=False)
 
         Returns:
             Validated data model, None (if allow_missing=True), or RepoError
@@ -87,7 +87,7 @@ class RepositoryIO:
             )
 
         # Validate against schema
-        if options.validate:
+        if options.should_validate:
             try:
                 return schema.model_validate(data)
             except Exception as e:

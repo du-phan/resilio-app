@@ -98,7 +98,7 @@ def get_current_metrics() -> Union[EnrichedMetrics, MetricsError]:
 
     # Load metrics
     metrics_path = daily_metrics_path(latest_metrics_date)
-    result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
+    result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
         log_message(
@@ -194,7 +194,7 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
 
     # Load metrics
     metrics_path = daily_metrics_path(latest_metrics_date)
-    result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
+    result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
         log_message(
@@ -285,7 +285,7 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
     for i in range(days):
         target_date = today - timedelta(days=i)
         metrics_path = daily_metrics_path(target_date)
-        result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
+        result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
 
         if result is None:
             # Missing metrics for this day, skip

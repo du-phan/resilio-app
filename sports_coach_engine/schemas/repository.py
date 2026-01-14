@@ -51,7 +51,7 @@ class RepoError:
 class ReadOptions(BaseModel):
     """Options for reading files."""
 
-    validate: bool = True
+    should_validate: bool = True
     allow_missing: bool = False
     migrate_schema: bool = True
 

@@ -113,7 +113,7 @@ def get_current_plan() -> Union[MasterPlan, PlanError]:
 
     # Load current plan
     plan_path = "current_plan_path()"
-    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, validate=True))
+    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, should_validate=True))
 
     if result is None:
         log_message(
@@ -203,7 +203,7 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
     # Update profile with new goal if provided
     if goal:
         profile_path = "athlete_profile_path()"
-        profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
+        profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
         if isinstance(profile_result, RepoError):
             log_message(

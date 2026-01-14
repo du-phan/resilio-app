@@ -246,7 +246,7 @@ def enrich_metrics(
     # Try to load metrics from 7 days ago for trend calculation
     target_date = metrics.date - timedelta(days=7)
     week_ago_path = daily_metrics_path(target_date)
-    week_ago_result = repo.read_yaml(week_ago_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
+    week_ago_result = repo.read_yaml(week_ago_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
 
     if not isinstance(week_ago_result, Exception) and week_ago_result is not None:
         prev_ctl = week_ago_result.ctl_atl.ctl
