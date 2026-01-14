@@ -66,11 +66,17 @@ poetry run sce today --date 2026-01-20  # Specific date
 # 5. Manage goals and profile
 poetry run sce goal --type 10k --date 2026-06-01
 poetry run sce profile get
-poetry run sce profile set --name "Alex" --age 32
+poetry run sce profile create --name "Alex" --age 32  # For NEW profiles
+poetry run sce profile set --max-hr 190              # For UPDATING existing profiles
 
 # 6. View training plan
 poetry run sce plan show         # Get current plan
 poetry run sce plan regen        # Regenerate plan
+
+# 7. Populate plan workouts
+poetry run sce plan populate --from-json /tmp/plan_workouts.json       # Full replace
+poetry run sce plan update-week --week 5 --from-json week5.json         # Update single week
+poetry run sce plan update-from --week 6 --from-json weeks6-10.json     # Update from week N onwards
 ```
 
 **📖 Complete CLI Reference**: See [`docs/coaching/cli_reference.md`](docs/coaching/cli_reference.md) for full command documentation, parameters, return values, and usage examples.
@@ -193,7 +199,7 @@ Coach: "Let me set up your profile. What's your name?"
 Athlete: "Alex"
 Coach: "Great, Alex! How old are you?"
 Athlete: "32"
-Coach: [Calls sce profile set --name "Alex" --age 32]
+Coach: [Calls sce profile create --name "Alex" --age 32]
 ```
 
 ---
@@ -270,9 +276,74 @@ Coach: [Stores age=32]
    ```
 
 4. **Handle User Response**:
-   - **Approve**: Save plan to YAML files using `regenerate_plan()` or direct file writes
+   - **Approve**: Convert markdown plan to JSON structure, then populate via CLI:
+     ```python
+     # Convert markdown plan to JSON format
+     weeks_json = {
+       "weeks": [
+         {
+           "week_number": 1,
+           "phase": "base",
+           "start_date": "2026-01-15",
+           "end_date": "2026-01-21",
+           "target_volume_km": 22.0,
+           "target_systemic_load_au": 150.0,
+           "is_recovery_week": False,
+           "notes": "Recovery + foundation week",
+           "workouts": [
+             {
+               "id": "w1d2_easy",
+               "week_number": 1,
+               "day_of_week": 1,  # Tuesday (0=Monday)
+               "date": "2026-01-15",
+               "workout_type": "easy",
+               "phase": "base",
+               "duration_minutes": 30,
+               "distance_km": 6.0,
+               "intensity_zone": "z2",
+               "target_rpe": 3,
+               "target_pace_per_km": "7:15-7:45",
+               "target_hr_range": "120-140",
+               "purpose": "Ankle check run - monitor discomfort",
+               "surface": "treadmill",
+               "elevation_gain_m": 0
+             }
+             # ... more workouts for Week 1
+           ]
+         }
+         # ... Week 2-10
+       ]
+     }
+
+     # Save to temp file
+     import json
+     with open('/tmp/marathon_plan.json', 'w') as f:
+       json.dump(weeks_json, f, indent=2)
+
+     # Populate via CLI
+     poetry run sce plan populate --from-json /tmp/marathon_plan.json
+     ```
    - **Modify**: Use AskUserQuestion to clarify changes, regenerate, re-present
    - **Questions**: Answer, then re-confirm approval
+
+**Plan Update Commands**:
+
+After initial plan creation, use specific update commands for different scenarios:
+
+- **`sce plan populate --from-json`**: Full plan replacement
+  - Use for: Initial plan creation
+  - JSON contains: All weeks (1-N)
+
+- **`sce plan update-week --week N --from-json`**: Single week update
+  - Use for: Mid-week adjustments, illness recovery, single workout changes
+  - JSON contains: One week object (not array)
+  - Example: Athlete got sick Week 5 → update Week 5 only
+
+- **`sce plan update-from --week N --from-json`**: Partial replan
+  - Use for: "Replan rest of season", phase transitions, goal changes
+  - JSON contains: Weeks array starting from week N
+  - Preserves weeks 1 to N-1
+  - Example: After Week 4, replan Weeks 5-10 due to injury setback
 
 **When to Use This Pattern**:
 - ✅ Initial plan generation (first time setting goal)
@@ -457,6 +528,18 @@ This prevents hard climbing/strength days from incorrectly blocking running work
 **📖 Full Triggers Reference**: See [`docs/coaching/methodology.md#adaptation-triggers`](docs/coaching/methodology.md#adaptation-triggers) for detailed trigger handling patterns and examples.
 
 ### Coaching Workflow Best Practices
+
+**0. Explore commands with --help first**
+```bash
+# When unsure about command structure or parameters, check --help
+sce profile --help        # Shows subcommands: create, get, set
+sce profile create --help # Shows options for creating new profile
+sce profile set --help    # Shows options for updating existing profile
+
+# Key distinction:
+# - profile create: for NEW profiles (requires --name)
+# - profile set: for UPDATING existing profiles (any field)
+```
 
 **1. Always check exit codes**
 ```bash
@@ -659,7 +742,7 @@ What's your preference?
 
 Athlete: "Ask me each time - my schedule varies a lot"
 
-Coach: [Calls sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time]
+Coach: [Calls sce profile create --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time]
 
 "Perfect! I've created your profile. Now let's talk about your running goal..."
 ```
@@ -672,3 +755,81 @@ Coach: [Calls sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-pol
 4. ❌ **NEVER use AskUserQuestion with answers like "Tell me your name" or "I'll give my age"**
 
 **📖 More Examples**: See [`docs/coaching/scenarios.md`](docs/coaching/scenarios.md) for 10 detailed coaching scenarios.
+
+---
+
+### 📅 Training Constraints Discussion (BEFORE Plan Generation)
+
+**CRITICAL**: Before designing any training plan, you MUST discuss constraints with the athlete. The profile has defaults (2-4 runs/week, all 7 days available, 90min sessions), but these need validation based on the athlete's actual schedule and life.
+
+**When to do this**: After profile setup, goal setting, and BEFORE calling `sce plan regen` or designing weekly structure.
+
+**Constraints to discuss with natural conversation**:
+
+1. **Run frequency**: "How many runs per week are realistic for you? The default is 2-4, but what works with your schedule?"
+
+2. **Available days**: "Which days of the week can you typically run? For example, do you have work commitments, family obligations, or other sports on specific days?"
+
+3. **Session duration**: "What's the longest single session you can realistically do? For marathon training, long runs can reach 2-3 hours - is that manageable on weekends?"
+
+4. **Other sport commitments**: "I see you climb. Which days/times are your climbing sessions? Are they fixed or flexible?"
+
+5. **Morning vs evening**: "Do you prefer morning or evening runs? Any preference?"
+
+**Example conversation**:
+
+```
+Coach: "Before I design your marathon plan, let me understand your schedule constraints.
+       How many runs per week are realistic for you?"
+
+Athlete: "I can do 3-4 runs consistently. Maybe 5 on a good week, but let's plan for 4."
+
+Coach: "Perfect, 4 runs/week is solid for marathon training. Which days work best?
+       I know you climb - when are those sessions?"
+
+Athlete: "I climb Friday evenings at the gym. Weekends are usually open.
+       Weekdays I can run Tuesday and Thursday mornings before work."
+
+Coach: "Got it. So tentatively: Tuesday, Thursday, Saturday, Sunday for runs,
+       with Friday reserved for climbing. Does that work?"
+
+Athlete: "Yes, that's ideal."
+
+Coach: "One more thing - what's the longest run you can do? Marathon training
+       means long runs of 2-3 hours eventually."
+
+Athlete: "Weekends I can do 2-3 hours no problem. Weekdays max 90 minutes."
+
+Coach: [Updates profile with actual constraints]
+Coach: "Excellent! Now I'll design your plan around this schedule."
+```
+
+**After discussion, update profile**:
+
+```bash
+sce profile set \
+  --min-run-days 4 \
+  --max-run-days 4 \
+  --available-days "tuesday,thursday,saturday,sunday" \
+  --max-session-minutes 120  # or whatever they can do on long run days
+```
+
+**Why this matters**:
+- Generic defaults (7 days available, 90min max) don't reflect reality
+- Plan design depends on knowing which days are actually free
+- Long runs > 90min are essential for marathon - need to confirm athlete can do them
+- Other sport commitments (climbing Fridays) must be locked in before workout placement
+
+**What happens if you skip this**:
+- Plan assigns runs to days athlete can't train
+- Long runs get capped at 90min when athlete could do 3 hours
+- Conflicts with other sports aren't properly managed
+- Athlete has to manually move workouts every week (bad UX)
+
+**The correct flow**:
+1. Profile setup (basic info, sport priorities, conflict policy)
+2. **→ Constraints discussion (THIS STEP)**
+3. Goal setting
+4. Plan skeleton generation (`sce plan regen`)
+5. Plan design (weekly structure with toolkit data)
+6. Plan presentation and approval

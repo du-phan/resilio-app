@@ -116,6 +116,21 @@ def profile_set_command(
         "--conflict-policy",
         help="Conflict resolution: primary_sport_wins, running_goal_wins, or ask_each_time",
     ),
+    min_run_days: Optional[int] = typer.Option(
+        None,
+        "--min-run-days",
+        help="Minimum run days per week (e.g., 3)"
+    ),
+    max_run_days: Optional[int] = typer.Option(
+        None,
+        "--max-run-days",
+        help="Maximum run days per week (e.g., 4)"
+    ),
+    max_session_minutes: Optional[int] = typer.Option(
+        None,
+        "--max-session-minutes",
+        help="Maximum session duration in minutes (e.g., 90, 180)"
+    ),
 ) -> None:
     """Update athlete profile fields.
 
@@ -126,9 +141,14 @@ def profile_set_command(
         sce profile set --max-hr 190 --resting-hr 55
         sce profile set --run-priority primary
         sce profile set --conflict-policy ask_each_time
+        sce profile set --min-run-days 3 --max-run-days 4
+        sce profile set --max-session-minutes 180
     """
     # Collect non-None fields
     fields = {}
+    constraint_updates = {}
+
+    # Top-level fields
     if name is not None:
         fields["name"] = name
     if age is not None:
@@ -142,11 +162,37 @@ def profile_set_command(
     if conflict_policy is not None:
         fields["conflict_policy"] = conflict_policy
 
+    # Constraint fields (nested in profile.constraints)
+    if min_run_days is not None:
+        constraint_updates["min_run_days_per_week"] = min_run_days
+    if max_run_days is not None:
+        constraint_updates["max_run_days_per_week"] = max_run_days
+    if max_session_minutes is not None:
+        constraint_updates["max_time_per_session_minutes"] = max_session_minutes
+
+    # If constraint updates exist, need to load current profile and merge
+    if constraint_updates:
+        current_profile = get_profile()
+        if hasattr(current_profile, 'error_type'):
+            # Profile doesn't exist
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message=f"Cannot update constraints: {current_profile.message}",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=2)
+
+        # Merge current constraints with updates
+        current_constraints = current_profile.constraints.model_dump()
+        current_constraints.update(constraint_updates)
+        fields["constraints"] = current_constraints
+
     # Validate that at least one field was provided
-    if not fields:
+    if not fields and not constraint_updates:
         envelope = create_error_envelope(
             error_type="validation",
-            message="No fields specified. Use --name, --age, --max-hr, --resting-hr, etc.",
+            message="No fields specified. Use --name, --age, --max-hr, --min-run-days, --max-session-minutes, etc.",
             data={
                 "next_steps": "Run: sce profile set --help to see available fields"
             },
@@ -158,7 +204,27 @@ def profile_set_command(
     result = update_profile(**fields)
 
     # Convert to envelope
-    updated_fields = list(fields.keys())
+    # Build list of updated field names for user feedback
+    updated_fields = []
+    if name is not None:
+        updated_fields.append("name")
+    if age is not None:
+        updated_fields.append("age")
+    if max_hr is not None:
+        updated_fields.append("max_hr")
+    if resting_hr is not None:
+        updated_fields.append("resting_hr")
+    if run_priority is not None:
+        updated_fields.append("run_priority")
+    if conflict_policy is not None:
+        updated_fields.append("conflict_policy")
+    if min_run_days is not None:
+        updated_fields.append("min_run_days")
+    if max_run_days is not None:
+        updated_fields.append("max_run_days")
+    if max_session_minutes is not None:
+        updated_fields.append("max_session_minutes")
+
     envelope = api_result_to_envelope(
         result,
         success_message=f"Updated profile fields: {', '.join(updated_fields)}",

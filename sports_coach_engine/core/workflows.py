@@ -57,6 +57,7 @@ from sports_coach_engine.core.adaptation import (
     assess_override_risk,
 )
 from sports_coach_engine.core.memory import save_memory, Memory, MemoryType, MemorySource
+from sports_coach_engine.core.plan import calculate_periodization, suggest_volume_adjustment
 from sports_coach_engine.schemas.activity import RawActivity, NormalizedActivity
 from sports_coach_engine.schemas.metrics import DailyMetrics
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
@@ -662,21 +663,183 @@ def run_plan_generation(
             result.archived_plan_path = archive_path
             print(f"[PlanGen] Archived old plan to {archive_path}")
 
-        # Create basic plan structure (v0: minimal, Claude Code refines)
+        # Create minimal valid plan skeleton (Claude Code will fill in weeks)
+        # Generate unique plan ID
+        plan_id = f"plan_{uuid.uuid4().hex[:12]}"
+
+        # Calculate timeline (deterministic based on goal)
+        today = date.today()
+        if profile.goal and profile.goal.target_date:
+            target_date_str = profile.goal.target_date
+            target_date = date.fromisoformat(target_date_str) if isinstance(target_date_str, str) else target_date_str
+        else:
+            # Default to 12 weeks if no goal date
+            target_date = today + timedelta(weeks=12)
+
+        total_weeks = max(1, (target_date - today).days // 7)
+        start_date = today
+        end_date = target_date
+
+        # Get current CTL and weekly volume for recommendations (graceful fallback)
+        current_ctl = 20.0  # Default for new athletes
+        current_weekly_volume = 0.0
+        try:
+            from sports_coach_engine.api.coach import get_current_metrics
+            metrics = get_current_metrics()
+            if hasattr(metrics, 'ctl') and metrics.ctl is not None:
+                current_ctl = metrics.ctl
+        except Exception:
+            pass  # No metrics available - will use defaults
+
+        # Get phase structure from toolkit (quantitative data)
+        goal_type = profile.goal.type if profile.goal else GoalType.GENERAL_FITNESS
+        try:
+            phases = calculate_periodization(
+                goal=goal_type,
+                weeks_available=total_weeks,
+                start_date=start_date
+            )
+        except ValueError as e:
+            # Timeline too short for goal - create basic phase structure as fallback
+            # Claude Code will need to address this in conversation
+            print(f"[PlanGen] Warning: {e}")
+            print(f"[PlanGen] Creating fallback phase structure - Claude Code will refine based on constraints")
+
+            # Create simple phase structure for any timeline
+            if total_weeks <= 4:
+                # Very short: Just base + taper
+                phases = [
+                    {
+                        "phase": "base",
+                        "start_week": 0,
+                        "end_week": total_weeks - 2,
+                        "start_date": start_date,
+                        "end_date": start_date + timedelta(weeks=total_weeks - 1, days=-1),
+                        "weeks": total_weeks - 1
+                    },
+                    {
+                        "phase": "taper",
+                        "start_week": total_weeks - 1,
+                        "end_week": total_weeks - 1,
+                        "start_date": start_date + timedelta(weeks=total_weeks - 1),
+                        "end_date": end_date,
+                        "weeks": 1
+                    }
+                ]
+            else:
+                # Split into build + taper phases
+                taper_weeks = max(1, round(total_weeks * 0.15))  # ~15% taper
+                build_weeks = total_weeks - taper_weeks
+                base_weeks = max(1, round(build_weeks * 0.4))
+                peak_weeks = build_weeks - base_weeks
+
+                phases = [
+                    {
+                        "phase": "base",
+                        "start_week": 0,
+                        "end_week": base_weeks - 1,
+                        "start_date": start_date,
+                        "end_date": start_date + timedelta(weeks=base_weeks, days=-1),
+                        "weeks": base_weeks
+                    },
+                    {
+                        "phase": "build",
+                        "start_week": base_weeks,
+                        "end_week": base_weeks + peak_weeks - 1,
+                        "start_date": start_date + timedelta(weeks=base_weeks),
+                        "end_date": start_date + timedelta(weeks=base_weeks + peak_weeks, days=-1),
+                        "weeks": peak_weeks
+                    },
+                    {
+                        "phase": "taper",
+                        "start_week": build_weeks,
+                        "end_week": total_weeks - 1,
+                        "start_date": start_date + timedelta(weeks=build_weeks),
+                        "end_date": end_date,
+                        "weeks": taper_weeks
+                    }
+                ]
+
+        # Get volume recommendations from toolkit (suggestions, not final values)
+        # Map goal type to distance
+        goal_distance_map = {
+            GoalType.FIVE_K: 5.0,
+            GoalType.TEN_K: 10.0,
+            GoalType.HALF_MARATHON: 21.1,
+            GoalType.MARATHON: 42.2,
+            GoalType.GENERAL_FITNESS: 10.0,  # Default moderate distance
+        }
+        goal_distance = goal_distance_map.get(goal_type, 10.0)
+
+        volume_rec = suggest_volume_adjustment(
+            current_weekly_volume_km=current_weekly_volume,
+            current_ctl=current_ctl,
+            goal_distance_km=goal_distance,
+            weeks_available=total_weeks
+        )
+
+        # Extract suggested ranges (toolkit returns tuples)
+        starting_volume_km = (volume_rec.start_range_km[0] + volume_rec.start_range_km[1]) / 2
+        peak_volume_km = (volume_rec.peak_range_km[0] + volume_rec.peak_range_km[1]) / 2
+
+        # Extract conflict policy from profile
+        conflict_policy = profile.conflict_policy.value if profile.conflict_policy else "ask_each_time"
+
+        # Assemble minimal valid plan skeleton
         plan_data = {
-            "goal": profile.goal.model_dump() if profile.goal else None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            # Required identifiers
+            "id": plan_id,
+            "created_at": today.isoformat(),
+
+            # Goal (from profile)
+            "goal": profile.goal.model_dump() if profile.goal else {
+                "type": "general_fitness",
+                "race_name": None,
+                "target_date": None,
+                "target_time": None,
+                "effort_level": None
+            },
+
+            # Timeline (deterministic calculation)
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "total_weeks": total_weeks,
+
+            # Phase structure (toolkit provides dates/structure)
+            "phases": phases,
+
+            # Weekly plans (EMPTY - Claude Code fills in)
             "weeks": [],
-            "constraints": profile.constraints.model_dump()
-            if profile.constraints
-            else None,
+
+            # Volume recommendations (toolkit suggestions as defaults)
+            "starting_volume_km": starting_volume_km,
+            "peak_volume_km": peak_volume_km,
+
+            # Policy (from profile)
+            "conflict_policy": conflict_policy,
+
+            # Constraints summary
+            "constraints_applied": [
+                f"runs_per_week: {profile.constraints.min_run_days_per_week}-{profile.constraints.max_run_days_per_week}",
+                f"available_days: {len(profile.constraints.available_run_days)}",
+                f"max_session_minutes: {profile.constraints.max_time_per_session_minutes}",
+            ] if profile.constraints else [],
         }
 
-        # Save plan
-        repo.write_yaml(current_plan_path(), plan_data)
+        # Validate and convert to MasterPlan object before saving
+        try:
+            plan_object = MasterPlan.model_validate(plan_data)
+        except Exception as e:
+            raise WorkflowError(f"Plan validation failed: {e}") from e
+
+        # Save plan (write_yaml expects Pydantic model)
+        write_result = repo.write_yaml(current_plan_path(), plan_object)
+        if write_result is not None:
+            # write_result is RepoError
+            raise WorkflowError(f"Failed to save plan: {write_result}")
 
         result.success = True
-        result.plan = plan_data
+        result.plan = plan_data  # Return dict for API layer
 
         print(
             f"[PlanGen] Complete: Plan created for {profile.goal.type if profile.goal else 'general fitness'}"

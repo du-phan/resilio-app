@@ -112,7 +112,7 @@ def get_current_plan() -> Union[MasterPlan, PlanError]:
     log_message(repo, MessageRole.USER, "get_current_plan()")
 
     # Load current plan
-    plan_path = "current_plan_path()"
+    plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, should_validate=True))
 
     if result is None:
@@ -140,10 +140,14 @@ def get_current_plan() -> Union[MasterPlan, PlanError]:
     plan = result
 
     # Log response
+    # Get goal type for logging (plan.goal is a dict, not Goal object)
+    goal_type = plan.goal.get('type') if isinstance(plan.goal, dict) else plan.goal.type
+    goal_type_str = goal_type.value if hasattr(goal_type, 'value') else str(goal_type)
+
     log_message(
         repo,
         MessageRole.SYSTEM,
-        f"Returned plan: {plan.total_weeks} weeks, goal={plan.goal.type.value}",
+        f"Returned plan: {plan.total_weeks} weeks, goal={goal_type_str}",
     )
 
     return plan
@@ -292,10 +296,14 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
         )
 
     # Log response
+    # Get goal type for logging (plan.goal is a dict, not Goal object)
+    goal_type = plan.goal.get('type') if isinstance(plan.goal, dict) else plan.goal.type
+    goal_type_str = goal_type.value if hasattr(goal_type, 'value') else str(goal_type)
+
     log_message(
         repo,
         MessageRole.SYSTEM,
-        f"Generated new plan: {plan.total_weeks} weeks, goal={plan.goal.type.value}",
+        f"Generated new plan: {plan.total_weeks} weeks, goal={goal_type_str}",
     )
 
     return plan
@@ -455,3 +463,363 @@ def decline_suggestion(suggestion_id: str) -> Union[DeclineResult, PlanError]:
         error_type="not_found",
         message=f"Suggestion {suggestion_id} not found. Suggestion management is simplified in v0.",
     )
+
+
+def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanError]:
+    """
+    Populate weekly workouts in the current training plan.
+
+    This replaces the empty weeks array with actual weekly workout prescriptions.
+    The plan skeleton must exist (created by regenerate_plan).
+
+    Workflow:
+    1. Load current plan skeleton
+    2. Validate weeks_data structure against WeekPlan schema
+    3. Merge new weeks into plan.weeks array
+    4. Validate complete MasterPlan
+    5. Save to YAML with atomic write
+    6. Log operation via M14
+
+    Args:
+        weeks_data: List of week dictionaries matching WeekPlan schema
+
+    Returns:
+        Updated MasterPlan with populated weeks
+        PlanError on failure
+
+    Example:
+        >>> weeks = [
+        ...     {
+        ...         "week_number": 1,
+        ...         "phase": "base",
+        ...         "start_date": "2026-01-15",
+        ...         "end_date": "2026-01-21",
+        ...         "target_volume_km": 22.0,
+        ...         "workouts": [...]
+        ...     }
+        ... ]
+        >>> plan = populate_plan_workouts(weeks)
+    """
+    repo = RepositoryIO()
+
+    # Log user request
+    log_message(repo, MessageRole.USER, f"populate_plan_workouts(weeks={len(weeks_data)})")
+
+    # 1. Load current plan
+    plan_path = current_plan_path()
+    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
+
+    if result is None:
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            "No plan found for populate",
+        )
+        return PlanError(
+            error_type="not_found",
+            message="No plan found. Run 'sce plan regen' first to create skeleton.",
+        )
+
+    if isinstance(result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to load plan: {str(result)}",
+        )
+        return PlanError(
+            error_type="validation",
+            message=f"Failed to load plan: {str(result)}",
+        )
+
+    plan = result
+
+    # 2. Validate weeks_data structure
+    try:
+        from sports_coach_engine.schemas.plan import WeekPlan
+        validated_weeks = [WeekPlan.model_validate(w) for w in weeks_data]
+    except Exception as e:
+        log_message(repo, MessageRole.SYSTEM, f"Validation failed: {str(e)}")
+        return PlanError(
+            error_type="validation",
+            message=f"Invalid week data: {str(e)}",
+        )
+
+    # 3. Merge into plan (replace weeks array)
+    plan.weeks = validated_weeks
+
+    # 4. Validate complete plan
+    try:
+        complete_plan = MasterPlan.model_validate(plan.model_dump())
+    except Exception as e:
+        log_message(repo, MessageRole.SYSTEM, f"Plan validation failed: {str(e)}")
+        return PlanError(
+            error_type="validation",
+            message=f"Complete plan validation failed: {str(e)}",
+        )
+
+    # 5. Save to YAML
+    write_result = repo.write_yaml(plan_path, complete_plan)
+    if isinstance(write_result, RepoError):
+        log_message(repo, MessageRole.SYSTEM, f"Failed to save plan: {str(write_result)}")
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to save plan: {str(write_result)}",
+        )
+
+    # 6. Log success
+    total_workouts = sum(len(w.workouts) for w in validated_weeks)
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"Populated {len(validated_weeks)} weeks with {total_workouts} workouts",
+    )
+
+    return complete_plan
+
+
+def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, PlanError]:
+    """
+    Update a single week in the current training plan.
+
+    This replaces or adds a specific week while preserving other weeks.
+    Useful for mid-week adjustments or updating a single week's workouts.
+
+    Workflow:
+    1. Load current plan
+    2. Validate week_data structure against WeekPlan schema
+    3. Find and replace week with matching week_number (or append if new)
+    4. Validate complete MasterPlan
+    5. Save to YAML with atomic write
+    6. Log operation via M14
+
+    Args:
+        week_number: Week number to update (1-indexed)
+        week_data: Week dictionary matching WeekPlan schema
+
+    Returns:
+        Updated MasterPlan with modified week
+        PlanError on failure
+
+    Example:
+        >>> week5 = {
+        ...     "week_number": 5,
+        ...     "phase": "build",
+        ...     "start_date": "2026-02-12",
+        ...     "end_date": "2026-02-18",
+        ...     "target_volume_km": 36.0,
+        ...     "workouts": [...]
+        ... }
+        >>> plan = update_plan_week(5, week5)
+    """
+    repo = RepositoryIO()
+
+    # Log user request
+    log_message(repo, MessageRole.USER, f"update_plan_week(week={week_number})")
+
+    # 1. Load current plan
+    plan_path = current_plan_path()
+    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
+
+    if result is None:
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            "No plan found for update",
+        )
+        return PlanError(
+            error_type="not_found",
+            message="No plan found. Run 'sce plan regen' first to create skeleton.",
+        )
+
+    if isinstance(result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to load plan: {str(result)}",
+        )
+        return PlanError(
+            error_type="validation",
+            message=f"Failed to load plan: {str(result)}",
+        )
+
+    plan = result
+
+    # 2. Validate week_data structure
+    try:
+        from sports_coach_engine.schemas.plan import WeekPlan
+        validated_week = WeekPlan.model_validate(week_data)
+    except Exception as e:
+        log_message(repo, MessageRole.SYSTEM, f"Validation failed: {str(e)}")
+        return PlanError(
+            error_type="validation",
+            message=f"Invalid week data: {str(e)}",
+        )
+
+    # Verify week_number matches
+    if validated_week.week_number != week_number:
+        return PlanError(
+            error_type="validation",
+            message=f"Week number mismatch: expected {week_number}, got {validated_week.week_number}",
+        )
+
+    # 3. Find and replace week (or append if new)
+    week_found = False
+    for i, existing_week in enumerate(plan.weeks):
+        if existing_week.week_number == week_number:
+            plan.weeks[i] = validated_week
+            week_found = True
+            break
+
+    if not week_found:
+        # Append new week and sort
+        plan.weeks.append(validated_week)
+        plan.weeks.sort(key=lambda w: w.week_number)
+
+    # 4. Validate complete plan
+    try:
+        complete_plan = MasterPlan.model_validate(plan.model_dump())
+    except Exception as e:
+        log_message(repo, MessageRole.SYSTEM, f"Plan validation failed: {str(e)}")
+        return PlanError(
+            error_type="validation",
+            message=f"Complete plan validation failed: {str(e)}",
+        )
+
+    # 5. Save to YAML
+    write_result = repo.write_yaml(plan_path, complete_plan)
+    if isinstance(write_result, RepoError):
+        log_message(repo, MessageRole.SYSTEM, f"Failed to save plan: {str(write_result)}")
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to save plan: {str(write_result)}",
+        )
+
+    # 6. Log success
+    action = "Updated" if week_found else "Added"
+    total_workouts = len(validated_week.workouts)
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"{action} week {week_number} with {total_workouts} workouts",
+    )
+
+    return complete_plan
+
+
+def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[MasterPlan, PlanError]:
+    """
+    Update plan from a specific week onwards, preserving earlier weeks.
+
+    This is useful for "replan the rest of the season" scenarios where
+    earlier weeks remain unchanged but later weeks need modification.
+
+    Workflow:
+    1. Load current plan
+    2. Validate weeks_data structure against WeekPlan schema
+    3. Keep weeks < start_week, replace weeks >= start_week
+    4. Validate complete MasterPlan
+    5. Save to YAML with atomic write
+    6. Log operation via M14
+
+    Args:
+        start_week: First week number to update (inclusive, 1-indexed)
+        weeks_data: List of week dictionaries matching WeekPlan schema
+
+    Returns:
+        Updated MasterPlan with modified weeks
+        PlanError on failure
+
+    Example:
+        >>> # Keep weeks 1-4, replace weeks 5-10
+        >>> remaining_weeks = [
+        ...     {"week_number": 5, ...},
+        ...     {"week_number": 6, ...},
+        ...     # ... weeks 7-10
+        ... ]
+        >>> plan = update_plan_from_week(5, remaining_weeks)
+    """
+    repo = RepositoryIO()
+
+    # Log user request
+    log_message(repo, MessageRole.USER, f"update_plan_from_week(start={start_week}, weeks={len(weeks_data)})")
+
+    # 1. Load current plan
+    plan_path = current_plan_path()
+    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
+
+    if result is None:
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            "No plan found for update",
+        )
+        return PlanError(
+            error_type="not_found",
+            message="No plan found. Run 'sce plan regen' first to create skeleton.",
+        )
+
+    if isinstance(result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to load plan: {str(result)}",
+        )
+        return PlanError(
+            error_type="validation",
+            message=f"Failed to load plan: {str(result)}",
+        )
+
+    plan = result
+
+    # 2. Validate weeks_data structure
+    try:
+        from sports_coach_engine.schemas.plan import WeekPlan
+        validated_weeks = [WeekPlan.model_validate(w) for w in weeks_data]
+    except Exception as e:
+        log_message(repo, MessageRole.SYSTEM, f"Validation failed: {str(e)}")
+        return PlanError(
+            error_type="validation",
+            message=f"Invalid week data: {str(e)}",
+        )
+
+    # Verify all weeks are >= start_week
+    for week in validated_weeks:
+        if week.week_number < start_week:
+            return PlanError(
+                error_type="validation",
+                message=f"Week {week.week_number} is before start_week {start_week}",
+            )
+
+    # 3. Keep earlier weeks, replace from start_week onwards
+    earlier_weeks = [w for w in plan.weeks if w.week_number < start_week]
+    plan.weeks = earlier_weeks + validated_weeks
+    plan.weeks.sort(key=lambda w: w.week_number)
+
+    # 4. Validate complete plan
+    try:
+        complete_plan = MasterPlan.model_validate(plan.model_dump())
+    except Exception as e:
+        log_message(repo, MessageRole.SYSTEM, f"Plan validation failed: {str(e)}")
+        return PlanError(
+            error_type="validation",
+            message=f"Complete plan validation failed: {str(e)}",
+        )
+
+    # 5. Save to YAML
+    write_result = repo.write_yaml(plan_path, complete_plan)
+    if isinstance(write_result, RepoError):
+        log_message(repo, MessageRole.SYSTEM, f"Failed to save plan: {str(write_result)}")
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to save plan: {str(write_result)}",
+        )
+
+    # 6. Log success
+    total_workouts = sum(len(w.workouts) for w in validated_weeks)
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"Updated {len(validated_weeks)} weeks from week {start_week} onwards with {total_workouts} workouts",
+    )
+
+    return complete_plan
