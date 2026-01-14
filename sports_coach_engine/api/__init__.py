@@ -60,6 +60,12 @@ from sports_coach_engine.api.profile import (
     ProfileError,
 )
 
+from sports_coach_engine.api.helpers import (
+    is_error,
+    get_error_message,
+    handle_error,
+)
+
 __all__ = [
     # Coach operations
     "get_todays_workout",
@@ -98,4 +104,8 @@ __all__ = [
     "update_profile",
     "set_goal",
     "ProfileError",
+    # Helper functions
+    "is_error",
+    "get_error_message",
+    "handle_error",
 ]

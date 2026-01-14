@@ -111,6 +111,75 @@ risk = assess_override_risk(triggers, workout, memories)
 # Claude Code presents options with this context
 ```
 
+### Error Handling Pattern
+
+**CRITICAL**: All API functions return `Union[SuccessType, ErrorType]`. You MUST check for errors before accessing fields to avoid `AttributeError`.
+
+#### Correct Pattern
+
+```python
+from sports_coach_engine.api import get_profile, is_error
+
+profile = get_profile()
+if is_error(profile):
+    print(f"Error: {profile.message}")
+    # Handle error appropriately
+else:
+    print(f"Name: {profile.name}")  # Safe to access
+```
+
+#### What NOT to Do
+
+```python
+# ❌ WRONG - will crash with AttributeError if ProfileError is returned
+profile = get_profile()
+print(profile.name)  # Error objects don't have 'name' field!
+```
+
+#### Helper Functions
+
+Use these helper functions for cleaner error handling:
+
+```python
+from sports_coach_engine.api import is_error, handle_error, get_error_message
+
+# Simple boolean check
+result = get_current_metrics()
+if is_error(result):
+    print(f"Error: {result.message}")
+
+# Print error and get boolean (convenient for early returns)
+metrics = get_current_metrics()
+if handle_error(metrics, "Getting metrics"):
+    return  # Exit if error
+
+# Extract error message (returns None if not an error)
+msg = get_error_message(result)
+if msg:
+    print(f"Failed: {msg}")
+```
+
+#### Error Types by Module
+
+| Module | Error Type | Common error_type Values |
+|--------|-----------|--------------------------|
+| Profile | `ProfileError` | `not_found`, `validation`, `unknown` |
+| Sync | `SyncError` | `auth`, `rate_limit`, `network`, `lock`, `config`, `unknown` |
+| Coach | `CoachError` | `not_found`, `no_plan`, `insufficient_data`, `validation`, `unknown` |
+| Metrics | `MetricsError` | `not_found`, `insufficient_data`, `validation`, `unknown` |
+| Plan | `PlanError` | `not_found`, `no_goal`, `validation`, `unknown` |
+
+#### Complete Examples
+
+See these example scripts for proper error handling patterns:
+
+- **`examples/coaching/basic_session.py`** - Essential coaching interaction with error checks
+- **`examples/coaching/sync_and_assess.py`** - Strava sync with detailed error handling
+- **`examples/coaching/set_goal_and_plan.py`** - Goal setting and plan generation workflow
+- **`examples/coaching/weekly_review.py`** - Weekly analysis with rich data handling
+
+These examples show realistic coaching scenarios with proper error handling that you should follow when writing scripts.
+
 ### Direct Data Access
 
 For exploration or custom queries, use RepositoryIO directly:
