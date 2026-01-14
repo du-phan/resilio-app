@@ -36,9 +36,11 @@ from sports_coach_engine.core.paths import (
     current_plan_path,
     plan_archive_dir,
     activity_path,
+    weekly_metrics_summary_path,
 )
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.core.profile import ProfileService
+from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.strava import (
     fetch_activities,
     fetch_activity_details,
@@ -51,17 +53,70 @@ from sports_coach_engine.core.strava import (
 from sports_coach_engine.core.normalization import normalize_activity
 from sports_coach_engine.core.notes import analyze_activity
 from sports_coach_engine.core.load import compute_load
-from sports_coach_engine.core.metrics import compute_daily_metrics
+from sports_coach_engine.core.metrics import compute_daily_metrics, compute_weekly_summary
 from sports_coach_engine.core.adaptation import (
     detect_adaptation_triggers,
     assess_override_risk,
 )
 from sports_coach_engine.core.memory import save_memory, Memory, MemoryType, MemorySource
 from sports_coach_engine.core.plan import calculate_periodization, suggest_volume_adjustment
-from sports_coach_engine.schemas.activity import RawActivity, NormalizedActivity
+from sports_coach_engine.schemas.activity import (
+    RawActivity,
+    NormalizedActivity,
+    RPEEstimate,
+    RPESource,
+)
 from sports_coach_engine.schemas.metrics import DailyMetrics
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
 from sports_coach_engine.schemas.plan import WeekPlan, MasterPlan, PlanPhase
+
+
+# ============================================================
+# HELPER FUNCTIONS
+# ============================================================
+
+
+def select_best_rpe_estimate(estimates: list[RPEEstimate]) -> int:
+    """
+    Select best RPE estimate using confidence-based priority.
+
+    Priority order (evidence-based, sport science):
+    1. User input (explicit entry, always trust)
+    2. HR-based (objective physiological data, high confidence)
+    3. Pace-based (VDOT zones, if available)
+    4. Strava relative effort (reasonable algorithm)
+    5. Duration heuristic (fallback only, low confidence)
+
+    Within each source, prefer higher confidence estimates.
+
+    Args:
+        estimates: List of RPE estimates from different sources
+
+    Returns:
+        Single RPE value (1-10) based on best available estimate
+    """
+    if not estimates:
+        return 5  # Conservative fallback
+
+    # Priority by source quality (aligned with sport science)
+    for source in [
+        RPESource.USER_INPUT,
+        RPESource.HR_BASED,
+        RPESource.PACE_BASED,
+        RPESource.STRAVA_RELATIVE,
+        RPESource.DURATION_HEURISTIC,
+    ]:
+        matching = [e for e in estimates if e.source == source]
+        if matching:
+            # Within source, prefer higher confidence
+            matching.sort(
+                key=lambda e: {"high": 3, "medium": 2, "low": 1}.get(e.confidence, 0),
+                reverse=True,
+            )
+            return matching[0].value
+
+    # Should never reach here, but fallback to first estimate
+    return estimates[0].value
 
 
 # ============================================================
@@ -416,14 +471,32 @@ def run_sync_workflow(
             if since:
                 after_timestamp = int(since.timestamp())
 
-            activity_summaries = fetch_activities(config, after=after_timestamp)
+            # Fetch ALL activities with proper pagination
+            all_activities = []
+            page = 1
+            while True:
+                activities_page = fetch_activities(
+                    config,
+                    page=page,
+                    per_page=200,  # Max Strava allows
+                    after=after_timestamp
+                )
+
+                if not activities_page:
+                    break  # No more pages
+
+                all_activities.extend(activities_page)
+                page += 1
+                time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
+
+            activity_summaries = all_activities
 
             if not activity_summaries:
                 result.success = True
                 result.warnings.append("No new activities found")
                 return result
 
-            print(f"[Sync] Fetched {len(activity_summaries)} activity summaries")
+            print(f"[Sync] Fetched {len(activity_summaries)} activity summaries across {page-1} pages")
 
             # Step 2-8: Process each activity through pipeline
             for activity_summary in activity_summaries:
@@ -447,12 +520,8 @@ def run_sync_workflow(
                     profile = profile_service.load_profile()
                     analysis = analyze_activity(normalized, profile)
 
-                    # Resolve RPE (use first estimate for v0)
-                    estimated_rpe = (
-                        analysis.rpe_estimates[0].value
-                        if analysis.rpe_estimates
-                        else 5
-                    )
+                    # Resolve RPE (use intelligent selection with confidence-based priority)
+                    estimated_rpe = select_best_rpe_estimate(analysis.rpe_estimates)
 
                     # M8: Compute loads
                     load_result = compute_load(normalized, estimated_rpe, repo)
@@ -507,21 +576,25 @@ def run_sync_workflow(
                     )
                     continue
 
-            # Step 9: Recompute metrics for affected dates (M9)
+            # Step 9: Recompute all metrics (including rest days and weekly summary)
+            # This is now delegated to a standalone function for better separation of concerns
             if result.activities_imported:
-                unique_dates = set(
-                    activity.date for activity in result.activities_imported
-                )
-                for activity_date in sorted(unique_dates):
-                    try:
-                        metrics = compute_daily_metrics(activity_date, repo)
-                        metrics_path = daily_metrics_path(activity_date)
-                        repo.write_yaml(metrics_path, metrics.model_dump())
-                        result.metrics_updated = metrics  # Keep latest
-                    except Exception as e:
-                        result.warnings.append(
-                            f"Failed to compute metrics for {activity_date}: {e}"
-                        )
+                try:
+                    # Get earliest activity date to start metrics computation
+                    earliest = min(act.date for act in result.activities_imported)
+
+                    # Recompute metrics from earliest imported activity to today
+                    # This includes activity days, rest days, and weekly summary
+                    metrics_result = recompute_all_metrics(
+                        repo,
+                        start_date=earliest,
+                        end_date=date.today()
+                    )
+
+                    print(f"[Sync] Computed {metrics_result['metrics_computed']} days of metrics")
+                    result.metrics_updated = True
+                except Exception as e:
+                    result.warnings.append(f"Failed to recompute metrics: {e}")
 
             # Step 10: Update last_sync_at
             training_history_path = athlete_training_history_path()
@@ -1021,10 +1094,8 @@ def run_manual_activity_workflow(
         analysis = analyze_activity(normalized, profile)
 
         if rpe is None:
-            # Use first RPE estimate
-            estimated_rpe = (
-                analysis.rpe_estimates[0].value if analysis.rpe_estimates else 5
-            )
+            # Use intelligent RPE estimate selection (confidence-based priority)
+            estimated_rpe = select_best_rpe_estimate(analysis.rpe_estimates)
         else:
             estimated_rpe = rpe
 
@@ -1086,3 +1157,152 @@ def _get_activity_path(activity: NormalizedActivity) -> str:
     filename = f"{date_str}_{sport_str}_{time_str}.yaml"
 
     return activity_path(year_month, filename)
+
+
+def _get_existing_metrics_dates(repo: RepositoryIO) -> list[date]:
+    """
+    Get list of all dates that have computed metrics.
+
+    Returns:
+        Sorted list of dates with existing metrics files
+    """
+    metrics_dir = "data/metrics/daily"
+
+    try:
+        # List all YAML files in metrics/daily/
+        files = repo.list_files(f"{metrics_dir}/*.yaml")
+
+        dates = []
+        for file_path in files:
+            # Extract date from filename (e.g., "2026-01-14.yaml" → "2026-01-14")
+            filename = Path(file_path).stem
+            try:
+                dates.append(date.fromisoformat(filename))
+            except ValueError:
+                # Skip invalid filenames
+                continue
+
+        return sorted(dates)
+
+    except Exception:
+        return []
+
+
+def _get_earliest_activity_date(repo: RepositoryIO) -> Optional[date]:
+    """
+    Find earliest activity date from disk.
+
+    Scans all activity files to determine the earliest activity date,
+    which is used as the starting point for metrics recomputation.
+
+    Args:
+        repo: Repository I/O instance
+
+    Returns:
+        Earliest activity date, or None if no activities exist
+    """
+    try:
+        activity_files = repo.list_files("data/activities/**/*.yaml")
+        if not activity_files:
+            return None
+
+        dates = []
+        for file_path in activity_files:
+            # Extract date from filename: "2026-01-14_run_0930.yaml" → "2026-01-14"
+            filename = Path(file_path).name
+            date_str = filename.split('_')[0]
+            try:
+                dates.append(date.fromisoformat(date_str))
+            except ValueError:
+                # Skip invalid filenames
+                continue
+
+        return min(dates) if dates else None
+
+    except Exception:
+        return None
+
+
+def recompute_all_metrics(
+    repo: RepositoryIO,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+) -> dict:
+    """
+    Recompute metrics for all dates from start to end.
+
+    Reads activity files from disk, computes daily metrics (including rest days),
+    and updates weekly summary. NO external API calls - completely offline.
+
+    This function enables:
+    - Fixing metric calculation bugs without re-syncing from Strava
+    - Backfilling rest days for historical data
+    - Regenerating metrics after manual activity edits
+
+    Args:
+        repo: Repository I/O instance
+        start_date: Start date (default: earliest activity date)
+        end_date: End date (default: today)
+
+    Returns:
+        Dict with metrics_computed, rest_days_filled counts
+
+    Raises:
+        MetricsCalculationError: If no activities found or computation fails
+    """
+    from sports_coach_engine.core.metrics import (
+        compute_daily_metrics,
+        compute_weekly_summary,
+        MetricsCalculationError,
+    )
+    from sports_coach_engine.core.paths import (
+        daily_metrics_path,
+        weekly_metrics_summary_path,
+    )
+
+    # Step 1: Discover date range from existing activities
+    if start_date is None:
+        start_date = _get_earliest_activity_date(repo)
+        if start_date is None:
+            raise MetricsCalculationError("No activities found")
+
+    if end_date is None:
+        end_date = date.today()
+
+    print(f"[Metrics] Recomputing from {start_date} to {end_date}")
+
+    # Step 2: Compute metrics for ALL dates (activities + rest days)
+    metrics_computed = 0
+    rest_days_filled = 0
+
+    current_date = start_date
+    while current_date <= end_date:
+        # Check if rest day by reading activities for this date
+        activities = _read_activities_for_date(current_date, repo)
+        is_rest_day = len(activities) == 0
+
+        # Compute and save metrics
+        metrics = compute_daily_metrics(current_date, repo)
+        metrics_path = daily_metrics_path(current_date)
+        repo.write_yaml(metrics_path, metrics.model_dump())
+
+        metrics_computed += 1
+        if is_rest_day:
+            rest_days_filled += 1
+
+        current_date += timedelta(days=1)
+
+    # Step 3: Recompute weekly summary for current week
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())  # Monday
+    weekly_summary = compute_weekly_summary(week_start, repo)
+    repo.write_yaml(weekly_metrics_summary_path(), weekly_summary.model_dump())
+
+    print(f"[Metrics] Computed {metrics_computed} days ({rest_days_filled} rest days)")
+
+    return {
+        "start_date": start_date,
+        "end_date": end_date,
+        "metrics_computed": metrics_computed,
+        "rest_days_filled": rest_days_filled,
+    }

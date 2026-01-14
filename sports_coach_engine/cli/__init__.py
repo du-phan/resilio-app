@@ -52,7 +52,7 @@ def main(
 
 
 # Import and register commands
-from sports_coach_engine.cli.commands import auth, plan, profile
+from sports_coach_engine.cli.commands import auth, metrics, plan, profile
 from sports_coach_engine.cli.commands.goal import goal_set_command
 from sports_coach_engine.cli.commands.init_cmd import init_command
 from sports_coach_engine.cli.commands.status import status_command
@@ -70,5 +70,6 @@ app.command(name="goal", help="Set a race goal")(goal_set_command)
 
 # Register subcommands
 app.add_typer(auth.app, name="auth", help="Manage Strava authentication")
+app.add_typer(metrics.app, name="metrics", help="Manage training metrics")
 app.add_typer(plan.app, name="plan", help="Manage training plans")
 app.add_typer(profile.app, name="profile", help="Manage athlete profile")
