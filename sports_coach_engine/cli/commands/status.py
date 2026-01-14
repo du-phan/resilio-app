@@ -56,8 +56,9 @@ def _build_success_message(result: any) -> str:
     """
     # If it's EnrichedMetrics, extract key values
     if hasattr(result, 'ctl') and hasattr(result, 'readiness'):
-        ctl_val = result.ctl.value if hasattr(result.ctl, 'value') else result.ctl
-        readiness_val = result.readiness.score if hasattr(result.readiness, 'score') else result.readiness
+        # Extract numeric values from MetricInterpretation objects
+        ctl_val = result.ctl.value
+        readiness_val = result.readiness.value
         return f"Current metrics: CTL {ctl_val:.0f}, Readiness {readiness_val:.0f}"
 
     # Fallback

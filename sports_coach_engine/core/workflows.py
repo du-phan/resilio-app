@@ -41,10 +41,12 @@ from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.core.profile import ProfileService
 from sports_coach_engine.core.strava import (
     fetch_activities,
+    fetch_activity_details,
     map_strava_to_raw,
     StravaAuthError,
     StravaRateLimitError,
     StravaAPIError,
+    DEFAULT_WAIT_BETWEEN_REQUESTS,
 )
 from sports_coach_engine.core.normalization import normalize_activity
 from sports_coach_engine.core.notes import analyze_activity
@@ -405,23 +407,36 @@ def run_sync_workflow(
         txn = TransactionLog(repo)
 
         try:
-            # Step 1: Fetch activities from Strava (M5)
+            # Step 1: Fetch activity summaries from Strava (M5)
             print(f"[Sync] Fetching activities from Strava (since={since})...")
-            raw_activities = fetch_activities(config, after=since)
 
-            if not raw_activities:
+            # Convert datetime to Unix timestamp for Strava API
+            after_timestamp = None
+            if since:
+                after_timestamp = int(since.timestamp())
+
+            activity_summaries = fetch_activities(config, after=after_timestamp)
+
+            if not activity_summaries:
                 result.success = True
                 result.warnings.append("No new activities found")
                 return result
 
-            print(f"[Sync] Fetched {len(raw_activities)} activities")
+            print(f"[Sync] Fetched {len(activity_summaries)} activity summaries")
 
             # Step 2-8: Process each activity through pipeline
-            for raw_activity_dict in raw_activities:
+            for activity_summary in activity_summaries:
                 raw_activity = None  # Initialize for error handling
                 try:
-                    # Map Strava dict to RawActivity
-                    raw_activity = map_strava_to_raw(raw_activity_dict)
+                    # Fetch full activity details (includes description and private_note)
+                    print(f"[Sync] Fetching details for activity {activity_summary['id']}...")
+                    activity_detail = fetch_activity_details(config, str(activity_summary["id"]))
+
+                    # Rate limiting between API calls
+                    time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
+
+                    # Map detailed activity dict to RawActivity
+                    raw_activity = map_strava_to_raw(activity_detail)
 
                     # M6: Normalize
                     normalized = normalize_activity(raw_activity, repo)
@@ -515,8 +530,8 @@ def run_sync_workflow(
                 history = {}
 
             history["last_strava_sync_at"] = datetime.now(timezone.utc).isoformat()
-            if raw_activities:
-                history["last_strava_activity_id"] = raw_activities[-1]['id']
+            if activity_summaries:
+                history["last_strava_activity_id"] = activity_summaries[-1]['id']
 
             repo.write_yaml(training_history_path, history)
 

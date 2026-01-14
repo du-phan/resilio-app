@@ -54,7 +54,7 @@ def to_json_serializable(obj: Any) -> Any:
     """
     # Pydantic v2 models
     if hasattr(obj, "model_dump"):
-        return obj.model_dump()
+        return obj.model_dump(mode='json')
 
     # Dataclasses
     if is_dataclass(obj) and not isinstance(obj, type):
