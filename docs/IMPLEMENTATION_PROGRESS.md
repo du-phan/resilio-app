@@ -40,14 +40,14 @@
 
 ### API Layer (5/5) ✅
 
-| Module         | Status | Tests | Notes                                     |
-| -------------- | ------ | ----- | ----------------------------------------- |
-| api.coach      | ✅     | 14    | get_todays_workout(), get_weekly_status() |
-| api.sync       | ✅     | 13    | sync_strava(), log_activity()             |
-| api.metrics    | ✅     | 16    | get_current_metrics(), get_readiness()    |
-| api.plan       | ✅     | 11    | get_current_plan(), regenerate_plan()     |
-| api.profile    | ✅     | 15    | get_profile(), update_profile()           |
-| **Total**      | ✅     | 69    | **All API functions operational**         |
+| Module      | Status | Tests | Notes                                     |
+| ----------- | ------ | ----- | ----------------------------------------- |
+| api.coach   | ✅     | 14    | get_todays_workout(), get_weekly_status() |
+| api.sync    | ✅     | 13    | sync_strava(), log_activity()             |
+| api.metrics | ✅     | 16    | get_current_metrics(), get_readiness()    |
+| api.plan    | ✅     | 11    | get_current_plan(), regenerate_plan()     |
+| api.profile | ✅     | 15    | get_profile(), update_profile()           |
+| **Total**   | ✅     | 69    | **All API functions operational**         |
 
 ---
 
@@ -471,6 +471,7 @@ All schema modules complete and integrated:
 - ✅ `run_manual_activity_workflow()`: Manual activity logging pipeline
 
 **Tests**: 12/12 passing (90% coverage)
+
 - 3 WorkflowLock tests (acquire, concurrent, stale detection)
 - 3 TransactionLog tests (create, modify, rollback)
 - 3 sync workflow tests (success, failure, locking)
@@ -492,6 +493,7 @@ All schema modules complete and integrated:
 - ✅ Timezone-aware datetime handling
 
 **Tests**: 20/20 passing (88% coverage)
+
 - 4 session management tests
 - 3 message logging tests
 - 3 session boundary tests
@@ -507,20 +509,24 @@ All schema modules complete and integrated:
 **Modules Complete**:
 
 1. **`api/coach.py`** (250 lines) - ✅ 14 tests
+
    - `get_todays_workout()`: Returns enriched workout with adaptation check
    - `get_weekly_status()`: Week overview with activity progress
    - `get_training_status()`: Current CTL/ATL/TSB/ACWR/readiness
 
 2. **`api/sync.py`** (180 lines) - ✅ 13 tests
+
    - `sync_strava()`: Orchestrates full sync workflow
    - `log_activity()`: Manual activity entry pipeline
 
 3. **`api/metrics.py`** (150 lines) - ✅ 16 tests
+
    - `get_current_metrics()`: Enriched metrics with interpretations
    - `get_readiness()`: Readiness score with component breakdown
    - `get_intensity_distribution()`: 7/14/30-day intensity analysis
 
 4. **`api/plan.py`** (280 lines) - ✅ 11 tests
+
    - `get_current_plan()`: Returns athlete's training plan
    - `regenerate_plan()`: Creates new plan from goal
    - `get_pending_suggestions()`: Adaptation suggestions (v0 stub)
@@ -536,6 +542,7 @@ All schema modules complete and integrated:
 ### Bugs Fixed During Phase 7 (17 total)
 
 **Workflow Test Bugs (6)**:
+
 1. Mock repository → real RepositoryIO for file operations
 2. Lock file format (YAML → JSON)
 3. Wrong function names in patches
@@ -543,24 +550,14 @@ All schema modules complete and integrated:
 5. TransactionLog missing repo parameter
 6. Complex workflow tests marked as skip
 
-**Enrichment Test Bugs (4)**:
-7. Missing mock_repo fixture
-8. enrich_metrics() missing repo parameter
-9. Mock return value issues
-10. Historical metrics parameter changes
+**Enrichment Test Bugs (4)**: 7. Missing mock_repo fixture 8. enrich_metrics() missing repo parameter 9. Mock return value issues 10. Historical metrics parameter changes
 
-**Logger Test Bugs (7)**:
-11. Missing file_exists() in mock_repo
-12. Timezone mismatch (naive → aware datetimes)
-13. Message.to_dict() enum vs string handling
-14. Invalid session ID format not caught
-15. Test expecting None instead of exception
-16. Missing delete_file() in mock_repo
-17. Cleanup function not actually deleting files
+**Logger Test Bugs (7)**: 11. Missing file_exists() in mock_repo 12. Timezone mismatch (naive → aware datetimes) 13. Message.to_dict() enum vs string handling 14. Invalid session ID format not caught 15. Test expecting None instead of exception 16. Missing delete_file() in mock_repo 17. Cleanup function not actually deleting files
 
 ### Phase 7 Outcomes
 
 **Code Statistics**:
+
 - Production code: 2,260 lines (workflows + logger + API)
 - Test code: 2,850 lines
 - Tests passing: 416/416 (100%)
@@ -568,6 +565,7 @@ All schema modules complete and integrated:
 - Coverage: ~90% average
 
 **Test Breakdown**:
+
 - M1 Workflows: 12 passing
 - M14 Logger: 20 passing
 - API Layer: 69 passing
@@ -575,6 +573,7 @@ All schema modules complete and integrated:
 - All other modules: 311 passing
 
 **Production Readiness**:
+
 - ✅ All core functionality complete
 - ✅ Workflow orchestration operational
 - ✅ File-based locking prevents race conditions
@@ -648,6 +647,7 @@ All schema modules complete and integrated:
 ## Version History
 
 - **v1.0.0** (2026-01-14): Phase 7 complete, production ready 🚀
+
   - All 14 modules complete (M1-M14)
   - API layer complete (5 modules, 15 functions)
   - 416 tests passing (100% pass rate)

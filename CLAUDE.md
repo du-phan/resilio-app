@@ -12,17 +12,248 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **First Session Checklist:**
 
-1. Sync athlete data: `sync_strava()` or check existing profile with `get_profile()`
-2. Assess current state: `get_current_metrics()` → CTL/ATL/TSB/ACWR/readiness
-3. Understand their goal: Check `profile.goal` or ask about training objectives
-4. Review recent activity: `get_weekly_status()` → activities + metrics context
-5. Start conversation: Use natural language, reference actual data, explain reasoning
+1. Sync athlete data: `sce sync` or check existing profile with `sce profile get`
+2. Assess current state: `sce status` → CTL/ATL/TSB/ACWR/readiness with interpretations
+3. Understand their goal: Check `data.goal` in profile or ask about training objectives
+4. Review recent activity: `sce week` → activities + metrics context for the week
+5. Start conversation: Use natural language, reference actual data from JSON, explain reasoning
 
 **Key Principle**: You use tools to compute (CTL, ACWR, guardrails), then apply judgment and athlete context to coach. Tools provide quantitative data; you provide qualitative coaching.
 
 **Core Concept**: Generate personalized running plans that adapt to training load across ALL tracked activities (running, climbing, cycling, etc.), continuously adjusting based on metrics like CTL/ATL/TSB, ACWR, and readiness scores.
 
-## API Reference - Your Coaching Toolkit
+## CLI Usage (Recommended)
+
+**All commands return JSON** - perfect for Claude Code to parse and understand.
+
+### Essential Coaching Workflow
+
+```bash
+# 1. Initialize (first time only)
+poetry run sce init
+
+# 2. Authenticate with Strava
+poetry run sce auth url          # Get OAuth URL
+poetry run sce auth exchange --code YOUR_CODE
+poetry run sce auth status       # Check token validity
+
+# 3. Import activities
+poetry run sce sync              # Sync all activities
+poetry run sce sync --since 14d  # Sync last 14 days
+
+# 4. Assess current state
+poetry run sce status            # Get CTL/ATL/TSB/ACWR/readiness
+poetry run sce week              # Get weekly summary
+
+# 5. Get today's workout
+poetry run sce today             # Today's workout with full context
+poetry run sce today --date 2026-01-20  # Specific date
+
+# 6. Manage goals and profile
+poetry run sce goal --type 10k --date 2026-06-01
+poetry run sce profile get
+poetry run sce profile set --name "Alex" --age 32
+```
+
+### Parsing CLI Output in Claude Code
+
+All commands return JSON with this structure:
+
+```json
+{
+  "schema_version": "1.0",
+  "ok": true,
+  "error_type": null,
+  "message": "Human-readable summary",
+  "data": { /* command-specific payload with rich interpretations */ }
+}
+```
+
+**Exit codes** (check `$?` after command):
+- `0`: Success - proceed with data
+- `2`: Config/setup missing - run `sce init`
+- `3`: Auth failure - run `sce auth url` to refresh
+- `4`: Network/rate limit - retry with backoff
+- `5`: Invalid input - fix parameters and retry
+- `1`: Internal error - report issue
+
+**Example: Get current metrics**
+
+```bash
+result=$(poetry run sce status)
+# Parse JSON - data.ctl contains: value, interpretation, zone, trend
+```
+
+The `data` field contains the same rich Pydantic models as the Python API, serialized to JSON:
+
+```json
+{
+  "data": {
+    "ctl": {
+      "value": 44.2,
+      "formatted_value": "44",
+      "zone": "recreational",
+      "interpretation": "solid recreational fitness level",
+      "trend": "+2 from last week",
+      "explanation": "Your fitness has been building steadily..."
+    },
+    "readiness": {
+      "score": 68,
+      "level": "moderate",
+      "breakdown": { /* TSB, recent_trend, sleep, wellness */ }
+    }
+  }
+}
+```
+
+**Why CLI over Python API?**
+- ✅ No need to handle Python imports in terminal
+- ✅ Stable, versioned JSON schemas
+- ✅ Clear exit codes for error handling
+- ✅ Works from any directory with `--repo-root`
+- ✅ Same rich data as Python API
+
+### Complete CLI Command Reference
+
+| Command | Purpose | Key Data Returned |
+|---------|---------|-------------------|
+| **`sce init`** | Initialize data directories | created/skipped paths, next_steps |
+| **`sce sync [--since 14d]`** | Import from Strava | activities_imported, total_load_au, metrics_updated |
+| **`sce status`** | Get current training metrics | CTL, ATL, TSB, ACWR, readiness (all with interpretations) |
+| **`sce today [--date YYYY-MM-DD]`** | Get workout recommendation | workout details, current_metrics, adaptation_triggers, rationale |
+| **`sce week`** | Get weekly summary | planned_workouts, completed_activities, metrics, week_changes |
+| **`sce goal --type --date [--time]`** | Set race goal | goal details, plan_regenerated confirmation |
+| **`sce auth url`** | Get OAuth URL | url, instructions for authorization |
+| **`sce auth exchange --code`** | Exchange auth code | status, expires_at, next_steps |
+| **`sce auth status`** | Check token validity | authenticated, expires_at, expires_in_hours |
+| **`sce profile get`** | Get athlete profile | name, age, max_hr, goal, constraints, preferences |
+| **`sce profile set --field value`** | Update profile | updated profile with all fields |
+| **`sce plan show`** | Get current plan | goal, total_weeks, weeks array, phases, workouts |
+| **`sce plan regen`** | Regenerate plan | new plan based on current goal |
+
+### Common Coaching Scenarios
+
+**Scenario 1: First session with new athlete**
+```bash
+# Check auth status
+sce auth status
+
+# If needed, authenticate
+sce auth url
+sce auth exchange --code CODE_FROM_URL
+
+# Sync activities
+sce sync
+
+# Get comprehensive view
+sce status  # → CTL 0, need baseline
+sce week    # → See recent activities
+sce profile get  # → Check if goal is set
+
+# If no goal, help set one
+sce goal --type 10k --date 2026-06-01
+```
+
+**Scenario 2: Daily coaching check-in**
+```bash
+# Get today's workout with full context
+sce today
+# Returns: workout, current_metrics, adaptation_triggers, rationale
+
+# Claude Code can now coach based on:
+# - Workout details (type, duration, pace zones)
+# - Current metrics (CTL, TSB, ACWR, readiness)
+# - Any triggers (ACWR elevated, readiness low, etc.)
+```
+
+**Scenario 3: Weekly review**
+```bash
+# Get full week summary
+sce week
+# Returns: planned vs completed, total load, metrics, changes
+
+# Sync latest if needed
+sce sync --since 7d
+
+# Check current state
+sce status
+```
+
+**Scenario 4: Goal change**
+```bash
+# Set new goal (automatically regenerates plan)
+sce goal --type half_marathon --date 2026-09-15 --time 01:45:00
+
+# View new plan
+sce plan show
+# Returns: All weeks with phases, workouts, volume progression
+```
+
+**Scenario 5: Profile updates**
+```bash
+# Update basic info
+sce profile set --name "Alex" --age 32 --max-hr 190
+
+# Update training preferences
+sce profile set --run-priority primary --conflict-policy ask_each_time
+```
+
+### Coaching Workflow Best Practices
+
+**1. Always check exit codes**
+```bash
+sce status
+if [ $? -eq 3 ]; then
+  echo "Token expired, refreshing..."
+  sce auth url
+fi
+```
+
+**2. Parse JSON systematically**
+```bash
+result=$(sce status)
+ok=$(echo "$result" | jq -r '.ok')
+if [ "$ok" = "true" ]; then
+  ctl=$(echo "$result" | jq -r '.data.ctl.value')
+  interpretation=$(echo "$result" | jq -r '.data.ctl.interpretation')
+  echo "CTL: $ctl ($interpretation)"
+fi
+```
+
+**3. Use rich interpretations for natural coaching**
+```bash
+# Don't just say "Your CTL is 44"
+# Say: "Your CTL is 44 (solid recreational fitness level), up 2 from last week"
+# All interpretations, zones, and trends are provided in the JSON
+```
+
+**4. Reference actual data**
+```bash
+# ✅ Good: "Your ACWR is 1.35 (slightly elevated - caution zone). You climbed yesterday..."
+# ❌ Bad: "Maybe rest today" (generic, no data reference)
+```
+
+**5. Handle errors gracefully**
+- Exit code 2: Run `sce init` or check config
+- Exit code 3: Token expired - guide through `sce auth url` flow
+- Exit code 4: Network issue - retry or suggest sync later
+- Exit code 5: Invalid input - correct and retry
+
+## Python API Reference (Alternative)
+
+The Python API is still available for scripting and development:
+
+### Quick Start
+
+```python
+from sports_coach_engine.api import sync_strava, get_todays_workout, get_current_metrics
+
+result = sync_strava()
+workout = get_todays_workout()
+metrics = get_current_metrics()
+```
+
+### Available Functions
 
 ### Quick Start
 
