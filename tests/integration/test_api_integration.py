@@ -5,17 +5,17 @@ Tests end-to-end workflows with real modules (not mocked).
 """
 
 import pytest
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from pathlib import Path
 
 from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.config import load_config, Config
+from sports_coach_engine.schemas.config import Config, Settings, Secrets, StravaSecrets
 from sports_coach_engine.api.sync import sync_strava, log_activity, SyncError
 from sports_coach_engine.api.coach import get_todays_workout, get_weekly_status, get_training_status, CoachError
 from sports_coach_engine.api.metrics import get_current_metrics, get_readiness, get_intensity_distribution, MetricsError
 from sports_coach_engine.api.plan import get_current_plan, regenerate_plan, PlanError
 from sports_coach_engine.api.profile import get_profile, update_profile, set_goal, ProfileError
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, TrainingConstraints, ConflictPolicy
+from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, TrainingConstraints, ConflictPolicy, Weekday, RunningPriority
 from sports_coach_engine.schemas.enrichment import SyncSummary
 from sports_coach_engine.schemas.activity import NormalizedActivity
 
@@ -41,27 +41,42 @@ def integration_repo(tmp_path):
     repo.ensure_directory("conversations/summaries")
 
     # Create minimal profile
+    today = date.today()
     profile = AthleteProfile(
         name="Integration Test Athlete",
+        created_at=today.isoformat(),
         constraints=TrainingConstraints(
-            runs_per_week=3,
-            long_run_day="saturday",
-            conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
+            available_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SATURDAY],
+            preferred_run_days=[Weekday.SATURDAY],
+            min_run_days_per_week=3,
+            max_run_days_per_week=4,
         ),
-        goal=None,
-        recent_races=[],
+        running_priority=RunningPriority.PRIMARY,
+        conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
+        goal=Goal(
+            type=GoalType.GENERAL_FITNESS,
+            target_date=None,
+            target_time=None,
+        ),
     )
     repo.write_yaml("athlete/profile.yaml", profile)
 
     # Create minimal config
     config = Config(
-        settings={
-            "athlete_name": "Integration Test Athlete",
-            "log_level": "INFO",
-        },
-        secrets={},
+        settings=Settings(),
+        secrets=Secrets(
+            strava=StravaSecrets(
+                client_id="test_client",
+                client_secret="test_secret",
+                access_token="test_token",
+                refresh_token="test_refresh",
+                token_expires_at=9999999999,
+            )
+        ),
+        loaded_at=datetime.now(),
     )
-    repo.write_yaml("config/config.yaml", config.settings)
+    repo.write_yaml("config/config.yaml", config.model_dump())
+    repo.write_yaml("config/secrets.local.yaml", config.secrets.model_dump())
 
     return repo
 
@@ -83,19 +98,21 @@ class TestProfileIntegration:
         profile = get_profile()
         assert isinstance(profile, AthleteProfile)
         assert profile.name == "Integration Test Athlete"
-        assert profile.constraints.runs_per_week == 3
+        assert profile.constraints.min_run_days_per_week == 3
+        assert Weekday.SATURDAY in profile.constraints.preferred_run_days
 
         # Update constraints
         updated = update_profile(
             constraints={
-                "runs_per_week": 4,
-                "long_run_day": "sunday",
-                "conflict_policy": "running_goal_wins",
+                "min_run_days_per_week": 4,
+                "max_run_days_per_week": 5,
+                "preferred_run_days": [Weekday.SUNDAY],
             }
         )
 
         assert isinstance(updated, AthleteProfile)
-        assert updated.constraints.runs_per_week == 4
+        assert updated.constraints.min_run_days_per_week == 4
+        assert Weekday.SUNDAY in updated.constraints.preferred_run_days
 
     def test_set_goal_flow(self, integration_repo, tmp_path, monkeypatch):
         """Test setting a goal (without plan generation in integration test)."""

@@ -16,6 +16,19 @@ from sports_coach_engine.schemas.plan import MasterPlan
 from sports_coach_engine.schemas.profile import Goal, AthleteProfile
 from sports_coach_engine.schemas.adaptation import Suggestion
 
+# Import toolkit functions from core modules
+from sports_coach_engine.core.plan import (
+    calculate_periodization,
+    calculate_volume_progression,
+    suggest_volume_adjustment,
+    create_workout,
+    validate_guardrails,
+)
+from sports_coach_engine.core.adaptation import (
+    detect_adaptation_triggers,
+    assess_override_risk,
+)
+
 
 # ============================================================
 # ERROR TYPES

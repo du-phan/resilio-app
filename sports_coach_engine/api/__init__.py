@@ -43,6 +43,14 @@ from sports_coach_engine.api.plan import (
     PlanError,
     AcceptResult,
     DeclineResult,
+    # Toolkit functions
+    calculate_periodization,
+    calculate_volume_progression,
+    suggest_volume_adjustment,
+    create_workout,
+    validate_guardrails,
+    detect_adaptation_triggers,
+    assess_override_risk,
 )
 
 from sports_coach_engine.api.profile import (
@@ -77,6 +85,14 @@ __all__ = [
     "PlanError",
     "AcceptResult",
     "DeclineResult",
+    # Toolkit functions
+    "calculate_periodization",
+    "calculate_volume_progression",
+    "suggest_volume_adjustment",
+    "create_workout",
+    "validate_guardrails",
+    "detect_adaptation_triggers",
+    "assess_override_risk",
     # Profile operations
     "get_profile",
     "update_profile",
