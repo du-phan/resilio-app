@@ -500,7 +500,7 @@ def run_sync_workflow(
 
                 except Exception as e:
                     result.activities_failed += 1
-                    activity_id = raw_activity.id if raw_activity else raw_activity_dict.get('id', 'unknown')
+                    activity_id = raw_activity.id if raw_activity else activity_summary.get('id', 'unknown')
                     result.warnings.append(
                         f"Failed to process activity {activity_id}: {e}"
                     )

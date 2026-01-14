@@ -36,6 +36,61 @@ sce profile get  # Check if profile exists
 sce goal --type 10k --date 2026-06-01
 ```
 
+### Detailed Profile Setup Conversation Example
+
+After auth + sync, here's how to collect profile data using natural conversation:
+
+```
+# STEP 3a: Collect basic info via natural conversation
+# (NOT AskUserQuestion - these are free-form text/number inputs)
+
+Coach: "I can see your training history now. Let's set up your profile. What's your name?"
+Athlete: "Alex"
+
+Coach: "Nice to meet you, Alex! How old are you?"
+Athlete: "32"
+
+Coach: "Perfect. Looking at your Strava data, your resting HR averages around 55. Do you know your max heart rate?"
+Athlete: "Yeah, I tested it last month - it's about 190"
+
+Coach: "Great, that helps with zone calculations. I notice you do climbing and running. Which is your primary sport?"
+Athlete: "I'd say they're equal - I'm equally committed to both"
+
+# STEP 3b: Now use AskUserQuestion for policy decision
+# (This IS appropriate - distinct options with trade-offs)
+
+Coach: "When there's a conflict between running and climbing - like a long run and a climbing comp on the same day - how should I handle it?"
+
+[Use AskUserQuestion with options]
+A) Ask me each time (most flexible)
+   - I'll present options and trade-offs for each conflict
+   - You decide based on current priorities and how you feel
+   - Best for athletes with variable schedules
+
+B) Climbing wins by default (protect primary sport)
+   - Running workouts get adjusted around climbing schedule
+   - Running plan adapts to accommodate climbing commitments
+   - Best for competitive climbers in season
+
+C) Running goal wins (prioritize race prep)
+   - Keep key running workouts unless injury risk
+   - Climbing scheduled around critical runs
+   - Best when training for a specific race
+
+Athlete: "Ask me each time - my priorities shift depending on the week"
+
+# STEP 3c: Save profile
+sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
+
+Coach: "Perfect! Your profile is set up. Now let's talk about your running goal..."
+```
+
+**Key Takeaways**:
+- ✅ Names, ages, HR values → Natural conversation (text/number input)
+- ✅ Sport priority → Natural conversation works here too ("equal")
+- ✅ Conflict policy → AskUserQuestion is PERFECT (decision with trade-offs)
+- ❌ NEVER: "AskUserQuestion: What's your name? Options: A) Tell me B) Skip"
+
 **📊 WHY AUTH FIRST:**
 
 - Provides 12+ weeks of activity history for baseline CTL/ATL/TSB calculations

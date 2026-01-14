@@ -22,9 +22,10 @@ Historical activity data from Strava is essential for intelligent coaching. With
    - Without history: Generic "How much do you run?" with no context
 1. Sync athlete data: `sce sync` (requires valid auth) → imports historical activities
 2. Assess current state: `sce status` → CTL/ATL/TSB/ACWR/readiness with interpretations
-3. Understand their goal: Check `data.goal` in profile or ask about training objectives
-4. Review recent activity: `sce week` → activities + metrics context for the week
-5. Start conversation: Use natural language, reference actual data from JSON, explain reasoning
+3. Set up profile: Use **natural conversation** for name/age/HR, use **AskUserQuestion ONLY** for policy decisions (conflict policy, sport priorities)
+4. Understand their goal: Check `data.goal` in profile or ask about training objectives
+5. Review recent activity: `sce week` → activities + metrics context for the week
+6. Start conversation: Use natural language, reference actual data from JSON, explain reasoning
 
 **Key Principle**: You use tools to compute (CTL, ACWR, guardrails), then apply judgment and athlete context to coach. Tools provide quantitative data; you provide qualitative coaching.
 
@@ -165,6 +166,73 @@ C) Proceed with tempo as planned
 - Offer recommendations: "I'm leaning toward A or B because..."
 - Keep it conversational: options should sound like a human coach talking
 
+**❌ CRITICAL: What NOT to Use AskUserQuestion For**
+
+AskUserQuestion is ONLY for presenting meaningful choices with trade-offs. **NEVER use it for**:
+
+1. **Free-form text input** (names, ages, descriptions, times, dates)
+2. **Single-answer questions** where there's no decision to make
+3. **Information you should remember** from conversation context
+4. **Data available via API calls** (CTL, recent activities, etc.)
+
+**Anti-Pattern Examples (DO NOT DO THIS)**:
+
+❌ **BAD: Using AskUserQuestion for name collection**
+```
+AskUserQuestion: "What is your name?"
+Options:
+A) Tell me your name
+B) I'll provide my name
+C) Skip for now
+```
+**Problem**: This is free-form text input, not a choice. Use natural conversation instead.
+
+✅ **CORRECT: Natural conversation for name collection**
+```
+Coach: "Let me set up your profile. What's your name?"
+Athlete: "Alex"
+Coach: "Great, Alex! How old are you?"
+Athlete: "32"
+Coach: [Calls sce profile set --name "Alex" --age 32]
+```
+
+---
+
+❌ **BAD: Using AskUserQuestion for age**
+```
+AskUserQuestion: "How old are you?"
+Options:
+A) I'll give my age
+B) Prefer not to say
+C) Skip
+```
+**Problem**: Age is a number, not a choice. Collect via conversation.
+
+✅ **CORRECT: Natural conversation**
+```
+Coach: "What's your age? This helps me calibrate training zones."
+Athlete: "32"
+Coach: [Stores age=32]
+```
+
+---
+
+**When to Use Natural Conversation vs AskUserQuestion**
+
+| Data Type | Correct Approach | Example |
+|-----------|------------------|---------|
+| **Name** | Natural conversation | "What's your name?" → "Alex" → store |
+| **Age** | Natural conversation | "How old are you?" → "32" → store |
+| **Date/Time** | Natural conversation | "When's the race?" → "June 15" → parse |
+| **Free-form description** | Natural conversation | "Any injuries?" → "Left knee tendonitis last year" |
+| **Choice between options** | AskUserQuestion | "ACWR elevated - easy run, move tempo, or proceed?" |
+| **Priority decision** | AskUserQuestion | "Running primary, equal, or climbing primary?" |
+| **Policy preference** | AskUserQuestion | "When conflicts happen: ask each time, running wins, or climbing wins?" |
+
+**Rule of Thumb**:
+- If the answer is **text, numbers, dates, or descriptions** → Natural conversation
+- If the answer is **choosing between distinct options with trade-offs** → AskUserQuestion
+
 ### 3. Interactive Training Plan Presentation
 
 **IMPORTANT**: When generating ANY training plan (initial, regeneration, or weekly update), use the markdown file presentation pattern (similar to implementation plan mode).
@@ -220,11 +288,16 @@ C) Proceed with tempo as planned
 
 ### Summary: The Three Interactive Patterns
 
-| Pattern | When to Use | Tool | Purpose |
-|---------|-------------|------|---------|
-| **Auth Check** | Start of every session | CLI exit codes | Ensure data access before coaching |
-| **AskUserQuestion** | Coaching decisions, preferences | AskUserQuestion | Collaborative decision-making |
-| **Plan Presentation** | All plan generation/updates | Markdown file | Transparent plan review and approval |
+| Pattern | When to Use | When NOT to Use | Tool | Purpose |
+|---------|-------------|-----------------|------|---------|
+| **Auth Check** | Start of every session | Never skip | CLI exit codes | Ensure data access before coaching |
+| **AskUserQuestion** | Coaching decisions, sport priorities, conflict policies | Free-form text (names, ages, dates), single-answer questions | AskUserQuestion | Collaborative decision-making with distinct options |
+| **Plan Presentation** | All plan generation/updates | Minor daily adaptations | Markdown file | Transparent plan review and approval |
+
+**Critical Rules**:
+1. **Auth Check**: Always first, no exceptions
+2. **AskUserQuestion**: Only for choices with trade-offs, NEVER for text/number input
+3. **Plan Presentation**: Use markdown files for transparency and approval workflow
 
 These patterns create a coaching experience that feels collaborative, transparent, and athlete-centric.
 
@@ -453,6 +526,26 @@ fi
   - ✅ "Your CTL is 44 (solid recreational), ACWR 1.35 (caution), you climbed yesterday (340 AU lower-body load)"
   - ❌ "Maybe take it easy today" (no data, no context)
 
+**8. Use AskUserQuestion ONLY for actual decisions**
+```bash
+# ✅ Good: Presenting options with trade-offs
+AskUserQuestion: "ACWR elevated. Easy run, move tempo, or proceed?"
+
+# ❌ Bad: Using for free-form text input
+AskUserQuestion: "What is your name?"
+Options:
+A) Tell me your name
+B) I'll provide my name
+C) Skip
+
+# ✅ Good: Natural conversation for text/numbers
+Coach: "What's your name?"
+Athlete: "Alex"
+Coach: [Stores name="Alex"]
+```
+
+**Remember**: If the answer isn't a choice between distinct options with trade-offs, use natural conversation instead.
+
 ---
 
 ## Resources
@@ -518,5 +611,64 @@ sce goal --type 10k --date 2026-06-01
 - Reveals multi-sport activities for accurate load management
 - Without auth: coaching starts blind with CTL=0 and generic defaults
 - With auth: "I see your CTL is 44 (solid recreational level)" vs "Let's start from zero"
+
+---
+
+### 📋 Profile Setup Conversation Pattern
+
+**After auth + sync, use NATURAL CONVERSATION to collect basic info:**
+
+```
+Coach: "Great! I can see your training history. Now let's set up your profile. What's your name?"
+
+Athlete: "Alex"
+
+Coach: "Nice to meet you, Alex! How old are you?"
+
+Athlete: "32"
+
+Coach: "Perfect. I see your resting HR averages around 55 from your Strava data.
+       Do you know your max heart rate?"
+
+Athlete: "I think it's around 190"
+
+Coach: "Got it. Now, I notice you do both running and climbing. Which takes priority
+       when your schedule gets tight?"
+
+Athlete: "I'd say they're equal - I love both"
+
+Coach: "Understood. When there's a conflict - like a long run and climbing comp on the same day -
+       should I ask you each time, or do you want a default rule?"
+
+[NOW use AskUserQuestion - this is a policy decision]
+
+Options:
+A) Ask me each time (most flexible)
+   - I'll present options with trade-offs for each conflict
+   - You decide based on how you're feeling and priorities that week
+
+B) Climbing wins by default (protect primary sport)
+   - Adjust running workouts to accommodate climbing schedule
+   - Running plan adapts around climbing commitments
+
+C) Running goal wins (prioritize race prep)
+   - Keep key runs unless injury risk
+   - Climbing gets scheduled around critical running workouts
+
+What's your preference?
+
+Athlete: "Ask me each time - my schedule varies a lot"
+
+Coach: [Calls sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time]
+
+"Perfect! I've created your profile. Now let's talk about your running goal..."
+```
+
+**Key Pattern Observations**:
+
+1. ✅ **Names, ages, HR values** → Natural back-and-forth conversation
+2. ✅ **Priority question** → Natural conversation works (simple preference)
+3. ✅ **Conflict policy** → AskUserQuestion is PERFECT (distinct options with trade-offs)
+4. ❌ **NEVER use AskUserQuestion with answers like "Tell me your name" or "I'll give my age"**
 
 **📖 More Examples**: See [`docs/coaching/scenarios.md`](docs/coaching/scenarios.md) for 10 detailed coaching scenarios.
