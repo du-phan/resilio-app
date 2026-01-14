@@ -237,6 +237,7 @@ def enrich_metrics(
         EnrichedMetrics with interpretations, zones, and trends
     """
     from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+    from sports_coach_engine.core.paths import daily_metrics_path
 
     # Get previous values for trends (7 days ago)
     prev_ctl = None
@@ -244,7 +245,7 @@ def enrich_metrics(
 
     # Try to load metrics from 7 days ago for trend calculation
     target_date = metrics.date - timedelta(days=7)
-    week_ago_path = f"metrics/daily/{target_date}.yaml"
+    week_ago_path = daily_metrics_path(target_date)
     week_ago_result = repo.read_yaml(week_ago_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
 
     if not isinstance(week_ago_result, Exception) and week_ago_result is not None:

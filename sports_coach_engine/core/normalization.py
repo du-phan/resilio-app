@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Optional
 
 from sports_coach_engine.core.notes import detect_treadmill
+from sports_coach_engine.core.paths import activities_month_dir
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.activity import (
     DataQuality,
@@ -451,9 +452,9 @@ def generate_activity_filename(
     Returns:
         Relative file path from repo root
     """
-    # Base directory: activities/YYYY-MM/
+    # Base directory: data/activities/YYYY-MM/
     year_month = activity.date.strftime("%Y-%m")
-    base_dir = f"activities/{year_month}"
+    base_dir = activities_month_dir(year_month)
 
     # Date prefix: YYYY-MM-DD
     date_str = activity.date.strftime("%Y-%m-%d")

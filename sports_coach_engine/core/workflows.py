@@ -30,10 +30,18 @@ from pathlib import Path
 from typing import Any, Optional
 
 from sports_coach_engine.core.config import load_config, Config
+from sports_coach_engine.core.paths import (
+    athlete_training_history_path,
+    daily_metrics_path,
+    current_plan_path,
+    plan_archive_dir,
+    activity_path,
+)
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.core.profile import ProfileService
 from sports_coach_engine.core.strava import (
     fetch_activities,
+    map_strava_to_raw,
     StravaAuthError,
     StravaRateLimitError,
     StravaAPIError,
@@ -398,7 +406,7 @@ def run_sync_workflow(
         try:
             # Step 1: Fetch activities from Strava (M5)
             print(f"[Sync] Fetching activities from Strava (since={since})...")
-            raw_activities = fetch_activities(repo, config, since=since)
+            raw_activities = fetch_activities(config, after=since)
 
             if not raw_activities:
                 result.success = True
@@ -408,8 +416,12 @@ def run_sync_workflow(
             print(f"[Sync] Fetched {len(raw_activities)} activities")
 
             # Step 2-8: Process each activity through pipeline
-            for raw_activity in raw_activities:
+            for raw_activity_dict in raw_activities:
+                raw_activity = None  # Initialize for error handling
                 try:
+                    # Map Strava dict to RawActivity
+                    raw_activity = map_strava_to_raw(raw_activity_dict)
+
                     # M6: Normalize
                     normalized = normalize_activity(raw_activity, repo)
 
@@ -432,7 +444,7 @@ def run_sync_workflow(
                     # Save normalized activity
                     activity_path = _get_activity_path(normalized)
                     txn.record_create(activity_path)
-                    repo.write_yaml(activity_path, normalized.model_dump())
+                    repo.write_yaml(activity_path, normalized)
 
                     result.activities_imported.append(normalized)
 
@@ -472,8 +484,9 @@ def run_sync_workflow(
 
                 except Exception as e:
                     result.activities_failed += 1
+                    activity_id = raw_activity.id if raw_activity else raw_activity_dict.get('id', 'unknown')
                     result.warnings.append(
-                        f"Failed to process activity {raw_activity.id}: {e}"
+                        f"Failed to process activity {activity_id}: {e}"
                     )
                     continue
 
@@ -485,7 +498,7 @@ def run_sync_workflow(
                 for activity_date in sorted(unique_dates):
                     try:
                         metrics = compute_daily_metrics(activity_date, repo)
-                        metrics_path = f"metrics/daily/{activity_date.isoformat()}.yaml"
+                        metrics_path = daily_metrics_path(activity_date)
                         repo.write_yaml(metrics_path, metrics.model_dump())
                         result.metrics_updated = metrics  # Keep latest
                     except Exception as e:
@@ -494,7 +507,7 @@ def run_sync_workflow(
                         )
 
             # Step 10: Update last_sync_at
-            training_history_path = "athlete/training_history.yaml"
+            training_history_path = athlete_training_history_path()
             if repo.file_exists(training_history_path):
                 history = repo.read_yaml(training_history_path, schema=None)
             else:
@@ -502,7 +515,7 @@ def run_sync_workflow(
 
             history["last_strava_sync_at"] = datetime.now(timezone.utc).isoformat()
             if raw_activities:
-                history["last_strava_activity_id"] = raw_activities[-1].id
+                history["last_strava_activity_id"] = raw_activities[-1]['id']
 
             repo.write_yaml(training_history_path, history)
 
@@ -568,7 +581,7 @@ def run_metrics_refresh(
         metrics = compute_daily_metrics(target_date, repo)
 
         # Save metrics
-        metrics_path = f"metrics/daily/{target_date.isoformat()}.yaml"
+        metrics_path = daily_metrics_path(target_date)
         repo.write_yaml(metrics_path, metrics.model_dump())
 
         result.success = True
@@ -622,13 +635,13 @@ def run_plan_generation(
             profile_service.save_profile(profile)
 
         # Archive old plan if exists
-        current_plan_path = "plans/current_plan.yaml"
-        if repo.file_exists(current_plan_path):
+        plan_path = current_plan_path()
+        if repo.file_exists(plan_path):
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            archive_path = f"plans/archive/plan_{timestamp}.yaml"
-            repo.ensure_directory("plans/archive")
+            archive_path = f"{plan_archive_dir()}/plan_{timestamp}.yaml"
+            repo.ensure_directory(plan_archive_dir())
 
-            old_plan = repo.read_yaml(current_plan_path, schema=None)
+            old_plan = repo.read_yaml(plan_path, schema=None)
             repo.write_yaml(archive_path, old_plan)
             result.archived_plan_path = archive_path
             print(f"[PlanGen] Archived old plan to {archive_path}")
@@ -693,7 +706,7 @@ def run_adaptation_check(
         print(f"[AdaptCheck] Checking adaptations for {target_date}...")
 
         # Load metrics (M9)
-        metrics_path = f"metrics/daily/{target_date.isoformat()}.yaml"
+        metrics_path = daily_metrics_path(target_date)
         if not repo.file_exists(metrics_path):
             result.success = True
             result.warnings.append("No metrics found for target date")
@@ -846,7 +859,7 @@ def run_manual_activity_workflow(
 
         # M9: Recompute metrics for activity date
         metrics = compute_daily_metrics(activity_date, repo)
-        metrics_path = f"metrics/daily/{activity_date.isoformat()}.yaml"
+        metrics_path = daily_metrics_path(activity_date)
         repo.write_yaml(metrics_path, metrics)
 
         result.success = True
@@ -893,4 +906,4 @@ def _get_activity_path(activity: NormalizedActivity) -> str:
     sport_str = activity.sport_type.lower().replace("_", "")
     filename = f"{date_str}_{sport_str}_{time_str}.yaml"
 
-    return f"activities/{year_month}/{filename}"
+    return activity_path(year_month, filename)

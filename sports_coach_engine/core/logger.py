@@ -33,6 +33,12 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Optional
 
+from sports_coach_engine.core.paths import (
+    transcripts_dir,
+    summaries_dir,
+    transcript_path,
+    summary_path,
+)
 from sports_coach_engine.core.repository import RepositoryIO
 
 
@@ -583,7 +589,7 @@ def _search_content(
     while current_date <= end_date and len(results) < limit:
         # Get all session transcripts for this date
         year_month = current_date.strftime("%Y-%m")
-        transcripts_dir = f"conversations/transcripts/{year_month}"
+        transcripts_dir = transcripts_dir(year_month)
 
         if repo.directory_exists(transcripts_dir):
             try:
@@ -666,7 +672,7 @@ def _cleanup_transcripts_before(
     current_date = cutoff_date - timedelta(days=60)  # Look back 2 months
     while current_date <= cutoff_date:
         year_month = current_date.strftime("%Y-%m")
-        transcripts_dir = f"conversations/transcripts/{year_month}"
+        transcripts_dir = transcripts_dir(year_month)
 
         if repo.directory_exists(transcripts_dir):
             try:
@@ -701,7 +707,7 @@ def _cleanup_summaries_before(
     current_date = cutoff_date - timedelta(days=180)  # Look back 6 months
     while current_date <= cutoff_date:
         year_month = current_date.strftime("%Y-%m")
-        summaries_dir = f"conversations/summaries/{year_month}"
+        summaries_dir = summaries_dir(year_month)
 
         if repo.directory_exists(summaries_dir):
             try:
@@ -733,9 +739,9 @@ def _cleanup_summaries_before(
 def _get_next_session_number(repo: RepositoryIO, target_date: date) -> int:
     """Get next available session number for a date."""
     year_month = target_date.strftime("%Y-%m")
-    transcripts_dir = f"conversations/transcripts/{year_month}"
+    trans_dir = transcripts_dir(year_month)
 
-    if not repo.directory_exists(transcripts_dir):
+    if not repo.directory_exists(trans_dir):
         return 1
 
     # Find existing sessions for this date
@@ -768,7 +774,7 @@ def _get_transcript_path(session_id: str) -> str:
     session_date = datetime.fromisoformat(date_str).date()
     year_month = session_date.strftime("%Y-%m")
 
-    return f"conversations/transcripts/{year_month}/{session_id}.jsonl"
+    return transcript_path(year_month, session_id)
 
 
 def _get_summary_path(target_date: date) -> str:
@@ -776,7 +782,7 @@ def _get_summary_path(target_date: date) -> str:
     year_month = target_date.strftime("%Y-%m")
     date_str = target_date.isoformat()
 
-    return f"conversations/summaries/{year_month}/{date_str}_summary.json"
+    return summary_path(year_month, date_str)
 
 
 def _generate_summary(

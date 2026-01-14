@@ -119,9 +119,9 @@ For exploration or custom queries, use RepositoryIO directly:
 from sports_coach_engine.core.repository import RepositoryIO
 
 repo = RepositoryIO()
-profile = repo.read_yaml("athlete/profile.yaml")
-activities = repo.list_files("activities/**/*.yaml")
-raw_metrics = repo.read_yaml("metrics/daily/2026-01-12.yaml")
+profile = repo.read_yaml("data/athlete/profile.yaml")
+activities = repo.list_files("data/activities/**/*.yaml")
+raw_metrics = repo.read_yaml("data/metrics/daily/2026-01-12.yaml")
 ```
 
 ## Coaching Guidelines
@@ -472,12 +472,13 @@ The technical spec defines 14 modules. Claude Code calls the API layer, which in
 **Directory structure** (created on first use):
 
 ```
-athlete/                 # Profile, memories, training history
-activities/YYYY-MM/      # Activity files organized by month
-metrics/                 # Daily and weekly computed metrics
-plans/                   # Current plan and workouts
-conversations/           # Session transcripts
-config/                  # Settings and secrets
+data/                          # All user data (centralized)
+  athlete/                     # Profile, memories, training history
+  activities/YYYY-MM/          # Activity files organized by month
+  metrics/                     # Daily and weekly computed metrics
+  plans/                       # Current plan and workouts
+  conversations/               # Session transcripts
+config/                        # Settings and secrets (at root)
 ```
 
 #### 2. Adoption-First Design (Minimize User Effort)

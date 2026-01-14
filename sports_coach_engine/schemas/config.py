@@ -35,12 +35,12 @@ class ConfigErrorType(str, Enum):
 class PathSettings(BaseModel):
     """File path configuration (relative to repo root)."""
 
-    athlete_dir: str = "athlete"
-    activities_dir: str = "activities"
-    metrics_dir: str = "metrics"
-    plans_dir: str = "plans"
-    conversations_dir: str = "conversations"
-    backup_dir: str = "backup"
+    athlete_dir: str = "data/athlete"
+    activities_dir: str = "data/activities"
+    metrics_dir: str = "data/metrics"
+    plans_dir: str = "data/plans"
+    conversations_dir: str = "data/conversations"
+    backup_dir: str = "data/backup"
 
 
 class StravaSettings(BaseModel):

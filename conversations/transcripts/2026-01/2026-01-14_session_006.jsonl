@@ -1,2 +1,0 @@
-{"timestamp": "2026-01-14T10:25:31.736722+00:00", "role": "user", "content": "get_training_status()", "metadata": {}}
-{"timestamp": "2026-01-14T10:25:31.738180+00:00", "role": "system", "content": "Training status: CTL=0, TSB=+0, readiness=45/100", "metadata": {}}

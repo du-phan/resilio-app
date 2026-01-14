@@ -9,6 +9,12 @@ from datetime import date, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass, field
 
+from sports_coach_engine.core.paths import (
+    daily_metrics_path,
+    athlete_profile_path,
+    current_plan_path,
+    activities_month_dir,
+)
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_adaptation_check, WorkflowError
@@ -180,7 +186,7 @@ def get_todays_workout(
             )
 
     # Load metrics and profile for enrichment
-    metrics_path = f"metrics/daily/{target_date}.yaml"
+    metrics_path = daily_metrics_path(target_date)
     metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
 
     if isinstance(metrics_result, RepoError) or metrics_result is None:
@@ -198,7 +204,7 @@ def get_todays_workout(
     metrics = metrics_result
 
     # Load profile
-    profile_path = "athlete/profile.yaml"
+    profile_path = athlete_profile_path()
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
     if isinstance(profile_result, RepoError):
@@ -299,7 +305,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
 
     # Load current plan to count planned workouts
     planned_workouts = 0
-    plan_path = "plans/current_plan.yaml"
+    plan_path = current_plan_path()
     plan_result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, validate=True))
 
     if isinstance(plan_result, RepoError):
@@ -320,7 +326,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
 
     for i in range(7):
         check_date = week_start + timedelta(days=i)
-        activity_dir = f"activities/{check_date.strftime('%Y-%m')}"
+        activity_dir = activities_month_dir(check_date.strftime('%Y-%m'))
         activity_files = repo.list_files(f"{activity_dir}/*.yaml")
 
         for activity_file in activity_files:
@@ -364,7 +370,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     ctl_change = None
     tsb_change = None
 
-    metrics_path = f"metrics/daily/{today}.yaml"
+    metrics_path = daily_metrics_path(today)
     metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
 
     if not isinstance(metrics_result, RepoError) and metrics_result is not None:
@@ -374,7 +380,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
             current_readiness = metrics_result.readiness.score
 
         # Calculate week-over-week changes
-        week_ago_path = f"metrics/daily/{today - timedelta(days=7)}.yaml"
+        week_ago_path = daily_metrics_path(today - timedelta(days=7))
         week_ago_result = repo.read_yaml(
             week_ago_path,
             DailyMetrics,
@@ -463,7 +469,7 @@ def get_training_status() -> Union[EnrichedMetrics, CoachError]:
         )
 
     # Load metrics
-    metrics_path = f"metrics/daily/{latest_metrics_date}.yaml"
+    metrics_path = daily_metrics_path(latest_metrics_date)
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
 
     if isinstance(result, RepoError):
@@ -521,7 +527,7 @@ def _find_latest_metrics_date(repo: RepositoryIO) -> Optional[date]:
     today = date.today()
     for i in range(30):
         check_date = today - timedelta(days=i)
-        metrics_path = f"metrics/daily/{check_date}.yaml"
+        metrics_path = daily_metrics_path(check_date)
         resolved_path = repo.resolve_path(metrics_path)
         if resolved_path.exists():
             return check_date

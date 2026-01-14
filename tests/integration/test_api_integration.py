@@ -9,6 +9,14 @@ from datetime import date, timedelta, datetime
 from pathlib import Path
 
 from sports_coach_engine.core.repository import RepositoryIO
+from sports_coach_engine.core.paths import (
+    get_athlete_dir,
+    get_activities_dir,
+    get_metrics_dir,
+    get_plans_dir,
+    get_conversations_dir,
+    athlete_profile_path,
+)
 from sports_coach_engine.schemas.config import Config, Settings, Secrets, StravaSecrets
 from sports_coach_engine.api.sync import sync_strava, log_activity, SyncError
 from sports_coach_engine.api.coach import get_todays_workout, get_weekly_status, get_training_status, CoachError
@@ -32,13 +40,13 @@ def integration_repo(tmp_path):
     repo.repo_root = tmp_path
 
     # Create directory structure
-    repo.ensure_directory("athlete")
-    repo.ensure_directory("activities")
-    repo.ensure_directory("metrics/daily")
-    repo.ensure_directory("plans")
+    repo.ensure_directory(get_athlete_dir())
+    repo.ensure_directory(get_activities_dir())
+    repo.ensure_directory(f"{get_metrics_dir()}/daily")
+    repo.ensure_directory(get_plans_dir())
     repo.ensure_directory("config")
-    repo.ensure_directory("conversations/transcripts")
-    repo.ensure_directory("conversations/summaries")
+    repo.ensure_directory(f"{get_conversations_dir()}/transcripts")
+    repo.ensure_directory(f"{get_conversations_dir()}/summaries")
 
     # Create minimal profile
     today = date.today()
@@ -59,7 +67,7 @@ def integration_repo(tmp_path):
             target_time=None,
         ),
     )
-    repo.write_yaml("athlete/profile.yaml", profile)
+    repo.write_yaml(athlete_profile_path(), profile)
 
     # Create minimal config
     config = Config(

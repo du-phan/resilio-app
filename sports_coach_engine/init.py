@@ -75,7 +75,7 @@ strava:
     print("✅ Data directory initialized successfully!")
     print()
     print("Next steps:")
-    print("1. Edit data/config/secrets.local.yaml with your Strava credentials")
+    print("1. Edit config/secrets.local.yaml with your Strava credentials")
     print("2. Run: python -m sports_coach_engine.strava_connect (when implemented)")
     print()
 

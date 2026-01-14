@@ -9,6 +9,7 @@ from datetime import date
 from typing import Optional, Union
 from dataclasses import dataclass
 
+from sports_coach_engine.core.paths import current_plan_path, athlete_profile_path
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_plan_generation, WorkflowError
@@ -111,7 +112,7 @@ def get_current_plan() -> Union[MasterPlan, PlanError]:
     log_message(repo, MessageRole.USER, "get_current_plan()")
 
     # Load current plan
-    plan_path = "plans/current_plan.yaml"
+    plan_path = "current_plan_path()"
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, validate=True))
 
     if result is None:
@@ -201,7 +202,7 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
 
     # Update profile with new goal if provided
     if goal:
-        profile_path = "athlete/profile.yaml"
+        profile_path = "athlete_profile_path()"
         profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
         if isinstance(profile_result, RepoError):

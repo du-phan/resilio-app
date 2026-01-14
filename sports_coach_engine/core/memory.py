@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+from sports_coach_engine.core.paths import athlete_memories_path
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.memory import (
     ArchivedMemory,
@@ -44,7 +45,7 @@ def _read_memories_yaml(repo: RepositoryIO) -> dict:
 
     Returns empty structure if file doesn't exist.
     """
-    path = repo.resolve_path("athlete/memories.yaml")
+    path = repo.resolve_path(athlete_memories_path())
 
     if not path.exists():
         return {
@@ -66,7 +67,7 @@ def _write_memories_yaml(repo: RepositoryIO, data: dict) -> None:
 
     Uses atomic write (temp file + rename).
     """
-    path = repo.resolve_path("athlete/memories.yaml")
+    path = repo.resolve_path(athlete_memories_path())
     path.parent.mkdir(parents=True, exist_ok=True)
 
     # Atomic write

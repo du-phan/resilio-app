@@ -9,6 +9,7 @@ from datetime import date
 from typing import Optional, Union, Any
 from dataclasses import dataclass
 
+from sports_coach_engine.core.paths import athlete_profile_path
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 from sports_coach_engine.core.logger import log_message, MessageRole
@@ -39,7 +40,7 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
     Get current athlete profile.
 
     Workflow:
-    1. Load profile from athlete/profile.yaml
+    1. Load profile from athlete_profile_path()
     2. Log operation via M14
     3. Return profile
 
@@ -71,7 +72,7 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
     log_message(repo, MessageRole.USER, "get_profile()")
 
     # Load profile
-    profile_path = "athlete/profile.yaml"
+    profile_path = "athlete_profile_path()"
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
     if isinstance(result, RepoError):
@@ -145,7 +146,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
     log_message(repo, MessageRole.USER, f"update_profile(fields={field_names})")
 
     # Load current profile
-    profile_path = "athlete/profile.yaml"
+    profile_path = "athlete_profile_path()"
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
     if isinstance(result, RepoError):
@@ -290,7 +291,7 @@ def set_goal(
     )
 
     # Update profile with new goal
-    profile_path = "athlete/profile.yaml"
+    profile_path = "athlete_profile_path()"
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(validate=True))
 
     if isinstance(profile_result, RepoError):

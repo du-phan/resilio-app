@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass
 
+from sports_coach_engine.core.paths import daily_metrics_path
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.enrichment import enrich_metrics
@@ -96,7 +97,7 @@ def get_current_metrics() -> Union[EnrichedMetrics, MetricsError]:
         )
 
     # Load metrics
-    metrics_path = f"metrics/daily/{latest_metrics_date}.yaml"
+    metrics_path = daily_metrics_path(latest_metrics_date)
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
 
     if isinstance(result, RepoError):
@@ -192,7 +193,7 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
         )
 
     # Load metrics
-    metrics_path = f"metrics/daily/{latest_metrics_date}.yaml"
+    metrics_path = daily_metrics_path(latest_metrics_date)
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(validate=True))
 
     if isinstance(result, RepoError):
@@ -283,7 +284,7 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
     today = date.today()
     for i in range(days):
         target_date = today - timedelta(days=i)
-        metrics_path = f"metrics/daily/{target_date}.yaml"
+        metrics_path = daily_metrics_path(target_date)
         result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, validate=True))
 
         if result is None:
@@ -382,7 +383,7 @@ def _find_latest_metrics_date(repo: RepositoryIO) -> Optional[date]:
     today = date.today()
     for i in range(30):
         check_date = today - timedelta(days=i)
-        metrics_path = f"metrics/daily/{check_date}.yaml"
+        metrics_path = daily_metrics_path(check_date)
         resolved_path = repo.resolve_path(metrics_path)
         if resolved_path.exists():
             return check_date

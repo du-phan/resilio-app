@@ -1,4 +1,0 @@
-{"timestamp": "2026-01-14T10:17:44.115996+00:00", "role": "user", "content": "regenerate_plan(goal=half_marathon, target_date=2026-04-08)", "metadata": {}}
-{"timestamp": "2026-01-14T10:17:44.116402+00:00", "role": "system", "content": "Failed to load profile: <sports_coach_engine.schemas.repository.RepoError object at 0x105d15520>", "metadata": {}}
-{"timestamp": "2026-01-14T10:17:44.119058+00:00", "role": "user", "content": "regenerate_plan(goal=half_marathon, target_date=2026-04-08)", "metadata": {}}
-{"timestamp": "2026-01-14T10:17:44.119145+00:00", "role": "system", "content": "Failed to load profile: <sports_coach_engine.schemas.repository.RepoError object at 0x105dd9220>", "metadata": {}}

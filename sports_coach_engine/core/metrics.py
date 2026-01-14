@@ -19,6 +19,11 @@ from unrelated activities like climbing or upper-body work.
 from typing import Optional
 from datetime import date, datetime, timedelta
 
+from sports_coach_engine.core.paths import (
+    activities_month_dir,
+    daily_metrics_path,
+    weekly_metrics_summary_path,
+)
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.activity import (
     NormalizedActivity,
@@ -195,7 +200,7 @@ def compute_daily_metrics(
     )
 
     # Step 7: Persist to disk
-    metrics_path = f"metrics/daily/{target_date.isoformat()}.yaml"
+    metrics_path = daily_metrics_path(target_date)
     result = repo.write_yaml(metrics_path, daily_metrics)
 
     if result is not None:
@@ -319,7 +324,7 @@ def compute_weekly_summary(
     )
 
     # Persist to disk
-    summary_path = "metrics/weekly_summary.yaml"
+    summary_path = weekly_metrics_summary_path()
     result = repo.write_yaml(summary_path, weekly_summary)
 
     if result is not None:
@@ -354,7 +359,7 @@ def aggregate_daily_load(
     # Build path pattern: activities/{YYYY-MM}/{YYYY-MM-DD}_*.yaml
     year_month = f"{target_date.year}-{target_date.month:02d}"
     date_str = target_date.isoformat()
-    pattern = f"activities/{year_month}/{date_str}_*.yaml"
+    pattern = f"{activities_month_dir(year_month)}/{date_str}_*.yaml"
 
     # Find all matching activity files
     activity_files = repo.list_files(pattern)
@@ -875,7 +880,7 @@ def validate_metrics(metrics: DailyMetrics) -> list[str]:
 
 def _read_previous_metrics(target_date: date, repo: RepositoryIO) -> Optional[DailyMetrics]:
     """Read daily metrics for a specific date."""
-    metrics_path = f"metrics/daily/{target_date.isoformat()}.yaml"
+    metrics_path = daily_metrics_path(target_date)
     result = repo.read_yaml(metrics_path, DailyMetrics)
 
     # repo.read_yaml returns RepoError if file doesn't exist
@@ -890,7 +895,7 @@ def _read_activities_for_date(target_date: date, repo: RepositoryIO) -> list[Nor
     """Read all activities for a specific date."""
     year_month = f"{target_date.year}-{target_date.month:02d}"
     date_str = target_date.isoformat()
-    pattern = f"activities/{year_month}/{date_str}_*.yaml"
+    pattern = f"{activities_month_dir(year_month)}/{date_str}_*.yaml"
 
     activity_files = repo.list_files(pattern)
     activities = []

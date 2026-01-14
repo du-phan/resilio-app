@@ -1,8 +1,0 @@
-{"timestamp": "2026-01-14T10:28:16.333600+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.334309+00:00", "role": "system", "content": "Returned profile: Test Athlete, goal=half_marathon", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.334434+00:00", "role": "user", "content": "get_training_status()", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.336046+00:00", "role": "system", "content": "Training status: CTL=6, TSB=-29, readiness=23/100", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.336177+00:00", "role": "user", "content": "get_weekly_status()", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.345733+00:00", "role": "system", "content": "Weekly status: 1/0 workouts, 45 minutes, CTL=6.5", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.345897+00:00", "role": "user", "content": "get_todays_workout(date=2026-01-14)", "metadata": {}}
-{"timestamp": "2026-01-14T10:28:16.347526+00:00", "role": "system", "content": "No workout for 2026-01-14: No workout available", "metadata": {}}

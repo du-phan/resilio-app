@@ -43,6 +43,11 @@ from sports_coach_engine.schemas.plan import (
     WeekPlan,
     MasterPlan,
 )
+from sports_coach_engine.core.paths import (
+    current_plan_path,
+    plan_workouts_dir,
+    get_plans_dir,
+)
 from sports_coach_engine.core.repository import RepositoryIO
 
 
@@ -1193,13 +1198,13 @@ def persist_plan(plan: MasterPlan, repo: Optional[RepositoryIO] = None) -> None:
         repo = RepositoryIO()
 
     # Write master plan metadata
-    error = repo.write_yaml("plans/current_plan.yaml", plan)
+    error = repo.write_yaml(current_plan_path(), plan)
     if error:
         raise RuntimeError(f"Failed to write master plan: {error.message}")
 
     # Write individual workouts
     for week in plan.weeks:
-        week_dir = f"plans/workouts/week_{week.week_number:02d}"
+        week_dir = plan_workouts_dir(week.week_number)
 
         for workout in week.workouts:
             # Generate filename: "monday_tempo.yaml", "sunday_long_run.yaml"
@@ -1254,7 +1259,7 @@ def archive_current_plan(reason: str, repo: Optional[RepositoryIO] = None) -> Op
     archive_info = {
         "archived_at": timestamp,
         "reason": reason,
-        "original_path": "plans/",
+        "original_path": f"{get_plans_dir()}/",
     }
     archive_info_path = archive_dir.parent / f"{archive_name}_info.yaml"
     with open(archive_info_path, "w") as f:

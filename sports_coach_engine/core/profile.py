@@ -9,6 +9,7 @@ import math
 from typing import Optional, Union, List
 from enum import Enum
 
+from sports_coach_engine.core.paths import athlete_profile_path
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.profile import (
     AthleteProfile,
@@ -74,7 +75,7 @@ class ProfileService:
             or ProfileError on failure
         """
         result = self.repo.read_yaml(
-            "athlete/profile.yaml", AthleteProfile, ReadOptions(allow_missing=True)
+            "athlete_profile_path()", AthleteProfile, ReadOptions(allow_missing=True)
         )
 
         if isinstance(result, RepoError):
@@ -94,7 +95,7 @@ class ProfileService:
         Returns:
             None on success, ProfileError on failure
         """
-        result = self.repo.write_yaml("athlete/profile.yaml", profile)
+        result = self.repo.write_yaml("athlete_profile_path()", profile)
 
         if isinstance(result, RepoError):
             return ProfileError(
@@ -154,7 +155,7 @@ class ProfileService:
         """
         from pathlib import Path
 
-        profile_path = self.repo.resolve_path("athlete/profile.yaml")
+        profile_path = self.repo.resolve_path("athlete_profile_path()")
 
         if not profile_path.exists():
             return ProfileError(

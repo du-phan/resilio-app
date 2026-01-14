@@ -1,4 +1,0 @@
-{"timestamp": "2026-01-14T10:27:56.456215+00:00", "role": "user", "content": "log_activity(sport_type=running, duration=45min, rpe=6, date=2026-01-14)", "metadata": {}}
-{"timestamp": "2026-01-14T10:27:56.462415+00:00", "role": "system", "content": "Logged run: 270 AU systemic, 243 AU lower-body", "metadata": {}}
-{"timestamp": "2026-01-14T10:27:56.462545+00:00", "role": "user", "content": "get_training_status()", "metadata": {}}
-{"timestamp": "2026-01-14T10:27:56.463771+00:00", "role": "system", "content": "Training status: CTL=6, TSB=-29, readiness=23/100", "metadata": {}}

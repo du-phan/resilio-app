@@ -99,7 +99,7 @@ def sync_strava(
     """
     # Initialize repository and config
     repo = RepositoryIO()
-    config_result = load_config(repo)
+    config_result = load_config(repo.repo_root)
     if isinstance(config_result, RepoError):
         log_message(
             repo,
