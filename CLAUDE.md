@@ -52,28 +52,34 @@ poetry run sce auth status       # Check if token is valid
 poetry run sce init
 
 # 2. Import activities (requires valid auth)
-poetry run sce sync              # Sync all activities
+poetry run sce sync              # Sync all activities (with proper pagination)
 poetry run sce sync --since 14d  # Sync last 14 days
 
-# 3. Assess current state
+# 3. Manage metrics (offline operations)
+poetry run sce metrics recompute                    # Recompute all metrics from disk
+poetry run sce metrics recompute --start 2025-06-01 # Recompute from specific date
+# Use cases: Fix metric bugs, backfill rest days, regenerate after manual edits
+# NO Strava API calls - completely offline
+
+# 4. Assess current state
 poetry run sce status            # Get CTL/ATL/TSB/ACWR/readiness
 poetry run sce week              # Get weekly summary
 
-# 4. Get today's workout
+# 5. Get today's workout
 poetry run sce today             # Today's workout with full context
 poetry run sce today --date 2026-01-20  # Specific date
 
-# 5. Manage goals and profile
+# 6. Manage goals and profile
 poetry run sce goal --type 10k --date 2026-06-01
 poetry run sce profile get
 poetry run sce profile create --name "Alex" --age 32  # For NEW profiles
 poetry run sce profile set --max-hr 190              # For UPDATING existing profiles
 
-# 6. View training plan
+# 7. View training plan
 poetry run sce plan show         # Get current plan
 poetry run sce plan regen        # Regenerate plan
 
-# 7. Populate plan workouts
+# 8. Populate plan workouts
 poetry run sce plan populate --from-json /tmp/plan_workouts.json       # Full replace
 poetry run sce plan update-week --week 5 --from-json week5.json         # Update single week
 poetry run sce plan update-from --week 6 --from-json weeks6-10.json     # Update from week N onwards
