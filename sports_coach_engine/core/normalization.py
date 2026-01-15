@@ -172,6 +172,11 @@ def normalize_activity(
         round(raw.distance_meters / 1000, 2) if raw.distance_meters else None
     )
 
+    # Compute day of week from date (0=Monday, ..., 6=Sunday per ISO 8601)
+    day_of_week = raw.date.weekday()
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_of_week_name = day_names[day_of_week]
+
     # Create normalized activity
     now = datetime.now(timezone.utc)
     normalized = NormalizedActivity(
@@ -183,6 +188,8 @@ def normalize_activity(
         sub_type=raw.sub_type,
         name=raw.name,
         date=raw.date,
+        day_of_week=day_of_week,
+        day_of_week_name=day_of_week_name,
         start_time=raw.start_time,
         duration_minutes=duration_minutes,
         duration_seconds=raw.duration_seconds,

@@ -13,6 +13,7 @@ import typer
 from sports_coach_engine.api import sync_strava
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import output_json
+from sports_coach_engine.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
 
 
 def sync_command(
@@ -22,21 +23,37 @@ def sync_command(
         "--since",
         help="Sync activities since (e.g., '14d' for 14 days, or '2026-01-01')",
     ),
+    all_history: bool = typer.Option(
+        False,
+        "--all",
+        help="Sync ALL historical activities (overrides default 120-day window)",
+    ),
 ) -> None:
     """Import activities from Strava and update metrics.
 
     Fetches activities from Strava, normalizes sport types, calculates RPE estimates,
     computes training loads, and updates daily/weekly metrics.
 
+    By default, syncs the last 120 days (optimal for CTL accuracy and training patterns).
+    Use --all to fetch complete history, or --since to specify a custom window.
+
     Examples:
-        sce sync                    # Sync all activities
+        sce sync                    # Sync last 120 days (recommended default)
+        sce sync --all              # Sync ALL historical activities
         sce sync --since 14d        # Sync last 14 days
         sce sync --since 2026-01-01 # Sync since specific date
     """
     # Parse since parameter
     since_dt: Optional[datetime] = None
-    if since:
+    if all_history:
+        # Explicit --all flag: fetch all history (since=None)
+        since_dt = None
+    elif since:
+        # Explicit --since: use provided value
         since_dt = _parse_since_param(since)
+    else:
+        # Default: use 120-day window (optimal for CTL accuracy)
+        since_dt = datetime.now() - timedelta(days=DEFAULT_SYNC_LOOKBACK_DAYS)
 
     # Call API
     result = sync_strava(since=since_dt)

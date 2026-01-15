@@ -86,6 +86,9 @@ STRAVA_AUTHORIZE_URL = "https://www.strava.com/oauth/authorize"
 STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_API_BASE = "https://www.strava.com/api/v3"
 
+# Sync window defaults
+DEFAULT_SYNC_LOOKBACK_DAYS = 120  # 4 months - optimal for CTL accuracy (2.86× time constant)
+
 # Rate limits (Strava defaults)
 DEFAULT_RETRY_ATTEMPTS = 3
 DEFAULT_WAIT_BETWEEN_REQUESTS = 1.0  # seconds
@@ -456,7 +459,7 @@ def fetch_athlete_profile(config: Config) -> Optional[dict]:
 
 def sync_strava(
     config: Optional[Config] = None,
-    lookback_days: int = 30,
+    lookback_days: int = DEFAULT_SYNC_LOOKBACK_DAYS,
 ) -> tuple[list[RawActivity], SyncResult]:
     """
     Sync activities from Strava.
@@ -466,7 +469,7 @@ def sync_strava(
 
     Args:
         config: Configuration (loads from file if not provided)
-        lookback_days: Days to look back for first sync (default 30)
+        lookback_days: Days to look back for first sync (default 120)
 
     Returns:
         Tuple of (activities, sync_result)

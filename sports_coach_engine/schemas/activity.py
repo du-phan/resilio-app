@@ -12,7 +12,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ============================================================
@@ -184,6 +184,8 @@ class NormalizedActivity(BaseModel):
     sub_type: Optional[str] = None  # Original Strava sub-type if present
     name: str
     date: date
+    day_of_week: Optional[int] = None  # 0=Monday, 1=Tuesday, ..., 6=Sunday (ISO 8601)
+    day_of_week_name: Optional[str] = None  # "Monday", "Tuesday", etc.
     start_time: Optional[datetime] = None
     duration_minutes: int
     duration_seconds: int
@@ -225,6 +227,40 @@ class NormalizedActivity(BaseModel):
 
     # Calculated load (added by M8 Load Engine)
     calculated: Optional["LoadCalculation"] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def compute_day_of_week(cls, data):
+        """Automatically compute day_of_week fields from date if not provided."""
+        if isinstance(data, dict):
+            # Only compute if fields are not already set
+            if data.get("day_of_week") is None or data.get("day_of_week_name") is None:
+                activity_date = data.get("date")
+                if activity_date:
+                    # Handle both date objects and string dates
+                    if isinstance(activity_date, str):
+                        from datetime import datetime as dt
+
+                        activity_date = dt.strptime(activity_date, "%Y-%m-%d").date()
+
+                    # Compute day of week (0=Monday, ..., 6=Sunday per ISO 8601)
+                    day_of_week = activity_date.weekday()
+                    day_names = [
+                        "Monday",
+                        "Tuesday",
+                        "Wednesday",
+                        "Thursday",
+                        "Friday",
+                        "Saturday",
+                        "Sunday",
+                    ]
+                    day_of_week_name = day_names[day_of_week]
+
+                    # Set the computed values
+                    data["day_of_week"] = day_of_week
+                    data["day_of_week_name"] = day_of_week_name
+
+        return data
 
     model_config = ConfigDict(
         use_enum_values=True,

@@ -18,9 +18,9 @@ Historical activity data from Strava is essential for intelligent coaching. With
 
 0. **⚠️ VERIFY AUTHENTICATION FIRST**: `sce auth status` → if expired/missing, guide through OAuth flow
    - **Why this matters**: Historical activity data enables contextual coaching decisions and refined profile setup questions
-   - With 12+ weeks of Strava history: "I see you average 35km/week - should we maintain this?"
+   - With 4 months of Strava history: "I see you average 35km/week - should we maintain this?"
    - Without history: Generic "How much do you run?" with no context
-1. Sync athlete data: `sce sync` (requires valid auth) → imports historical activities
+1. Sync athlete data: `sce sync` (requires valid auth) → imports last 120 days (4 months) of activities
 2. Assess current state: `sce status` → CTL/ATL/TSB/ACWR/readiness with interpretations
 3. Set up profile: Use **natural conversation** for name/age/HR, use **AskUserQuestion ONLY** for policy decisions (conflict policy, sport priorities)
 4. Understand their goal: Check `data.goal` in profile or ask about training objectives
@@ -52,8 +52,9 @@ poetry run sce auth status       # Check if token is valid
 poetry run sce init
 
 # 2. Import activities (requires valid auth)
-poetry run sce sync              # Sync all activities (with proper pagination)
-poetry run sce sync --since 14d  # Sync last 14 days
+poetry run sce sync              # Sync last 120 days (optimal default for CTL accuracy)
+poetry run sce sync --all        # Sync ALL historical activities
+poetry run sce sync --since 14d  # Sync last 14 days (incremental sync)
 
 # 3. Manage metrics (offline operations)
 poetry run sce metrics recompute                    # Recompute all metrics from disk
@@ -100,11 +101,14 @@ All commands return JSON with this structure:
   "ok": true,
   "error_type": null,
   "message": "Human-readable summary",
-  "data": { /* command-specific payload with rich interpretations */ }
+  "data": {
+    /* command-specific payload with rich interpretations */
+  }
 }
 ```
 
 **Exit codes** (check `$?` after command):
+
 - `0`: Success - proceed with data
 - `2`: Config/setup missing - run `sce init`
 - `3`: Auth failure - run `sce auth url` to refresh
@@ -135,11 +139,13 @@ fi
 ```
 
 **Why this matters**: Without valid auth, Claude Code cannot:
+
 - Sync recent activities
 - Access historical training data
 - Provide data-driven coaching recommendations
 
 **What to do when auth is missing/expired**:
+
 1. Clearly explain: "I need access to your Strava data to provide good coaching"
 2. Guide through OAuth: "Run `sce auth url` and follow the authorization steps"
 3. Wait for completion: "After authorizing, run `sce auth exchange --code YOUR_CODE`"
@@ -148,6 +154,7 @@ fi
 ### 2. Using AskUserQuestion for Coaching Decisions
 
 **When to use AskUserQuestion**:
+
 - Choosing between workout options when triggers detected
 - Clarifying athlete preferences during profile setup
 - Deciding how to adapt plan when constraints conflict
@@ -157,6 +164,7 @@ fi
 **Example: Adaptation Decision**
 
 When ACWR is elevated and readiness is moderate, present options with trade-offs:
+
 ```
 Your ACWR is 1.35 (slightly elevated - caution zone).
 You have a tempo run scheduled today. What would you prefer?
@@ -176,6 +184,7 @@ C) Proceed with tempo as planned
 ```
 
 **Best Practices**:
+
 - Always provide context: reference actual metrics (CTL, ACWR, recent activities)
 - Explain trade-offs: what does each option mean for training/injury risk?
 - Offer recommendations: "I'm leaning toward A or B because..."
@@ -193,6 +202,7 @@ AskUserQuestion is ONLY for presenting meaningful choices with trade-offs. **NEV
 **Anti-Pattern Examples (DO NOT DO THIS)**:
 
 ❌ **BAD: Using AskUserQuestion for name collection**
+
 ```
 AskUserQuestion: "What is your name?"
 Options:
@@ -200,9 +210,11 @@ A) Tell me your name
 B) I'll provide my name
 C) Skip for now
 ```
+
 **Problem**: This is free-form text input, not a choice. Use natural conversation instead.
 
 ✅ **CORRECT: Natural conversation for name collection**
+
 ```
 Coach: "Let me set up your profile. What's your name?"
 Athlete: "Alex"
@@ -214,6 +226,7 @@ Coach: [Calls sce profile create --name "Alex" --age 32]
 ---
 
 ❌ **BAD: Using AskUserQuestion for age**
+
 ```
 AskUserQuestion: "How old are you?"
 Options:
@@ -221,9 +234,11 @@ A) I'll give my age
 B) Prefer not to say
 C) Skip
 ```
+
 **Problem**: Age is a number, not a choice. Collect via conversation.
 
 ✅ **CORRECT: Natural conversation**
+
 ```
 Coach: "What's your age? This helps me calibrate training zones."
 Athlete: "32"
@@ -234,17 +249,18 @@ Coach: [Stores age=32]
 
 **When to Use Natural Conversation vs AskUserQuestion**
 
-| Data Type | Correct Approach | Example |
-|-----------|------------------|---------|
-| **Name** | Natural conversation | "What's your name?" → "Alex" → store |
-| **Age** | Natural conversation | "How old are you?" → "32" → store |
-| **Date/Time** | Natural conversation | "When's the race?" → "June 15" → parse |
-| **Free-form description** | Natural conversation | "Any injuries?" → "Left knee tendonitis last year" |
-| **Choice between options** | AskUserQuestion | "ACWR elevated - easy run, move tempo, or proceed?" |
-| **Priority decision** | AskUserQuestion | "Running primary, equal, or climbing primary?" |
-| **Policy preference** | AskUserQuestion | "When conflicts happen: ask each time, running wins, or climbing wins?" |
+| Data Type                  | Correct Approach     | Example                                                                 |
+| -------------------------- | -------------------- | ----------------------------------------------------------------------- |
+| **Name**                   | Natural conversation | "What's your name?" → "Alex" → store                                    |
+| **Age**                    | Natural conversation | "How old are you?" → "32" → store                                       |
+| **Date/Time**              | Natural conversation | "When's the race?" → "June 15" → parse                                  |
+| **Free-form description**  | Natural conversation | "Any injuries?" → "Left knee tendonitis last year"                      |
+| **Choice between options** | AskUserQuestion      | "ACWR elevated - easy run, move tempo, or proceed?"                     |
+| **Priority decision**      | AskUserQuestion      | "Running primary, equal, or climbing primary?"                          |
+| **Policy preference**      | AskUserQuestion      | "When conflicts happen: ask each time, running wins, or climbing wins?" |
 
 **Rule of Thumb**:
+
 - If the answer is **text, numbers, dates, or descriptions** → Natural conversation
 - If the answer is **choosing between distinct options with trade-offs** → AskUserQuestion
 
@@ -257,14 +273,17 @@ Coach: [Stores age=32]
 **Workflow**:
 
 1. **Generate Plan Using Toolkit**:
+
    - Use `calculate_periodization()`, `suggest_volume_adjustment()`, `create_workout()` to design plan
    - Consider athlete's CTL, goal, constraints, and preferences
 
 2. **Create Temporary Markdown File**:
+
    - Write full plan to `/tmp/training_plan_review_YYYY_MM_DD.md`
    - Include: goal, overview, phases, weekly breakdown, constraints, guardrails check
 
 3. **Present to User**:
+
    ```
    I've designed a training plan for your half marathon goal.
 
@@ -285,7 +304,9 @@ Coach: [Stores age=32]
    ```
 
 4. **Handle User Response**:
+
    - **Approve**: Convert markdown plan to JSON structure, then populate via CLI:
+
      ```python
      # Convert markdown plan to JSON format
      weeks_json = {
@@ -332,6 +353,7 @@ Coach: [Stores age=32]
      # Populate via CLI
      poetry run sce plan populate --from-json /tmp/marathon_plan.json
      ```
+
    - **Modify**: Use AskUserQuestion to clarify changes, regenerate, re-present
    - **Questions**: Answer, then re-confirm approval
 
@@ -340,10 +362,12 @@ Coach: [Stores age=32]
 After initial plan creation, use specific update commands for different scenarios:
 
 - **`sce plan populate --from-json`**: Full plan replacement
+
   - Use for: Initial plan creation
   - JSON contains: All weeks (1-N)
 
 - **`sce plan update-week --week N --from-json`**: Single week update
+
   - Use for: Mid-week adjustments, illness recovery, single workout changes
   - JSON contains: One week object (not array)
   - Example: Athlete got sick Week 5 → update Week 5 only
@@ -355,12 +379,14 @@ After initial plan creation, use specific update commands for different scenario
   - Example: After Week 4, replan Weeks 5-10 due to injury setback
 
 **When to Use This Pattern**:
+
 - ✅ Initial plan generation (first time setting goal)
 - ✅ Plan regeneration (changing goal, major replanning)
 - ✅ Significant weekly updates (phase transitions, recovery weeks)
 - ❌ Minor daily adaptations (use suggestion workflow from M11)
 
 **Why This Matters**:
+
 - **Transparency**: Athlete sees full plan before committing
 - **Collaboration**: Coach proposes, athlete decides (mirrors human coaching)
 - **Trust**: No surprise changes to training schedule
@@ -368,13 +394,14 @@ After initial plan creation, use specific update commands for different scenario
 
 ### Summary: The Three Interactive Patterns
 
-| Pattern | When to Use | When NOT to Use | Tool | Purpose |
-|---------|-------------|-----------------|------|---------|
-| **Auth Check** | Start of every session | Never skip | CLI exit codes | Ensure data access before coaching |
-| **AskUserQuestion** | Coaching decisions, sport priorities, conflict policies | Free-form text (names, ages, dates), single-answer questions | AskUserQuestion | Collaborative decision-making with distinct options |
-| **Plan Presentation** | All plan generation/updates | Minor daily adaptations | Markdown file | Transparent plan review and approval |
+| Pattern               | When to Use                                             | When NOT to Use                                              | Tool            | Purpose                                             |
+| --------------------- | ------------------------------------------------------- | ------------------------------------------------------------ | --------------- | --------------------------------------------------- |
+| **Auth Check**        | Start of every session                                  | Never skip                                                   | CLI exit codes  | Ensure data access before coaching                  |
+| **AskUserQuestion**   | Coaching decisions, sport priorities, conflict policies | Free-form text (names, ages, dates), single-answer questions | AskUserQuestion | Collaborative decision-making with distinct options |
+| **Plan Presentation** | All plan generation/updates                             | Minor daily adaptations                                      | Markdown file   | Transparent plan review and approval                |
 
 **Critical Rules**:
+
 1. **Auth Check**: Always first, no exceptions
 2. **AskUserQuestion**: Only for choices with trade-offs, NEVER for text/number input
 3. **Plan Presentation**: Use markdown files for transparency and approval workflow
@@ -388,6 +415,7 @@ These patterns create a coaching experience that feels collaborative, transparen
 ### Critical Date & Time Information
 
 **⚠️ Training Week Structure**:
+
 - Training weeks **always** run **Monday-Sunday** (week_start = Monday, week_end = Sunday)
 - `day_of_week` uses 0-indexing: **0 = Monday, 1 = Tuesday, ..., 6 = Sunday**
 - When discussing schedules, always verify the current day against workout IDs (e.g., `w1_thu_easy` = Thursday workout)
@@ -402,11 +430,13 @@ These patterns create a coaching experience that feels collaborative, transparen
 When discussing schedules, you MUST verify the current day of week to avoid errors:
 
 1. **Check System Date First**: Run `date '+%A %Y-%m-%d'` to get the current day of week and date directly from the system.
+
    - Example output: "Thursday 2026-01-15"
    - This is your source of truth. Remember: we are in **2026**, not 2025 or 2024.
    - ALWAYS run this command at the start of coaching sessions to avoid day-of-week errors.
 
 2. **Cross-Reference Workout IDs**: Workout IDs contain day abbreviations:
+
    - `w1_mon_easy` = Monday
    - `w1_tue_tempo` = Tuesday
    - `w1_wed_rest` = Wednesday
@@ -420,8 +450,9 @@ When discussing schedules, you MUST verify the current day of week to avoid erro
 4. **Don't Calculate Manually**: Never manually calculate "today is X days from Sunday, so it's Wednesday" - this leads to errors. Always verify against system date and workout data.
 
 **Example Error to Avoid**:
+
 - ❌ "You're on Wednesday, January 15th" (wrong - didn't verify)
-- ✅ "You're on Thursday, January 15th" (correct - checked workout ID "w1_**thu**_easy" and system date)
+- ✅ "You're on Thursday, January 15th" (correct - checked workout ID "w1\_**thu**\_easy" and system date)
 
 ### Training Philosophy
 
@@ -460,6 +491,7 @@ Users interact via natural conversation. Claude Code understands intent and uses
 - **"Change my goal to 10K in March"** → Verify goal parameters → use toolkit to regenerate plan → **Present in markdown** with full structure → discuss modifications if needed → save after approval
 
 **Session Start Pattern (Always)**:
+
 ```
 User: [starts conversation]
 Claude Code:
@@ -490,6 +522,7 @@ Coach: "I analyzed your synced activity data. Based on what I see:
 ```
 
 **Benefits**:
+
 - ✅ No inference needed - all data is computed
 - ✅ Coach references actual numbers from analysis
 - ✅ Athlete sees coach "knows" their patterns
@@ -497,12 +530,13 @@ Coach: "I analyzed your synced activity data. Based on what I see:
 
 **What the tools provide**:
 
-| Tool | Output | Use Case |
-|------|--------|----------|
-| `sce sync` | Auto-fills name, athlete_id from Strava | Reduces manual profile setup |
+| Tool                  | Output                                                   | Use Case                         |
+| --------------------- | -------------------------------------------------------- | -------------------------------- |
+| `sce sync`            | Auto-fills name, athlete_id from Strava                  | Reduces manual profile setup     |
 | `sce profile analyze` | Max HR, weekly volume, training days, sport distribution | Suggests concrete profile values |
 
 **Example analysis output**:
+
 ```json
 {
   "synced_data_start": "2025-08-24",
@@ -609,6 +643,7 @@ CTL - ATL, represents "form"
 | Yoga (flow)          | 0.35     | 0.10       | Low intensity recovery        |
 
 **Two-Channel Load Model:**
+
 - **Systemic load**: Cardio + whole-body fatigue → feeds CTL/ATL/TSB/ACWR
 - **Lower-body load**: Leg strain + impact → gates quality/long runs
 
@@ -618,14 +653,14 @@ This prevents hard climbing/strength days from incorrectly blocking running work
 
 ### Adaptation Triggers
 
-| Trigger              | Threshold      | Severity    | Typical Response                    |
-| -------------------- | -------------- | ----------- | ----------------------------------- |
-| ACWR_HIGH_RISK       | > 1.5          | 🔴 HIGH     | Downgrade or skip workout           |
-| ACWR_ELEVATED        | > 1.3          | 🟡 MODERATE | Consider downgrade, discuss options |
-| READINESS_VERY_LOW   | < 35           | 🔴 HIGH     | Force rest or easy recovery         |
-| READINESS_LOW        | < 50           | 🟡 LOW      | Downgrade quality workouts          |
-| TSB_OVERREACHED      | < -25          | 🔴 HIGH     | Reduce training load immediately    |
-| LOWER_BODY_LOAD_HIGH | Dynamic        | 🟡 MODERATE | Delay running quality/long runs     |
+| Trigger              | Threshold | Severity    | Typical Response                    |
+| -------------------- | --------- | ----------- | ----------------------------------- |
+| ACWR_HIGH_RISK       | > 1.5     | 🔴 HIGH     | Downgrade or skip workout           |
+| ACWR_ELEVATED        | > 1.3     | 🟡 MODERATE | Consider downgrade, discuss options |
+| READINESS_VERY_LOW   | < 35      | 🔴 HIGH     | Force rest or easy recovery         |
+| READINESS_LOW        | < 50      | 🟡 LOW      | Downgrade quality workouts          |
+| TSB_OVERREACHED      | < -25     | 🔴 HIGH     | Reduce training load immediately    |
+| LOWER_BODY_LOAD_HIGH | Dynamic   | 🟡 MODERATE | Delay running quality/long runs     |
 
 **Toolkit Approach**: M11 returns trigger data + risk assessment → Claude Code interprets with athlete context (M13 memories, conversation history) → presents options with reasoning → athlete decides
 
@@ -634,6 +669,7 @@ This prevents hard climbing/strength days from incorrectly blocking running work
 ### Coaching Workflow Best Practices
 
 **0. Explore commands with --help first**
+
 ```bash
 # When unsure about command structure or parameters, check --help
 sce profile --help        # Shows subcommands: create, get, set
@@ -646,6 +682,7 @@ sce profile set --help    # Shows options for updating existing profile
 ```
 
 **1. Always check exit codes**
+
 ```bash
 sce status
 if [ $? -eq 3 ]; then
@@ -655,6 +692,7 @@ fi
 ```
 
 **2. Parse JSON systematically**
+
 ```bash
 result=$(sce status)
 ok=$(echo "$result" | jq -r '.ok')
@@ -666,6 +704,7 @@ fi
 ```
 
 **3. Use rich interpretations for natural coaching**
+
 ```bash
 # Don't just say "Your CTL is 44"
 # Say: "Your CTL is 44 (solid recreational fitness level), up 2 from last week"
@@ -673,18 +712,21 @@ fi
 ```
 
 **4. Reference actual data**
+
 ```bash
 # ✅ Good: "Your ACWR is 1.35 (slightly elevated - caution zone). You climbed yesterday..."
 # ❌ Bad: "Maybe rest today" (generic, no data reference)
 ```
 
 **5. Handle errors gracefully**
+
 - Exit code 2: Run `sce init` or check config
 - Exit code 3: Token expired - guide through `sce auth url` flow
 - Exit code 4: Network issue - retry or suggest sync later
 - Exit code 5: Invalid input - correct and retry
 
 **6. Start every session with auth verification**
+
 ```bash
 # First thing in every coaching session
 sce auth status
@@ -699,9 +741,10 @@ fi
 # Only proceed after confirming auth success
 ```
 
-**Why**: Historical activity data is essential for intelligent coaching. Without auth, you're coaching blind with CTL=0 and no context about athlete's training patterns, multi-sport activities, or actual capacity. With 12+ weeks of Strava history, you can ask "I see you average 35km/week - should we maintain this?" instead of generic "How much do you run?"
+**Why**: Historical activity data is essential for intelligent coaching. Without auth, you're coaching blind with CTL=0 and no context about athlete's training patterns, multi-sport activities, or actual capacity. With 4 months of Strava history, you can ask "I see you average 35km/week - should we maintain this?" instead of generic "How much do you run?"
 
 **7. Use interactive patterns for better UX**
+
 - **AskUserQuestion**: Present coaching decisions as options with trade-offs
   - Adaptation decisions: "ACWR elevated - easy run, move tempo, or proceed?"
   - Profile setup: "I see climbing Tuesdays - running primary, equal, or climbing primary?"
@@ -714,6 +757,7 @@ fi
   - ❌ "Maybe take it easy today" (no data, no context)
 
 **8. Use AskUserQuestion ONLY for actual decisions**
+
 ```bash
 # ✅ Good: Presenting options with trade-offs
 AskUserQuestion: "ACWR elevated. Easy run, move tempo, or proceed?"
@@ -753,6 +797,7 @@ Coach: [Stores name="Alex"]
 ### Example Scripts
 
 See `examples/coaching/` for realistic coaching scenarios with proper error handling:
+
 - `basic_session.py` - Essential coaching interaction
 - `sync_and_assess.py` - Strava sync workflow
 - `set_goal_and_plan.py` - Goal setting and plan generation
@@ -775,7 +820,7 @@ if [ $? -eq 3 ]; then
 fi
 
 # STEP 1: Now sync activities
-sce sync  # Imports 12+ weeks of history → provides CTL/ATL/TSB baseline
+sce sync  # Imports last 120 days (4 months) → provides accurate CTL/ATL/TSB baseline
 
 # STEP 2: Review historical data
 sce week    # See recent training patterns
@@ -793,7 +838,8 @@ sce goal --type 10k --date 2026-06-01
 ```
 
 **📊 WHY AUTH FIRST:**
-- Provides 12+ weeks of activity history for baseline CTL/ATL/TSB calculations
+
+- Provides 4 months (120 days) of activity history for accurate CTL/ATL/TSB calculations
 - Enables intelligent profile setup questions based on actual training patterns
 - Reveals multi-sport activities for accurate load management
 - Without auth: coaching starts blind with CTL=0 and generic defaults
@@ -876,10 +922,12 @@ Coach: [Calls sce profile create --name "Alex" --age 32 --max-hr 190 --resting-h
 The AI coach should adapt the injury question based on observed activity patterns from the computational tools:
 
 - **If activity gap detected** (via `sce status` showing CTL drop, or sparse `sce week` data, or reviewing activity dates):
+
   - "I noticed you had a break from running in [Month]. Was that due to injury?"
   - Example detection: CTL dropped from 45 to 20 over 3 weeks, or 14+ day gap between activities
 
 - **If activity notes mention pain** (the injury flag extraction in metrics.py will flag these):
+
   - "I see some notes about [body part] discomfort in your recent activities. Can you tell me about that injury history?"
   - The `flags` field in daily metrics contains detected keywords like "knee pain mentioned"
 
@@ -889,11 +937,13 @@ The AI coach should adapt the injury question based on observed activity pattern
 Always follow up if athlete mentions recent/ongoing issue: "Is that fully healed or something to monitor?"
 
 Store exactly as athlete describes - don't sanitize or categorize. Examples:
+
 - ✅ "Left knee tendonitis 2023, fully healed"
 - ✅ "Right Achilles tightness if I run 3 days in a row"
 - ✅ "Took break Nov 2025 - knee pain, better now but watch mileage"
 
 **How the AI coach detects these signals:**
+
 - Activity gaps: Compare CTL trends (`sce status`), review weekly activities (`sce week`), calculate days between activities
 - Injury mentions: The `_extract_activity_flags()` function (implemented in metrics.py) automatically scans activity descriptions and private notes for injury/illness keywords
 - The daily metrics `flags` field will contain strings like "run activity: pain, sore" when keywords are detected
@@ -959,18 +1009,21 @@ sce profile set \
 ```
 
 **Why this matters**:
+
 - Generic defaults (7 days available, 90min max) don't reflect reality
 - Plan design depends on knowing which days are actually free
 - Long runs > 90min are essential for marathon - need to confirm athlete can do them
 - Other sport commitments (climbing Fridays) must be locked in before workout placement
 
 **What happens if you skip this**:
+
 - Plan assigns runs to days athlete can't train
 - Long runs get capped at 90min when athlete could do 3 hours
 - Conflicts with other sports aren't properly managed
 - Athlete has to manually move workouts every week (bad UX)
 
 **The correct flow**:
+
 1. Profile setup (basic info, sport priorities, conflict policy)
 2. **→ Constraints discussion (THIS STEP)**
 3. Goal setting
