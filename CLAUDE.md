@@ -849,106 +849,17 @@ sce goal --type 10k --date 2026-06-01
 
 ### 📋 Profile Setup Conversation Pattern
 
-**After auth + sync, use NATURAL CONVERSATION to collect basic info:**
+**After auth + sync, use NATURAL CONVERSATION for basic info**:
 
-```
-Coach: "Great! I can see your training history. Now let's set up your profile. What's your name?"
+**Pattern**:
+1. ✅ Names, ages, HR values → Natural back-and-forth conversation
+2. ✅ Injury history → Context-aware (check for activity gaps via computational tools)
+3. ✅ Sport priorities → Natural conversation for preference
+4. ✅ Conflict policy → **AskUserQuestion** (distinct options with trade-offs)
 
-Athlete: "Alex"
+**❌ NEVER use AskUserQuestion** for text/number input like "What's your name?" or "How old are you?"
 
-Coach: "Nice to meet you, Alex! How old are you?"
-
-Athlete: "32"
-
-Coach: "Perfect. I see your recent workouts show a max HR around 188. Does a max HR of 190 sound about right?"
-
-Athlete: "Yeah, 190 is accurate."
-
-Coach: "Great. What's your typical resting heart rate? Most endurance athletes are in the 45-60 range."
-
-Athlete: "I usually wake up around 52."
-
-Coach: "Excellent - that indicates good aerobic fitness. Now, I noticed you had a gap in your running back in November. Was that due to injury, or just a break?"
-
-Athlete: "Actually, I had some left knee pain. Took a few weeks off."
-
-Coach: "Thanks for letting me know. Is that fully healed now, or something I should watch for?"
-
-Athlete: "It's better, but it can flare up if I increase mileage too quickly."
-
-Coach: "Understood - I'll make sure we progress conservatively and watch for any warning signs.
-       Now, I notice you do both running and climbing. Which takes priority when your schedule gets tight?"
-
-Athlete: "I'd say they're equal - I love both"
-
-Coach: "Understood. When there's a conflict - like a long run and climbing comp on the same day -
-       should I ask you each time, or do you want a default rule?"
-
-[NOW use AskUserQuestion - this is a policy decision]
-
-Options:
-A) Ask me each time (most flexible)
-   - I'll present options with trade-offs for each conflict
-   - You decide based on how you're feeling and priorities that week
-
-B) Climbing wins by default (protect primary sport)
-   - Adjust running workouts to accommodate climbing schedule
-   - Running plan adapts around climbing commitments
-
-C) Running goal wins (prioritize race prep)
-   - Keep key runs unless injury risk
-   - Climbing gets scheduled around critical running workouts
-
-What's your preference?
-
-Athlete: "Ask me each time - my schedule varies a lot"
-
-Coach: [Calls sce profile create --name "Alex" --age 32 --max-hr 190 --resting-hr 52 --injury-history "Left knee pain Nov 2025, healed but watch mileage progression" --conflict-policy ask_each_time]
-
-"Perfect! I've created your profile. Now let's talk about your running goal..."
-```
-
-**Key Pattern Observations**:
-
-1. ✅ **Names, ages, HR values** → Natural back-and-forth conversation
-2. ✅ **Resting HR question** → Natural conversation, reference typical ranges for context
-3. ✅ **Injury history** → Context-aware (noticed activity gap), collaborative framing, follow-up on status
-4. ✅ **Priority question** → Natural conversation works (simple preference)
-5. ✅ **Conflict policy** → AskUserQuestion is PERFECT (distinct options with trade-offs)
-6. ❌ **NEVER use AskUserQuestion with answers like "Tell me your name" or "I'll give my age"**
-
-**Injury History Question - Context-Aware Patterns**:
-
-The AI coach should adapt the injury question based on observed activity patterns from the computational tools:
-
-- **If activity gap detected** (via `sce status` showing CTL drop, or sparse `sce week` data, or reviewing activity dates):
-
-  - "I noticed you had a break from running in [Month]. Was that due to injury?"
-  - Example detection: CTL dropped from 45 to 20 over 3 weeks, or 14+ day gap between activities
-
-- **If activity notes mention pain** (the injury flag extraction in metrics.py will flag these):
-
-  - "I see some notes about [body part] discomfort in your recent activities. Can you tell me about that injury history?"
-  - The `flags` field in daily metrics contains detected keywords like "knee pain mentioned"
-
-- **If no signals detected**:
-  - "Any past injuries I should know about? Helps me watch for warning signs and adjust training load appropriately."
-
-Always follow up if athlete mentions recent/ongoing issue: "Is that fully healed or something to monitor?"
-
-Store exactly as athlete describes - don't sanitize or categorize. Examples:
-
-- ✅ "Left knee tendonitis 2023, fully healed"
-- ✅ "Right Achilles tightness if I run 3 days in a row"
-- ✅ "Took break Nov 2025 - knee pain, better now but watch mileage"
-
-**How the AI coach detects these signals:**
-
-- Activity gaps: Compare CTL trends (`sce status`), review weekly activities (`sce week`), calculate days between activities
-- Injury mentions: The `_extract_activity_flags()` function (implemented in metrics.py) automatically scans activity descriptions and private notes for injury/illness keywords
-- The daily metrics `flags` field will contain strings like "run activity: pain, sore" when keywords are detected
-
-**📖 More Examples**: See [`docs/coaching/scenarios.md`](docs/coaching/scenarios.md) for 10 detailed coaching scenarios.
+**📖 Complete conversation example with injury detection**: See [`docs/coaching/scenarios.md#scenario-1-first-session`](docs/coaching/scenarios.md#scenario-1-first-session)
 
 ---
 
