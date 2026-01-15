@@ -10,13 +10,13 @@ from typing import Optional, Union
 from dataclasses import dataclass
 
 from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.core.config import load_config
+from sports_coach_engine.core.config import load_config, ConfigError
 from sports_coach_engine.core.workflows import (
     run_sync_workflow,
     run_manual_activity_workflow,
     WorkflowError,
 )
+from sports_coach_engine.core.strava import StravaRateLimitError
 from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.core.enrichment import enrich_metrics, interpret_load
 from sports_coach_engine.schemas.enrichment import SyncSummary
@@ -100,15 +100,15 @@ def sync_strava(
     # Initialize repository and config
     repo = RepositoryIO()
     config_result = load_config(repo.repo_root)
-    if isinstance(config_result, RepoError):
+    if isinstance(config_result, ConfigError):
         log_message(
             repo,
             MessageRole.SYSTEM,
-            f"Sync failed: config error - {str(config_result)}",
+            f"Sync failed: config error - {config_result.message}",
         )
         return SyncError(
             error_type="config",
-            message=f"Configuration error: {str(config_result)}",
+            message=f"Configuration error: {config_result.message}",
         )
 
     config = config_result
@@ -123,6 +123,17 @@ def sync_strava(
     # Call M1 workflow
     try:
         result = run_sync_workflow(repo, config, since=since)
+    except StravaRateLimitError as e:
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Sync failed: rate limit exceeded - {str(e)}",
+        )
+        return SyncError(
+            error_type="rate_limit",
+            message="Rate limit exceeded. Please wait and try again.",
+            retry_after=None,
+        )
     except WorkflowError as e:
         error_type = _classify_workflow_error(e)
         log_message(
@@ -363,7 +374,7 @@ def _build_sync_summary(repo: RepositoryIO, result) -> SyncSummary:
 
     return SyncSummary(
         activities_imported=len(result.activities_imported),
-        activities_skipped=0,  # Would come from workflow if tracked
+        activities_skipped=result.activities_skipped,
         activities_failed=result.activities_failed,
         activity_types=activity_types,
         total_duration_minutes=total_duration,
@@ -390,7 +401,7 @@ def _build_basic_sync_summary(result) -> SyncSummary:
 
     return SyncSummary(
         activities_imported=len(result.activities_imported),
-        activities_skipped=0,
+        activities_skipped=result.activities_skipped,
         activities_failed=result.activities_failed,
         activity_types=activity_types,
         total_duration_minutes=total_duration,

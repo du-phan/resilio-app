@@ -1,0 +1,46 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_15756215296
+source: strava
+sport_type: climb
+sub_type: RockClimbing
+name: 3 rouge ez et 1 noir 1
+date: '2025-09-09'
+start_time: '2025-09-09T19:00:00Z'
+duration_minutes: 120
+duration_seconds: 7200
+distance_km: null
+distance_meters: 0.0
+elevation_gain_m: 0.0
+average_hr: null
+max_hr: null
+has_hr_data: false
+description: ''
+private_note: ''
+workout_type: 28
+suffer_score: null
+perceived_exertion: 5
+surface_type: unknown
+surface_type_confidence: high
+data_quality: low
+has_gps_data: false
+gear_id: null
+created_at: '2025-09-09T17:00:00Z'
+updated_at: '2025-09-09T17:00:00Z'
+synced_at: '2026-01-15T11:04:51.889059Z'
+calculated:
+  activity_id: strava_15756215296
+  duration_minutes: 120
+  estimated_rpe: 5
+  sport_type: climb
+  surface_type: unknown
+  base_effort_au: 134.5
+  systemic_multiplier: 0.6
+  lower_body_multiplier: 0.1
+  multiplier_adjustments: []
+  systemic_load_au: 80.7
+  lower_body_load_au: 13.5
+  session_type: moderate
+day_of_week: 1
+day_of_week_name: Tuesday

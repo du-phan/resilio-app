@@ -30,7 +30,7 @@ from sports_coach_engine.api import (
     api_assess_taper_status,
 )
 
-from sports_coach_engine.cli.output import output_json
+from sports_coach_engine.cli.output import create_error_envelope, output_json
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 
 app = typer.Typer(help="Weekly analysis and risk assessment")
@@ -82,24 +82,20 @@ def adherence_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @app.command(name="intensity")
@@ -134,24 +130,20 @@ def intensity_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @app.command(name="gaps")
@@ -186,24 +178,20 @@ def gaps_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @app.command(name="load")
@@ -227,14 +215,12 @@ def load_command(
         # Validate priority
         valid_priorities = ["running_primary", "equal", "other_primary"]
         if priority not in valid_priorities:
-            envelope = {
-                "ok": False,
-                "error_type": "invalid_input",
-                "message": f"priority must be one of {valid_priorities}",
-                "data": None,
-            }
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"priority must be one of {valid_priorities}",
+            )
             output_json(envelope)
-            raise typer.Exit(code=5)
+            raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
         # Load activities
         with open(activities_json, "r") as f:
@@ -253,24 +239,20 @@ def load_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @app.command(name="capacity")
@@ -310,24 +292,20 @@ def capacity_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 # ============================================================
@@ -381,24 +359,20 @@ def risk_assess_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @risk_app.command(name="recovery-window")
@@ -432,14 +406,12 @@ def recovery_window_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except Exception as e:
-        envelope = {
-            "ok": False,
-            "error_type": "calculation_failed",
-            "message": str(e),
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="calculation_failed",
+            message=str(e),
+        )
         output_json(envelope)
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @risk_app.command(name="forecast")
@@ -482,24 +454,20 @@ def forecast_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @risk_app.command(name="taper-status")
@@ -546,35 +514,28 @@ def taper_status_command(
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except ValueError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid date format: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid date format: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except FileNotFoundError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"JSON file not found: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"JSON file not found: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "invalid_input",
-            "message": f"Invalid JSON: {str(e)}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON: {str(e)}",
+        )
         output_json(envelope)
-        raise typer.Exit(code=5)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
-# Register risk subcommand
-app.add_typer(risk_app, name="risk")
+# Risk commands are exposed at top-level via CLI registration.

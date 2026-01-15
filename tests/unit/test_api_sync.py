@@ -16,7 +16,8 @@ from sports_coach_engine.api.sync import (
 from sports_coach_engine.core.workflows import SyncWorkflowResult, ManualActivityResult
 from sports_coach_engine.schemas.enrichment import SyncSummary
 from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+from sports_coach_engine.core.config import ConfigError
+from sports_coach_engine.schemas.config import ConfigErrorType
 
 
 # ============================================================
@@ -45,6 +46,7 @@ def mock_sync_result(mock_activity):
     result.warnings = []
     result.partial_failure = False
     result.activities_imported = [mock_activity]
+    result.activities_skipped = 0
     result.activities_failed = 0
     result.metrics_updated = Mock()
     result.suggestions_generated = []
@@ -103,7 +105,10 @@ class TestSyncStrava:
     def test_sync_strava_config_error(self, mock_config, mock_log):
         """Test sync failure due to config error."""
         # Mock config error
-        mock_config.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "Config not found")
+        mock_config.return_value = ConfigError(
+            error_type=ConfigErrorType.FILE_NOT_FOUND,
+            message="Config not found",
+        )
 
         result = sync_strava()
 

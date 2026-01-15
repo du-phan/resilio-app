@@ -26,6 +26,7 @@ Session Boundaries:
 """
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
@@ -41,6 +42,8 @@ from sports_coach_engine.core.paths import (
 )
 from sports_coach_engine.core.repository import RepositoryIO
 
+# Avoid stdout noise in CLI mode; logging stays on stderr by default.
+logger = logging.getLogger(__name__)
 
 # ============================================================
 # ERROR TYPES
@@ -222,7 +225,7 @@ def start_session(
         last_activity_at=datetime.now(timezone.utc),
     )
 
-    print(f"[Logger] Started session: {session_id}")
+    logger.info("[Logger] Started session: %s", session_id)
 
     return session_id
 
@@ -264,9 +267,11 @@ def end_session(repo: RepositoryIO) -> Optional[SessionSummary]:
     # Mark session as inactive
     _current_session.is_active = False
 
-    print(
-        f"[Logger] Ended session: {_current_session.id} "
-        f"({len(messages)} messages, {summary.duration_minutes} min)"
+    logger.info(
+        "[Logger] Ended session: %s (%s messages, %s min)",
+        _current_session.id,
+        len(messages),
+        summary.duration_minutes,
     )
 
     return summary
@@ -458,7 +463,7 @@ def get_recent_summaries(
                 summary = SessionSummary(**summary_data)
                 summaries.append(summary)
             except Exception as e:
-                print(f"[Logger] Error loading summary for {current_date}: {e}")
+                logger.warning("[Logger] Error loading summary for %s: %s", current_date, e)
 
         current_date += timedelta(days=1)
 
@@ -505,7 +510,7 @@ def search_conversations(
             end_date = date.fromisoformat(end_str)
             results = _search_by_date_range(repo, start_date, end_date, limit)
         except (ValueError, IndexError):
-            print(f"[Logger] Invalid date range format: {query}")
+            logger.warning("[Logger] Invalid date range format: %s", query)
 
     elif mode == SearchMode.CONTENT:
         # Grep through transcripts
@@ -539,7 +544,7 @@ def _search_by_topic(
                 if topic in summary.topics:
                     results.append(summary)
             except Exception as e:
-                print(f"[Logger] Error searching summary for {current_date}: {e}")
+                logger.warning("[Logger] Error searching summary for %s: %s", current_date, e)
 
         current_date += timedelta(days=1)
 
@@ -565,7 +570,7 @@ def _search_by_date_range(
                 summary = SessionSummary(**summary_data)
                 results.append(summary)
             except Exception as e:
-                print(f"[Logger] Error loading summary for {current_date}: {e}")
+                logger.warning("[Logger] Error loading summary for %s: %s", current_date, e)
 
         current_date += timedelta(days=1)
 
@@ -613,7 +618,7 @@ def _search_content(
                             results.append(summary)
 
             except Exception as e:
-                print(f"[Logger] Error searching content for {current_date}: {e}")
+                logger.warning("[Logger] Error searching content for %s: %s", current_date, e)
 
         current_date += timedelta(days=1)
 
@@ -653,9 +658,10 @@ def cleanup_old_conversations(repo: RepositoryIO) -> dict[str, int]:
     summary_cutoff = today - timedelta(days=SUMMARY_RETENTION_DAYS)
     stats["summaries_deleted"] = _cleanup_summaries_before(repo, summary_cutoff)
 
-    print(
-        f"[Logger] Cleanup complete: {stats['transcripts_deleted']} transcripts, "
-        f"{stats['summaries_deleted']} summaries deleted"
+    logger.info(
+        "[Logger] Cleanup complete: %s transcripts, %s summaries deleted",
+        stats["transcripts_deleted"],
+        stats["summaries_deleted"],
     )
 
     return stats
@@ -689,7 +695,7 @@ def _cleanup_transcripts_before(
                         deleted_count += 1
 
             except Exception as e:
-                print(f"[Logger] Error cleaning transcripts for {year_month}: {e}")
+                logger.warning("[Logger] Error cleaning transcripts for %s: %s", year_month, e)
 
         current_date += timedelta(days=30)  # Move to next month
 
@@ -724,7 +730,7 @@ def _cleanup_summaries_before(
                         deleted_count += 1
 
             except Exception as e:
-                print(f"[Logger] Error cleaning summaries for {year_month}: {e}")
+                logger.warning("[Logger] Error cleaning summaries for %s: %s", year_month, e)
 
         current_date += timedelta(days=30)  # Move to next month
 

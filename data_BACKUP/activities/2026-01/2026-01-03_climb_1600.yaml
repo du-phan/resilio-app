@@ -1,0 +1,47 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16926790612
+source: strava
+sport_type: climb
+sub_type: RockClimbing
+name: Afternoon Activity
+date: '2026-01-03'
+start_time: '2026-01-03T16:00:03Z'
+duration_minutes: 135
+duration_seconds: 8100
+distance_km: null
+distance_meters: 0.0
+elevation_gain_m: 0.0
+average_hr: null
+max_hr: null
+has_hr_data: false
+description: ''
+private_note: null
+workout_type: 28
+suffer_score: null
+perceived_exertion: 3
+surface_type: unknown
+surface_type_confidence: high
+data_quality: low
+has_gps_data: false
+gear_id: null
+created_at: '2026-01-03T15:00:03Z'
+updated_at: '2026-01-03T15:00:03Z'
+synced_at: '2026-01-15T11:02:59.170275Z'
+calculated:
+  activity_id: strava_16926790612
+  duration_minutes: 135
+  estimated_rpe: 3
+  sport_type: climb
+  surface_type: unknown
+  base_effort_au: 95.1
+  systemic_multiplier: 0.65
+  lower_body_multiplier: 0.1
+  multiplier_adjustments:
+  - 'Long duration (>120min): +0.05 systemic'
+  systemic_load_au: 61.8
+  lower_body_load_au: 9.5
+  session_type: easy
+day_of_week: 5
+day_of_week_name: Saturday

@@ -1,0 +1,47 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16259757452
+source: strava
+sport_type: run
+sub_type: Run
+name: Morning Run
+date: '2025-10-26'
+start_time: '2025-10-26T10:14:06Z'
+duration_minutes: 61
+duration_seconds: 3673
+distance_km: 10.03
+distance_meters: 10032.9
+elevation_gain_m: 48.0
+average_hr: 153.3
+max_hr: 165.0
+has_hr_data: true
+description: Une salade sans lard svp
+private_note: Base run to discover Lyon
+workout_type: null
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-10-26T09:14:06Z'
+updated_at: '2025-10-26T09:14:06Z'
+synced_at: '2026-01-15T11:03:59.772727Z'
+calculated:
+  activity_id: strava_16259757452
+  duration_minutes: 61
+  estimated_rpe: 7
+  sport_type: run
+  surface_type: road
+  base_effort_au: 78.0
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments:
+  - 'Interval training: -15% (work:rest recovery)'
+  systemic_load_au: 78.0
+  lower_body_load_au: 78.0
+  session_type: quality
+day_of_week: 6
+day_of_week_name: Sunday

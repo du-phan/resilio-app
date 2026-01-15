@@ -1,0 +1,55 @@
+{"timestamp": "2026-01-15T11:02:04.098352+00:00", "role": "user", "content": "sync_strava(since=None)", "metadata": {}}
+{"timestamp": "2026-01-15T11:05:03.859161+00:00", "role": "user", "content": "sync_strava(since=None)", "metadata": {}}
+{"timestamp": "2026-01-15T11:05:32.172005+00:00", "role": "system", "content": "Sync workflow failed: unknown error - Rate limit exceeded", "metadata": {}}
+{"timestamp": "2026-01-15T11:05:40.827277+00:00", "role": "user", "content": "get_current_metrics()", "metadata": {}}
+{"timestamp": "2026-01-15T11:05:40.827690+00:00", "role": "system", "content": "No metrics found - no training data available", "metadata": {}}
+{"timestamp": "2026-01-15T11:05:44.801530+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-15T11:05:44.801787+00:00", "role": "system", "content": "Failed to load profile: [file_not_found] File not found (path: /Users/duphan/Projects/sports-coach-engine/data/athlete/profile.yaml)", "metadata": {}}
+{"timestamp": "2026-01-15T11:06:54.113260+00:00", "role": "user", "content": "get_current_metrics()", "metadata": {}}
+{"timestamp": "2026-01-15T11:06:54.113766+00:00", "role": "system", "content": "No metrics found - no training data available", "metadata": {}}
+{"timestamp": "2026-01-15T11:06:56.907945+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-15T11:06:56.908170+00:00", "role": "system", "content": "Failed to load profile: [file_not_found] File not found (path: /Users/duphan/Projects/sports-coach-engine/data/athlete/profile.yaml)", "metadata": {}}
+{"timestamp": "2026-01-15T11:06:59.937973+00:00", "role": "user", "content": "sync_strava(since=None)", "metadata": {}}
+{"timestamp": "2026-01-15T11:07:06.626545+00:00", "role": "system", "content": "Sync workflow failed: unknown error - Rate limit exceeded", "metadata": {}}
+{"timestamp": "2026-01-15T11:09:30.621473+00:00", "role": "user", "content": "analyze_profile_from_activities()", "metadata": {}}
+{"timestamp": "2026-01-15T11:09:30.723585+00:00", "role": "system", "content": "Analyzed 85 activities in 134-day window (2025-09-03 to 2026-01-14)", "metadata": {}}
+{"timestamp": "2026-01-15T11:09:31.379532+00:00", "role": "user", "content": "get_current_metrics()", "metadata": {}}
+{"timestamp": "2026-01-15T11:09:31.383430+00:00", "role": "system", "content": "Returned metrics for 2026-01-15: CTL=26, TSB=+5, readiness=49/100", "metadata": {}}
+{"timestamp": "2026-01-15T11:15:45.495666+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-15T11:15:45.495906+00:00", "role": "system", "content": "Failed to load profile: [file_not_found] File not found (path: /Users/duphan/Projects/sports-coach-engine/data/athlete/profile.yaml)", "metadata": {}}
+{"timestamp": "2026-01-15T11:15:57.358172+00:00", "role": "user", "content": "create_profile(name=The Big D, age=32, max_hr=199)", "metadata": {}}
+{"timestamp": "2026-01-15T11:15:57.359584+00:00", "role": "system", "content": "Created profile: The Big D, priority=primary", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:08.586116+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:08.587432+00:00", "role": "system", "content": "Returned profile: The Big D, goal=general_fitness", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:08.587577+00:00", "role": "user", "content": "update_profile(fields=constraints)", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:08.590706+00:00", "role": "system", "content": "Updated profile: constraints", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:31.503629+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:31.504900+00:00", "role": "system", "content": "Returned profile: The Big D, goal=general_fitness", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:41.882487+00:00", "role": "user", "content": "set_goal(race_type=marathon, target_date=2026-03-28, target_time=None)", "metadata": {}}
+{"timestamp": "2026-01-15T11:16:41.884877+00:00", "role": "system", "content": "Set goal: marathon on 2026-03-28", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:23.375480+00:00", "role": "user", "content": "populate_plan_workouts(weeks=10)", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:23.375888+00:00", "role": "system", "content": "Failed to load plan: [file_not_found] File not found (path: /Users/duphan/Projects/sports-coach-engine/data/plans/current_plan.yaml)", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:27.528189+00:00", "role": "user", "content": "regenerate_plan()", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:27.531031+00:00", "role": "system", "content": "Generated new plan: 10 weeks, goal=marathon", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:33.570207+00:00", "role": "user", "content": "populate_plan_workouts(weeks=10)", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:33.571410+00:00", "role": "system", "content": "Validation failed: 10 validation errors for WeekPlan\nphase\n  Input should be 'base', 'build', 'peak', 'taper' or 'recovery' [type=enum, input_value='foundation', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.0.phase\n  Input should be 'base', 'build', 'peak', 'taper' or 'recovery' [type=enum, input_value='foundation', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.0.intensity_zone\n  Input should be 'zone_1', 'zone_2', 'zone_3', 'zone_4' or 'zone_5' [type=enum, input_value='z2', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.1.phase\n  Input should be 'base', 'build', 'peak', 'taper' or 'recovery' [type=enum, input_value='foundation', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.1.intensity_zone\n  Input should be 'zone_1', 'zone_2', 'zone_3', 'zone_4' or 'zone_5' [type=enum, input_value='z2', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.2.phase\n  Input should be 'base', 'build', 'peak', 'taper' or 'recovery' [type=enum, input_value='foundation', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.2.intensity_zone\n  Input should be 'zone_1', 'zone_2', 'zone_3', 'zone_4' or 'zone_5' [type=enum, input_value='z2', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.3.workout_type\n  Input should be 'easy', 'long_run', 'tempo', 'intervals', 'fartlek', 'strides', 'race' or 'rest' [type=enum, input_value='recovery', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.3.phase\n  Input should be 'base', 'build', 'peak', 'taper' or 'recovery' [type=enum, input_value='foundation', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum\nworkouts.3.intensity_zone\n  Input should be 'zone_1', 'zone_2', 'zone_3', 'zone_4' or 'zone_5' [type=enum, input_value='z1', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.12/v/enum", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:52.685825+00:00", "role": "user", "content": "populate_plan_workouts(weeks=10)", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:52.706762+00:00", "role": "system", "content": "Populated 10 weeks with 39 workouts", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:59.446432+00:00", "role": "user", "content": "get_current_plan()", "metadata": {}}
+{"timestamp": "2026-01-15T11:24:59.474070+00:00", "role": "system", "content": "Returned plan: 10 weeks, goal=marathon", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:04.385863+00:00", "role": "user", "content": "get_current_plan()", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:04.414130+00:00", "role": "system", "content": "Returned plan: 10 weeks, goal=marathon", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:09.175839+00:00", "role": "user", "content": "get_todays_workout(date=2026-01-15)", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:09.206867+00:00", "role": "system", "content": "No workout for 2026-01-15: No workout scheduled for 2026-01-15", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:14.258087+00:00", "role": "user", "content": "get_todays_workout(date=2026-01-21)", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:14.299203+00:00", "role": "system", "content": "No metrics for 2026-01-21, checking for most recent metrics", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:14.301109+00:00", "role": "system", "content": "Using metrics from 2026-01-15 for context", "metadata": {}}
+{"timestamp": "2026-01-15T11:25:14.302698+00:00", "role": "system", "content": "Workout for 2026-01-21: Easy Run, 32min, RPE 3", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:23.754447+00:00", "role": "user", "content": "sync_strava(since=2025-09-17 18:10:23.750416)", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:30.396778+00:00", "role": "system", "content": "Sync workflow failed: unknown error - Rate limit exceeded", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:43.257890+00:00", "role": "user", "content": "get_current_metrics()", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:43.262832+00:00", "role": "system", "content": "Returned metrics for 2026-01-15: CTL=26, TSB=+5, readiness=49/100", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:47.787154+00:00", "role": "user", "content": "get_weekly_status()", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:47.891225+00:00", "role": "system", "content": "Weekly status: 2/0 workouts, 63 minutes, CTL=26.3", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:51.542027+00:00", "role": "user", "content": "get_todays_workout(date=2026-01-15)", "metadata": {}}
+{"timestamp": "2026-01-15T17:10:51.566797+00:00", "role": "system", "content": "No workout for 2026-01-15: No workout scheduled for 2026-01-15", "metadata": {}}

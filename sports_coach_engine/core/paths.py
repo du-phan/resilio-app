@@ -19,13 +19,14 @@ from sports_coach_engine.core.repository import RepositoryIO
 
 # Cache config to avoid repeated file reads
 _config_cache: Optional[object] = None
+_config_cache_root: Optional[object] = None
 
 
 def _get_paths():
     """Get path settings from config (cached)."""
-    global _config_cache
-    if _config_cache is None:
-        repo = RepositoryIO()
+    global _config_cache, _config_cache_root
+    repo = RepositoryIO()
+    if _config_cache is None or _config_cache_root != repo.repo_root:
         config_result = load_config(repo.repo_root)
         if hasattr(config_result, "error_type"):
             # Config load failed, use defaults
@@ -34,6 +35,7 @@ def _get_paths():
             _config_cache = PathSettings()
         else:
             _config_cache = config_result.settings.paths
+        _config_cache_root = repo.repo_root
     return _config_cache
 
 

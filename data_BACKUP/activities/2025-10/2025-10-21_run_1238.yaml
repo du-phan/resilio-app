@@ -1,0 +1,48 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16210128518
+source: strava
+sport_type: run
+sub_type: Run
+name: Lunch Run
+date: '2025-10-21'
+start_time: '2025-10-21T12:38:41Z'
+duration_minutes: 49
+duration_seconds: 2988
+distance_km: 7.5
+distance_meters: 7496.3
+elevation_gain_m: 4.0
+average_hr: 164.3
+max_hr: 199.0
+has_hr_data: true
+description: 10 x 400m @1500m pace 75s r
+private_note: Tough session. It gets tough right at the 3rd lap. The 75s rest time
+  is short. I managed to stick to the goal pace till the end though (4:10 - 4:15/km)
+workout_type: null
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-10-21T10:38:41Z'
+updated_at: '2025-10-21T10:38:41Z'
+synced_at: '2026-01-15T11:04:04.384601Z'
+calculated:
+  activity_id: strava_16210128518
+  duration_minutes: 49
+  estimated_rpe: 5
+  sport_type: run
+  surface_type: road
+  base_effort_au: 46.7
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments:
+  - 'Interval training: -15% (work:rest recovery)'
+  systemic_load_au: 46.7
+  lower_body_load_au: 46.7
+  session_type: moderate
+day_of_week: 1
+day_of_week_name: Tuesday

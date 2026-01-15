@@ -35,7 +35,7 @@ class TestPhase1Integration:
 
         # Create config files
         settings = {
-            "paths": {"athlete_dir": "athlete"},
+            "paths": {"athlete_dir": "data/athlete"},
         }
         (tmp_path / "config" / "settings.yaml").write_text(yaml.dump(settings))
 
@@ -55,7 +55,7 @@ class TestPhase1Integration:
         # Step 1: Load config
         config = load_config()
         assert not isinstance(config, ConfigError)
-        assert config.settings.paths.athlete_dir == "athlete"
+        assert config.settings.paths.athlete_dir == "data/athlete"
 
         # Step 2: Initialize repository
         repo = RepositoryIO(config=config)
@@ -131,7 +131,7 @@ class TestPhase1Integration:
         repo = RepositoryIO()
 
         # Acquire lock
-        lock1 = repo.acquire_lock("operation1", paths=["athlete/profile.yaml"])
+        lock1 = repo.acquire_lock("operation1", paths=["data/athlete/profile.yaml"])
         assert not isinstance(lock1, RepoError)
         assert lock1.operation == "operation1"
 
@@ -213,7 +213,7 @@ class TestPhase1Integration:
         service.save_profile(profile)
 
         # Verify file exists and is valid
-        profile_path = tmp_path / "athlete" / "profile.yaml"
+        profile_path = tmp_path / "data" / "athlete" / "profile.yaml"
         assert profile_path.exists()
 
         # Read back and verify structure

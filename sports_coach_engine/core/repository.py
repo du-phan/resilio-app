@@ -128,14 +128,17 @@ class RepositoryIO:
     # ============================================================
 
     def write_yaml(
-        self, path: str | Path, data: BaseModel, atomic: bool = True
+        self,
+        path: str | Path,
+        data: Union[BaseModel, dict, list],
+        atomic: bool = True,
     ) -> Optional["RepoError"]:
         """
         Write data to a YAML file with optional atomic write.
 
         Args:
             path: Path to YAML file (relative to repo root)
-            data: Pydantic model to serialize
+            data: Pydantic model, dict, or list to serialize
             atomic: Use atomic write (default: True)
 
         Returns:
@@ -147,12 +150,9 @@ class RepositoryIO:
         resolved_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Serialize to YAML
-        # Use model_dump(mode='json') to get JSON-serializable types
-        # This converts enums to their string values, dates to ISO strings, etc.
         try:
-            yaml_content = yaml.safe_dump(
-                data.model_dump(mode='json'), sort_keys=False, allow_unicode=True
-            )
+            payload = data.model_dump(mode='json') if isinstance(data, BaseModel) else data
+            yaml_content = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
         except Exception as e:
             return RepoError(
                 error_type=RepoErrorType.VALIDATION_ERROR,

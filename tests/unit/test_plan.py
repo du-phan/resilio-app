@@ -1194,11 +1194,11 @@ class TestPlanPersistence:
         persist_plan(plan, repo)
 
         # Verify master plan file exists
-        assert (tmp_path / "plans" / "current_plan.yaml").exists()
+        assert (tmp_path / "data" / "plans" / "current_plan.yaml").exists()
 
         # Verify workout files exist
-        assert (tmp_path / "plans" / "workouts" / "week_01" / "monday_tempo.yaml").exists()
-        assert (tmp_path / "plans" / "workouts" / "week_01" / "wednesday_easy.yaml").exists()
+        assert (tmp_path / "data" / "plans" / "workouts" / "week_01" / "monday_tempo.yaml").exists()
+        assert (tmp_path / "data" / "plans" / "workouts" / "week_01" / "wednesday_easy.yaml").exists()
 
     def test_persist_plan_content_valid(self, tmp_path, monkeypatch):
         """Persisted plan should be readable with correct content."""
@@ -1237,13 +1237,13 @@ class TestPlanPersistence:
         persist_plan(plan, repo)
 
         # Read back and verify
-        loaded_plan = repo.read_yaml("plans/current_plan.yaml", MasterPlan)
+        loaded_plan = repo.read_yaml("data/plans/current_plan.yaml", MasterPlan)
         assert not isinstance(loaded_plan, Exception)  # No error
         assert loaded_plan.id == "test_plan_002"
         assert loaded_plan.total_weeks == 8
 
         # Read workout and verify
-        workout_path = "plans/workouts/week_01/monday_tempo.yaml"
+        workout_path = "data/plans/workouts/week_01/monday_tempo.yaml"
         loaded_workout = repo.read_yaml(workout_path, WorkoutPrescription)
         assert not isinstance(loaded_workout, Exception)
         assert loaded_workout.workout_type == "tempo"
@@ -1291,9 +1291,9 @@ class TestPlanPersistence:
         assert archive_path is not None
         assert "goal_changed" in archive_path
 
-        # Original plans/ directory should be empty (recreated)
-        assert (tmp_path / "plans").exists()
-        assert not (tmp_path / "plans" / "current_plan.yaml").exists()
+        # Original data/plans/ directory should be empty (recreated)
+        assert (tmp_path / "data" / "plans").exists()
+        assert not (tmp_path / "data" / "plans" / "current_plan.yaml").exists()
 
         # Archive should contain the old plan
         archived_plan_path = Path(archive_path) / "current_plan.yaml"

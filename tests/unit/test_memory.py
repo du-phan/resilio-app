@@ -41,7 +41,7 @@ def repo(tmp_path, monkeypatch):
     # Create .git directory to mark as repo root
     (tmp_path / ".git").mkdir()
     # Create athlete directory
-    (tmp_path / "athlete").mkdir(exist_ok=True)
+    (tmp_path / "data" / "athlete").mkdir(exist_ok=True)
     # Change to tmp directory
     monkeypatch.chdir(tmp_path)
     return RepositoryIO()
@@ -243,7 +243,7 @@ class TestStorage:
         save_memory(sample_memory, repo)
 
         # Read file directly
-        path = repo.resolve_path("athlete/memories.yaml")
+        path = repo.resolve_path("data/athlete/memories.yaml")
         with open(path) as f:
             data = yaml.safe_load(f)
 
@@ -680,7 +680,7 @@ class TestArchival:
 
         # Manually archive with old/recent dates
         import yaml
-        path = repo.resolve_path("athlete/memories.yaml")
+        path = repo.resolve_path("data/athlete/memories.yaml")
         with open(path) as f:
             data = yaml.safe_load(f)
         data["archived"] = [

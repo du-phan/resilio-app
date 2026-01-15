@@ -1,0 +1,46 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16040584437
+source: strava
+sport_type: run
+sub_type: Run
+name: Lunch Run
+date: '2025-10-05'
+start_time: '2025-10-05T12:51:18Z'
+duration_minutes: 39
+duration_seconds: 2340
+distance_km: 6.91
+distance_meters: 6912.7
+elevation_gain_m: 55.0
+average_hr: 151.7
+max_hr: 169.0
+has_hr_data: true
+description: 'Je t''ai pas vu Floflo  La Night  '
+private_note: null
+workout_type: null
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-10-05T10:51:18Z'
+updated_at: '2025-10-05T10:51:18Z'
+synced_at: '2026-01-15T11:04:20.551894Z'
+calculated:
+  activity_id: strava_16040584437
+  duration_minutes: 39
+  estimated_rpe: 6
+  sport_type: run
+  surface_type: road
+  base_effort_au: 50.3
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments: []
+  systemic_load_au: 50.3
+  lower_body_load_au: 50.3
+  session_type: moderate
+day_of_week: 6
+day_of_week_name: Sunday

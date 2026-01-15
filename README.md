@@ -2,18 +2,18 @@
 
 AI-powered adaptive running coach for multi-sport athletes, running entirely in Claude Code terminal.
 
-**Current Status**: Phase 1 Core Infrastructure Complete (M2 Config, M3 Repository I/O, M4 Profile Service)
+**Current Status**: Phase 7 Complete (M1-M14). System ready for coaching sessions.
 
 ## Setup
 
 ### 1. Install Dependencies
 
 ```bash
-# Using pip
-pip install -r requirements.txt
-
-# Or using poetry
+# Using poetry (recommended)
 poetry install
+
+# Or using pip (PEP 517)
+pip install -e .
 ```
 
 ### 2. Create Configuration
@@ -49,34 +49,11 @@ pytest tests/integration -v
 pytest tests/ -v --cov=sports_coach_engine/core
 ```
 
-## Phase 1 Complete (M2, M3, M4)
+## Implementation Status
 
-Phase 1 implements the foundational infrastructure:
-
-✅ **M2 - Config & Secrets**: Configuration loading and validation
-✅ **M3 - Repository I/O**: File I/O with atomic writes and locking
-✅ **M4 - Athlete Profile Service**: Profile CRUD, VDOT calculation, constraint validation
-
-**55 tests passing** (8 config + 18 repository + 24 profile + 5 integration)
-
-### What's Implemented
-
-- Configuration loading from `config/settings.yaml` and `config/secrets.local.yaml`
-- YAML read/write with schema validation
-- Atomic writes (temp file + rename) to prevent corruption
-- File locking to prevent concurrent access issues
-- Athlete profile CRUD operations (load, save, update, delete)
-- VDOT calculation from race times (Jack Daniels' formula)
-- Constraint validation (4 rules per M4 spec)
-
-### What's Next (Phase 2+)
-
-- M5: Strava Integration (OAuth, activity sync)
-- M6-M8: Activity processing pipeline (normalization, RPE analysis, load calculation)
-- M9: Metrics Engine (CTL/ATL/TSB, ACWR, readiness)
-- M10-M11: Plan generation and adaptation
-- M12-M14: Data enrichment, memory, conversation logging
-- API layer for Claude Code integration
+All 14 modules are implemented (M1-M14), including Strava sync, metrics, planning,
+adaptation, and conversation logging. See `docs/IMPLEMENTATION_PROGRESS.md` for the
+full module/test breakdown.
 
 ## Architecture
 

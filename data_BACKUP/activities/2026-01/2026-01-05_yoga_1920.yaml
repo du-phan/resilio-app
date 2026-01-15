@@ -1,0 +1,46 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16948294030
+source: strava
+sport_type: yoga
+sub_type: Yoga
+name: Evening Yoga
+date: '2026-01-05'
+start_time: '2026-01-05T19:20:00Z'
+duration_minutes: 33
+duration_seconds: 1980
+distance_km: null
+distance_meters: 0.0
+elevation_gain_m: 0.0
+average_hr: null
+max_hr: null
+has_hr_data: false
+description: 'Yin yoga: focus on hip flexor and hamstring streches'
+private_note: ''
+workout_type: 31
+suffer_score: null
+perceived_exertion: 2
+surface_type: unknown
+surface_type_confidence: high
+data_quality: low
+has_gps_data: false
+gear_id: null
+created_at: '2026-01-05T18:20:00Z'
+updated_at: '2026-01-05T18:20:00Z'
+synced_at: '2026-01-15T11:02:56.452935Z'
+calculated:
+  activity_id: strava_16948294030
+  duration_minutes: 33
+  estimated_rpe: 2
+  sport_type: yoga
+  surface_type: unknown
+  base_effort_au: 16.6
+  systemic_multiplier: 0.35
+  lower_body_multiplier: 0.1
+  multiplier_adjustments: []
+  systemic_load_au: 5.8
+  lower_body_load_au: 1.7
+  session_type: easy
+day_of_week: 0
+day_of_week_name: Monday

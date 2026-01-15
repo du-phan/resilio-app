@@ -1,0 +1,47 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16314617418
+source: strava
+sport_type: run
+sub_type: Run
+name: Evening Run
+date: '2025-10-31'
+start_time: '2025-10-31T19:33:52Z'
+duration_minutes: 37
+duration_seconds: 2266
+distance_km: 5.16
+distance_meters: 5164.4
+elevation_gain_m: 129.0
+average_hr: 153.9
+max_hr: 186.0
+has_hr_data: true
+description: 12 x 17s hill sprint 90s rest
+private_note: null
+workout_type: null
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-10-31T18:33:52Z'
+updated_at: '2025-10-31T18:33:52Z'
+synced_at: '2026-01-15T11:03:55.266576Z'
+calculated:
+  activity_id: strava_16314617418
+  duration_minutes: 37
+  estimated_rpe: 5
+  sport_type: run
+  surface_type: road
+  base_effort_au: 35.3
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments:
+  - 'Interval training: -15% (work:rest recovery)'
+  systemic_load_au: 35.3
+  lower_body_load_au: 35.3
+  session_type: moderate
+day_of_week: 4
+day_of_week_name: Friday

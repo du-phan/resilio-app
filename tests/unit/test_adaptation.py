@@ -118,19 +118,19 @@ class TestWorkoutReference:
     def test_valid_workout_reference(self):
         """Should create valid workout reference."""
         ref = WorkoutReference(
-            file_path="plans/workouts/week_01/tuesday_tempo.yaml",
+            file_path="data/plans/workouts/week_01/tuesday_tempo.yaml",
             date=date(2026, 1, 21),
             workout_type="tempo",
             is_key_workout=True,
         )
-        assert ref.file_path == "plans/workouts/week_01/tuesday_tempo.yaml"
+        assert ref.file_path == "data/plans/workouts/week_01/tuesday_tempo.yaml"
         assert ref.workout_type == "tempo"
         assert ref.is_key_workout is True
 
     def test_key_workout_defaults_false(self):
         """is_key_workout should default to False."""
         ref = WorkoutReference(
-            file_path="plans/workouts/week_01/monday_easy.yaml",
+            file_path="data/plans/workouts/week_01/monday_easy.yaml",
             date=date(2026, 1, 20),
             workout_type="easy",
         )

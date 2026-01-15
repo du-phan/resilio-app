@@ -394,7 +394,7 @@ class TestCrossModuleIntegration:
         get_profile()
 
         # Check that conversation logs were created
-        transcripts_dir = tmp_path / "conversations" / "transcripts"
+        transcripts_dir = tmp_path / "data" / "conversations" / "transcripts"
         if transcripts_dir.exists():
             # Should have at least created a directory
             assert transcripts_dir.is_dir()
@@ -413,7 +413,7 @@ class TestErrorPropagation:
         monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Write invalid YAML
-        profile_path = tmp_path / "athlete" / "profile.yaml"
+        profile_path = tmp_path / "data" / "athlete" / "profile.yaml"
         profile_path.write_text("invalid: yaml: content: [")
 
         result = get_profile()
@@ -427,7 +427,7 @@ class TestErrorPropagation:
         monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Write profile missing required fields
-        profile_path = tmp_path / "athlete" / "profile.yaml"
+        profile_path = tmp_path / "data" / "athlete" / "profile.yaml"
         profile_path.write_text("name: Test")  # Missing constraints
 
         result = get_profile()

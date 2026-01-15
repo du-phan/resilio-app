@@ -16,8 +16,9 @@ athletes receive appropriate running recommendations without false constraints
 from unrelated activities like climbing or upper-body work.
 """
 
-from typing import Optional
+import logging
 from datetime import date, datetime, timedelta
+from typing import Optional
 
 from sports_coach_engine.core.paths import (
     activities_month_dir,
@@ -45,6 +46,8 @@ from sports_coach_engine.schemas.metrics import (
     ConfidenceLevel,
     CTLZone,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -874,7 +877,11 @@ def compute_metrics_batch(
             results.append(metrics)
         except Exception as e:
             # Log error but continue
-            print(f"Warning: Failed to compute metrics for {current_date}: {e}")
+            logger.warning(
+                "Failed to compute metrics for %s: %s",
+                current_date,
+                e,
+            )
 
         current_date += timedelta(days=1)
 

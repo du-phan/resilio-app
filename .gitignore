@@ -211,7 +211,6 @@ __marimo__/
 data/
 data_samples/
 config/secrets.local.yaml
-backup/
 *.bak
 .env.local
 

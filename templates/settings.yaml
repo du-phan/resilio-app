@@ -3,12 +3,12 @@
 
 # File paths (relative to repository root)
 paths:
-  athlete_dir: "athlete"
-  activities_dir: "activities"
-  metrics_dir: "metrics"
-  plans_dir: "plans"
-  conversations_dir: "conversations"
-  backup_dir: "backup"
+  athlete_dir: "data/athlete"
+  activities_dir: "data/activities"
+  metrics_dir: "data/metrics"
+  plans_dir: "data/plans"
+  conversations_dir: "data/conversations"
+  backup_dir: "data/backup"
 
 # Strava API configuration
 strava:

@@ -44,12 +44,12 @@ class TestLoadConfig:
         # Write valid settings.yaml
         settings = {
             "paths": {
-                "athlete_dir": "athlete",
-                "activities_dir": "activities",
-                "metrics_dir": "metrics",
-                "plans_dir": "plans",
-                "conversations_dir": "conversations",
-                "backup_dir": "backup",
+                "athlete_dir": "data/athlete",
+                "activities_dir": "data/activities",
+                "metrics_dir": "data/metrics",
+                "plans_dir": "data/plans",
+                "conversations_dir": "data/conversations",
+                "backup_dir": "data/backup",
             }
         }
         with open(config_dir / "settings.yaml", "w") as f:
@@ -77,7 +77,7 @@ class TestLoadConfig:
 
         assert not isinstance(result, ConfigError)
         assert isinstance(result, Config)
-        assert result.settings.paths.athlete_dir == "athlete"
+        assert result.settings.paths.athlete_dir == "data/athlete"
 
     def test_load_config_error_missing_settings(self, tmp_path, monkeypatch):
         """Should return error when settings.yaml missing."""
@@ -97,7 +97,7 @@ class TestLoadConfig:
         config_dir.mkdir()
 
         # Create settings but not secrets
-        settings = {"paths": {"athlete_dir": "athlete"}}
+        settings = {"paths": {"athlete_dir": "data/athlete"}}
         with open(config_dir / "settings.yaml", "w") as f:
             yaml.dump(settings, f)
 
@@ -153,4 +153,4 @@ class TestLoadConfig:
         # Check default values are populated
         assert result.settings.training_defaults.ctl_time_constant == 42
         assert result.settings.training_defaults.atl_time_constant == 7
-        assert result.settings.paths.athlete_dir == "athlete"
+        assert result.settings.paths.athlete_dir == "data/athlete"

@@ -169,7 +169,7 @@ class TestMessageLogging:
         log_message(mock_repo, MessageRole.USER, "Test message")
 
         # Check that transcript file was created
-        transcript_files = list(tmp_path.glob("conversations/transcripts/**/*.jsonl"))
+        transcript_files = list(tmp_path.glob("data/conversations/transcripts/**/*.jsonl"))
         assert len(transcript_files) > 0
 
     def test_log_message_appends_jsonl(self, mock_repo, tmp_path):
@@ -178,7 +178,7 @@ class TestMessageLogging:
         log_message(mock_repo, MessageRole.USER, "Message 1")
         log_message(mock_repo, MessageRole.SYSTEM, "Message 2")
 
-        transcript_files = list(tmp_path.glob("conversations/transcripts/**/*.jsonl"))
+        transcript_files = list(tmp_path.glob("data/conversations/transcripts/**/*.jsonl"))
         assert len(transcript_files) == 1
 
         lines = transcript_files[0].read_text().strip().split("\n")
@@ -196,7 +196,7 @@ class TestMessageLogging:
         log_message(mock_repo, MessageRole.USER, "Test message")
 
         # Session should be auto-started (verified by checking for transcript file)
-        transcript_files = list(tmp_path.glob("conversations/transcripts/**/*.jsonl"))
+        transcript_files = list(tmp_path.glob("data/conversations/transcripts/**/*.jsonl"))
         assert len(transcript_files) > 0
 
 
@@ -313,13 +313,13 @@ class TestCleanup:
         """Test cleanup deletes old transcripts (>60 days)."""
         # Create old transcript
         old_date = date.today() - timedelta(days=70)
-        old_transcript_dir = tmp_path / "conversations" / "transcripts" / old_date.strftime("%Y-%m")
+        old_transcript_dir = tmp_path / "data" / "conversations" / "transcripts" / old_date.strftime("%Y-%m")
         old_transcript_dir.mkdir(parents=True, exist_ok=True)
         old_transcript = old_transcript_dir / f"{old_date}_session_001.jsonl"
         old_transcript.write_text('{"test": "old"}')
 
         # Create recent transcript
-        recent_transcript_dir = tmp_path / "conversations" / "transcripts" / date.today().strftime("%Y-%m")
+        recent_transcript_dir = tmp_path / "data" / "conversations" / "transcripts" / date.today().strftime("%Y-%m")
         recent_transcript_dir.mkdir(parents=True, exist_ok=True)
         recent_transcript = recent_transcript_dir / f"{date.today()}_session_001.jsonl"
         recent_transcript.write_text('{"test": "recent"}')
@@ -335,13 +335,13 @@ class TestCleanup:
         """Test cleanup deletes old summaries (>180 days)."""
         # Create old summary
         old_date = date.today() - timedelta(days=200)
-        old_summary_dir = tmp_path / "conversations" / "summaries" / old_date.strftime("%Y-%m")
+        old_summary_dir = tmp_path / "data" / "conversations" / "summaries" / old_date.strftime("%Y-%m")
         old_summary_dir.mkdir(parents=True, exist_ok=True)
         old_summary = old_summary_dir / f"{old_date}_summary.json"
         old_summary.write_text('{"test": "old"}')
 
         # Create recent summary
-        recent_summary_dir = tmp_path / "conversations" / "summaries" / date.today().strftime("%Y-%m")
+        recent_summary_dir = tmp_path / "data" / "conversations" / "summaries" / date.today().strftime("%Y-%m")
         recent_summary_dir.mkdir(parents=True, exist_ok=True)
         recent_summary = recent_summary_dir / f"{date.today()}_summary.json"
         recent_summary.write_text('{"test": "recent"}')

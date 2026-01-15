@@ -1,0 +1,48 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16187465653
+source: strava
+sport_type: run
+sub_type: Run
+name: Morning Run
+date: '2025-10-19'
+start_time: '2025-10-19T09:16:43Z'
+duration_minutes: 37
+duration_seconds: 2275
+distance_km: 4.99
+distance_meters: 4994.3
+elevation_gain_m: 137.0
+average_hr: 146.5
+max_hr: 171.0
+has_hr_data: true
+description: 12 x 17s hill sprint 90s r
+private_note: First 4 reps are kinda for "warming up", then 4 reps all in, then 4
+  reps a bit slower to finish
+workout_type: 0
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-10-19T07:16:43Z'
+updated_at: '2025-10-19T07:16:43Z'
+synced_at: '2026-01-15T11:04:07.350324Z'
+calculated:
+  activity_id: strava_16187465653
+  duration_minutes: 37
+  estimated_rpe: 6
+  sport_type: run
+  surface_type: road
+  base_effort_au: 40.6
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments:
+  - 'Interval training: -15% (work:rest recovery)'
+  systemic_load_au: 40.6
+  lower_body_load_au: 40.6
+  session_type: moderate
+day_of_week: 6
+day_of_week_name: Sunday

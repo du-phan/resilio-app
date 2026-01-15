@@ -1,0 +1,46 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16082370824
+source: strava
+sport_type: run
+sub_type: Run
+name: Morning Run
+date: '2025-10-09'
+start_time: '2025-10-09T07:58:20Z'
+duration_minutes: 44
+duration_seconds: 2676
+distance_km: 7.7
+distance_meters: 7697.9
+elevation_gain_m: 43.0
+average_hr: 152.1
+max_hr: 174.0
+has_hr_data: true
+description: ''
+private_note: null
+workout_type: null
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-10-09T05:58:20Z'
+updated_at: '2025-10-09T05:58:20Z'
+synced_at: '2026-01-15T11:04:17.588205Z'
+calculated:
+  activity_id: strava_16082370824
+  duration_minutes: 44
+  estimated_rpe: 6
+  sport_type: run
+  surface_type: road
+  base_effort_au: 56.8
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments: []
+  systemic_load_au: 56.8
+  lower_body_load_au: 56.8
+  session_type: moderate
+day_of_week: 3
+day_of_week_name: Thursday

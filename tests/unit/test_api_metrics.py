@@ -396,7 +396,7 @@ class TestFindLatestMetricsDate:
 
         # Create metrics file for today
         today = date.today()
-        metrics_dir = tmp_path / "metrics" / "daily"
+        metrics_dir = tmp_path / "data" / "metrics" / "daily"
         metrics_dir.mkdir(parents=True, exist_ok=True)
         metrics_file = metrics_dir / f"{today}.yaml"
         metrics_file.write_text("test: data")
@@ -414,7 +414,7 @@ class TestFindLatestMetricsDate:
 
         # Create metrics file for 5 days ago
         past_date = date.today() - timedelta(days=5)
-        metrics_dir = tmp_path / "metrics" / "daily"
+        metrics_dir = tmp_path / "data" / "metrics" / "daily"
         metrics_dir.mkdir(parents=True, exist_ok=True)
         metrics_file = metrics_dir / f"{past_date}.yaml"
         metrics_file.write_text("test: data")

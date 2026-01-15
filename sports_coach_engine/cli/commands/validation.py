@@ -19,7 +19,7 @@ from sports_coach_engine.api.validation import (
     api_validate_plan_structure,
     api_assess_goal_feasibility,
 )
-from sports_coach_engine.cli.output import output_json
+from sports_coach_engine.cli.output import create_error_envelope, output_json
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 
 app = typer.Typer(help="Validation operations (interval structure, plan structure, goal feasibility)")
@@ -58,24 +58,20 @@ def validate_intervals_command(
     try:
         work_bouts_path = Path(work_bouts_json)
         if not work_bouts_path.exists():
-            envelope = {
-                "ok": False,
-                "error_type": "FILE_NOT_FOUND",
-                "message": f"Work bouts file not found: {work_bouts_json}",
-                "data": None,
-            }
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Work bouts file not found: {work_bouts_json}",
+            )
             output_json(envelope)
             raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
         with open(work_bouts_path, "r") as f:
             work_bouts = json.load(f)
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_JSON",
-            "message": f"Invalid JSON in work bouts file: {e}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in work bouts file: {e}",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
@@ -83,24 +79,20 @@ def validate_intervals_command(
     try:
         recovery_bouts_path = Path(recovery_bouts_json)
         if not recovery_bouts_path.exists():
-            envelope = {
-                "ok": False,
-                "error_type": "FILE_NOT_FOUND",
-                "message": f"Recovery bouts file not found: {recovery_bouts_json}",
-                "data": None,
-            }
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Recovery bouts file not found: {recovery_bouts_json}",
+            )
             output_json(envelope)
             raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
         with open(recovery_bouts_path, "r") as f:
             recovery_bouts = json.load(f)
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_JSON",
-            "message": f"Invalid JSON in recovery bouts file: {e}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in recovery bouts file: {e}",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
@@ -163,24 +155,20 @@ def validate_plan_command(
     try:
         phases_path = Path(phases_json)
         if not phases_path.exists():
-            envelope = {
-                "ok": False,
-                "error_type": "FILE_NOT_FOUND",
-                "message": f"Phases file not found: {phases_json}",
-                "data": None,
-            }
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Phases file not found: {phases_json}",
+            )
             output_json(envelope)
             raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
         with open(phases_path, "r") as f:
             phases = json.load(f)
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_JSON",
-            "message": f"Invalid JSON in phases file: {e}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in phases file: {e}",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
@@ -188,24 +176,20 @@ def validate_plan_command(
     try:
         weekly_volumes_path = Path(weekly_volumes_json)
         if not weekly_volumes_path.exists():
-            envelope = {
-                "ok": False,
-                "error_type": "FILE_NOT_FOUND",
-                "message": f"Weekly volumes file not found: {weekly_volumes_json}",
-                "data": None,
-            }
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Weekly volumes file not found: {weekly_volumes_json}",
+            )
             output_json(envelope)
             raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
         with open(weekly_volumes_path, "r") as f:
             weekly_volumes = json.load(f)
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_JSON",
-            "message": f"Invalid JSON in weekly volumes file: {e}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in weekly volumes file: {e}",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
@@ -213,24 +197,20 @@ def validate_plan_command(
     try:
         recovery_weeks_path = Path(recovery_weeks_json)
         if not recovery_weeks_path.exists():
-            envelope = {
-                "ok": False,
-                "error_type": "FILE_NOT_FOUND",
-                "message": f"Recovery weeks file not found: {recovery_weeks_json}",
-                "data": None,
-            }
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Recovery weeks file not found: {recovery_weeks_json}",
+            )
             output_json(envelope)
             raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
         with open(recovery_weeks_path, "r") as f:
             recovery_weeks = json.load(f)
     except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_JSON",
-            "message": f"Invalid JSON in recovery weeks file: {e}",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in recovery weeks file: {e}",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
@@ -301,12 +281,10 @@ def assess_goal_command(
         else:
             raise ValueError("Invalid time format")
     except ValueError:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_TIME_FORMAT",
-            "message": "goal_time must be in format HH:MM:SS or MM:SS",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message="goal_time must be in format HH:MM:SS or MM:SS",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
@@ -314,12 +292,10 @@ def assess_goal_command(
     try:
         goal_date_obj = datetime.strptime(goal_date, "%Y-%m-%d").date()
     except ValueError:
-        envelope = {
-            "ok": False,
-            "error_type": "INVALID_DATE_FORMAT",
-            "message": "goal_date must be in format YYYY-MM-DD",
-            "data": None,
-        }
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message="goal_date must be in format YYYY-MM-DD",
+        )
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 

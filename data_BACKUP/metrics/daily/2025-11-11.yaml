@@ -1,0 +1,55 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: daily_metrics
+date: '2025-11-11'
+calculated_at: '2026-01-15T12:08:28.750964'
+daily_load:
+  date: '2025-11-11'
+  systemic_load_au: 125.8
+  lower_body_load_au: 19.4
+  activity_count: 1
+  activities:
+  - id: strava_16428768647
+    sport_type: climb
+    systemic_load_au: 125.8
+    lower_body_load_au: 19.4
+    session_type: moderate
+ctl_atl:
+  ctl: 48.7
+  atl: 46.6
+  tsb: 2.1
+  ctl_zone: recreational
+  tsb_zone: optimal
+  ctl_trend: maintaining
+  ctl_change_7d: -0.0
+acwr:
+  acwr: 0.91
+  zone: safe
+  acute_load_7d: 259.9
+  chronic_load_28d: 40.7
+  injury_risk_elevated: false
+readiness:
+  score: 35
+  level: easy_only
+  confidence: medium
+  components:
+    tsb_contribution: 80.2
+    load_trend_contribution: 97.1
+    sleep_contribution: null
+    wellness_contribution: null
+    weights_used:
+      tsb: 0.3
+      load_trend: 0.35
+      sleep: 0.0
+      wellness: 0.0
+  recommendation: Easy effort only. Avoid high-intensity work today.
+  injury_flag_override: false
+  illness_flag_override: true
+  override_reason: Illness detected - easy effort only
+baseline_established: true
+acwr_available: true
+data_days_available: 60
+ctl_initialization_method: chained
+estimated_baseline_days: null
+flags:
+- 'climb activity: ill'

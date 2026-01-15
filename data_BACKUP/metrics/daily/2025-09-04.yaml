@@ -1,0 +1,49 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: daily_metrics
+date: '2025-09-04'
+calculated_at: '2026-01-15T12:08:23.468577'
+daily_load:
+  date: '2025-09-04'
+  systemic_load_au: 80.7
+  lower_body_load_au: 13.5
+  activity_count: 1
+  activities:
+  - id: strava_15698840436
+    sport_type: climb
+    systemic_load_au: 80.7
+    lower_body_load_au: 13.5
+    session_type: moderate
+ctl_atl:
+  ctl: 54.1
+  atl: 57.6
+  tsb: -3.6
+  ctl_zone: recreational
+  tsb_zone: optimal
+  ctl_trend: null
+  ctl_change_7d: null
+acwr: null
+readiness:
+  score: 19
+  level: rest_recommended
+  confidence: low
+  components:
+    tsb_contribution: 66.0
+    load_trend_contribution: 0.0
+    sleep_contribution: null
+    wellness_contribution: null
+    weights_used:
+      tsb: 0.3
+      load_trend: 0.35
+      sleep: 0.0
+      wellness: 0.0
+  recommendation: Rest is strongly recommended. Your body needs recovery.
+  injury_flag_override: false
+  illness_flag_override: false
+  override_reason: null
+baseline_established: false
+acwr_available: false
+data_days_available: 1
+ctl_initialization_method: chained
+estimated_baseline_days: null
+flags: []

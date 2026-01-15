@@ -1,0 +1,49 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_17050189802
+source: strava
+sport_type: run
+sub_type: Run
+name: Evening Run
+date: '2026-01-14'
+start_time: '2026-01-14T19:18:35Z'
+duration_minutes: 35
+duration_seconds: 2114
+distance_km: 5.27
+distance_meters: 5268.7
+elevation_gain_m: 0.0
+average_hr: 157.1
+max_hr: 173.0
+has_hr_data: true
+description: ''
+private_note: "30 minutes @ 6:00 min/km\r\n5 minutes cooldown\r\n\r\nAt minute 10,\
+  \ the right ankle started to feel a bit weird and not comfortable, nothing painful,\
+  \ around 2/10. Then around minute 18 everything got better till the end. \r\n\r\n"
+workout_type: 0
+suffer_score: null
+perceived_exertion: null
+surface_type: treadmill
+surface_type_confidence: high
+data_quality: treadmill
+has_gps_data: false
+gear_id: g19552264
+created_at: '2026-01-14T18:18:35Z'
+updated_at: '2026-01-14T18:18:35Z'
+synced_at: '2026-01-15T11:02:46.645638Z'
+calculated:
+  activity_id: strava_17050189802
+  duration_minutes: 35
+  estimated_rpe: 7
+  sport_type: run
+  surface_type: treadmill
+  base_effort_au: 44.7
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 0.9
+  multiplier_adjustments:
+  - 'Interval training: -15% (work:rest recovery)'
+  systemic_load_au: 44.7
+  lower_body_load_au: 40.2
+  session_type: quality
+day_of_week: 2
+day_of_week_name: Wednesday

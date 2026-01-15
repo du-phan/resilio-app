@@ -273,9 +273,9 @@ class TestGetWeeklyStatus:
 
         # Mock activities (no activities this week)
         def mock_read_yaml(path, schema, options):
-            if "plans/current_plan" in path:
+            if "data/plans/current_plan" in path:
                 return mock_plan
-            elif "metrics/daily" in path:
+            elif "data/metrics/daily" in path:
                 metrics = Mock()
                 metrics.ctl_atl = Mock()
                 metrics.ctl_atl.ctl = 44.0
@@ -306,9 +306,9 @@ class TestGetWeeklyStatus:
 
         # Mock no plan
         def mock_read_yaml(path, schema, options):
-            if "plans/current_plan" in path:
+            if "data/plans/current_plan" in path:
                 return RepoError(RepoErrorType.FILE_NOT_FOUND, "Plan not found")
-            elif "metrics/daily" in path:
+            elif "data/metrics/daily" in path:
                 metrics = Mock()
                 metrics.ctl_atl = Mock()
                 metrics.ctl_atl.ctl = 44.0
@@ -452,7 +452,7 @@ class TestFindLatestMetricsDate:
 
         # Create metrics file for today
         today = date.today()
-        metrics_dir = tmp_path / "metrics" / "daily"
+        metrics_dir = tmp_path / "data" / "metrics" / "daily"
         metrics_dir.mkdir(parents=True, exist_ok=True)
         metrics_file = metrics_dir / f"{today}.yaml"
         metrics_file.write_text("test: data")

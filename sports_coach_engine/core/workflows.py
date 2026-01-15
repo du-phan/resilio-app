@@ -21,6 +21,7 @@ This module does NOT:
 - Make coaching decisions (uses M11 toolkit, Claude Code decides)
 """
 
+import logging
 import os
 import time
 import uuid
@@ -72,6 +73,9 @@ from sports_coach_engine.schemas.metrics import DailyMetrics
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, StravaConnection
 # ProfileError import removed to avoid circular dependency - using duck typing instead
 from sports_coach_engine.schemas.plan import WeekPlan, MasterPlan, PlanPhase
+
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -170,6 +174,7 @@ class SyncWorkflowResult(WorkflowResult):
     """Result from run_sync_workflow."""
 
     activities_imported: list[NormalizedActivity] = field(default_factory=list)
+    activities_skipped: int = 0
     activities_failed: int = 0
     metrics_updated: Optional[DailyMetrics] = None
     suggestions_generated: list[Any] = field(default_factory=list)
@@ -274,16 +279,20 @@ class WorkflowLock:
                     self.repo.delete_file(self.lock_file)
                 elif self._is_stale(lock_data):
                     # Break stale lock
-                    print(
-                        f"[WorkflowLock] Breaking stale lock from PID {lock_data.get('pid')}"
+                    logger.warning(
+                        "[WorkflowLock] Breaking stale lock from PID %s",
+                        lock_data.get("pid"),
                     )
                     self.repo.delete_file(self.lock_file)
                 else:
                     # Active lock held by another process
                     if attempt < self.retry_attempts - 1:
-                        print(
-                            f"[WorkflowLock] Lock held by PID {lock_data.get('pid')}, "
-                            f"waiting {self.retry_wait_seconds}s... (attempt {attempt + 1}/{self.retry_attempts})"
+                        logger.info(
+                            "[WorkflowLock] Lock held by PID %s, waiting %ss... (attempt %s/%s)",
+                            lock_data.get("pid"),
+                            self.retry_wait_seconds,
+                            attempt + 1,
+                            self.retry_attempts,
                         )
                         time.sleep(self.retry_wait_seconds)
                         continue
@@ -313,7 +322,7 @@ class WorkflowLock:
                     self.repo.delete_file(self.lock_file)
                     self._acquired = False
             except Exception as e:
-                print(f"[WorkflowLock] Warning: Error releasing lock: {e}")
+                logger.warning("[WorkflowLock] Error releasing lock: %s", e)
 
     def _is_stale(self, lock_data: dict) -> bool:
         """
@@ -489,7 +498,7 @@ def _fetch_and_update_athlete_profile(
         # Apply updates if any
         if updates:
             profile_service.update_profile(updates)
-            print(f"[Sync] Updated profile from Strava: {', '.join(updates.keys())}")
+            logger.info("[Sync] Updated profile from Strava: %s", ", ".join(updates.keys()))
             return list(updates.keys())
 
         return None
@@ -499,11 +508,11 @@ def _fetch_and_update_athlete_profile(
         raise
     except (StravaAPIError, StravaRateLimitError) as e:
         # Non-fatal - log warning and continue
-        print(f"[Sync] Warning: Could not fetch athlete profile: {e}")
+        logger.warning("[Sync] Could not fetch athlete profile: %s", e)
         return None
     except Exception as e:
         # Unexpected errors - log but don't block sync
-        print(f"[Sync] Warning: Profile update failed: {e}")
+        logger.warning("[Sync] Profile update failed: %s", e)
         return None
 
 
@@ -560,7 +569,7 @@ def run_sync_workflow(
                 result.profile_fields_updated = profile_fields_updated
 
             # Step 1: Fetch activity summaries from Strava (M5)
-            print(f"[Sync] Fetching activities from Strava (since={since})...")
+            logger.info("[Sync] Fetching activities from Strava (since=%s)...", since)
 
             # Convert datetime to Unix timestamp for Strava API
             after_timestamp = None
@@ -592,14 +601,35 @@ def run_sync_workflow(
                 result.warnings.append("No new activities found")
                 return result
 
-            print(f"[Sync] Fetched {len(activity_summaries)} activity summaries across {page-1} pages")
+            logger.info(
+                "[Sync] Fetched %s activity summaries across %s pages",
+                len(activity_summaries),
+                page - 1,
+            )
+
+            # Build index of existing activities to prevent duplicates
+            since_date = since.date() if since else None
+            existing_ids, existing_by_date = _load_existing_activity_index(
+                repo,
+                config.settings.paths.activities_dir,
+                since_date,
+            )
 
             # Step 2-8: Process each activity through pipeline
             for activity_summary in activity_summaries:
                 raw_activity = None  # Initialize for error handling
                 try:
+                    # Skip if activity already imported (idempotency by Strava ID)
+                    activity_id = f"strava_{activity_summary['id']}"
+                    if activity_id in existing_ids:
+                        result.activities_skipped += 1
+                        continue
+
                     # Fetch full activity details (includes description and private_note)
-                    print(f"[Sync] Fetching details for activity {activity_summary['id']}...")
+                    logger.info(
+                        "[Sync] Fetching details for activity %s...",
+                        activity_summary["id"],
+                    )
                     activity_detail = fetch_activity_details(config, str(activity_summary["id"]))
 
                     # Rate limiting between API calls
@@ -610,6 +640,12 @@ def run_sync_workflow(
 
                     # M6: Normalize
                     normalized = normalize_activity(raw_activity, repo)
+
+                    # Skip fuzzy duplicates (manual logs or previously imported with different IDs)
+                    existing_on_day = existing_by_date.get(normalized.date, [])
+                    if _is_fuzzy_duplicate(normalized, existing_on_day):
+                        result.activities_skipped += 1
+                        continue
 
                     # M7: Analyze notes & RPE
                     profile_service = ProfileService(repo)
@@ -629,6 +665,8 @@ def run_sync_workflow(
                     repo.write_yaml(activity_path, normalized)
 
                     result.activities_imported.append(normalized)
+                    existing_ids.add(normalized.id)
+                    existing_by_date.setdefault(normalized.date, []).append(normalized)
 
                     # M13: Extract memories from notes
                     if normalized.description or normalized.private_note:
@@ -687,8 +725,22 @@ def run_sync_workflow(
                         end_date=date.today()
                     )
 
-                    print(f"[Sync] Computed {metrics_result['metrics_computed']} days of metrics")
-                    result.metrics_updated = True
+                    logger.info(
+                        "[Sync] Computed %s days of metrics",
+                        metrics_result["metrics_computed"],
+                    )
+                    metrics_path = daily_metrics_path(date.today())
+                    metrics = repo.read_yaml(
+                        metrics_path,
+                        DailyMetrics,
+                        ReadOptions(allow_missing=True, should_validate=True),
+                    )
+                    if metrics is None or isinstance(metrics, RepoError):
+                        result.warnings.append(
+                            "Metrics recomputed but latest daily metrics could not be loaded"
+                        )
+                    else:
+                        result.metrics_updated = metrics
                 except Exception as e:
                     result.warnings.append(f"Failed to recompute metrics: {e}")
 
@@ -709,9 +761,10 @@ def run_sync_workflow(
             result.success = True
             result.partial_failure = result.activities_failed > 0
 
-            print(
-                f"[Sync] Complete: {len(result.activities_imported)} imported, "
-                f"{result.activities_failed} failed"
+            logger.info(
+                "[Sync] Complete: %s imported, %s failed",
+                len(result.activities_imported),
+                result.activities_failed,
             )
 
             return result
@@ -722,11 +775,11 @@ def run_sync_workflow(
 
         except Exception as e:
             # Fatal error: rollback all changes
-            print(f"[Sync] Fatal error, rolling back: {e}")
+            logger.error("[Sync] Fatal error, rolling back: %s", e)
             try:
                 txn.rollback()
             except WorkflowRollbackError as rollback_err:
-                print(f"[Sync] Rollback had errors: {rollback_err}")
+                logger.error("[Sync] Rollback had errors: %s", rollback_err)
 
             raise WorkflowError(f"Sync workflow failed: {e}") from e
 
@@ -761,20 +814,16 @@ def run_metrics_refresh(
         target_date = date.today()
 
     try:
-        print(f"[MetricsRefresh] Computing metrics for {target_date}...")
+        logger.info("[MetricsRefresh] Computing metrics for %s...", target_date)
 
         # Compute metrics (M9)
         metrics = compute_daily_metrics(target_date, repo)
-
-        # Save metrics
-        metrics_path = daily_metrics_path(target_date)
-        repo.write_yaml(metrics_path, metrics.model_dump())
 
         result.success = True
         result.metrics = metrics
         result.date_refreshed = target_date
 
-        print(f"[MetricsRefresh] Complete: CTL={metrics.ctl_atl.ctl:.1f}")
+        logger.info("[MetricsRefresh] Complete: CTL=%.1f", metrics.ctl_atl.ctl)
 
         return result
 
@@ -809,7 +858,7 @@ def run_plan_generation(
     result = PlanGenerationResult(success=False)
 
     try:
-        print("[PlanGen] Generating training plan...")
+        logger.info("[PlanGen] Generating training plan...")
 
         # Load profile (M4)
         profile_service = ProfileService(repo)
@@ -830,7 +879,7 @@ def run_plan_generation(
             old_plan = repo.read_yaml(plan_path, schema=None)
             repo.write_yaml(archive_path, old_plan)
             result.archived_plan_path = archive_path
-            print(f"[PlanGen] Archived old plan to {archive_path}")
+            logger.info("[PlanGen] Archived old plan to %s", archive_path)
 
         # Create minimal valid plan skeleton (Claude Code will fill in weeks)
         # Generate unique plan ID
@@ -873,8 +922,10 @@ def run_plan_generation(
         except ValueError as e:
             # Timeline too short for goal - create basic phase structure as fallback
             # Claude Code will need to address this in conversation
-            print(f"[PlanGen] Warning: {e}")
-            print(f"[PlanGen] Creating fallback phase structure - Claude Code will refine based on constraints")
+            logger.warning("[PlanGen] Warning: %s", e)
+            logger.info(
+                "[PlanGen] Creating fallback phase structure - Claude Code will refine based on constraints"
+            )
 
             # Create simple phase structure for any timeline
             if total_weeks <= 4:
@@ -1012,8 +1063,9 @@ def run_plan_generation(
         result.success = True
         result.plan = plan_data  # Return dict for API layer
 
-        print(
-            f"[PlanGen] Complete: Plan created for {profile.goal.type if profile.goal else 'general fitness'}"
+        logger.info(
+            "[PlanGen] Complete: Plan created for %s",
+            profile.goal.type if profile.goal else "general fitness",
         )
 
         return result
@@ -1053,7 +1105,7 @@ def run_adaptation_check(
         target_date = date.today()
 
     try:
-        print(f"[AdaptCheck] Checking adaptations for {target_date}...")
+        logger.info("[AdaptCheck] Checking adaptations for %s...", target_date)
 
         # Load metrics (M9) - optional for future dates
         metrics = None
@@ -1061,7 +1113,10 @@ def run_adaptation_check(
         if repo.file_exists(metrics_path):
             metrics = repo.read_yaml(metrics_path, schema=DailyMetrics)
         else:
-            print(f"[AdaptCheck] No metrics for {target_date} (future date or no activities yet)")
+            logger.info(
+                "[AdaptCheck] No metrics for %s (future date or no activities yet)",
+                target_date,
+            )
 
         # Load profile
         profile_service = ProfileService(repo)
@@ -1144,17 +1199,18 @@ def run_adaptation_check(
                 result.auto_applied_overrides.append(
                     "SAFETY OVERRIDE: ACWR > 1.5 + readiness < 35 → rest day mandatory"
                 )
-                print("[AdaptCheck] Safety override: Force rest day")
+                logger.warning("[AdaptCheck] Safety override: Force rest day")
 
         result.success = True
 
         if triggers:
-            print(
-                f"[AdaptCheck] Complete: {len(triggers)} triggers detected, "
-                f"{len(result.auto_applied_overrides)} auto-applied"
+            logger.info(
+                "[AdaptCheck] Complete: %s triggers detected, %s auto-applied",
+                len(triggers),
+                len(result.auto_applied_overrides),
             )
         else:
-            print("[AdaptCheck] Complete: No adaptations needed")
+            logger.info("[AdaptCheck] Complete: No adaptations needed")
 
         return result
 
@@ -1197,7 +1253,11 @@ def run_manual_activity_workflow(
         activity_date = date.today()
 
     try:
-        print(f"[ManualActivity] Logging {sport_type} activity for {activity_date}...")
+        logger.info(
+            "[ManualActivity] Logging %s activity for %s...",
+            sport_type,
+            activity_date,
+        )
 
         # Create RawActivity
         activity_id = f"manual_{uuid.uuid4()}"
@@ -1246,9 +1306,11 @@ def run_manual_activity_workflow(
         result.activity = normalized
         result.metrics_updated = metrics
 
-        print(
-            f"[ManualActivity] Complete: {sport_type} logged "
-            f"({duration_minutes}min, RPE {estimated_rpe})"
+        logger.info(
+            "[ManualActivity] Complete: %s logged (%s min, RPE %s)",
+            sport_type,
+            duration_minutes,
+            estimated_rpe,
         )
 
         return result
@@ -1260,6 +1322,72 @@ def run_manual_activity_workflow(
 # ============================================================
 # HELPER FUNCTIONS
 # ============================================================
+
+
+def _load_existing_activity_index(
+    repo: RepositoryIO,
+    activities_dir: str,
+    since_date: Optional[date],
+) -> tuple[set[str], dict[date, list[NormalizedActivity]]]:
+    """Build an index of existing activities to prevent duplicate imports."""
+    existing_ids: set[str] = set()
+    existing_by_date: dict[date, list[NormalizedActivity]] = {}
+
+    pattern = f"{activities_dir}/**/*.yaml"
+    for file_path in repo.list_files(pattern):
+        file_date = _parse_activity_date_from_filename(Path(file_path).name)
+        if since_date and file_date and file_date < since_date:
+            continue
+
+        activity = repo.read_yaml(
+            file_path,
+            NormalizedActivity,
+            ReadOptions(allow_missing=True, should_validate=True),
+        )
+        if activity is None or isinstance(activity, RepoError):
+            continue
+
+        existing_ids.add(activity.id)
+        existing_by_date.setdefault(activity.date, []).append(activity)
+
+    return existing_ids, existing_by_date
+
+
+def _parse_activity_date_from_filename(filename: str) -> Optional[date]:
+    """Extract YYYY-MM-DD date from activity filename, if present."""
+    if len(filename) < 10:
+        return None
+    try:
+        return datetime.strptime(filename[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _is_fuzzy_duplicate(
+    new_activity: NormalizedActivity,
+    existing_activities: list[NormalizedActivity],
+) -> bool:
+    """Check if activity matches an existing one by date, sport, time, and duration."""
+    for existing in existing_activities:
+        if new_activity.sport_type != existing.sport_type:
+            continue
+
+        if not new_activity.start_time or not existing.start_time:
+            continue
+
+        time_diff = abs(
+            (new_activity.start_time - existing.start_time).total_seconds()
+        )
+        if time_diff > 1800:  # 30 minutes
+            continue
+
+        duration_diff = abs(new_activity.duration_seconds - existing.duration_seconds)
+        if duration_diff > 300:  # 5 minutes
+            continue
+
+        return True
+
+    return False
 
 
 def _get_activity_path(activity: NormalizedActivity) -> str:
@@ -1399,7 +1527,7 @@ def recompute_all_metrics(
     if end_date is None:
         end_date = date.today()
 
-    print(f"[Metrics] Recomputing from {start_date} to {end_date}")
+    logger.info("[Metrics] Recomputing from %s to %s", start_date, end_date)
 
     # Step 2: Compute metrics for ALL dates (activities + rest days)
     metrics_computed = 0
@@ -1411,10 +1539,8 @@ def recompute_all_metrics(
         activities = _read_activities_for_date(current_date, repo)
         is_rest_day = len(activities) == 0
 
-        # Compute and save metrics
+        # Compute metrics (compute_daily_metrics persists to disk)
         metrics = compute_daily_metrics(current_date, repo)
-        metrics_path = daily_metrics_path(current_date)
-        repo.write_yaml(metrics_path, metrics.model_dump())
 
         metrics_computed += 1
         if is_rest_day:
@@ -1428,7 +1554,11 @@ def recompute_all_metrics(
     weekly_summary = compute_weekly_summary(week_start, repo)
     repo.write_yaml(weekly_metrics_summary_path(), weekly_summary.model_dump())
 
-    print(f"[Metrics] Computed {metrics_computed} days ({rest_days_filled} rest days)")
+    logger.info(
+        "[Metrics] Computed %s days (%s rest days)",
+        metrics_computed,
+        rest_days_filled,
+    )
 
     return {
         "start_date": start_date,

@@ -12,6 +12,7 @@ from typing import List
 import typer
 
 from sports_coach_engine.cli.errors import get_exit_code_from_envelope
+from sports_coach_engine.schemas.config import PathSettings
 from sports_coach_engine.cli.output import create_success_envelope, output_json
 
 
@@ -19,7 +20,7 @@ def init_command(ctx: typer.Context) -> None:
     """Initialize data directory structure and config templates.
 
     Creates:
-    - data/ directory with athlete/, activities/, metrics/, plans/, conversations/
+    - data/athlete/, data/activities/, data/metrics/, data/plans/, data/conversations/, data/backup/ directories
     - config/ directory with settings.yaml and secrets.local.yaml templates
 
     Safe to run multiple times - won't overwrite existing files.
@@ -33,14 +34,16 @@ def init_command(ctx: typer.Context) -> None:
     skipped: List[str] = []
 
     # Define directory structure
+    paths = PathSettings()
     data_dirs = [
-        repo_root / "data" / "athlete",
-        repo_root / "data" / "activities",
-        repo_root / "data" / "metrics" / "daily",
-        repo_root / "data" / "metrics" / "weekly",
-        repo_root / "data" / "plans" / "archive",
-        repo_root / "data" / "plans" / "workouts",
-        repo_root / "data" / "conversations",
+        repo_root / paths.athlete_dir,
+        repo_root / paths.activities_dir,
+        repo_root / paths.metrics_dir / "daily",
+        repo_root / paths.metrics_dir / "weekly",
+        repo_root / paths.plans_dir / "archive",
+        repo_root / paths.plans_dir / "workouts",
+        repo_root / paths.conversations_dir,
+        repo_root / paths.backup_dir,
     ]
 
     config_dir = repo_root / "config"
@@ -116,17 +119,21 @@ _schema:
   format_version: "1.0.0"
   schema_type: "settings"
 
+# Data paths (relative to repo root)
+paths:
+  athlete_dir: "data/athlete"
+  activities_dir: "data/activities"
+  metrics_dir: "data/metrics"
+  plans_dir: "data/plans"
+  conversations_dir: "data/conversations"
+  backup_dir: "data/backup"
+
 # Strava API endpoints
 strava:
   auth_url: "https://www.strava.com/oauth/authorize"
   token_url: "https://www.strava.com/oauth/token"
   api_base: "https://www.strava.com/api/v3"
   scopes: ["activity:read_all"]
-
-# Data paths (relative to repo root)
-paths:
-  data_root: "data"
-  config_root: "config"
 """
             )
             created.append(str(settings_file.relative_to(repo_root)))

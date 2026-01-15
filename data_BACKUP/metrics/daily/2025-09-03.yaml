@@ -1,0 +1,49 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: daily_metrics
+date: '2025-09-03'
+calculated_at: '2026-01-15T12:08:23.459635'
+daily_load:
+  date: '2025-09-03'
+  systemic_load_au: 56.7
+  lower_body_load_au: 56.7
+  activity_count: 1
+  activities:
+  - id: strava_15685568339
+    sport_type: run
+    systemic_load_au: 56.7
+    lower_body_load_au: 56.7
+    session_type: quality
+ctl_atl:
+  ctl: 53.4
+  atl: 53.8
+  tsb: -0.4
+  ctl_zone: recreational
+  tsb_zone: optimal
+  ctl_trend: null
+  ctl_change_7d: null
+acwr: null
+readiness:
+  score: 44
+  level: easy_only
+  confidence: low
+  components:
+    tsb_contribution: 74.0
+    load_trend_contribution: 65.0
+    sleep_contribution: null
+    wellness_contribution: null
+    weights_used:
+      tsb: 0.3
+      load_trend: 0.35
+      sleep: 0.0
+      wellness: 0.0
+  recommendation: Easy effort only. Avoid high-intensity work today.
+  injury_flag_override: false
+  illness_flag_override: false
+  override_reason: null
+baseline_established: false
+acwr_available: false
+data_days_available: 0
+ctl_initialization_method: estimated
+estimated_baseline_days: 14
+flags: []

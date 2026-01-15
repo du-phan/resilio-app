@@ -1,0 +1,56 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16250644353
+source: strava
+sport_type: strength
+sub_type: Workout
+name: Lunch Activity
+date: '2025-10-25'
+start_time: '2025-10-25T11:00:22Z'
+duration_minutes: 120
+duration_seconds: 7200
+distance_km: null
+distance_meters: 0.0
+elevation_gain_m: 0.0
+average_hr: null
+max_hr: null
+has_hr_data: false
+description: "First session ever at Block Session in Lyon!\nGood sensation and because\
+  \ it is a new gym I just want to climb as much as possible so I did not try super\
+  \ hard boulder.\nThe level is ( in french): D\xE9butant, facile, moyen, tr\xE8s\
+  \ difficile,  extr\xEAme, mutant.\n\nI warm up on intermediate (moyen) level then\
+  \ climb solely on the difficile level. Below is the result of all th\xE9 difficile\
+  \ level boulders that I climbed: \n\n\u2022 Flash : 2\n\u2022 2-3 tries: 7\n\u2022\
+  \ 4+ tries: 3\n\nI'd say in term of difficulty , the \"difficile\" level is around\
+  \ red 3 and below at arkose Montmartre (my hom gym). So I'd say I could have climbed\
+  \ their \"tr\xE8s difficile\" level too, but with site some attempts and effort.\
+  \ \n\nOverall good sensation ! The style is quite crimpy old school, so not quite\
+  \ my style but the boulders are great. \n\n"
+private_note: null
+workout_type: null
+suffer_score: null
+perceived_exertion: 5
+surface_type: unknown
+surface_type_confidence: high
+data_quality: low
+has_gps_data: false
+gear_id: null
+created_at: '2025-10-25T09:00:22Z'
+updated_at: '2025-10-25T09:00:22Z'
+synced_at: '2026-01-15T11:04:01.206037Z'
+calculated:
+  activity_id: strava_16250644353
+  duration_minutes: 120
+  estimated_rpe: 5
+  sport_type: strength
+  surface_type: unknown
+  base_effort_au: 134.5
+  systemic_multiplier: 0.55
+  lower_body_multiplier: 0.4
+  multiplier_adjustments: []
+  systemic_load_au: 74.0
+  lower_body_load_au: 53.8
+  session_type: moderate
+day_of_week: 5
+day_of_week_name: Saturday

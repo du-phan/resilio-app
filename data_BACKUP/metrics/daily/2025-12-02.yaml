@@ -1,0 +1,49 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: daily_metrics
+date: '2025-12-02'
+calculated_at: '2026-01-15T12:08:31.174145'
+daily_load:
+  date: '2025-12-02'
+  systemic_load_au: 0.0
+  lower_body_load_au: 0.0
+  activity_count: 0
+  activities: []
+ctl_atl:
+  ctl: 35.9
+  atl: 7.3
+  tsb: 28.6
+  ctl_zone: developing
+  tsb_zone: peaked
+  ctl_trend: declining
+  ctl_change_7d: -6.6
+acwr:
+  acwr: 0.03
+  zone: undertrained
+  acute_load_7d: 6.2
+  chronic_load_28d: 28.3
+  injury_risk_elevated: false
+readiness:
+  score: 52
+  level: reduce_intensity
+  confidence: medium
+  components:
+    tsb_contribution: 100.0
+    load_trend_contribution: 65.0
+    sleep_contribution: null
+    wellness_contribution: null
+    weights_used:
+      tsb: 0.3
+      load_trend: 0.35
+      sleep: 0.0
+      wellness: 0.0
+  recommendation: Consider reducing intensity or volume. Listen to your body.
+  injury_flag_override: false
+  illness_flag_override: false
+  override_reason: null
+baseline_established: true
+acwr_available: true
+data_days_available: 60
+ctl_initialization_method: chained
+estimated_baseline_days: null
+flags: []

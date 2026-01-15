@@ -272,7 +272,7 @@ class TestFilenameGeneration:
 
         filename = generate_activity_filename(activity, temp_repo)
 
-        assert filename == "activities/2026-01/2026-01-12_run_0730.yaml"
+        assert filename == "data/activities/2026-01/2026-01-12_run_0730.yaml"
 
     def test_index_based_naming_when_start_time_missing(self, temp_repo):
         """Should use index when start_time is missing."""
@@ -291,7 +291,7 @@ class TestFilenameGeneration:
 
         filename = generate_activity_filename(activity, temp_repo)
 
-        assert filename == "activities/2026-01/2026-01-12_climb_1.yaml"
+        assert filename == "data/activities/2026-01/2026-01-12_climb_1.yaml"
 
     def test_collision_handling_increments_index(self, temp_repo):
         """Should increment index when filename collision occurs."""
@@ -309,7 +309,7 @@ class TestFilenameGeneration:
         )
 
         # Create first file to cause collision
-        first_path = "activities/2026-01/2026-01-12_run_0730.yaml"
+        first_path = "data/activities/2026-01/2026-01-12_run_0730.yaml"
         # Create a proper NormalizedActivity for the first file
         first_activity = NormalizedActivity(
             id="existing_activity",
@@ -329,7 +329,7 @@ class TestFilenameGeneration:
         filename = generate_activity_filename(activity, temp_repo)
 
         # Should add _2 suffix
-        assert filename == "activities/2026-01/2026-01-12_run_0730_2.yaml"
+        assert filename == "data/activities/2026-01/2026-01-12_run_0730_2.yaml"
 
 
 # ============================================================
@@ -438,7 +438,7 @@ class TestNormalizationIntegration:
         assert temp_repo.file_exists(result.file_path)
 
         # Verify file path format
-        assert "activities/2026-01/" in result.file_path
+        assert "data/activities/2026-01/" in result.file_path
         assert "2026-01-12_run_" in result.file_path
 
     def test_treadmill_detection_affects_data_quality(self):

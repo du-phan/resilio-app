@@ -28,7 +28,7 @@ class TestProfileService:
     def test_load_profile_returns_none_when_not_exists(self, tmp_path, monkeypatch):
         """Should return None when profile doesn't exist."""
         (tmp_path / ".git").mkdir()
-        (tmp_path / "athlete").mkdir()
+        (tmp_path / "data" / "athlete").mkdir()
         monkeypatch.chdir(tmp_path)
 
         repo = RepositoryIO()
@@ -69,7 +69,7 @@ class TestProfileService:
         assert loaded.running_priority == RunningPriority.PRIMARY
 
     def test_save_profile_creates_athlete_directory(self, tmp_path, monkeypatch):
-        """Should create athlete/ directory if it doesn't exist."""
+        """Should create data/athlete/ directory if it doesn't exist."""
         (tmp_path / ".git").mkdir()
         monkeypatch.chdir(tmp_path)
 
@@ -91,7 +91,7 @@ class TestProfileService:
 
         error = service.save_profile(profile)
         assert error is None
-        assert (tmp_path / "athlete" / "profile.yaml").exists()
+        assert (tmp_path / "data" / "athlete" / "profile.yaml").exists()
 
     def test_update_profile_merges_changes(self, tmp_path, monkeypatch):
         """Should merge updates with existing profile."""
@@ -198,7 +198,7 @@ class TestProfileService:
         )
         service.save_profile(profile)
 
-        profile_path = tmp_path / "athlete" / "profile.yaml"
+        profile_path = tmp_path / "data" / "athlete" / "profile.yaml"
         assert profile_path.exists()
 
         # Delete

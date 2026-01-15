@@ -148,7 +148,7 @@ esac
 - `config_missing` → Exit code 2
 - `auth_error` → Exit code 3
 - `network_error`, `rate_limit` → Exit code 4
-- `validation_error`, `insufficient_data` → Exit code 5
+- `validation_error`, `invalid_input`, `insufficient_data` → Exit code 5
 - All other errors → Exit code 1
 
 ## Detailed Command Reference

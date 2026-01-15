@@ -363,6 +363,7 @@ def fetch_activity_details(config: Config, activity_id: str) -> dict:
 
     Raises:
         StravaAuthError: If authentication fails
+        StravaRateLimitError: If rate limited
         StravaAPIError: If API request fails
     """
     access_token = get_valid_token(config)
@@ -440,6 +441,12 @@ def fetch_athlete_profile(config: Config) -> Optional[dict]:
 
             if response.status_code == 401:
                 raise StravaAuthError("Invalid or expired token")
+            elif response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                raise StravaRateLimitError(
+                    "Rate limit exceeded",
+                    retry_after=int(retry_after) if retry_after else None,
+                )
             elif response.status_code != 200:
                 raise StravaAPIError(
                     f"Athlete profile fetch failed: {response.status_code}",

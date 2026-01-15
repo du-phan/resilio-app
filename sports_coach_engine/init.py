@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 
 
-def init_data_directory(root_path: Path = Path("data")):
+def init_data_directory(root_path: Path = Path(".")):
     """Create data directory structure with templates."""
 
     print("Initializing Sports Coach Engine data directory...")
@@ -21,6 +21,7 @@ def init_data_directory(root_path: Path = Path("data")):
         root_path / "athlete",
         root_path / "activities",
         root_path / "metrics" / "daily",
+        root_path / "metrics" / "weekly",
         root_path / "plans" / "archive",
         root_path / "plans" / "workouts",
         root_path / "conversations",

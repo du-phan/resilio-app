@@ -1,0 +1,47 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16450067182
+source: strava
+sport_type: strength
+sub_type: Workout
+name: Fencing!
+date: '2025-11-13'
+start_time: '2025-11-13T20:00:04Z'
+duration_minutes: 60
+duration_seconds: 3600
+distance_km: null
+distance_meters: 0.0
+elevation_gain_m: 0.0
+average_hr: null
+max_hr: null
+has_hr_data: false
+description: 'Introduction class of fencing. A lot of fun, it was more intense than
+  I thought '
+private_note: null
+workout_type: null
+suffer_score: null
+perceived_exertion: 6
+surface_type: unknown
+surface_type_confidence: high
+data_quality: low
+has_gps_data: false
+gear_id: null
+created_at: '2025-11-13T19:00:04Z'
+updated_at: '2025-11-13T19:00:04Z'
+synced_at: '2026-01-15T11:03:38.446452Z'
+calculated:
+  activity_id: strava_16450067182
+  duration_minutes: 60
+  estimated_rpe: 6
+  sport_type: strength
+  surface_type: unknown
+  base_effort_au: 77.4
+  systemic_multiplier: 0.55
+  lower_body_multiplier: 0.4
+  multiplier_adjustments: []
+  systemic_load_au: 42.6
+  lower_body_load_au: 31.0
+  session_type: moderate
+day_of_week: 3
+day_of_week_name: Thursday

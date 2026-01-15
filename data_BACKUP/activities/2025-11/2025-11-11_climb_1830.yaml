@@ -1,0 +1,55 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16428768647
+source: strava
+sport_type: climb
+sub_type: RockClimbing
+name: Evening Rock Climb
+date: '2025-11-11'
+start_time: '2025-11-11T18:30:00Z'
+duration_minutes: 150
+duration_seconds: 9000
+distance_km: null
+distance_meters: 0.0
+elevation_gain_m: 0.0
+average_hr: null
+max_hr: null
+has_hr_data: false
+description: "At home gym Arkose Montmartre. \r\nI flashed a black-level boulder (grade\
+  \ black 1/5): in slight overhang with some powerful move.  It is my style but objectively\
+  \ it is still a very easy, I'd rather grade it red 3/5.\r\nThen I work on another\
+  \ black-level boulder (grade black 2/5): I spent at least 1h on it to work on the\
+  \ crux, which, imo, is a bit morphological: it is harder for shorter climber like\
+  \ me. I should be able to do it in the next sessions though.\r\nFinally I work on\
+  \ a red 4/5 traversal style: I did not succeed as I'm already quite tired and this\
+  \ boulder is quite physical, especially for shorter climber (again).\r\nIn general,\
+  \ I feel quite  good, quite physical (and a bit longer than usual) session. "
+private_note: ''
+workout_type: 28
+suffer_score: null
+perceived_exertion: 6
+surface_type: unknown
+surface_type_confidence: high
+data_quality: low
+has_gps_data: false
+gear_id: null
+created_at: '2025-11-11T17:30:00Z'
+updated_at: '2025-11-11T17:30:00Z'
+synced_at: '2026-01-15T11:03:41.649082Z'
+calculated:
+  activity_id: strava_16428768647
+  duration_minutes: 150
+  estimated_rpe: 6
+  sport_type: climb
+  surface_type: unknown
+  base_effort_au: 193.6
+  systemic_multiplier: 0.65
+  lower_body_multiplier: 0.1
+  multiplier_adjustments:
+  - 'Long duration (>120min): +0.05 systemic'
+  systemic_load_au: 125.8
+  lower_body_load_au: 19.4
+  session_type: moderate
+day_of_week: 1
+day_of_week_name: Tuesday

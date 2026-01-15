@@ -1,0 +1,56 @@
+schema_metadata:
+  format_version: 1.0.0
+  schema_type: activity
+id: strava_16434799491
+source: strava
+sport_type: run
+sub_type: Run
+name: Lunch Run
+date: '2025-11-12'
+start_time: '2025-11-12T12:32:07Z'
+duration_minutes: 60
+duration_seconds: 3605
+distance_km: 9.11
+distance_meters: 9114.4
+elevation_gain_m: 9.0
+average_hr: 156.0
+max_hr: 198.0
+has_hr_data: true
+description: "8 x 600m @3k pace 75s rest\r\n\r\n/tool_creation: create a new tool\
+  \ if not exist called `historical workout pattern matching`: the goal is to find\
+  \ all \"similar\" workouts in the past (for example for this specific one, look\
+  \ for all the workouts type X x 600m at around the same pace). Then based on your\
+  \ expertise, retrieve or compute all the important metrics allowing you to adjust\
+  \ the training plan (HR, VMA, etc.). Add these inputs into the tool `Training plan\
+  \ adaptation`. Then update the system prompt. Think ultrahard, step by step. Be\
+  \ rigorous and thorough. Always plan before act."
+private_note: "My 3k pace is around 4:30 - 4:35 min/km\r\nNot an easy one, definitely\
+  \ tougher than the 6 x 1000m  @10k pace last week. As usual it is the first few\
+  \ laps that I ran the slowest, psychological issue I guess. \r\n"
+workout_type: 0
+suffer_score: null
+perceived_exertion: null
+surface_type: road
+surface_type_confidence: high
+data_quality: high
+has_gps_data: true
+gear_id: g19552264
+created_at: '2025-11-12T11:32:07Z'
+updated_at: '2025-11-12T11:32:07Z'
+synced_at: '2026-01-15T11:03:40.231708Z'
+calculated:
+  activity_id: strava_16434799491
+  duration_minutes: 60
+  estimated_rpe: 5
+  sport_type: run
+  surface_type: road
+  base_effort_au: 57.1
+  systemic_multiplier: 1.0
+  lower_body_multiplier: 1.0
+  multiplier_adjustments:
+  - 'Interval training: -15% (work:rest recovery)'
+  systemic_load_au: 57.1
+  lower_body_load_au: 57.1
+  session_type: moderate
+day_of_week: 2
+day_of_week_name: Wednesday

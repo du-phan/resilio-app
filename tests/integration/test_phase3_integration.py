@@ -60,7 +60,7 @@ class TestPhase3Integration:
         """
         # Setup
         (tmp_path / ".git").mkdir()
-        (tmp_path / "activities").mkdir(parents=True)
+        (tmp_path / "data" / "activities").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
@@ -109,7 +109,7 @@ class TestPhase3Integration:
 
         # Persist all activities
         for activity in activities:
-            month_dir = f"activities/{activity.date.year}-{activity.date.month:02d}"
+            month_dir = f"data/activities/{activity.date.year}-{activity.date.month:02d}"
             (tmp_path / month_dir).mkdir(parents=True, exist_ok=True)
             activity_path = f"{month_dir}/{activity.date.isoformat()}_{activity.id}.yaml"
             error = repo.write_yaml(activity_path, activity)
@@ -234,7 +234,7 @@ class TestPhase3Integration:
         # Create a simple activity
         target_date = date(2026, 1, 15)
         activity = self._create_run_activity(target_date, 45, 6, "easy", 145, 6)
-        month_dir = f"activities/{activity.date.year}-{activity.date.month:02d}"
+        month_dir = f"data/activities/{activity.date.year}-{activity.date.month:02d}"
         (tmp_path / month_dir).mkdir(parents=True)
         repo.write_yaml(f"{month_dir}/{activity.date.isoformat()}_{activity.id}.yaml", activity)
 
@@ -243,7 +243,7 @@ class TestPhase3Integration:
         assert metrics1.date == target_date
 
         # Read back from file
-        metrics_path = f"metrics/daily/{target_date.isoformat()}.yaml"
+        metrics_path = f"data/metrics/daily/{target_date.isoformat()}.yaml"
         result = repo.read_yaml(metrics_path, DailyMetrics)
         assert not hasattr(result, "error_type")  # Not a RepoError
 
@@ -268,7 +268,7 @@ class TestPhase3Integration:
                     start_date + timedelta(days=day),
                     30, 4, "easy", 135, 4
                 )
-                month_dir = f"activities/{activity.date.year}-{activity.date.month:02d}"
+                month_dir = f"data/activities/{activity.date.year}-{activity.date.month:02d}"
                 (tmp_path / month_dir).mkdir(parents=True, exist_ok=True)
                 error = repo.write_yaml(
                     f"{month_dir}/{activity.date.isoformat()}_{activity.id}.yaml",
@@ -284,7 +284,7 @@ class TestPhase3Integration:
                     spike_start + timedelta(days=day),
                     70, 10, "quality", 165, 9  # Much harder and longer
                 )
-                month_dir = f"activities/{activity.date.year}-{activity.date.month:02d}"
+                month_dir = f"data/activities/{activity.date.year}-{activity.date.month:02d}"
                 (tmp_path / month_dir).mkdir(parents=True, exist_ok=True)
                 error = repo.write_yaml(
                     f"{month_dir}/{activity.date.isoformat()}_{activity.id}.yaml",
@@ -318,7 +318,7 @@ class TestPhase3Integration:
 
         # Note: M7 (Notes Analyzer) would normally extract this to flags
         # For integration test, we'll manually add the flag
-        month_dir = f"activities/{activity.date.year}-{activity.date.month:02d}"
+        month_dir = f"data/activities/{activity.date.year}-{activity.date.month:02d}"
         (tmp_path / month_dir).mkdir(parents=True)
         repo.write_yaml(f"{month_dir}/{activity.date.isoformat()}_{activity.id}.yaml", activity)
 
