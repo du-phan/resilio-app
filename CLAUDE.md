@@ -142,50 +142,20 @@ AskUserQuestion is ONLY for presenting meaningful choices with trade-offs. **NEV
 3. **Information you should remember** from conversation context
 4. **Data available via API calls** (CTL, recent activities, etc.)
 
-**Anti-Pattern Examples (DO NOT DO THIS)**:
+**Anti-Pattern Example**:
 
-❌ **BAD: Using AskUserQuestion for name collection**
-
+❌ **BAD**: Using for name collection
 ```
 AskUserQuestion: "What is your name?"
-Options:
-A) Tell me your name
-B) I'll provide my name
-C) Skip for now
+Options: A) Tell me your name, B) I'll provide my name, C) Skip
 ```
+Problem: This is free-form text input, not a choice.
 
-**Problem**: This is free-form text input, not a choice. Use natural conversation instead.
-
-✅ **CORRECT: Natural conversation for name collection**
-
+✅ **CORRECT**: Natural conversation
 ```
-Coach: "Let me set up your profile. What's your name?"
+Coach: "What's your name?"
 Athlete: "Alex"
-Coach: "Great, Alex! How old are you?"
-Athlete: "32"
 Coach: [Calls sce profile create --name "Alex" --age 32]
-```
-
----
-
-❌ **BAD: Using AskUserQuestion for age**
-
-```
-AskUserQuestion: "How old are you?"
-Options:
-A) I'll give my age
-B) Prefer not to say
-C) Skip
-```
-
-**Problem**: Age is a number, not a choice. Collect via conversation.
-
-✅ **CORRECT: Natural conversation**
-
-```
-Coach: "What's your age? This helps me calibrate training zones."
-Athlete: "32"
-Coach: [Stores age=32]
 ```
 
 ---
