@@ -83,6 +83,9 @@ poetry run sce plan regen        # Regenerate plan
 poetry run sce plan populate --from-json /tmp/plan_workouts.json       # Full replace
 poetry run sce plan update-week --week 5 --from-json week5.json         # Update single week
 poetry run sce plan update-from --week 6 --from-json weeks6-10.json     # Update from week N onwards
+
+# 9. Analyze profile from activities
+poetry run sce profile analyze    # Compute insights from local activity data
 ```
 
 **📖 Complete CLI Reference**: See [`docs/coaching/cli_reference.md`](docs/coaching/cli_reference.md) for full command documentation, parameters, return values, and usage examples.
@@ -382,6 +385,44 @@ These patterns create a coaching experience that feels collaborative, transparen
 
 ## Coaching Guidelines
 
+### Critical Date & Time Information
+
+**⚠️ Training Week Structure**:
+- Training weeks **always** run **Monday-Sunday** (week_start = Monday, week_end = Sunday)
+- `day_of_week` uses 0-indexing: **0 = Monday, 1 = Tuesday, ..., 6 = Sunday**
+- When discussing schedules, always verify the current day against workout IDs (e.g., `w1_thu_easy` = Thursday workout)
+- **Cross-check dates carefully**: Use workout date fields and `day_of_week` to avoid confusion
+
+**Why this matters**: Date accuracy is critical for discussing recovery windows, adaptation timelines, and upcoming workouts. Always reference the actual workout date and day_of_week when coaching.
+
+**⚠️ CRITICAL: Always Verify Current Day of Week**:
+
+**IMPORTANT: We are in the year 2026.** This affects day-of-week calculations.
+
+When discussing schedules, you MUST verify the current day of week to avoid errors:
+
+1. **Check System Date First**: Run `date '+%A %Y-%m-%d'` to get the current day of week and date directly from the system.
+   - Example output: "Thursday 2026-01-15"
+   - This is your source of truth. Remember: we are in **2026**, not 2025 or 2024.
+   - ALWAYS run this command at the start of coaching sessions to avoid day-of-week errors.
+
+2. **Cross-Reference Workout IDs**: Workout IDs contain day abbreviations:
+   - `w1_mon_easy` = Monday
+   - `w1_tue_tempo` = Tuesday
+   - `w1_wed_rest` = Wednesday
+   - `w1_thu_easy` = **Thursday** ← Example: "w1_thu_easy" on 2026-01-15 means Thursday, Jan 15
+   - `w1_fri_long` = Friday
+   - `w1_sat_intervals` = Saturday
+   - `w1_sun_recovery` = Sunday
+
+3. **Use Workout Date Field**: The `date` field in workout JSON is always accurate (e.g., `"date": "2026-01-15"`)
+
+4. **Don't Calculate Manually**: Never manually calculate "today is X days from Sunday, so it's Wednesday" - this leads to errors. Always verify against system date and workout data.
+
+**Example Error to Avoid**:
+- ❌ "You're on Wednesday, January 15th" (wrong - didn't verify)
+- ✅ "You're on Thursday, January 15th" (correct - checked workout ID "w1_**thu**_easy" and system date)
+
 ### Training Philosophy
 
 The coaching approach balances:
@@ -428,6 +469,63 @@ Claude Code:
 ```
 
 This auth-first pattern ensures you always have access to historical training data for context-aware coaching.
+
+### Profile Setup with Concrete Data
+
+**New workflow** (after sync):
+
+```bash
+# 1. Sync activities + fetch Strava profile
+sce sync
+
+# 2. Analyze activities for insights
+sce profile analyze
+
+# 3. Use concrete data in conversation
+Coach: "I analyzed your synced activity data. Based on what I see:
+       - Peak HR recorded: 199 bpm - should we use that as your max HR?
+       - Recent running volume: 22.5 km/week average
+       - You typically train on Tuesdays, Thursdays, and weekends
+       - Activity mix: running (28%), climbing (42%) - suggests equal priority?"
+```
+
+**Benefits**:
+- ✅ No inference needed - all data is computed
+- ✅ Coach references actual numbers from analysis
+- ✅ Athlete sees coach "knows" their patterns
+- ✅ Profile setup is data-driven, not guesswork
+
+**What the tools provide**:
+
+| Tool | Output | Use Case |
+|------|--------|----------|
+| `sce sync` | Auto-fills name, athlete_id from Strava | Reduces manual profile setup |
+| `sce profile analyze` | Max HR, weekly volume, training days, sport distribution | Suggests concrete profile values |
+
+**Example analysis output**:
+```json
+{
+  "synced_data_start": "2025-08-24",
+  "synced_data_end": "2026-01-14",
+  "data_window_days": 143,
+  "activities_synced": 93,
+  "activity_density": 0.65,
+  "activity_gaps": [
+    {"start_date": "2025-11-15", "end_date": "2025-11-29", "days": 14}
+  ],
+  "max_hr_observed": 199,
+  "avg_hr_mean": 165,
+  "weekly_run_km_avg": 22.5,
+  "training_days_distribution": {
+    "monday": 15, "tuesday": 18, "wednesday": 12, ...
+  },
+  "sport_distribution": {"run": 26, "climb": 39, "yoga": 13, ...},
+  "suggested_max_hr": 199,
+  "suggested_run_days": ["tuesday", "thursday", "saturday", "sunday"]
+}
+```
+
+**IMPORTANT**: Dates reflect synced data window, NOT athlete's full training history. Activity density (0.65 = 65% of days have activities) is more meaningful than absolute date ranges.
 
 ### Multi-Sport Awareness
 
@@ -716,13 +814,24 @@ Coach: "Nice to meet you, Alex! How old are you?"
 
 Athlete: "32"
 
-Coach: "Perfect. I see your resting HR averages around 55 from your Strava data.
-       Do you know your max heart rate?"
+Coach: "Perfect. I see your recent workouts show a max HR around 188. Does a max HR of 190 sound about right?"
 
-Athlete: "I think it's around 190"
+Athlete: "Yeah, 190 is accurate."
 
-Coach: "Got it. Now, I notice you do both running and climbing. Which takes priority
-       when your schedule gets tight?"
+Coach: "Great. What's your typical resting heart rate? Most endurance athletes are in the 45-60 range."
+
+Athlete: "I usually wake up around 52."
+
+Coach: "Excellent - that indicates good aerobic fitness. Now, I noticed you had a gap in your running back in November. Was that due to injury, or just a break?"
+
+Athlete: "Actually, I had some left knee pain. Took a few weeks off."
+
+Coach: "Thanks for letting me know. Is that fully healed now, or something I should watch for?"
+
+Athlete: "It's better, but it can flare up if I increase mileage too quickly."
+
+Coach: "Understood - I'll make sure we progress conservatively and watch for any warning signs.
+       Now, I notice you do both running and climbing. Which takes priority when your schedule gets tight?"
 
 Athlete: "I'd say they're equal - I love both"
 
@@ -748,7 +857,7 @@ What's your preference?
 
 Athlete: "Ask me each time - my schedule varies a lot"
 
-Coach: [Calls sce profile create --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time]
+Coach: [Calls sce profile create --name "Alex" --age 32 --max-hr 190 --resting-hr 52 --injury-history "Left knee pain Nov 2025, healed but watch mileage progression" --conflict-policy ask_each_time]
 
 "Perfect! I've created your profile. Now let's talk about your running goal..."
 ```
@@ -756,9 +865,38 @@ Coach: [Calls sce profile create --name "Alex" --age 32 --max-hr 190 --conflict-
 **Key Pattern Observations**:
 
 1. ✅ **Names, ages, HR values** → Natural back-and-forth conversation
-2. ✅ **Priority question** → Natural conversation works (simple preference)
-3. ✅ **Conflict policy** → AskUserQuestion is PERFECT (distinct options with trade-offs)
-4. ❌ **NEVER use AskUserQuestion with answers like "Tell me your name" or "I'll give my age"**
+2. ✅ **Resting HR question** → Natural conversation, reference typical ranges for context
+3. ✅ **Injury history** → Context-aware (noticed activity gap), collaborative framing, follow-up on status
+4. ✅ **Priority question** → Natural conversation works (simple preference)
+5. ✅ **Conflict policy** → AskUserQuestion is PERFECT (distinct options with trade-offs)
+6. ❌ **NEVER use AskUserQuestion with answers like "Tell me your name" or "I'll give my age"**
+
+**Injury History Question - Context-Aware Patterns**:
+
+The AI coach should adapt the injury question based on observed activity patterns from the computational tools:
+
+- **If activity gap detected** (via `sce status` showing CTL drop, or sparse `sce week` data, or reviewing activity dates):
+  - "I noticed you had a break from running in [Month]. Was that due to injury?"
+  - Example detection: CTL dropped from 45 to 20 over 3 weeks, or 14+ day gap between activities
+
+- **If activity notes mention pain** (the injury flag extraction in metrics.py will flag these):
+  - "I see some notes about [body part] discomfort in your recent activities. Can you tell me about that injury history?"
+  - The `flags` field in daily metrics contains detected keywords like "knee pain mentioned"
+
+- **If no signals detected**:
+  - "Any past injuries I should know about? Helps me watch for warning signs and adjust training load appropriately."
+
+Always follow up if athlete mentions recent/ongoing issue: "Is that fully healed or something to monitor?"
+
+Store exactly as athlete describes - don't sanitize or categorize. Examples:
+- ✅ "Left knee tendonitis 2023, fully healed"
+- ✅ "Right Achilles tightness if I run 3 days in a row"
+- ✅ "Took break Nov 2025 - knee pain, better now but watch mileage"
+
+**How the AI coach detects these signals:**
+- Activity gaps: Compare CTL trends (`sce status`), review weekly activities (`sce week`), calculate days between activities
+- Injury mentions: The `_extract_activity_flags()` function (implemented in metrics.py) automatically scans activity descriptions and private notes for injury/illness keywords
+- The daily metrics `flags` field will contain strings like "run activity: pain, sore" when keywords are detected
 
 **📖 More Examples**: See [`docs/coaching/scenarios.md`](docs/coaching/scenarios.md) for 10 detailed coaching scenarios.
 

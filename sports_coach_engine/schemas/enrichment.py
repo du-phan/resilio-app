@@ -199,6 +199,9 @@ class SyncSummary(BaseModel):
     total_duration_minutes: int
     total_load_au: float
 
+    # Profile updates
+    profile_fields_updated: Optional[list[str]] = None  # Fields auto-filled from Strava athlete profile
+
     # Metric changes
     metrics_before: Optional[EnrichedMetrics] = None
     metrics_after: Optional[EnrichedMetrics] = None  # None if enrichment fails

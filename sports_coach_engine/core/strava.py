@@ -386,6 +386,69 @@ def fetch_activity_details(config: Config, activity_id: str) -> dict:
         raise StravaAPIError(f"HTTP error: {e}")
 
 
+@retry(
+    stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=2, min=2, max=8),
+    retry=retry_if_exception_type((httpx.HTTPError, StravaAPIError)),
+)
+def fetch_athlete_profile(config: Config) -> Optional[dict]:
+    """
+    Fetch authenticated athlete's profile data from Strava.
+
+    This endpoint provides profile information that can be used to auto-fill
+    athlete profile fields, avoiding redundant questions during setup.
+
+    Available fields (when athlete has disclosed):
+    - firstname, lastname: Athlete's name
+    - sex: Gender ("M" or "F")
+    - weight: Body weight in kg (if athlete logs in Strava)
+    - profile, profile_medium: Avatar URLs
+    - city, state, country: Location
+    - created_at, updated_at: Account timestamps
+
+    Note: Requires 'profile:read_all' OAuth scope (already requested).
+
+    Args:
+        config: Configuration with Strava credentials
+
+    Returns:
+        Athlete profile dict, or None if fetch fails
+
+    Raises:
+        StravaAuthError: If authentication fails
+        StravaAPIError: If API request fails
+
+    Example:
+        >>> profile = fetch_athlete_profile(config)
+        >>> if profile:
+        ...     athlete_name = profile.get("firstname")
+        ...     athlete_gender = profile.get("sex")  # "M" or "F"
+        ...     athlete_weight = profile.get("weight")  # kg, may be None
+    """
+    access_token = get_valid_token(config)
+
+    try:
+        with httpx.Client() as client:
+            response = client.get(
+                f"{STRAVA_API_BASE}/athlete",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30.0,
+            )
+
+            if response.status_code == 401:
+                raise StravaAuthError("Invalid or expired token")
+            elif response.status_code != 200:
+                raise StravaAPIError(
+                    f"Athlete profile fetch failed: {response.status_code}",
+                    status_code=response.status_code,
+                )
+
+            return response.json()
+
+    except httpx.HTTPError as e:
+        raise StravaAPIError(f"HTTP error: {e}")
+
+
 # ============================================================
 # SYNC WORKFLOW
 # ============================================================

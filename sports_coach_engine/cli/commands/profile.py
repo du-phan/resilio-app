@@ -236,3 +236,44 @@ def profile_set_command(
     # Exit with appropriate code
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
+
+
+@app.command(name="analyze")
+def profile_analyze_command(ctx: typer.Context) -> None:
+    """Analyze activity history to suggest profile values.
+
+    Provides concrete, quantifiable insights for profile setup:
+    - Activity date range and gaps (injury breaks, vacations)
+    - Max HR observed in workouts
+    - Weekly volume averages (run distance)
+    - Training day patterns (which days athlete typically trains)
+    - Multi-sport frequency and priorities
+
+    Pure computation on local data - no Strava API calls.
+
+    Example:
+        sce profile analyze
+
+        Output includes suggestions for:
+        - max_hr: 199 (observed peak)
+        - weekly_km: 22.5 (4-week average)
+        - available_run_days: [tuesday, thursday, saturday, sunday]
+        - running_priority: equal (40% running, 60% other sports)
+    """
+    from sports_coach_engine.api.profile import analyze_profile_from_activities
+
+    # Call API
+    result = analyze_profile_from_activities()
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message="Analyzed activity history for profile insights",
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)

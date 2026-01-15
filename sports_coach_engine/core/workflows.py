@@ -32,18 +32,20 @@ from typing import Any, Optional
 from sports_coach_engine.core.config import load_config, Config
 from sports_coach_engine.core.paths import (
     athlete_training_history_path,
+    athlete_profile_path,
     daily_metrics_path,
     current_plan_path,
     plan_archive_dir,
     activity_path,
     weekly_metrics_summary_path,
 )
-from sports_coach_engine.core.repository import RepositoryIO
+from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.core.profile import ProfileService
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.strava import (
     fetch_activities,
     fetch_activity_details,
+    fetch_athlete_profile,
     map_strava_to_raw,
     StravaAuthError,
     StravaRateLimitError,
@@ -67,7 +69,8 @@ from sports_coach_engine.schemas.activity import (
     RPESource,
 )
 from sports_coach_engine.schemas.metrics import DailyMetrics
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
+from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, StravaConnection
+# ProfileError import removed to avoid circular dependency - using duck typing instead
 from sports_coach_engine.schemas.plan import WeekPlan, MasterPlan, PlanPhase
 
 
@@ -171,6 +174,7 @@ class SyncWorkflowResult(WorkflowResult):
     metrics_updated: Optional[DailyMetrics] = None
     suggestions_generated: list[Any] = field(default_factory=list)
     memories_extracted: list[Memory] = field(default_factory=list)
+    profile_fields_updated: Optional[list[str]] = None  # Fields updated from Strava athlete profile
 
 
 @dataclass
@@ -416,6 +420,93 @@ class TransactionLog:
 # ============================================================
 
 
+def _fetch_and_update_athlete_profile(
+    config: Config,
+    repo: RepositoryIO,
+    txn: "TransactionLog"
+) -> Optional[list[str]]:
+    """
+    Fetch athlete profile from Strava and update local profile.
+
+    Best-effort operation - failures don't block activity sync.
+    Only updates fields if:
+    - Athlete has disclosed them in Strava
+    - Local profile doesn't already have them (no overwrites)
+
+    Strava field mappings:
+    - athlete.firstname → profile.name (if profile.name is empty)
+    - athlete.sex → Not in schema (skip for now)
+    - athlete.weight → Not in schema (skip for now)
+    - athlete.id → profile.strava.athlete_id
+
+    Args:
+        config: Config with Strava credentials
+        repo: Repository for file operations
+        txn: Transaction log for rollback tracking
+
+    Returns:
+        List of field names that were updated, or None if no updates made
+
+    Raises:
+        StravaAuthError: Fatal - auth token invalid (propagate to caller)
+    """
+    try:
+        athlete_data = fetch_athlete_profile(config)
+        if not athlete_data:
+            return None
+
+        # Load current profile
+        profile_service = ProfileService(repo)
+        profile = profile_service.load_profile()
+
+        # If no profile exists, skip (profile should be created via `sce profile create`)
+        # Use duck typing to check for error (has error_type attribute)
+        if profile is None or hasattr(profile, 'error_type'):
+            return None
+
+        # Track for rollback
+        txn.record_modify(athlete_profile_path(), profile)
+
+        # Update only if fields are empty
+        updates = {}
+
+        # Name (from firstname, or firstname + lastname)
+        if not profile.name and athlete_data.get('firstname'):
+            firstname = athlete_data.get('firstname', '')
+            lastname = athlete_data.get('lastname', '')
+            full_name = f"{firstname} {lastname}".strip() if lastname else firstname
+            updates['name'] = full_name
+
+        # Strava athlete ID
+        if athlete_data.get('id'):
+            if not profile.strava:
+                profile.strava = StravaConnection(athlete_id=str(athlete_data['id']))
+                updates['strava'] = profile.strava
+            elif not profile.strava.athlete_id:
+                profile.strava.athlete_id = str(athlete_data['id'])
+                updates['strava'] = profile.strava
+
+        # Apply updates if any
+        if updates:
+            profile_service.update_profile(updates)
+            print(f"[Sync] Updated profile from Strava: {', '.join(updates.keys())}")
+            return list(updates.keys())
+
+        return None
+
+    except StravaAuthError:
+        # Auth errors are fatal - propagate
+        raise
+    except (StravaAPIError, StravaRateLimitError) as e:
+        # Non-fatal - log warning and continue
+        print(f"[Sync] Warning: Could not fetch athlete profile: {e}")
+        return None
+    except Exception as e:
+        # Unexpected errors - log but don't block sync
+        print(f"[Sync] Warning: Profile update failed: {e}")
+        return None
+
+
 def run_sync_workflow(
     repo: RepositoryIO,
     config: Config,
@@ -463,6 +554,11 @@ def run_sync_workflow(
         txn = TransactionLog(repo)
 
         try:
+            # Step 0: Fetch and update athlete profile from Strava (best-effort)
+            profile_fields_updated = _fetch_and_update_athlete_profile(config, repo, txn)
+            if profile_fields_updated:
+                result.profile_fields_updated = profile_fields_updated
+
             # Step 1: Fetch activity summaries from Strava (M5)
             print(f"[Sync] Fetching activities from Strava (since={since})...")
 
@@ -749,8 +845,10 @@ def run_plan_generation(
             # Default to 12 weeks if no goal date
             target_date = today + timedelta(weeks=12)
 
-        total_weeks = max(1, (target_date - today).days // 7)
-        start_date = today
+        # Align start_date to Monday for proper week structure (Monday=0, Sunday=6)
+        # This ensures all weeks follow Monday-Sunday convention
+        start_date = today - timedelta(days=today.weekday())
+        total_weeks = max(1, (target_date - start_date).days // 7)
         end_date = target_date
 
         # Get current CTL and weekly volume for recommendations (graceful fallback)
@@ -957,44 +1055,76 @@ def run_adaptation_check(
     try:
         print(f"[AdaptCheck] Checking adaptations for {target_date}...")
 
-        # Load metrics (M9)
+        # Load metrics (M9) - optional for future dates
+        metrics = None
         metrics_path = daily_metrics_path(target_date)
-        if not repo.file_exists(metrics_path):
-            result.success = True
-            result.warnings.append("No metrics found for target date")
-            return result
-
-        metrics = repo.read_yaml(metrics_path, schema=DailyMetrics)
+        if repo.file_exists(metrics_path):
+            metrics = repo.read_yaml(metrics_path, schema=DailyMetrics)
+        else:
+            print(f"[AdaptCheck] No metrics for {target_date} (future date or no activities yet)")
 
         # Load profile
         profile_service = ProfileService(repo)
         profile = profile_service.load_profile()
 
+        # Load training plan and find workout for target date (M10)
+        plan_path = current_plan_path()
+        if not repo.file_exists(plan_path):
+            result.success = True
+            result.warnings.append("No training plan found")
+            return result
+
+        plan = repo.read_yaml(plan_path, schema=MasterPlan, options=ReadOptions(should_validate=True))
+        if isinstance(plan, RepoError):
+            result.success = True
+            result.warnings.append(f"Failed to load plan: {plan}")
+            return result
+
+        # Find workout for target_date
+        workout = None
+        for week in plan.weeks:
+            for w in week.workouts:
+                if w.date == target_date:
+                    workout = w
+                    break
+            if workout:
+                break
+
+        if workout is None:
+            result.success = True
+            result.warnings.append(f"No workout scheduled for {target_date}")
+            return result
+
+        # Store workout in result
+        result.workout = workout
+
         # Detect adaptation triggers (M11)
         # Note: This is a placeholder - full M11 integration requires workout context
         triggers = []
 
-        # Check ACWR
-        if metrics.acwr and metrics.acwr.value > 1.5:
-            triggers.append(
-                {
-                    "type": "acwr_high_risk",
-                    "value": metrics.acwr.value,
-                    "threshold": 1.5,
-                    "zone": "danger",
-                }
-            )
+        # Only check triggers if metrics exist (not for future dates)
+        if metrics:
+            # Check ACWR
+            if metrics.acwr and metrics.acwr.acwr > 1.5:
+                triggers.append(
+                    {
+                        "type": "acwr_high_risk",
+                        "value": metrics.acwr.acwr,
+                        "threshold": 1.5,
+                        "zone": "danger",
+                    }
+                )
 
-        # Check readiness
-        if metrics.readiness.score < 35:
-            triggers.append(
-                {
-                    "type": "readiness_very_low",
-                    "value": metrics.readiness.score,
-                    "threshold": 35,
-                    "zone": "danger",
-                }
-            )
+            # Check readiness
+            if metrics.readiness.score < 35:
+                triggers.append(
+                    {
+                        "type": "readiness_very_low",
+                        "value": metrics.readiness.score,
+                        "threshold": 35,
+                        "zone": "danger",
+                    }
+                )
 
         result.triggers = triggers
 

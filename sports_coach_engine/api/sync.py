@@ -368,6 +368,7 @@ def _build_sync_summary(repo: RepositoryIO, result) -> SyncSummary:
         activity_types=activity_types,
         total_duration_minutes=total_duration,
         total_load_au=total_load,
+        profile_fields_updated=result.profile_fields_updated,
         metrics_before=None,  # Would require reading metrics before sync
         metrics_after=metrics_after,
         metric_changes=metric_changes,
@@ -394,6 +395,7 @@ def _build_basic_sync_summary(result) -> SyncSummary:
         activity_types=activity_types,
         total_duration_minutes=total_duration,
         total_load_au=total_load,
+        profile_fields_updated=result.profile_fields_updated,
         metrics_before=None,
         metrics_after=None,
         metric_changes=[],

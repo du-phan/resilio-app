@@ -221,17 +221,15 @@ def compute_daily_metrics(
     load_trend = compute_load_trend(target_date, repo)
     data_days = _count_historical_days(target_date, repo)
 
-    # Extract flags from activities (if any)
-    injury_flags = []
-    illness_flags = []
-    flags_list = []
-    # TODO: Extract actual flags from activities when M7 integration is complete
+    # Extract injury/illness flags from today's activities
+    injury_flags, illness_flags = _extract_activity_flags(target_date, repo)
+    flags_list = injury_flags + illness_flags
 
     readiness = compute_readiness(
         tsb=ctl_atl.tsb,
         load_trend=load_trend,
-        sleep_quality=None,  # TODO: Extract from activity notes
-        wellness_score=None,  # TODO: Extract from activity notes
+        sleep_quality=None,  # TODO: Extract from activity notes (deferred to later version)
+        wellness_score=None,  # TODO: Extract from activity notes (deferred to later version)
         injury_flags=injury_flags,
         illness_flags=illness_flags,
         acwr_available=acwr_available,
@@ -974,6 +972,105 @@ def _read_activities_for_date(target_date: date, repo: RepositoryIO) -> list[Nor
             activities.append(activity)
 
     return activities
+
+
+def _extract_activity_flags(target_date: date, repo: RepositoryIO) -> tuple[list[str], list[str]]:
+    """
+    Extract injury and illness flags from activity notes for a given date.
+
+    Scans activity descriptions and private notes for keywords indicating
+    injury or illness. This complements the injury history captured during
+    profile setup, enabling ongoing monitoring of injury evolution.
+
+    Injury keywords (clear pain/injury signals):
+    - pain, ache, hurt, sore (beyond normal training soreness)
+    - injury, injured, strain, sprain, tear
+    - limping, limped, can't walk
+    - sharp, stabbing, shooting (pain descriptors)
+
+    Illness keywords (systemic illness):
+    - sick, ill, fever, feverish
+    - flu, cold, covid, virus
+    - nauseous, vomiting, diarrhea
+    - congestion, cough (if with other illness signals)
+
+    Note: Excludes ambiguous terms like "tired" or "fatigued" which are normal
+    training responses. AI coach can ask clarifying questions if needed.
+
+    Args:
+        target_date: Date to check activities for
+        repo: Repository I/O instance
+
+    Returns:
+        Tuple of (injury_flags, illness_flags) where each is a list of
+        descriptive strings (e.g., ["pain mentioned in activity notes"])
+    """
+    # Injury keywords - clear pain/injury signals
+    INJURY_KEYWORDS = {
+        "pain", "ache", "aching", "hurt", "hurting", "hurts",
+        "sore", "soreness", "tender", "tenderness",
+        "injury", "injured", "strain", "strained", "sprain", "sprained",
+        "tear", "torn", "tweak", "tweaked",
+        "limp", "limping", "limped",
+        "sharp", "stabbing", "shooting",  # Pain descriptors
+        "tight", "tightness",  # Can indicate injury
+        "swollen", "swelling", "inflamed", "inflammation",
+    }
+
+    # Illness keywords - systemic illness
+    ILLNESS_KEYWORDS = {
+        "sick", "ill", "illness",
+        "fever", "feverish", "temperature",
+        "flu", "influenza", "cold",
+        "covid", "coronavirus", "virus", "viral",
+        "nauseous", "nausea", "vomiting", "vomit", "threw up",
+        "diarrhea", "stomach",
+        "congested", "congestion", "cough", "coughing",
+        "chills", "shivering",
+        "headache" , "migraine",  # Can indicate illness
+    }
+
+    activities = _read_activities_for_date(target_date, repo)
+
+    injury_flags = []
+    illness_flags = []
+
+    for activity in activities:
+        # Combine description and private_note for scanning
+        text_fields = []
+        if activity.description:
+            text_fields.append(activity.description.lower())
+        if activity.private_note:
+            text_fields.append(activity.private_note.lower())
+
+        combined_text = " ".join(text_fields)
+
+        if not combined_text:
+            continue  # No notes to scan
+
+        # Check for injury keywords
+        found_injury_keywords = []
+        for keyword in INJURY_KEYWORDS:
+            if keyword in combined_text:
+                found_injury_keywords.append(keyword)
+
+        if found_injury_keywords:
+            # Create descriptive flag
+            keywords_str = ", ".join(sorted(set(found_injury_keywords)))
+            injury_flags.append(f"{activity.sport_type} activity: {keywords_str}")
+
+        # Check for illness keywords
+        found_illness_keywords = []
+        for keyword in ILLNESS_KEYWORDS:
+            if keyword in combined_text:
+                found_illness_keywords.append(keyword)
+
+        if found_illness_keywords:
+            # Create descriptive flag
+            keywords_str = ", ".join(sorted(set(found_illness_keywords)))
+            illness_flags.append(f"{activity.sport_type} activity: {keywords_str}")
+
+    return injury_flags, illness_flags
 
 
 def _count_historical_days(target_date: date, repo: RepositoryIO) -> int:

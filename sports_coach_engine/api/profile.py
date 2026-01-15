@@ -5,11 +5,12 @@ Provides functions for Claude Code to manage athlete profiles,
 goals, and constraints.
 """
 
-from datetime import date, datetime
-from typing import Optional, Union, Any
+from datetime import date, datetime, timedelta
+from typing import Optional, Union, Any, Dict, List
 from dataclasses import dataclass
+from collections import defaultdict, Counter
 
-from sports_coach_engine.core.paths import athlete_profile_path
+from sports_coach_engine.core.paths import athlete_profile_path, get_activities_dir
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 from sports_coach_engine.core.logger import log_message, MessageRole
@@ -24,6 +25,7 @@ from sports_coach_engine.schemas.profile import (
     TimePreference,
     VitalSigns,
 )
+from sports_coach_engine.schemas.activity import NormalizedActivity
 
 
 # ============================================================
@@ -505,3 +507,314 @@ def set_goal(
     )
 
     return goal
+
+
+# ============================================================
+# PROFILE ANALYSIS (from synced activities)
+# ============================================================
+
+
+@dataclass
+class ProfileAnalysis:
+    """Analysis of synced activity data for profile setup insights.
+
+    IMPORTANT: This analyzes only the activities synced from Strava,
+    NOT the athlete's complete training history. The date range reflects
+    the sync window, not how long they've been training.
+    """
+
+    # Synced data window (NOT athlete's full history)
+    synced_data_start: Optional[date]  # First activity in sync
+    synced_data_end: Optional[date]    # Last activity in sync
+    data_window_days: int              # Days between first and last activity
+    activities_synced: int             # Total activities in window
+    activity_density: float            # activities_synced / data_window_days
+
+    # Activity gaps (breaks > 7 days within synced window)
+    activity_gaps: List[Dict[str, Any]]  # [{start_date, end_date, days}]
+
+    # Heart rate insights
+    max_hr_observed: Optional[int]  # Peak HR from all activities
+    avg_hr_mean: Optional[int]      # Mean of all average HRs
+    activities_with_hr: int
+
+    # Volume analysis
+    weekly_run_km_avg: Optional[float]
+    weekly_run_km_recent_4wk: Optional[float]  # Last 4 weeks
+    total_activities: int
+
+    # Training patterns
+    training_days_distribution: Dict[str, int]  # {"monday": 15, "tuesday": 12, ...}
+    preferred_days: List[str]  # Top 3-4 days by frequency
+
+    # Multi-sport analysis
+    sport_distribution: Dict[str, int]  # {"run": 26, "climb": 39, ...}
+    sport_percentages: Dict[str, float]
+    run_to_other_ratio: Optional[float]  # Running % vs everything else
+
+    # Recommendations
+    suggested_max_hr: Optional[int]
+    suggested_weekly_km: Optional[float]
+    suggested_run_days: List[str]
+    suggested_running_priority: str  # "primary" | "equal" | "secondary"
+
+
+def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
+    """
+    Analyze historical activity data to provide profile setup insights.
+
+    Pure computation on local data - no API calls.
+
+    Workflow:
+    1. Load all activities from data/activities/**/*.yaml
+    2. Compute date ranges, gaps, volume stats
+    3. Analyze HR data from activities with HR
+    4. Identify training day patterns
+    5. Classify sport distribution and priorities
+    6. Generate recommendations
+
+    Returns:
+        ProfileAnalysis with quantifiable insights
+        ProfileError if no activities found or computation fails
+
+    Example CLI usage:
+        sce profile analyze
+
+    Example output:
+        {
+          "synced_data_start": "2025-08-24",
+          "synced_data_end": "2026-01-14",
+          "data_window_days": 143,
+          "activities_synced": 93,
+          "activity_density": 0.65,
+          "activity_gaps": [
+            {"start_date": "2025-11-15", "end_date": "2025-11-29", "days": 14}
+          ],
+          "max_hr_observed": 199,
+          "avg_hr_mean": 165,
+          "weekly_run_km_avg": 22.5,
+          "training_days_distribution": {
+            "monday": 15, "tuesday": 18, "wednesday": 12, ...
+          },
+          "sport_distribution": {"run": 26, "climb": 39, "yoga": 13, ...},
+          "suggested_max_hr": 199,
+          "suggested_run_days": ["tuesday", "thursday", "saturday", "sunday"]
+        }
+
+    Note: Dates reflect synced data window, not athlete's full training history.
+    """
+    repo = RepositoryIO()
+
+    # Log operation
+    log_message(repo, MessageRole.USER, "analyze_profile_from_activities()")
+
+    # Load all activities
+    try:
+        activities = _load_all_activities(repo)
+    except Exception as e:
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to load activities: {e}"
+        )
+
+    if not activities:
+        return ProfileError(
+            error_type="not_found",
+            message="No activities found. Run 'sce sync' first to import activities."
+        )
+
+    # Sort by date
+    activities.sort(key=lambda a: a.date)
+
+    # 1. Synced data window analysis (NOT athlete's full history)
+    synced_start = activities[0].date
+    synced_end = activities[-1].date
+    data_window_days = (synced_end - synced_start).days + 1
+    activities_synced = len(activities)
+    activity_density = activities_synced / data_window_days if data_window_days > 0 else 0
+
+    # 2. Activity gaps (> 7 days)
+    gaps = _find_activity_gaps(activities, min_gap_days=7)
+
+    # 3. HR analysis
+    hr_data = _analyze_heart_rate(activities)
+
+    # 4. Volume analysis
+    volume_data = _analyze_volume(activities)
+
+    # 5. Training day patterns
+    day_patterns = _analyze_training_days(activities)
+
+    # 6. Sport distribution
+    sport_data = _analyze_sport_distribution(activities)
+
+    # 7. Generate recommendations
+    recommendations = _generate_recommendations(
+        hr_data, volume_data, day_patterns, sport_data
+    )
+
+    # Build result
+    analysis = ProfileAnalysis(
+        synced_data_start=synced_start,
+        synced_data_end=synced_end,
+        data_window_days=data_window_days,
+        activities_synced=activities_synced,
+        activity_density=round(activity_density, 2),
+        activity_gaps=gaps,
+        max_hr_observed=hr_data['max_hr'],
+        avg_hr_mean=hr_data['avg_hr_mean'],
+        activities_with_hr=hr_data['count_with_hr'],
+        weekly_run_km_avg=volume_data['weekly_avg'],
+        weekly_run_km_recent_4wk=volume_data['recent_4wk'],
+        total_activities=len(activities),
+        training_days_distribution=day_patterns['distribution'],
+        preferred_days=day_patterns['preferred'],
+        sport_distribution=sport_data['counts'],
+        sport_percentages=sport_data['percentages'],
+        run_to_other_ratio=sport_data['run_ratio'],
+        suggested_max_hr=recommendations['max_hr'],
+        suggested_weekly_km=recommendations['weekly_km'],
+        suggested_run_days=recommendations['run_days'],
+        suggested_running_priority=recommendations['running_priority'],
+    )
+
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"Analyzed {activities_synced} activities in {data_window_days}-day window ({synced_start} to {synced_end})"
+    )
+
+    return analysis
+
+
+def _load_all_activities(repo: RepositoryIO) -> List[NormalizedActivity]:
+    """Load all activities from data/activities/**/*.yaml."""
+    pattern = "data/activities/**/*.yaml"
+    activity_files = repo.list_files(pattern)
+
+    activities = []
+    for file_path in activity_files:
+        result = repo.read_yaml(file_path, NormalizedActivity, ReadOptions(should_validate=False))
+        if not isinstance(result, RepoError):
+            activities.append(result)
+
+    return activities
+
+
+def _find_activity_gaps(activities: List[NormalizedActivity], min_gap_days: int) -> List[Dict]:
+    """Find gaps in training > min_gap_days."""
+    gaps = []
+    for i in range(1, len(activities)):
+        prev_date = activities[i-1].date
+        curr_date = activities[i].date
+        gap_days = (curr_date - prev_date).days
+
+        if gap_days > min_gap_days:
+            gaps.append({
+                "start_date": prev_date.isoformat(),
+                "end_date": curr_date.isoformat(),
+                "days": gap_days
+            })
+
+    return gaps
+
+
+def _analyze_heart_rate(activities: List[NormalizedActivity]) -> Dict:
+    """Extract HR insights."""
+    hr_values = []
+    avg_hr_values = []
+
+    for a in activities:
+        if a.max_hr:
+            hr_values.append(int(a.max_hr))
+        if a.average_hr:
+            avg_hr_values.append(int(a.average_hr))
+
+    return {
+        'max_hr': max(hr_values) if hr_values else None,
+        'avg_hr_mean': int(sum(avg_hr_values) / len(avg_hr_values)) if avg_hr_values else None,
+        'count_with_hr': len(hr_values)
+    }
+
+
+def _analyze_volume(activities: List[NormalizedActivity]) -> Dict:
+    """Analyze running volume patterns."""
+    weekly_km = defaultdict(float)
+    for a in activities:
+        if a.sport_type in ["run", "trail_run", "treadmill_run"] and a.distance_km:
+            week_key = a.date.isocalendar()[:2]  # (year, week)
+            weekly_km[week_key] += a.distance_km
+
+    if not weekly_km:
+        return {'weekly_avg': None, 'recent_4wk': None}
+
+    weeks = sorted(weekly_km.keys())
+    volumes = [weekly_km[w] for w in weeks]
+
+    return {
+        'weekly_avg': sum(volumes) / len(volumes) if volumes else None,
+        'recent_4wk': sum(volumes[-4:]) / min(4, len(volumes)) if volumes else None
+    }
+
+
+def _analyze_training_days(activities: List[NormalizedActivity]) -> Dict:
+    """Find which days athlete typically trains."""
+    day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+    day_counts = Counter(a.date.weekday() for a in activities)
+
+    distribution = {day_names[i]: day_counts.get(i, 0) for i in range(7)}
+
+    # Top 3-4 days by frequency
+    sorted_days = sorted(distribution.items(), key=lambda x: x[1], reverse=True)
+    preferred = [day for day, count in sorted_days[:4] if count >= 5]  # At least 5 activities
+
+    return {
+        'distribution': distribution,
+        'preferred': preferred
+    }
+
+
+def _analyze_sport_distribution(activities: List[NormalizedActivity]) -> Dict:
+    """Classify sport participation."""
+    sport_counts = Counter(a.sport_type for a in activities)
+    total = len(activities)
+
+    run_types = ["run", "trail_run", "treadmill_run"]
+    run_count = sum(sport_counts.get(s, 0) for s in run_types)
+
+    percentages = {sport: (count / total) * 100 for sport, count in sport_counts.items()}
+    run_pct = (run_count / total) * 100 if total > 0 else 0
+
+    return {
+        'counts': dict(sport_counts),
+        'percentages': percentages,
+        'run_ratio': run_pct
+    }
+
+
+def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) -> Dict:
+    """Generate profile field suggestions."""
+    # Max HR: Use observed max if available
+    suggested_max_hr = hr_data['max_hr']
+
+    # Weekly volume: Use recent 4-week average, or overall average
+    suggested_km = volume_data['recent_4wk'] or volume_data['weekly_avg']
+
+    # Run days: Use top 3-4 days
+    suggested_run_days = day_patterns['preferred']
+
+    # Running priority
+    run_ratio = sport_data['run_ratio']
+    if run_ratio >= 60:
+        priority = "primary"
+    elif run_ratio >= 30:
+        priority = "equal"
+    else:
+        priority = "secondary"
+
+    return {
+        'max_hr': suggested_max_hr,
+        'weekly_km': suggested_km,
+        'run_days': suggested_run_days,
+        'running_priority': priority
+    }

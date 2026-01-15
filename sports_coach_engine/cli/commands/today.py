@@ -5,7 +5,7 @@ Returns the workout recommendation for today (or specified date) with full coach
 context including metrics, triggers, and rationale.
 """
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 import typer
@@ -38,10 +38,11 @@ def today_command(
         sce today --date 2026-01-20  # Workout for specific date
     """
     # Parse date if provided
-    target_date: Optional[datetime] = None
+    target_date: Optional[date] = None
     if date:
         try:
-            target_date = datetime.fromisoformat(date)
+            # Convert to date object (not datetime) to match workout schema
+            target_date = datetime.fromisoformat(date).date()
         except ValueError:
             # Build error envelope
             envelope = create_error_envelope(

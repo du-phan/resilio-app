@@ -60,7 +60,7 @@ class WeeklyStatus:
     total_load_au: float
 
     # Activities summary
-    activities: list[dict] = field(default_factory=list)  # Brief activity summaries
+    activities: list[dict] = field(default_factory=list)  # Brief activity summaries (date, day_of_week, day_name, sport_type, duration_minutes, systemic_load_au)
 
     # Metrics snapshot
     current_ctl: Optional[float] = None
@@ -191,19 +191,36 @@ def get_todays_workout(
     metrics_path = daily_metrics_path(target_date)
     metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
 
+    # For future dates or missing metrics, use most recent available metrics for context
     if isinstance(metrics_result, RepoError) or metrics_result is None:
-        # No metrics available, return workout without enrichment
         log_message(
             repo,
             MessageRole.SYSTEM,
-            f"No metrics available for enrichment, returning basic workout",
+            f"No metrics for {target_date}, checking for most recent metrics",
         )
-        return CoachError(
-            error_type="insufficient_data",
-            message="No metrics available to assess workout suitability",
-        )
+        # Try to find most recent metrics (look back up to 7 days)
+        metrics = None
+        for days_back in range(1, 8):
+            past_date = target_date - timedelta(days=days_back)
+            past_metrics_path = daily_metrics_path(past_date)
+            past_result = repo.read_yaml(past_metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
+            if not isinstance(past_result, RepoError) and past_result is not None:
+                metrics = past_result
+                log_message(
+                    repo,
+                    MessageRole.SYSTEM,
+                    f"Using metrics from {past_date} for context",
+                )
+                break
 
-    metrics = metrics_result
+        if metrics is None:
+            # No historical metrics either - return error
+            return CoachError(
+                error_type="insufficient_data",
+                message="No training data available yet. Sync activities to generate metrics.",
+            )
+    else:
+        metrics = metrics_result
 
     # Load profile
     profile_path = athlete_profile_path()
@@ -277,7 +294,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
         - completion_rate: Percentage complete (0.0-1.0)
         - total_duration_minutes: Total training time
         - total_load_au: Total systemic load
-        - activities: Brief summaries of completed activities
+        - activities: Brief summaries of completed activities (each with date, day_of_week, day_name, sport_type, duration_minutes, systemic_load_au)
         - current_ctl/tsb/readiness: Current metrics
         - ctl_change/tsb_change: Week-over-week changes
         - pending_suggestions: Count of pending adaptation suggestions
@@ -370,6 +387,8 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
 
                 activities.append({
                     "date": str(activity.date),
+                    "day_of_week": activity.date.weekday(),  # 0=Monday, 6=Sunday
+                    "day_name": activity.date.strftime('%A').lower(),  # "monday", "tuesday", etc.
                     "sport_type": activity.sport_type,
                     "duration_minutes": activity.duration_minutes,
                     "systemic_load_au": systemic_load,

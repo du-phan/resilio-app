@@ -153,9 +153,9 @@ def main():
 
         print()
 
-        if metrics.acwr and metrics.acwr.value > 1.3:
+        if metrics.acwr and metrics.acwr.acwr > 1.3:
             print("⚠️  INJURY RISK ELEVATED")
-            print(f"   ACWR is {metrics.acwr.value:.2f} (caution threshold: 1.3)")
+            print(f"   ACWR is {metrics.acwr.acwr:.2f} (caution threshold: 1.3)")
             print("   Consider moderating training load increases.")
             print()
 
