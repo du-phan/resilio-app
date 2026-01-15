@@ -33,89 +33,31 @@ Historical activity data from Strava is essential for intelligent coaching. With
 
 ---
 
-## CLI Usage (Recommended)
+## CLI Commands (Essential for Coaching)
 
-**All commands return JSON** - perfect for Claude Code to parse and understand.
+All commands return JSON. Check exit codes: 0=success, 2=config missing, 3=auth failure.
 
-### Essential Commands
-
+**Session-Critical Commands**:
 ```bash
-# CRITICAL: Always check auth status before any coaching session
-# 0. Verify authentication (do this FIRST, every session)
-poetry run sce auth status       # Check if token is valid
+# 0. ALWAYS check auth first
+sce auth status              # Exit code 3 = expired, run auth flow
 
-# If exit code is 3 (auth failure), guide through OAuth:
-# poetry run sce auth url         # Get OAuth URL
-# poetry run sce auth exchange --code YOUR_CODE
+# 1. Daily coaching workflow
+sce status                   # CTL/ATL/TSB/ACWR/readiness
+sce today                    # Today's workout with context
+sce week                     # Weekly summary
 
-# 1. Initialize (first time only)
-poetry run sce init
+# 2. Profile & goal management
+sce profile get              # View athlete profile
+sce profile set --max-hr 190 # Update profile fields
+sce goal --type 10k --date 2026-06-01
 
-# 2. Import activities (requires valid auth)
-poetry run sce sync              # Sync last 120 days (optimal default for CTL accuracy)
-poetry run sce sync --all        # Sync ALL historical activities
-poetry run sce sync --since 14d  # Sync last 14 days (incremental sync)
-
-# 2b. Analyze profile from activities
-poetry run sce profile analyze    # Compute insights from local activity data
-
-# 3. Manage metrics (offline operations)
-poetry run sce metrics recompute                    # Recompute all metrics from disk
-poetry run sce metrics recompute --start 2025-06-01 # Recompute from specific date
-# Use cases: Fix metric bugs, backfill rest days, regenerate after manual edits
-# NO Strava API calls - completely offline
-
-# 4. Assess current state
-poetry run sce status            # Get CTL/ATL/TSB/ACWR/readiness
-poetry run sce week              # Get weekly summary
-
-# 5. Get today's workout
-poetry run sce today             # Today's workout with full context
-poetry run sce today --date 2026-01-20  # Specific date
-
-# 6. Manage goals and profile
-poetry run sce goal --type 10k --date 2026-06-01
-poetry run sce profile get
-poetry run sce profile create --name "Alex" --age 32  # For NEW profiles
-poetry run sce profile set --max-hr 190              # For UPDATING existing profiles
-
-# 7. View training plan
-poetry run sce plan show         # Get current plan
-poetry run sce plan regen        # Regenerate plan
-
-# 8. Populate plan workouts
-poetry run sce plan populate --from-json /tmp/plan_workouts.json       # Full replace
-poetry run sce plan update-week --week 5 --from-json week5.json         # Update single week
-poetry run sce plan update-from --week 6 --from-json weeks6-10.json     # Update from week N onwards
-
+# 3. Training plan
+sce plan show                # View current plan
+sce plan regen               # Regenerate plan from goal
 ```
 
-**📖 Complete CLI Reference**: See [`docs/coaching/cli_reference.md`](docs/coaching/cli_reference.md) for full command documentation, parameters, return values, and usage examples.
-
-### JSON Output Structure
-
-All commands return JSON with this structure:
-
-```json
-{
-  "schema_version": "1.0",
-  "ok": true,
-  "error_type": null,
-  "message": "Human-readable summary",
-  "data": {
-    /* command-specific payload with rich interpretations */
-  }
-}
-```
-
-**Exit codes** (check `$?` after command):
-
-- `0`: Success - proceed with data
-- `2`: Config/setup missing - run `sce init`
-- `3`: Auth failure - run `sce auth url` to refresh
-- `4`: Network/rate limit - retry with backoff
-- `5`: Invalid input - fix parameters and retry
-- `1`: Internal error - report issue
+**📖 Complete CLI reference** (all commands, parameters, JSON formats, error handling): [`docs/coaching/cli_reference.md`](docs/coaching/cli_reference.md)
 
 ---
 
