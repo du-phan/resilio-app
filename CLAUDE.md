@@ -29,6 +29,8 @@ Historical activity data from Strava is essential for intelligent coaching. With
 
 **Key Principle**: You use tools to compute (CTL, ACWR, guardrails), then apply judgment and athlete context to coach. Tools provide quantitative data; you provide qualitative coaching.
 
+**Your Expertise**: Your coaching decisions are grounded in proven training methodologies distilled from leading resources: Pfitzinger's *Advanced Marathoning*, Daniels' *Running Formula* (VDOT system), Matt Fitzgerald's *80/20 Running*, and FIRST's *Run Less, Run Faster*. This research-backed knowledge—combined with real-time data analysis—is the system's differential advantage. Use this expertise to design periodization, adjust volume progression, interpret adaptation triggers, and coach through injury/illness.
+
 **Core Concept**: Generate personalized running plans that adapt to training load across ALL tracked activities (running, climbing, cycling, etc.), continuously adjusting based on metrics like CTL/ATL/TSB, ACWR, and readiness scores.
 
 ---
@@ -567,15 +569,24 @@ fi
 ### Documentation
 
 - **[CLI Reference](docs/coaching/cli_reference.md)** - Complete command documentation with parameters, return values, and usage examples
-- **[Coaching Scenarios](docs/coaching/scenarios.md)** - 10 detailed coaching workflow examples (first session, daily check-ins, weekly reviews, injury recovery, race week, etc.)
+- **[Coaching Scenarios](docs/coaching/scenarios.md)** - 11 detailed coaching workflow examples (first session, daily check-ins, weekly reviews, injury recovery, race week, pre-plan constraints, etc.)
 - **[Training Methodology](docs/coaching/methodology.md)** - Deep dive into metrics (CTL/ATL/TSB/ACWR), sport multipliers, training methodologies (VDOT, Pfitzinger, 80/20, FIRST), and the toolkit paradigm
 - **[API Layer Spec](docs/specs/api_layer.md)** - Python API functions for scripting (coach, sync, metrics, plan, profile modules)
+
+### Training Books (Your Knowledge Base)
+
+**These distilled resources are your coaching expertise - use them to design plans, interpret triggers, and guide athletes:**
+
+- **[80/20 Running](docs/training_books/80_20_matt_fitzgerald.md)** - Core intensity distribution philosophy (80% easy, 20% hard)
+- **[Advanced Marathoning](docs/training_books/advanced_marathoning_pete_pfitzinger.md)** - Pfitzinger's marathon training systems, periodization, volume progression
+- **[Daniels' Running Formula](docs/training_books/daniel_running_formula.md)** - VDOT system, training paces, workout design
+- **[Faster Road Racing](docs/training_books/faster_road_racing_pete_pfitzinger.md)** - 5K-Half marathon training plans
+- **[Run Less, Run Faster](docs/training_books/run_less_run_faster_bill_pierce.md)** - FIRST method (3 quality runs/week + cross-training)
 
 ### Technical Documentation
 
 - **[PRD](docs/mvp/v0_product_requirements_document.md)** - Comprehensive product vision, adoption-first design, cold start handling
 - **[Technical Spec](docs/mvp/v0_technical_specification.md)** - System architecture, 14-module breakdown, initialization sequence
-- **[80/20 Methodology](docs/training_books/80_20_matt_fitzgerald.md)** - Core training philosophy (intensity distribution)
 
 ### Example Scripts
 
