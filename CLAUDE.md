@@ -56,6 +56,9 @@ poetry run sce sync              # Sync last 120 days (optimal default for CTL a
 poetry run sce sync --all        # Sync ALL historical activities
 poetry run sce sync --since 14d  # Sync last 14 days (incremental sync)
 
+# 2b. Analyze profile from activities
+poetry run sce profile analyze    # Compute insights from local activity data
+
 # 3. Manage metrics (offline operations)
 poetry run sce metrics recompute                    # Recompute all metrics from disk
 poetry run sce metrics recompute --start 2025-06-01 # Recompute from specific date
@@ -85,8 +88,6 @@ poetry run sce plan populate --from-json /tmp/plan_workouts.json       # Full re
 poetry run sce plan update-week --week 5 --from-json week5.json         # Update single week
 poetry run sce plan update-from --week 6 --from-json weeks6-10.json     # Update from week N onwards
 
-# 9. Analyze profile from activities
-poetry run sce profile analyze    # Compute insights from local activity data
 ```
 
 **📖 Complete CLI Reference**: See [`docs/coaching/cli_reference.md`](docs/coaching/cli_reference.md) for full command documentation, parameters, return values, and usage examples.
@@ -772,6 +773,7 @@ sce goal --type 10k --date 2026-06-01
 **After auth + sync, use NATURAL CONVERSATION for basic info**:
 
 **Pattern**:
+
 1. ✅ Names, ages, HR values → Natural back-and-forth conversation
 2. ✅ Injury history → Context-aware (check for activity gaps via computational tools)
 3. ✅ Sport priorities → Natural conversation for preference
@@ -785,79 +787,14 @@ sce goal --type 10k --date 2026-06-01
 
 ### 📅 Training Constraints Discussion (BEFORE Plan Generation)
 
-**CRITICAL**: Before designing any training plan, you MUST discuss constraints with the athlete. The profile has defaults (2-4 runs/week, all 7 days available, 90min sessions), but these need validation based on the athlete's actual schedule and life.
+**CRITICAL**: Before designing any training plan, discuss constraints with the athlete.
 
-**When to do this**: After profile setup, goal setting, and BEFORE calling `sce plan regen` or designing weekly structure.
+**Constraints to discuss** (via natural conversation):
 
-**Constraints to discuss with natural conversation**:
+1. Run frequency (realistic runs/week)
+2. Available days (work, family, other sports)
+3. Session duration (max time for long runs)
+4. Other sport commitments (fixed or flexible?)
+5. Time of day preference (morning vs evening)
 
-1. **Run frequency**: "How many runs per week are realistic for you? The default is 2-4, but what works with your schedule?"
-
-2. **Available days**: "Which days of the week can you typically run? For example, do you have work commitments, family obligations, or other sports on specific days?"
-
-3. **Session duration**: "What's the longest single session you can realistically do? For marathon training, long runs can reach 2-3 hours - is that manageable on weekends?"
-
-4. **Other sport commitments**: "I see you climb. Which days/times are your climbing sessions? Are they fixed or flexible?"
-
-5. **Morning vs evening**: "Do you prefer morning or evening runs? Any preference?"
-
-**Example conversation**:
-
-```
-Coach: "Before I design your marathon plan, let me understand your schedule constraints.
-       How many runs per week are realistic for you?"
-
-Athlete: "I can do 3-4 runs consistently. Maybe 5 on a good week, but let's plan for 4."
-
-Coach: "Perfect, 4 runs/week is solid for marathon training. Which days work best?
-       I know you climb - when are those sessions?"
-
-Athlete: "I climb Friday evenings at the gym. Weekends are usually open.
-       Weekdays I can run Tuesday and Thursday mornings before work."
-
-Coach: "Got it. So tentatively: Tuesday, Thursday, Saturday, Sunday for runs,
-       with Friday reserved for climbing. Does that work?"
-
-Athlete: "Yes, that's ideal."
-
-Coach: "One more thing - what's the longest run you can do? Marathon training
-       means long runs of 2-3 hours eventually."
-
-Athlete: "Weekends I can do 2-3 hours no problem. Weekdays max 90 minutes."
-
-Coach: [Updates profile with actual constraints]
-Coach: "Excellent! Now I'll design your plan around this schedule."
-```
-
-**After discussion, update profile**:
-
-```bash
-sce profile set \
-  --min-run-days 4 \
-  --max-run-days 4 \
-  --available-days "tuesday,thursday,saturday,sunday" \
-  --max-session-minutes 120  # or whatever they can do on long run days
-```
-
-**Why this matters**:
-
-- Generic defaults (7 days available, 90min max) don't reflect reality
-- Plan design depends on knowing which days are actually free
-- Long runs > 90min are essential for marathon - need to confirm athlete can do them
-- Other sport commitments (climbing Fridays) must be locked in before workout placement
-
-**What happens if you skip this**:
-
-- Plan assigns runs to days athlete can't train
-- Long runs get capped at 90min when athlete could do 3 hours
-- Conflicts with other sports aren't properly managed
-- Athlete has to manually move workouts every week (bad UX)
-
-**The correct flow**:
-
-1. Profile setup (basic info, sport priorities, conflict policy)
-2. **→ Constraints discussion (THIS STEP)**
-3. Goal setting
-4. Plan skeleton generation (`sce plan regen`)
-5. Plan design (weekly structure with toolkit data)
-6. Plan presentation and approval
+**📖 Complete workflow, example dialogue, constraint patterns**: See [`docs/coaching/scenarios.md#scenario-11-pre-plan-constraints`](docs/coaching/scenarios.md#scenario-11-pre-plan-constraints)
