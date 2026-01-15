@@ -571,100 +571,20 @@ Coach: "I analyzed your synced activity data. Based on what I see:
 
 ---
 
-## Quick Reference Tables
+## Quick Reference: Key Metrics
 
-### Key Metrics (CTL/ATL/TSB/ACWR)
+**Essential zones for daily coaching decisions**:
 
-#### CTL (Chronic Training Load)
+- **CTL** (Chronic Training Load): 42-day fitness level
+  - <20: Beginner | 20-35: Recreational | 35-50: Competitive | >50: Advanced
+- **TSB** (Training Stress Balance): Readiness for quality work
+  - <-25: Overreached | -25 to -10: Productive training | -10 to +5: Fresh | +5 to +15: Race ready
+- **ACWR** (Acute:Chronic Workload Ratio): Injury risk from load spikes
+  - 0.8-1.3: Safe | 1.3-1.5: Caution (elevated risk) | >1.5: Danger (high risk)
+- **Readiness Score** (0-100): Daily go/no-go for hard workouts
+  - <35: Very low | 35-50: Low | 50-70: Moderate | 70-85: Good | >85: Excellent
 
-42-day weighted average, represents "fitness"
-
-| CTL Value | Zone         | Interpretation                   |
-| --------- | ------------ | -------------------------------- |
-| < 20      | Beginner     | New to training                  |
-| 20-35     | Recreational | Regular recreational athlete     |
-| 35-50     | Competitive  | Serious recreational/competitive |
-| 50-70     | Advanced     | Advanced competitive athlete     |
-| > 70      | Elite        | Elite/professional level         |
-
-**Use for**: Assess overall fitness level, set volume baselines, understand training capacity
-
-#### TSB (Training Stress Balance)
-
-CTL - ATL, represents "form"
-
-| TSB Range  | State       | Interpretation              |
-| ---------- | ----------- | --------------------------- |
-| < -25      | Overreached | High fatigue, need recovery |
-| -25 to -10 | Productive  | Optimal training zone       |
-| -10 to +5  | Fresh       | Good for quality work       |
-| +5 to +15  | Race Ready  | Peaked, ready to race       |
-| > +15      | Detraining  | Fitness declining           |
-
-**Use for**: Determine readiness for quality work or racing, plan training intensity
-
-#### ACWR (Acute:Chronic Workload Ratio)
-
-(7-day total load) / (28-day average load)
-
-| ACWR Range | Zone    | Injury Risk       |
-| ---------- | ------- | ----------------- |
-| 0.8-1.3    | Safe    | Normal (baseline) |
-| 1.3-1.5    | Caution | Elevated (1.5-2x) |
-| > 1.5      | Danger  | High (2-4x)       |
-
-**Use for**: Evaluate injury risk from load spikes, guide adaptation decisions
-
-#### Readiness Score (0-100)
-
-| Score | Level     | Interpretation              |
-| ----- | --------- | --------------------------- |
-| < 35  | Very Low  | Significant fatigue/illness |
-| 35-50 | Low       | Moderate fatigue            |
-| 50-70 | Moderate  | Normal training state       |
-| 70-85 | Good      | Fresh, ready for work       |
-| > 85  | Excellent | Peak readiness              |
-
-**Use for**: Daily go/no-go decision for hard workouts, overall training readiness
-
-**📖 Full Metrics Reference**: See [`docs/coaching/methodology.md`](docs/coaching/methodology.md) for detailed explanations, calculations, evidence, and usage patterns.
-
-### Sport Multipliers (Two-Channel Load Model)
-
-| Sport                | Systemic | Lower Body | Notes                         |
-| -------------------- | -------- | ---------- | ----------------------------- |
-| Running (road/track) | 1.00     | 1.00       | Baseline for all calculations |
-| Running (treadmill)  | 1.00     | 0.90       | Reduced impact                |
-| Trail running        | 1.05     | 1.10       | Increased effort + impact     |
-| Cycling              | 0.85     | 0.35       | Low leg impact, high cardio   |
-| Swimming             | 0.70     | 0.10       | Minimal leg strain            |
-| Climbing/bouldering  | 0.60     | 0.10       | Upper-body dominant           |
-| Strength (general)   | 0.55     | 0.40       | Whole-body fatigue            |
-| Yoga (flow)          | 0.35     | 0.10       | Low intensity recovery        |
-
-**Two-Channel Load Model:**
-
-- **Systemic load**: Cardio + whole-body fatigue → feeds CTL/ATL/TSB/ACWR
-- **Lower-body load**: Leg strain + impact → gates quality/long runs
-
-This prevents hard climbing/strength days from incorrectly blocking running workouts when the fatigue is primarily upper-body.
-
-**📖 Full Sport Multipliers Table**: See [`docs/coaching/methodology.md#sport-multipliers--load-model`](docs/coaching/methodology.md#sport-multipliers--load-model) for complete table, validated examples, and load calculation formulas.
-
-### Adaptation Triggers
-
-| Trigger              | Threshold | Severity    | Typical Response                    |
-| -------------------- | --------- | ----------- | ----------------------------------- |
-| ACWR_HIGH_RISK       | > 1.5     | 🔴 HIGH     | Downgrade or skip workout           |
-| ACWR_ELEVATED        | > 1.3     | 🟡 MODERATE | Consider downgrade, discuss options |
-| READINESS_VERY_LOW   | < 35      | 🔴 HIGH     | Force rest or easy recovery         |
-| READINESS_LOW        | < 50      | 🟡 LOW      | Downgrade quality workouts          |
-| TSB_OVERREACHED      | < -25     | 🔴 HIGH     | Reduce training load immediately    |
-| LOWER_BODY_LOAD_HIGH | Dynamic   | 🟡 MODERATE | Delay running quality/long runs     |
-
-**Toolkit Approach**: M11 returns trigger data + risk assessment → Claude Code interprets with athlete context (M13 memories, conversation history) → presents options with reasoning → athlete decides
-
-**📖 Full Triggers Reference**: See [`docs/coaching/methodology.md#adaptation-triggers`](docs/coaching/methodology.md#adaptation-triggers) for detailed trigger handling patterns and examples.
+**📖 Complete tables, sport multipliers, and methodology**: See [`docs/coaching/methodology.md`](docs/coaching/methodology.md)
 
 ### Coaching Workflow Best Practices
 
