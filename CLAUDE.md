@@ -591,16 +591,9 @@ See `examples/coaching/` for realistic coaching scenarios with proper error hand
 ## Quick Start Example: First Session (Auth-First Pattern)
 
 ```bash
-# STEP 0: Check auth status FIRST (mandatory)
+# STEP 0: Check auth status FIRST (see Session Initialization pattern above)
 sce auth status
-
-# If not authenticated or token expired:
-if [ $? -eq 3 ]; then
-  echo "Let's connect your Strava account so I can access your training history."
-  sce auth url
-  # User opens browser, authorizes, copies code
-  sce auth exchange --code CODE_FROM_URL
-fi
+# If exit code 3, follow OAuth flow from Session Initialization section
 
 # STEP 1: Now sync activities
 sce sync  # Imports last 120 days (4 months) → provides accurate CTL/ATL/TSB baseline
