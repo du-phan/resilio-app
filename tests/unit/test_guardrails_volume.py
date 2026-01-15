@@ -1,0 +1,488 @@
+"""
+Unit tests for guardrails volume validation module.
+
+Tests volume guardrails based on Daniels' Running Formula:
+- Quality volume validation (T/I/R pace limits)
+- Weekly progression (10% rule)
+- Long run limits
+- Safe volume range calculations
+"""
+
+import pytest
+from sports_coach_engine.core.guardrails.volume import (
+    validate_quality_volume,
+    validate_weekly_progression,
+    validate_long_run_limits,
+    calculate_safe_volume_range,
+)
+
+
+# ============================================================
+# QUALITY VOLUME VALIDATION TESTS
+# ============================================================
+
+
+class TestQualityVolumeValidation:
+    """Tests for T/I/R pace volume validation against Daniels' limits."""
+
+    def test_all_volumes_within_limits(self):
+        """All quality volumes within Daniels' constraints should pass."""
+        result = validate_quality_volume(
+            t_pace_km=3.0,      # 6% of weekly (< 10% limit)
+            i_pace_km=4.0,      # 8% of weekly (= 8% limit)
+            r_pace_km=2.0,      # 4% of weekly (< 5% limit)
+            weekly_mileage_km=50.0,
+        )
+
+        assert result.overall_ok is True
+        assert result.t_pace_ok is True
+        assert result.i_pace_ok is True
+        assert result.r_pace_ok is True
+        assert len(result.violations) == 0
+
+    def test_t_pace_exceeds_10_percent(self):
+        """T-pace exceeding 10% of weekly mileage should create violation."""
+        result = validate_quality_volume(
+            t_pace_km=6.0,      # 12% of weekly (> 10% limit)
+            i_pace_km=3.0,
+            r_pace_km=2.0,
+            weekly_mileage_km=50.0,
+        )
+
+        assert result.overall_ok is False
+        assert result.t_pace_ok is False
+        assert result.t_pace_limit_km == 5.0  # 10% of 50km
+        assert len(result.violations) == 1
+        assert result.violations[0].type == "T_PACE_VOLUME_EXCEEDED"
+
+    def test_i_pace_exceeds_8_percent_limit(self):
+        """I-pace exceeding 8% of weekly mileage should create violation."""
+        result = validate_quality_volume(
+            t_pace_km=3.0,
+            i_pace_km=6.0,      # 12% of weekly (> 8% limit)
+            r_pace_km=2.0,
+            weekly_mileage_km=50.0,
+        )
+
+        assert result.overall_ok is False
+        assert result.i_pace_ok is False
+        assert result.i_pace_limit_km == 4.0  # 8% of 50km = 4.0
+        assert len(result.violations) == 1
+        assert result.violations[0].type == "I_PACE_VOLUME_EXCEEDED"
+
+    def test_i_pace_exceeds_10km_absolute_limit(self):
+        """I-pace exceeding 10km absolute limit should create violation."""
+        result = validate_quality_volume(
+            t_pace_km=8.0,
+            i_pace_km=12.0,     # > 10km absolute limit
+            r_pace_km=3.0,
+            weekly_mileage_km=150.0,  # High weekly so 8% would be 12km, but 10km is max
+        )
+
+        assert result.overall_ok is False
+        assert result.i_pace_ok is False
+        assert result.i_pace_limit_km == 10.0  # lesser of 10km or 12km (8% of 150)
+
+    def test_r_pace_exceeds_5_percent_limit(self):
+        """R-pace exceeding 5% of weekly mileage should create violation."""
+        result = validate_quality_volume(
+            t_pace_km=3.0,
+            i_pace_km=4.0,
+            r_pace_km=4.0,      # 8% of weekly (> 5% limit)
+            weekly_mileage_km=50.0,
+        )
+
+        assert result.overall_ok is False
+        assert result.r_pace_ok is False
+        assert result.r_pace_limit_km == 2.5  # 5% of 50km
+        assert len(result.violations) == 1
+        assert result.violations[0].type == "R_PACE_VOLUME_EXCEEDED"
+
+    def test_r_pace_exceeds_8km_absolute_limit(self):
+        """R-pace exceeding 8km absolute limit should create violation."""
+        result = validate_quality_volume(
+            t_pace_km=10.0,
+            i_pace_km=8.0,
+            r_pace_km=10.0,     # > 8km absolute limit
+            weekly_mileage_km=200.0,  # High weekly so 5% would be 10km, but 8km is max
+        )
+
+        assert result.overall_ok is False
+        assert result.r_pace_ok is False
+        assert result.r_pace_limit_km == 8.0  # lesser of 8km or 10km (5% of 200)
+
+    def test_multiple_violations(self):
+        """Multiple quality volume violations should all be captured."""
+        result = validate_quality_volume(
+            t_pace_km=6.0,      # > 10%
+            i_pace_km=6.0,      # > 8%
+            r_pace_km=4.0,      # > 5%
+            weekly_mileage_km=50.0,
+        )
+
+        assert result.overall_ok is False
+        assert len(result.violations) == 3
+        violation_types = {v.type for v in result.violations}
+        assert "T_PACE_VOLUME_EXCEEDED" in violation_types
+        assert "I_PACE_VOLUME_EXCEEDED" in violation_types
+        assert "R_PACE_VOLUME_EXCEEDED" in violation_types
+
+    def test_beginner_weekly_volume(self):
+        """Low weekly volume should still apply percentage constraints."""
+        result = validate_quality_volume(
+            t_pace_km=1.5,      # 7.5% of weekly
+            i_pace_km=1.2,      # 6% of weekly
+            r_pace_km=0.8,      # 4% of weekly
+            weekly_mileage_km=20.0,
+        )
+
+        assert result.overall_ok is True
+        assert result.t_pace_limit_km == 2.0  # 10% of 20km
+        assert result.i_pace_limit_km == 1.6  # 8% of 20km
+        assert result.r_pace_limit_km == 1.0  # 5% of 20km
+
+    def test_zero_quality_volumes_valid(self):
+        """Zero quality volumes (easy week) should be valid."""
+        result = validate_quality_volume(
+            t_pace_km=0.0,
+            i_pace_km=0.0,
+            r_pace_km=0.0,
+            weekly_mileage_km=30.0,
+        )
+
+        assert result.overall_ok is True
+        assert len(result.violations) == 0
+
+
+# ============================================================
+# WEEKLY PROGRESSION VALIDATION TESTS
+# ============================================================
+
+
+class TestWeeklyProgressionValidation:
+    """Tests for weekly volume progression (10% rule)."""
+
+    def test_safe_10_percent_increase(self):
+        """Exactly 10% increase should be safe."""
+        result = validate_weekly_progression(
+            previous_volume_km=40.0,
+            current_volume_km=44.0,  # +10%
+        )
+
+        assert result.ok is True
+        assert result.increase_pct == 10.0
+        assert result.safe_max_km == 44.0
+        assert result.violation is None
+
+    def test_safe_5_percent_increase(self):
+        """Conservative <10% increase should be safe."""
+        result = validate_weekly_progression(
+            previous_volume_km=40.0,
+            current_volume_km=42.0,  # +5%
+        )
+
+        assert result.ok is True
+        assert result.increase_pct == 5.0
+
+    def test_volume_decrease_is_safe(self):
+        """Decreasing volume should always be safe."""
+        result = validate_weekly_progression(
+            previous_volume_km=50.0,
+            current_volume_km=30.0,  # -40%
+        )
+
+        assert result.ok is True
+        assert result.increase_km < 0
+        assert result.violation is None
+
+    def test_same_volume_is_safe(self):
+        """Maintaining same volume should be safe."""
+        result = validate_weekly_progression(
+            previous_volume_km=40.0,
+            current_volume_km=40.0,  # 0% change
+        )
+
+        assert result.ok is True
+        assert result.increase_pct == 0.0
+
+    def test_15_percent_increase_unsafe(self):
+        """15% increase should violate 10% rule."""
+        result = validate_weekly_progression(
+            previous_volume_km=40.0,
+            current_volume_km=46.0,  # +15%
+        )
+
+        assert result.ok is False
+        assert result.increase_pct == 15.0
+        assert result.violation is not None
+        assert "15%" in result.violation
+
+    def test_25_percent_increase_unsafe(self):
+        """Aggressive 25% increase should clearly violate."""
+        result = validate_weekly_progression(
+            previous_volume_km=40.0,
+            current_volume_km=50.0,  # +25%
+        )
+
+        assert result.ok is False
+        assert result.increase_pct == 25.0
+        assert result.recommendation is not None
+
+    def test_from_zero_volume_first_week(self):
+        """First week of training (from 0 volume) should be safe."""
+        result = validate_weekly_progression(
+            previous_volume_km=0.0,
+            current_volume_km=20.0,
+        )
+
+        # No percentage calculation possible from 0, but should be safe
+        assert result.ok is True
+
+    def test_very_low_volume_increase(self):
+        """Small absolute increases on low volume should be safe."""
+        result = validate_weekly_progression(
+            previous_volume_km=10.0,
+            current_volume_km=11.0,  # +10%
+        )
+
+        assert result.ok is True
+
+
+# ============================================================
+# LONG RUN VALIDATION TESTS
+# ============================================================
+
+
+class TestLongRunValidation:
+    """Tests for long run limits against weekly volume and duration."""
+
+    def test_long_run_within_all_limits(self):
+        """Long run within both percentage and duration limits should pass."""
+        result = validate_long_run_limits(
+            long_run_km=15.0,               # 30% of weekly
+            long_run_duration_minutes=120,  # 2 hours
+            weekly_volume_km=50.0,
+        )
+
+        assert result.overall_ok is True
+        assert result.pct_ok is True
+        assert result.duration_ok is True
+        assert len(result.violations) == 0
+
+    def test_long_run_exceeds_percentage_limit(self):
+        """Long run exceeding 30% of weekly volume should create violation."""
+        result = validate_long_run_limits(
+            long_run_km=18.0,               # 36% of weekly
+            long_run_duration_minutes=135,  # 2h 15min (ok)
+            weekly_volume_km=50.0,
+        )
+
+        assert result.overall_ok is False
+        assert result.pct_ok is False
+        assert result.duration_ok is True
+        assert result.pct_of_weekly == 36.0
+        assert len(result.violations) == 1
+        assert result.violations[0].type == "LONG_RUN_EXCEEDS_WEEKLY_PCT"
+
+    def test_long_run_exceeds_duration_limit(self):
+        """Long run exceeding 150 minutes should create violation."""
+        result = validate_long_run_limits(
+            long_run_km=15.0,               # 25% of weekly (ok)
+            long_run_duration_minutes=165,  # 2h 45min (> 150min)
+            weekly_volume_km=60.0,
+        )
+
+        assert result.overall_ok is False
+        assert result.pct_ok is True
+        assert result.duration_ok is False
+        assert len(result.violations) == 1
+        assert result.violations[0].type == "LONG_RUN_EXCEEDS_DURATION"
+
+    def test_long_run_exceeds_both_limits(self):
+        """Long run exceeding both limits should create two violations."""
+        result = validate_long_run_limits(
+            long_run_km=20.0,               # 40% of weekly (> 30%)
+            long_run_duration_minutes=165,  # 2h 45min (> 150min)
+            weekly_volume_km=50.0,
+        )
+
+        assert result.overall_ok is False
+        assert result.pct_ok is False
+        assert result.duration_ok is False
+        assert len(result.violations) == 2
+
+    def test_custom_percentage_limit(self):
+        """Custom percentage limit (25%) should be applied."""
+        result = validate_long_run_limits(
+            long_run_km=14.0,               # 28% of weekly
+            long_run_duration_minutes=120,
+            weekly_volume_km=50.0,
+            pct_limit=25.0,                 # Custom stricter limit
+        )
+
+        assert result.overall_ok is False
+        assert result.pct_ok is False
+        assert result.pct_limit == 25.0
+
+    def test_custom_duration_limit(self):
+        """Custom duration limit (180 min) should be applied."""
+        result = validate_long_run_limits(
+            long_run_km=15.0,
+            long_run_duration_minutes=165,  # 2h 45min
+            weekly_volume_km=60.0,
+            duration_limit_minutes=180,     # Custom more lenient limit
+        )
+
+        assert result.overall_ok is True
+        assert result.duration_ok is True
+        assert result.duration_limit_minutes == 180
+
+    def test_beginner_weekly_volume(self):
+        """Low weekly volume should still apply percentage constraints."""
+        result = validate_long_run_limits(
+            long_run_km=6.0,                # 30% of weekly
+            long_run_duration_minutes=55,   # < 1 hour
+            weekly_volume_km=20.0,
+        )
+
+        assert result.overall_ok is True
+        assert result.pct_of_weekly == 30.0
+
+
+# ============================================================
+# SAFE VOLUME RANGE TESTS
+# ============================================================
+
+
+class TestSafeVolumeRange:
+    """Tests for safe weekly volume range calculations based on CTL."""
+
+    def test_beginner_ctl_volume_range(self):
+        """CTL <20 should map to beginner range (15-25 km)."""
+        result = calculate_safe_volume_range(
+            current_ctl=15.0,
+            goal_type="fitness",
+        )
+
+        assert result.ctl_zone == "beginner"
+        assert result.base_volume_range_km == (15, 25)
+        assert result.recommended_start_km == 15
+        assert result.recommended_peak_km == 25
+
+    def test_recreational_ctl_volume_range(self):
+        """CTL 20-35 should map to recreational range (25-40 km)."""
+        result = calculate_safe_volume_range(
+            current_ctl=28.0,
+            goal_type="10k",
+        )
+
+        assert result.ctl_zone == "recreational"
+        assert result.base_volume_range_km == (25, 40)
+
+    def test_competitive_ctl_volume_range(self):
+        """CTL 35-50 should map to competitive range (40-65 km)."""
+        result = calculate_safe_volume_range(
+            current_ctl=44.0,
+            goal_type="half_marathon",
+        )
+
+        assert result.ctl_zone == "competitive"
+        assert result.base_volume_range_km == (40, 65)
+
+    def test_advanced_ctl_volume_range(self):
+        """CTL >50 should map to advanced range (55-80 km)."""
+        result = calculate_safe_volume_range(
+            current_ctl=58.0,
+            goal_type="marathon",
+        )
+
+        assert result.ctl_zone == "advanced"
+        assert result.base_volume_range_km == (55, 80)
+
+    def test_5k_goal_adjustment(self):
+        """5K goal should reduce volume by 10% (0.9 factor)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,              # recreational
+            goal_type="5k",
+        )
+
+        # Base: (25, 40), 5K adjustment: (22, 36)
+        assert result.goal_adjusted_range_km == (22, 36)
+
+    def test_half_marathon_goal_adjustment(self):
+        """Half marathon goal should increase volume by 15% (1.15 factor)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,              # recreational
+            goal_type="half_marathon",
+        )
+
+        # Base: (25, 40), half adjustment: (28, 46)
+        assert result.goal_adjusted_range_km == (28, 46)
+
+    def test_marathon_goal_adjustment(self):
+        """Marathon goal should increase volume by 30% (1.3 factor)."""
+        result = calculate_safe_volume_range(
+            current_ctl=44.0,              # competitive
+            goal_type="marathon",
+        )
+
+        # Base: (40, 65), marathon adjustment: (52, 84)
+        assert result.goal_adjusted_range_km == (52, 84)
+
+    def test_masters_adjustment_age_50_plus(self):
+        """Age 50+ should reduce volume by 10% (0.9 factor)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,              # recreational
+            goal_type="10k",
+            athlete_age=52,
+        )
+
+        # Base: (25, 40), masters adjustment: (22, 36)
+        assert result.masters_adjusted_range_km == (22, 36)
+        assert result.recommended_start_km == 22
+        assert result.recommended_peak_km == 36
+
+    def test_masters_adjustment_under_50(self):
+        """Age <50 should not apply masters adjustment."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,
+            goal_type="10k",
+            athlete_age=45,
+        )
+
+        # No masters adjustment
+        assert result.masters_adjusted_range_km is None
+        assert result.recommended_start_km == 25  # Base volume
+
+    def test_combined_goal_and_masters_adjustments(self):
+        """Marathon goal + masters age should apply both adjustments."""
+        result = calculate_safe_volume_range(
+            current_ctl=44.0,              # competitive: (40, 65)
+            goal_type="marathon",          # 1.3x: (52, 84)
+            athlete_age=52,                # 0.9x: (46, 75)
+        )
+
+        # Final: (46, 75)
+        assert result.goal_adjusted_range_km == (52, 84)
+        assert result.masters_adjusted_range_km == (46, 75)
+        assert result.recommended_start_km == 46
+        assert result.recommended_peak_km == 75
+
+    def test_zero_ctl_beginner_range(self):
+        """CTL of 0 (complete beginner) should use beginner range."""
+        result = calculate_safe_volume_range(
+            current_ctl=0.0,
+            goal_type="fitness",
+        )
+
+        assert result.ctl_zone == "beginner"
+        assert result.recommended_start_km == 15
+
+    def test_fitness_goal_no_adjustment(self):
+        """General fitness goal should use base volume (1.0 factor)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,
+            goal_type="fitness",
+        )
+
+        assert result.goal_adjusted_range_km == result.base_volume_range_km

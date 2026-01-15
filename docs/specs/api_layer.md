@@ -53,7 +53,8 @@ sports_coach_engine/
 │   ├── sync.py              # sync_strava, log_activity
 │   ├── metrics.py           # get_current_metrics, get_readiness
 │   ├── plan.py              # get_current_plan, regenerate_plan, accept/decline
-│   └── profile.py           # get_profile, update_profile, set_goal
+│   ├── profile.py           # get_profile, update_profile, set_goal
+│   └── vdot.py              # calculate_vdot_from_race, get_training_paces, etc.
 ├── core/                    # INTERNAL: Not for direct use
 │   ├── workflows.py         # Multi-step operation orchestration
 │   ├── config.py            # Configuration and secrets
@@ -68,7 +69,11 @@ sports_coach_engine/
 │   ├── adaptation.py        # Workout adaptation
 │   ├── enrichment.py        # Data context enrichment
 │   ├── memory.py            # Insights extraction
-│   └── logger.py            # Conversation logging
+│   ├── logger.py            # Conversation logging
+│   └── vdot/                # VDOT calculations (Daniels' Running Formula)
+│       ├── calculator.py    # Core VDOT calculations
+│       ├── tables.py        # VDOT lookup tables
+│       └── adjustments.py   # Environmental pace adjustments
 └── schemas/                 # Pydantic models, exported for type hints
 ```
 
@@ -524,6 +529,458 @@ def set_goal(
     """
     ...
 ```
+
+---
+
+### 3.6 Module: api/vdot.py
+
+VDOT calculations and training pace generation based on Jack Daniels' Running Formula.
+
+```python
+from typing import Union, Optional
+
+from sports_coach_engine.schemas.vdot import (
+    VDOTResult,
+    TrainingPaces,
+    RaceEquivalents,
+    SixSecondRulePaces,
+    PaceAdjustment,
+)
+
+
+def calculate_vdot_from_race(
+    race_distance: str,
+    race_time: str,
+    race_date: Optional[str] = None,
+) -> Union[VDOTResult, VDOTError]:
+    """
+    Calculate VDOT from race performance.
+
+    Args:
+        race_distance: Race distance ("mile", "5k", "10k", "15k", "half_marathon", "marathon")
+        race_time: Race time as string ("MM:SS" or "HH:MM:SS")
+        race_date: Optional race date (ISO format "YYYY-MM-DD") for confidence adjustment
+
+    Returns:
+        VDOTResult on success with:
+        - vdot: Calculated VDOT value (30-85)
+        - source_race: Input race distance
+        - source_time_formatted: Formatted race time
+        - confidence: "high" (race <2w old), "medium" (2-6w), "low" (>6w)
+
+        VDOTError on failure with error_type and message
+
+    Example:
+        >>> result = calculate_vdot_from_race("10k", "42:30")
+        >>> if not is_error(result):
+        ...     print(f"VDOT: {result.vdot}")
+    """
+    ...
+
+
+def get_training_paces(
+    vdot: int,
+    unit: str = "min_per_km",
+) -> Union[TrainingPaces, VDOTError]:
+    """
+    Get all training pace zones from VDOT.
+
+    Args:
+        vdot: VDOT value (30-85)
+        unit: Pace unit ("min_per_km" or "min_per_mile")
+
+    Returns:
+        TrainingPaces on success with:
+        - easy_pace_range: Tuple[int, int] (seconds per km/mile)
+        - marathon_pace_range: Marathon race pace
+        - threshold_pace_range: Lactate threshold pace
+        - interval_pace_range: VO2max interval pace
+        - repetition_pace_range: Speed work pace
+
+        VDOTError on failure (invalid VDOT or unit)
+
+    Example:
+        >>> paces = get_training_paces(48)
+        >>> if not is_error(paces):
+        ...     print(f"Easy: {paces.format_range(paces.easy_pace_range)}")
+    """
+    ...
+
+
+def predict_race_times(
+    race_distance: str,
+    race_time: str,
+) -> Union[RaceEquivalents, VDOTError]:
+    """
+    Predict equivalent race times for all distances.
+
+    Calculates VDOT from input race, then predicts times for all other distances.
+
+    Args:
+        race_distance: Source race distance
+        race_time: Source race time
+
+    Returns:
+        RaceEquivalents on success with:
+        - vdot: Calculated VDOT
+        - predictions: Dict mapping race distances to predicted times
+        - source_race: Input race
+        - confidence: Based on VDOT calculation
+
+        VDOTError on failure
+
+    Example:
+        >>> result = predict_race_times("10k", "42:30")
+        >>> if not is_error(result):
+        ...     print(f"Predicted half: {result.predictions['half_marathon']}")
+    """
+    ...
+
+
+def apply_six_second_rule_paces(
+    mile_time: str
+) -> Union[SixSecondRulePaces, VDOTError]:
+    """
+    Apply six-second rule for novice runners without recent race times.
+
+    Rule: R-pace = mile pace, I-pace = R + 6s/400m, T-pace = I + 6s/400m
+    (Uses 7-8 seconds for VDOT 40-50 range)
+
+    Args:
+        mile_time: Mile time as string ("M:SS")
+
+    Returns:
+        SixSecondRulePaces on success with:
+        - r_pace_400m: Repetition pace per 400m
+        - i_pace_400m: Interval pace per 400m
+        - t_pace_400m: Threshold pace per 400m
+        - adjustment_seconds: Adjustment used (6, 7, or 8)
+        - estimated_vdot_range: Estimated VDOT range
+
+        VDOTError on failure
+
+    Example:
+        >>> result = apply_six_second_rule_paces("6:00")
+        >>> if not is_error(result):
+        ...     print(f"R-pace: {result.r_pace_400m}s per 400m")
+    """
+    ...
+
+
+def adjust_pace_for_environment(
+    base_pace: str,
+    condition_type: str,
+    severity: float,
+) -> Union[PaceAdjustment, VDOTError]:
+    """
+    Adjust pace for environmental conditions.
+
+    Args:
+        base_pace: Base pace as string ("M:SS" per km)
+        condition_type: "altitude", "heat", "humidity", or "hills"
+        severity: Severity value (altitude in ft, temp in °C, humidity %, grade %)
+
+    Returns:
+        PaceAdjustment on success with:
+        - adjusted_pace_sec_per_km: Adjusted pace
+        - adjustment_seconds: Slowdown amount
+        - reason: Explanation of adjustment
+        - recommendation: Coaching guidance
+
+        VDOTError on failure
+
+    Example:
+        >>> result = adjust_pace_for_environment("5:00", "altitude", 7000)
+        >>> if not is_error(result):
+        ...     print(f"Adjusted pace: {result.adjusted_pace_sec_per_km}s/km")
+        ...     print(f"Recommendation: {result.recommendation}")
+    """
+    ...
+```
+
+---
+
+
+### 3.7 Module: api/guardrails.py
+
+Volume validation and recovery planning based on Daniels Running Formula and Pfitzinger guidelines.
+
+```python
+from typing import Union, Optional
+
+from sports_coach_engine.schemas.guardrails import (
+    QualityVolumeValidation,
+    WeeklyProgressionValidation,
+    LongRunValidation,
+    SafeVolumeRange,
+    BreakReturnPlan,
+    MastersRecoveryAdjustment,
+    RaceRecoveryPlan,
+    IllnessRecoveryPlan,
+)
+
+
+# Volume Validation Functions
+
+def validate_quality_volume(
+    t_pace_km: float,
+    i_pace_km: float,
+    r_pace_km: float,
+    weekly_mileage_km: float,
+) -> Union[QualityVolumeValidation, GuardrailsError]:
+    """Validate T/I/R pace volumes against Daniels hard constraints."""
+    ...
+
+def validate_weekly_progression(
+    previous_volume_km: float,
+    current_volume_km: float,
+) -> Union[WeeklyProgressionValidation, GuardrailsError]:
+    """Validate weekly volume progression (10% rule)."""
+    ...
+
+def validate_long_run_limits(
+    long_run_km: float,
+    long_run_duration_minutes: int,
+    weekly_volume_km: float,
+    pct_limit: float = 30.0,
+    duration_limit_minutes: int = 150,
+) -> Union[LongRunValidation, GuardrailsError]:
+    """Validate long run against weekly volume and duration limits."""
+    ...
+
+def calculate_safe_volume_range(
+    current_ctl: float,
+    goal_type: str = "fitness",
+    athlete_age: Optional[int] = None,
+) -> Union[SafeVolumeRange, GuardrailsError]:
+    """Calculate safe weekly volume range based on CTL and goals."""
+    ...
+
+
+# Recovery Planning Functions
+
+def calculate_break_return_plan(
+    break_days: int,
+    pre_break_ctl: float,
+    cross_training_level: str = "none",
+) -> Union[BreakReturnPlan, GuardrailsError]:
+    """Generate return-to-training protocol per Daniels Table 9.2."""
+    ...
+
+def calculate_masters_recovery(
+    age: int,
+    workout_type: str,
+) -> Union[MastersRecoveryAdjustment, GuardrailsError]:
+    """Calculate age-specific recovery adjustments (Pfitzinger)."""
+    ...
+
+def calculate_race_recovery(
+    race_distance: str,
+    athlete_age: int,
+    finishing_effort: str = "hard",
+) -> Union[RaceRecoveryPlan, GuardrailsError]:
+    """Determine post-race recovery protocol by distance and age."""
+    ...
+
+def generate_illness_recovery_plan(
+    illness_start_date: str,
+    illness_end_date: str,
+    severity: str = "moderate",
+) -> Union[IllnessRecoveryPlan, GuardrailsError]:
+    """Generate structured return-to-training plan after illness."""
+    ...
+```
+
+---
+
+### 3.8 Module: api/analysis.py
+
+Weekly insights, multi-sport load distribution, and holistic risk assessment.
+
+```python
+from typing import Union, List, Dict, Any, Optional
+from datetime import date
+
+from sports_coach_engine.schemas.analysis import (
+    WeekAdherenceAnalysis,
+    IntensityDistributionAnalysis,
+    ActivityGapAnalysis,
+    LoadDistributionAnalysis,
+    WeeklyCapacityCheck,
+    CurrentRiskAssessment,
+    RecoveryWindowEstimate,
+    TrainingStressForecast,
+    TaperStatusAssessment,
+)
+
+
+# Weekly Analysis Functions
+
+def api_analyze_week_adherence(
+    week_number: int,
+    planned_workouts: List[Dict[str, Any]],
+    completed_activities: List[Dict[str, Any]],
+) -> Union[WeekAdherenceAnalysis, AnalysisError]:
+    """Compare planned vs actual training for adherence patterns."""
+    ...
+
+def api_validate_intensity_distribution(
+    activities: List[Dict[str, Any]],
+    date_range_days: int = 28,
+) -> Union[IntensityDistributionAnalysis, AnalysisError]:
+    """Validate 80/20 rule compliance (80% low, 20% high)."""
+    ...
+
+def api_detect_activity_gaps(
+    activities: List[Dict[str, Any]],
+    min_gap_days: int = 7,
+) -> Union[ActivityGapAnalysis, AnalysisError]:
+    """Detect training breaks with CTL impact and cause detection."""
+    ...
+
+def api_analyze_load_distribution_by_sport(
+    activities: List[Dict[str, Any]],
+    date_range_days: int = 7,
+    sport_priority: str = "equal",
+) -> Union[LoadDistributionAnalysis, AnalysisError]:
+    """Analyze systemic and lower-body load across all sports."""
+    ...
+
+def api_check_weekly_capacity(
+    week_number: int,
+    planned_volume_km: float,
+    planned_systemic_load_au: float,
+    historical_activities: List[Dict[str, Any]],
+) -> Union[WeeklyCapacityCheck, AnalysisError]:
+    """Validate planned volume against proven capacity."""
+    ...
+
+
+# Risk Assessment Functions
+
+def api_assess_current_risk(
+    current_metrics: Dict[str, Any],
+    recent_activities: List[Dict[str, Any]],
+    planned_workout: Optional[Dict[str, Any]] = None,
+) -> Union[CurrentRiskAssessment, AnalysisError]:
+    """Multi-factor injury risk combining ACWR, readiness, TSB, recent load."""
+    ...
+
+def api_estimate_recovery_window(
+    trigger_type: str,
+    current_value: float,
+    safe_threshold: float,
+) -> Union[RecoveryWindowEstimate, AnalysisError]:
+    """Estimate recovery timeline to safe zone."""
+    ...
+
+def api_forecast_training_stress(
+    weeks_ahead: int,
+    current_metrics: Dict[str, Any],
+    planned_weeks: List[Dict[str, Any]],
+) -> Union[TrainingStressForecast, AnalysisError]:
+    """Project CTL/ATL/TSB/ACWR 1-4 weeks ahead."""
+    ...
+
+def api_assess_taper_status(
+    race_date: date,
+    current_metrics: Dict[str, Any],
+    recent_weeks: List[Dict[str, Any]],
+) -> Union[TaperStatusAssessment, AnalysisError]:
+    """Verify taper progression toward race day freshness."""
+    ...
+```
+
+**Key Features:**
+- **Week Adherence:** Completion stats, load variance, workout type adherence, pattern detection
+- **80/20 Validation:** Polarization scoring, compliance levels, moderate-intensity rut detection
+- **Gap Detection:** CTL impact analysis, cause inference from notes (injury/illness keywords)
+- **Multi-Sport Load:** Systemic + lower-body breakdown by sport, priority adherence, fatigue flags
+- **Capacity Checks:** Validates planned volume against historical max, prevents untested loads
+- **Risk Assessment:** Multi-factor scoring (ACWR, readiness, TSB, recent load), injury probability
+- **Recovery Windows:** Day-by-day checklist for returning to safe zones
+- **Stress Forecasting:** Projects metrics 1-4 weeks ahead, identifies risk windows
+- **Taper Verification:** Volume reduction, TSB trajectory, readiness trend tracking
+
+---
+
+### 3.9 Module: api/validation.py
+
+Interval structure, plan structure, and goal feasibility validation.
+
+```python
+def api_validate_interval_structure(
+    workout_type: str,
+    intensity: str,
+    work_bouts: List[Dict[str, Any]],
+    recovery_bouts: List[Dict[str, Any]],
+    weekly_volume_km: Optional[float] = None,
+) -> Union[IntervalStructureValidation, ValidationError]:
+    """Validate interval workout structure per Daniels methodology.
+
+    Checks:
+    - I-pace: 3-5min work bouts, equal recovery, total ≤10km or 8% weekly
+    - T-pace: 5-15min work bouts, 1min recovery per 5min work, total ≤10% weekly
+    - R-pace: 30-90sec work bouts, 2-3x recovery, total ≤8km or 5% weekly
+
+    Returns:
+        IntervalStructureValidation with work/recovery bout analysis, violations,
+        daniels_compliance (true/false), and recommendations.
+    """
+
+
+def api_validate_plan_structure(
+    total_weeks: int,
+    goal_type: str,
+    phases: Dict[str, int],
+    weekly_volumes_km: List[float],
+    recovery_weeks: List[int],
+    race_week: int,
+) -> Union[PlanStructureValidation, ValidationError]:
+    """Validate training plan structure for common errors.
+
+    Checks:
+    - Phase duration appropriateness (base, build, peak, taper)
+    - Volume progression (10% rule)
+    - Peak placement (2-3 weeks before race)
+    - Recovery week frequency (every 3-4 weeks)
+    - Taper structure (gradual volume reduction)
+
+    Returns:
+        PlanStructureValidation with overall_quality_score (0-100),
+        phase checks, volume checks, violations, and recommendations.
+    """
+
+
+def api_assess_goal_feasibility(
+    goal_type: str,
+    goal_time_seconds: int,
+    goal_date: Union[date, str],
+    current_vdot: Optional[int],
+    current_ctl: float,
+    vdot_for_goal: Optional[int] = None,
+) -> Union[GoalFeasibilityAssessment, ValidationError]:
+    """Assess goal feasibility based on VDOT and CTL.
+
+    Analyzes:
+    - Current fitness (VDOT, CTL) vs goal requirements
+    - Time available vs typical training duration
+    - VDOT improvement needed and realistic timeline
+    - CTL buildup needed for goal distance
+
+    Returns:
+        GoalFeasibilityAssessment with feasibility_verdict
+        (VERY_REALISTIC/REALISTIC/AMBITIOUS_BUT_REALISTIC/AMBITIOUS/UNREALISTIC),
+        confidence_level, feasibility_analysis, recommendations, warnings.
+    """
+```
+
+**Key Features:**
+- **Interval Validation:** Daniels methodology compliance (I/T/R-pace work/recovery ratios, total volume limits)
+- **Plan Validation:** Quality scoring (0-100), phase duration checks, volume progression safety (10% rule)
+- **Goal Feasibility:** VDOT gap analysis, time sufficiency, CTL buildup needs, alternative scenarios
+- **Violation Reporting:** Type, severity (LOW/MODERATE/HIGH), message, specific recommendations
+- **Input Validation:** Comprehensive type checking, date parsing, boundary validation
 
 ---
 

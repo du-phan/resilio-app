@@ -45,6 +45,10 @@ def get_exit_code_for_error_type(error_type: str) -> int:
         "network": EXIT_NETWORK_ERROR,
         # Validation issues
         "validation": EXIT_VALIDATION_ERROR,
+        "invalid_input": EXIT_VALIDATION_ERROR,
+        "out_of_range": EXIT_VALIDATION_ERROR,
+        # Calculation failures
+        "calculation_failed": EXIT_INTERNAL_ERROR,
         # Not implemented
         "not_implemented": EXIT_NOT_IMPLEMENTED,
         # Catch-all

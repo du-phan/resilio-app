@@ -34,10 +34,14 @@ def is_error(result) -> bool:
     from sports_coach_engine.api.coach import CoachError
     from sports_coach_engine.api.metrics import MetricsError
     from sports_coach_engine.api.plan import PlanError
+    from sports_coach_engine.api.vdot import VDOTError
+    from sports_coach_engine.api.guardrails import GuardrailsError
+    from sports_coach_engine.api.analysis import AnalysisError
+    from sports_coach_engine.api.validation import ValidationError
 
     return isinstance(
         result,
-        (ProfileError, SyncError, CoachError, MetricsError, PlanError),
+        (ProfileError, SyncError, CoachError, MetricsError, PlanError, VDOTError, GuardrailsError, AnalysisError, ValidationError),
     )
 
 

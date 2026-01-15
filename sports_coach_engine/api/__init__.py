@@ -10,6 +10,7 @@ Modules:
     - metrics: Metrics queries with interpretations
     - plan: Training plan operations
     - profile: Athlete profile management
+    - vdot: VDOT calculations and training paces
 """
 
 # Re-export all public functions for convenient access
@@ -67,6 +68,47 @@ from sports_coach_engine.api.helpers import (
     handle_error,
 )
 
+from sports_coach_engine.api.vdot import (
+    calculate_vdot_from_race,
+    get_training_paces,
+    predict_race_times,
+    apply_six_second_rule_paces,
+    adjust_pace_for_environment,
+    VDOTError,
+)
+
+from sports_coach_engine.api.guardrails import (
+    validate_quality_volume,
+    validate_weekly_progression,
+    validate_long_run_limits,
+    calculate_safe_volume_range,
+    calculate_break_return_plan,
+    calculate_masters_recovery,
+    calculate_race_recovery,
+    generate_illness_recovery_plan,
+    GuardrailsError,
+)
+
+from sports_coach_engine.api.analysis import (
+    api_analyze_week_adherence,
+    api_validate_intensity_distribution,
+    api_detect_activity_gaps,
+    api_analyze_load_distribution_by_sport,
+    api_check_weekly_capacity,
+    api_assess_current_risk,
+    api_estimate_recovery_window,
+    api_forecast_training_stress,
+    api_assess_taper_status,
+    AnalysisError,
+)
+
+from sports_coach_engine.api.validation import (
+    api_validate_interval_structure,
+    api_validate_plan_structure,
+    api_assess_goal_feasibility,
+    ValidationError,
+)
+
 __all__ = [
     # Coach operations
     "get_todays_workout",
@@ -110,4 +152,37 @@ __all__ = [
     "is_error",
     "get_error_message",
     "handle_error",
+    # VDOT operations
+    "calculate_vdot_from_race",
+    "get_training_paces",
+    "predict_race_times",
+    "apply_six_second_rule_paces",
+    "adjust_pace_for_environment",
+    "VDOTError",
+    # Guardrails operations
+    "validate_quality_volume",
+    "validate_weekly_progression",
+    "validate_long_run_limits",
+    "calculate_safe_volume_range",
+    "calculate_break_return_plan",
+    "calculate_masters_recovery",
+    "calculate_race_recovery",
+    "generate_illness_recovery_plan",
+    "GuardrailsError",
+    # Analysis operations
+    "api_analyze_week_adherence",
+    "api_validate_intensity_distribution",
+    "api_detect_activity_gaps",
+    "api_analyze_load_distribution_by_sport",
+    "api_check_weekly_capacity",
+    "api_assess_current_risk",
+    "api_estimate_recovery_window",
+    "api_forecast_training_stress",
+    "api_assess_taper_status",
+    "AnalysisError",
+    # Validation operations
+    "api_validate_interval_structure",
+    "api_validate_plan_structure",
+    "api_assess_goal_feasibility",
+    "ValidationError",
 ]
