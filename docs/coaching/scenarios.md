@@ -91,6 +91,89 @@ Coach: "Perfect! Your profile is set up. Now let's talk about your running goal.
 - ✅ Conflict policy → AskUserQuestion is PERFECT (decision with trade-offs)
 - ❌ NEVER: "AskUserQuestion: What's your name? Options: A) Tell me B) Skip"
 
+### Injury History - Context-Aware Questioning
+
+The AI coach should adapt the injury question based on observed activity patterns from the computational tools.
+
+#### Detection Methods
+
+**1. Activity Gap Detection**:
+- Via `sce status`: CTL drop from 45→20 over 3 weeks
+- Via `sce week`: 14+ day gap between activities
+- Via activity dates: Compare timestamps for gaps
+
+**2. Injury Keywords in Notes**:
+- The `flags` field in daily metrics automatically extracts injury/illness keywords
+- Keywords: pain, sore, injury, hurt, ache, strain, etc.
+- Example: flags = ["run activity: pain, sore"]
+
+**3. CTL/ATL Anomalies**:
+- Sudden CTL drops not explained by planned rest
+- ATL spike followed by extended low-load period
+
+#### Adaptive Question Patterns
+
+**If activity gap detected**:
+```
+"I noticed you had a break from running in November. Was that due to injury?"
+```
+
+**If activity notes mention pain**:
+```
+"I see some notes about knee discomfort in your recent activities.
+Can you tell me about that injury history?"
+```
+
+**If no signals detected**:
+```
+"Any past injuries I should know about? Helps me watch for warning signs
+and adjust training load appropriately."
+```
+
+#### Follow-Up Questions
+
+Always ask if recent/ongoing:
+```
+"Is that fully healed or something to monitor during training?"
+```
+
+#### Storage Format
+
+Store exactly as athlete describes - don't sanitize or categorize:
+
+✅ **Good**:
+- "Left knee tendonitis 2023, fully healed"
+- "Right Achilles tightness if I run 3 days in a row"
+- "Took break Nov 2025 - knee pain, better now but watch mileage"
+
+❌ **Bad**:
+- "Knee injury" (too vague)
+- "Healed tendonitis" (lost context)
+- Categorizing into "major" vs "minor" (subjective)
+
+#### Example Workflow
+
+```bash
+# 1. Check for activity gaps
+sce status  # Look for CTL drops
+sce week    # Review recent activity density
+
+# 2. If gap detected, ask context-aware question
+Coach: "I noticed your CTL dropped from 44 to 22 in mid-November.
+       Was that a planned break or due to injury?"
+
+Athlete: "Actually, I had some left knee pain. Took a few weeks off."
+
+# 3. Follow up on current status
+Coach: "Thanks for letting me know. Is that fully healed now,
+       or something I should watch for?"
+
+Athlete: "It's better, but it can flare up if I increase mileage too quickly."
+
+# 4. Store detailed history
+sce profile set --injury-history "Left knee pain Nov 2025, healed but watch mileage progression"
+```
+
 **📊 WHY AUTH FIRST:**
 
 - Provides 12+ weeks of activity history for baseline CTL/ATL/TSB calculations
@@ -289,6 +372,99 @@ sce week  # Track recovery progression
 - Watch for readiness to return to >60 before resuming quality work
 - Use multi-sport activities wisely: yoga, easy cycling OK; climbing/HIIT not OK
 - New goal setting: wait until readiness stabilizes
+
+## Scenario 11: Pre-Plan Constraints Discussion (BEFORE Plan Generation)
+
+**Context**: After profile setup and goal setting, BEFORE calling `sce plan regen`
+
+**Why This Matters**:
+- Generic defaults (2-4 runs/week, all 7 days available, 90min sessions) don't reflect reality
+- Plan design requires knowing actual schedule constraints
+- Long runs >90min essential for marathon training - must confirm athlete can do them
+- Other sport commitments must be locked in before workout placement
+
+**What Happens if Skipped**:
+- Plan assigns runs to days athlete can't train
+- Long runs capped at 90min when athlete could do 3 hours
+- Conflicts with other sports not managed → athlete manually moves workouts weekly (bad UX)
+
+### Conversation Pattern
+
+**Constraints to Discuss**:
+
+1. **Run frequency**: "How many runs per week are realistic for you?"
+2. **Available days**: "Which days can you typically run? Work commitments, family, other sports?"
+3. **Session duration**: "What's the longest run you can do? Marathon training means 2-3hr long runs."
+4. **Other sport commitments**: "I see you climb. Which days/times? Fixed or flexible?"
+5. **Time of day**: "Morning or evening runs? Any preference?"
+
+### Example Dialogue
+
+```
+Coach: "Before I design your marathon plan, let me understand your schedule.
+       How many runs per week are realistic?"
+
+Athlete: "I can do 3-4 runs consistently. Maybe 5 on a good week, but let's plan for 4."
+
+Coach: "Perfect, 4 runs/week is solid for marathon training. Which days work best?
+       I know you climb - when are those sessions?"
+
+Athlete: "I climb Friday evenings at the gym. Weekends usually open.
+       Weekdays I can run Tuesday and Thursday mornings before work."
+
+Coach: "Got it. Tentatively: Tuesday, Thursday, Saturday, Sunday for runs,
+       Friday reserved for climbing. Does that work?"
+
+Athlete: "Yes, that's ideal."
+
+Coach: "One more thing - what's the longest run you can do? Marathon training
+       means long runs of 2-3 hours eventually."
+
+Athlete: "Weekends I can do 2-3 hours no problem. Weekdays max 90 minutes."
+
+Coach: "Excellent! Let me update your profile with these constraints."
+```
+
+### Update Profile with Constraints
+
+```bash
+sce profile set \
+  --min-run-days 4 \
+  --max-run-days 4 \
+  --available-days "tuesday,thursday,saturday,sunday" \
+  --max-session-minutes 120
+```
+
+### Common Constraint Patterns
+
+| Athlete Type | Run Days/Week | Available Days | Max Session | Notes |
+|--------------|---------------|----------------|-------------|-------|
+| Full-time worker, climbing Fridays | 4 | Tue, Thu, Sat, Sun | 180min weekend | Protect Friday climbing |
+| Parent, evenings only | 3 | Mon, Wed, Sat | 120min | Early morning long run Saturday |
+| Multi-sport (cycling Sat) | 3-4 | Mon, Wed, Thu, Sun | 90min weekday, 150min Sun | Sunday long run only |
+| Flexible schedule | 4-5 | Any 5 days | 180min | Optimize for recovery |
+
+### Integration with Conflict Policy
+
+Constraints + conflict policy = complete scheduling system:
+
+- **Constraints**: Define WHEN athlete CAN train
+- **Conflict policy**: Define WHAT HAPPENS when conflicts arise within available days
+
+Example:
+- Constraint: "Can run Tue/Thu/Sat/Sun, Friday climbing"
+- Conflict policy: "ask_each_time"
+- Result: Coach proposes runs on available days, asks when conflicts occur within those days
+
+### Workflow Position
+
+**Correct Flow**:
+1. Profile setup (basic info, sport priorities, conflict policy)
+2. **→ THIS SCENARIO: Constraints discussion** ←
+3. Goal setting
+4. Plan skeleton generation (`sce plan regen`)
+5. Plan design (weekly structure)
+6. Plan presentation and approval
 
 ---
 
