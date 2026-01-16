@@ -381,119 +381,28 @@ Based on risk level, choose appropriate action:
 
 ## Decision Trees
 
-### Q: ACWR is elevated but athlete feels great. Proceed or adjust?
+For guidance on common injury risk decisions, see [DECISION_TREES.md](references/DECISION_TREES.md):
 
-**Factors to consider**:
-1. **How elevated?**
-   - 1.3-1.35: Small violation, feel often accurate
-   - 1.35-1.5: Moderate violation, injury risk real even if asymptomatic
-   - >1.5: High violation, feel is unreliable
-
-2. **What's causing it?**
-   - Recent illness return: Be cautious (immune system compromised)
-   - Volume spike: Adjust (tissue needs time to adapt)
-   - Multi-sport load: Check lower-body load specifically
-
-3. **Athlete history**:
-   - Recent injury: Err on caution
-   - Clean injury history + high CTL: More tolerance for ACWR 1.3-1.35
-   - Newer athlete (<1 year training): Strict adherence to ACWR <1.3
-
-**Decision**:
-- ACWR 1.3-1.35 + feels great + experienced + no red flags → Proceed with monitoring
-- ACWR >1.35 OR any red flags → Adjust regardless of feel
-
-**Use risk forecast** to check if current ACWR is temporary spike or ongoing pattern.
-
-### Q: Should I recommend rest day or downgrade workout?
-
-**Rest day** when:
-- Readiness <35 (very low)
-- TSB <-25 (overreached)
-- Multiple red flags (ACWR + low readiness + TSB)
-- Athlete reports pain or persistent soreness
-
-**Downgrade workout** when:
-- Readiness 35-50 (low to moderate)
-- ACWR 1.3-1.4 (caution zone)
-- Single risk factor (e.g., volume increase but readiness OK)
-- Athlete feels fatigued but not ill/injured
-
-**Proceed with modification** when:
-- Readiness 50-70 (moderate)
-- ACWR 1.15-1.3 (borderline)
-- Option: Reduce workout duration or intensity slightly
-
-### Q: When should I trigger plan-adaptation skill?
-
-**Trigger plan-adaptation** when:
-1. Risk level HIGH or VERY HIGH for 2+ consecutive weeks
-2. Multiple weeks need adjustment (not just current week)
-3. Athlete has injury symptoms (pain, persistent soreness)
-4. ACWR forecast shows risk spike lasting 3+ weeks
-
-**Use injury-risk-management** when:
-- Single-week adjustment sufficient
-- Proactive prevention (risk detected early)
-- Education and monitoring focus
-
-### Q: How do I handle multi-sport load interactions?
-
-**Check lower-body load specifically**:
-```bash
-sce analysis load --activities activities.json --days 7 --priority equal
-```
-
-**Returns**:
-- Systemic load by sport
-- Lower-body load by sport
-- Fatigue flags
-
-**Interpretation**:
-- High climbing systemic load + low climbing lower-body load → Easy run OK, quality run may struggle
-- High cycling lower-body load → Delay quality run by 48 hours
-- Swimming (minimal lower-body) → No running impact
-
-**Mitigation**:
-- Rearrange weekly schedule (see training-plan-design/references/MULTI_SPORT.md)
-- Adjust running intensity if multi-sport systemic load high
-- Consider other sport as recovery week equivalent if running volume drops
+- ACWR elevated but athlete feels great - Proceed or adjust?
+- Should I recommend rest day or downgrade workout?
+- When should I trigger plan-adaptation skill?
+- How do I handle multi-sport load interactions?
 
 ---
 
-## ACWR Risk Zones (Detailed)
+## ACWR Risk Zones
 
-| ACWR Range | Zone | Injury Risk | Action Required | Example Scenario |
-|------------|------|-------------|-----------------|------------------|
-| 0.5-0.8 | Undertraining | Low injury, high detraining risk | Increase load gradually | Returning from break, CTL dropping |
-| 0.8-1.0 | Low-normal | Baseline risk | Continue, monitor trends | Steady training, no spikes |
-| 1.0-1.15 | Optimal | Baseline risk | Continue, good adaptation zone | Progressive buildup during base phase |
-| 1.15-1.3 | Safe-high | Baseline risk | Monitor closely, no action unless sustained | Post-recovery week, temporary spike |
-| 1.3-1.4 | Caution | 1.5x baseline risk | Proactive adjustment within 3-7 days | Volume increased 12%, feeling good |
-| 1.4-1.5 | High caution | 2x baseline risk | Immediate adjustment (downgrade or rest) | Back-to-back hard weeks, no recovery |
-| >1.5 | Danger | 2-4x baseline risk | Immediate rest or drastic reduction | Sudden volume spike, illness return |
+See [ACWR_ZONES.md](references/ACWR_ZONES.md) for detailed zone definitions with injury risk multipliers (7 zones from undertraining to danger).
 
-**Key insight**: ACWR 1.3 is the inflection point where injury risk starts climbing significantly. Prevention is most effective at 1.15-1.3 (before entering danger zone).
+**Key insight**: ACWR 1.3 is the inflection point. Prevention is most effective at 1.15-1.3 (before entering danger zone).
 
 ---
 
 ## Readiness Score Interpretation
 
-| Readiness | Interpretation | Action |
-|-----------|----------------|--------|
-| <35 | Very low | Rest or very easy (20min RPE 2) |
-| 35-50 | Low | Easy run only, no quality |
-| 50-70 | Moderate | Proceed with caution, consider downgrade |
-| 70-85 | Good | Proceed as planned |
-| >85 | Excellent | Ideal for quality workout |
+See [READINESS_GUIDE.md](references/READINESS_GUIDE.md) for complete readiness zones and factors.
 
-**Factors affecting readiness**:
-- Sleep quality
-- Resting heart rate (elevated = low readiness)
-- Subjective wellness (mood, energy, soreness)
-- Recent training load (TSB)
-
-**Use readiness as gate**:
+**Key principle**: Use readiness as a secondary safety gate beyond ACWR.
 - Readiness <50 → No quality workouts, even if ACWR safe
 - Readiness >70 + ACWR safe → Green light for quality
 
@@ -501,137 +410,34 @@ sce analysis load --activities activities.json --days 7 --priority equal
 
 ## Common Risk Patterns
 
-### Pattern 1: Post-Recovery Week Spike
+See [RISK_PATTERNS.md](references/RISK_PATTERNS.md) for detailed analysis of 5 recognizable patterns:
 
-**Scenario**: After recovery week (30% volume drop), athlete returns with +15% increase.
-
-**Risk**: ACWR spikes from 0.9 → 1.35 due to low ATL during recovery week.
-
-**Mitigation**: Post-recovery week should increase +5-10% from pre-recovery baseline, NOT from recovery week.
-
-**Example**:
-- Week 3: 50km
-- Week 4: 35km (recovery, -30%)
-- Week 5: 55km (+10% from Week 3, NOT +57% from Week 4)
-
-### Pattern 2: Multi-Sport Overload
-
-**Scenario**: Athlete runs 40km/week + climbs 3x/week (hard sessions).
-
-**Risk**: Systemic load is 1,800 AU (equivalent to 60km running), but ACWR only tracks running (underestimates true load).
-
-**Mitigation**: Use multi-sport load analysis:
-```bash
-sce analysis load --activities activities.json --days 7 --priority equal
-```
-
-Adjust running volume if total systemic load exceeds athlete's capacity.
-
-### Pattern 3: Intensity Distribution Error
-
-**Scenario**: Athlete's easy runs are "moderate" (RPE 5-6), not true easy (RPE 3-4).
-
-**Risk**: Chronic fatigue, no true recovery, leads to overtraining despite ACWR <1.3.
-
-**Mitigation**: Validate 80/20 distribution:
-```bash
-sce analysis intensity --activities activities.json --days 28
-```
-
-If distribution is 70/30 or worse, coach athlete to slow down easy runs.
-
-### Pattern 4: Long Run Domination
-
-**Scenario**: Long run is 22km in 48km week (46% of volume, exceeds 30% guideline).
-
-**Risk**: Single session causes excessive fatigue, other runs suffer, recovery inadequate.
-
-**Mitigation**: Validate long run percentage:
-```bash
-sce guardrails long-run --duration 135 --weekly-volume 48 --pct-limit 30
-```
-
-Reduce long run or increase weekly volume to balance.
-
-### Pattern 5: Session Density
-
-**Scenario**: Tuesday tempo + Thursday intervals + Saturday long run + Sunday cycling (hard).
-
-**Risk**: Hard sessions too close together, no recovery time.
-
-**Mitigation**: Space quality sessions 48-72 hours apart. Check session density in `sce today` output.
+1. **Post-Recovery Week Spike** - ACWR spike after recovery due to low ATL
+2. **Multi-Sport Overload** - Systemic load underestimated when only tracking running
+3. **Intensity Distribution Error** - Easy runs too hard (70/30 instead of 80/20)
+4. **Long Run Domination** - Single session >30% of weekly volume
+5. **Session Density** - Hard sessions too close together
 
 ---
 
 ## Guardrails Integration
 
-**All guardrails commands support injury prevention**:
+See [GUARDRAILS.md](references/GUARDRAILS.md) for complete guardrails documentation.
 
-### Volume Progression
-```bash
-sce guardrails progression --previous 40 --current 48
-```
-
-**Use**: Validate weekly volume increases don't exceed 10% rule.
-
-**Returns**: `ok` (Boolean), `increase_pct`, `safe_max_km`, `violation` (if exceeded)
-
-### Quality Volume Limits
-```bash
-sce guardrails quality-volume --t-pace 5.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
-```
-
-**Use**: Ensure T/I/R volumes respect Daniels' limits.
-
-**Returns**: `overall_ok`, `violations` (list), `pace_limits` (recommended maximums)
-
-### Long Run Caps
-```bash
-sce guardrails long-run --duration 135 --weekly-volume 55 --pct-limit 30
-```
-
-**Use**: Validate long run doesn't exceed duration (150min) or percentage (30%) limits.
-
-**Returns**: `pct_ok`, `duration_ok`, `violations`
-
-### Break Return
-```bash
-sce guardrails break-return --days 21 --ctl 44 --cross-training moderate
-```
-
-**Use**: Calculate safe return volume after training break.
-
-**Returns**: `recommended_start_volume_km`, `buildup_weeks`, `progression_rate_pct`
-
-### Illness Recovery
-```bash
-sce guardrails illness-recovery --severity moderate --days-missed 7
-```
-
-**Use**: Determine safe return protocol after illness.
-
-**Returns**: `can_resume_immediately`, `recommended_easy_days`, `volume_reduction_pct`
-
-**All guardrails inform risk mitigation recommendations**.
+**5 key guardrails** that support injury prevention:
+- Volume progression (10% rule)
+- Quality volume limits (Daniels' T/I/R guidelines)
+- Long run caps (150min, 30% volume)
+- Break return protocols
+- Illness recovery protocols
 
 ---
 
-## Visualization: Risk Trajectory
+## Risk Communication
 
-When presenting risk to athlete, use narrative to create mental model:
+See [COMMUNICATION.md](references/COMMUNICATION.md) for techniques on explaining injury risk effectively.
 
-**Example**:
-> "Think of your training load as a curve. Your CTL (fitness) is climbing steadily at 44. Your ATL (fatigue) spiked to 58 this week due to the long run + climbing comp. The gap between these two numbers gives us ACWR: 58 ÷ 44 = 1.32.
->
-> When ACWR is 0.8-1.3, your body adapts well. When it crosses 1.3, injury risk increases because fatigue is outpacing your body's ability to recover.
->
-> Right now, you're at 1.32 - just over the threshold. One more hard week would push you to 1.4-1.5 (high risk). But if we back off slightly this week, you'll drop back to 1.15 by next week, and we can resume normal progression safely."
-
-**Key elements**:
-- Explain what the metrics mean (not just numbers)
-- Show the trend (where you're heading)
-- Connect to injury risk (why it matters)
-- Provide clear action (what to do)
+**Key principle**: Create mental models through narrative, not just numbers. Explain what metrics mean, show trends, connect to injury risk, provide clear action.
 
 ---
 
@@ -652,46 +458,12 @@ When presenting risk to athlete, use narrative to create mental model:
 
 ## Edge Cases
 
-### Edge Case 1: ACWR Safe but Athlete Injured
+For unusual injury risk situations, see [EDGE_CASES.md](references/EDGE_CASES.md):
 
-**Problem**: ACWR 1.10 (safe), but athlete reports knee pain.
-
-**Explanation**: ACWR tracks load spikes, not absolute load capacity. Athlete may have underlying biomechanical issue, previous injury, or environmental factor (e.g., cambered road).
-
-**Action**:
-- Don't override subjective pain signals
-- Rest or reduce until pain-free
-- Check for non-load factors (shoes, surface, form)
-- Consider referral to PT if persistent
-
-**Key**: ACWR is a risk indicator, not a guarantee. Always trust athlete's pain reports over metrics.
-
-### Edge Case 2: ACWR Elevated but Race in 10 Days
-
-**Problem**: ACWR 1.38, but half marathon in 10 days (taper phase).
-
-**Decision**:
-- If due to taper (ATL dropping faster than CTL): Proceed with taper
-- If due to training spike: Adjust taper to be more conservative
-- Check `sce risk taper-status` for taper-specific risk assessment
-
-**Action**: Extra recovery days during taper, reduce taper runs if needed.
-
-### Edge Case 3: Low ACWR (<0.8) During Base Phase
-
-**Problem**: ACWR 0.75, athlete feels undertrained.
-
-**Explanation**: ACWR <0.8 indicates training load is below athlete's adapted capacity. Detraining risk (fitness loss) > injury risk.
-
-**Action**: Increase volume gradually (+10% per week) to bring ACWR to 1.0-1.15 (optimal adaptation zone).
-
-### Edge Case 4: ACWR Spike After Recovery Week
-
-**Problem**: Recovery week → ACWR jumps to 1.4 when returning to normal volume.
-
-**Explanation**: ATL drops during recovery week, creating denominator effect (low CTL ÷ low ATL = high ACWR).
-
-**Action**: Post-recovery week should be +5-10% from pre-recovery, NOT +X% from recovery week. This prevents artificial ACWR spike.
+1. **ACWR Safe but Athlete Injured** - Trust pain over metrics
+2. **ACWR Elevated but Race in 10 Days** - Taper-specific decisions
+3. **Low ACWR (<0.8) During Base Phase** - Detraining risk
+4. **ACWR Spike After Recovery Week** - Denominator effect mitigation
 
 ---
 
@@ -704,83 +476,26 @@ When presenting risk to athlete, use narrative to create mental model:
 
 ---
 
-## CLI Command Reference
+## Additional Resources
 
-**Risk Assessment**:
-```bash
-sce risk assess --metrics metrics.json --recent activities.json
-sce risk forecast --weeks 4 --metrics metrics.json --plan plan.json
-sce risk taper-status --race-date [YYYY-MM-DD] --metrics metrics.json --recent-weeks recent.json
-```
+**Decision support**:
+- [Decision Trees](references/DECISION_TREES.md) - Common scenario guidance
+- [Edge Cases](references/EDGE_CASES.md) - Handling unusual situations
 
-**Guardrails**:
-```bash
-sce guardrails progression --previous [X] --current [Y]
-sce guardrails quality-volume --t-pace [X] --i-pace [Y] --r-pace [Z] --weekly-volume [W]
-sce guardrails long-run --duration [M] --weekly-volume [V] --pct-limit 30
-sce guardrails break-return --days [N] --ctl [X] --cross-training [level]
-sce guardrails illness-recovery --severity [level] --days-missed [N]
-```
+**Reference material**:
+- [ACWR Zones](references/ACWR_ZONES.md) - Detailed zone definitions
+- [Readiness Guide](references/READINESS_GUIDE.md) - Daily readiness thresholds
+- [Risk Patterns](references/RISK_PATTERNS.md) - 5 recognizable patterns
+- [Guardrails](references/GUARDRAILS.md) - Injury prevention commands
+- [Communication](references/COMMUNICATION.md) - Risk explanation techniques
+- [CLI Reference](references/CLI_REFERENCE.md) - Command quick reference
 
-**Analysis**:
-```bash
-sce analysis intensity --activities activities.json --days 28
-sce analysis load --activities activities.json --days 7 --priority [equal|primary|secondary]
-sce status
-sce week
-```
+**Templates**:
+- [Risk Analysis Template](templates/risk_analysis.md) - Structured risk report format
 
----
-
-## Output Template
-
-After completing risk assessment, provide structured output:
-
-```
-# Injury Risk Assessment Summary
-
-**Overall Risk**: [LOW/MODERATE/HIGH/VERY HIGH]
-**Risk Score**: [X/100]
-**ACWR**: [Value] ([Zone])
-
-**Key Findings**:
-- [Finding 1 with specific data]
-- [Finding 2 with specific data]
-
-**Contributing Factors**:
-[If none, state "No significant risk factors"]
-- [Factor 1]: [Severity] - [Brief description]
-- [Factor 2]: [Severity] - [Brief description]
-
-**Recommendations**:
-[Specific, actionable steps with rationale]
-1. [Recommendation 1]
-2. [Recommendation 2]
-
-**Monitoring**:
-- [What to watch]: [Threshold/target]
-- [Check frequency]: [Daily/Weekly]
-
-**Next Assessment**: [When to re-run risk assessment]
-```
-
----
-
-## Testing Injury Risk Management
-
-**Manual test scenarios**:
-
-1. ACWR 1.08 (safe) → Should return "low risk, continue training"
-2. ACWR 1.25 (borderline) → Should return "moderate risk, monitor closely"
-3. ACWR 1.38 (caution) → Should return "high risk, immediate adjustment"
-4. ACWR 1.58 (danger) → Should return "very high risk, rest or drastic reduction"
-5. Multi-sport overload → Should detect via load analysis
-6. Intensity distribution error → Should detect via 80/20 analysis
-7. Post-recovery week spike → Should recognize and adjust recommendation
-
-**Success criteria**:
-- Risk level aligns with ACWR zones
-- Contributing factors correctly identified
-- Recommendations are specific (not generic)
-- Athlete understands why risk matters
-- Mitigation strategies are actionable
+**Training methodology**:
+- [ACWR Research](../../../docs/coaching/methodology.md#acwr-acutechronic-workload-ratio)
+- [80/20 Running](../../../docs/training_books/80_20_matt_fitzgerald.md)
+- [Advanced Marathoning](../../../docs/training_books/advanced_marathoning_pete_pfitzinger.md)
+- [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md)
+- [Adaptation Triggers](../../../docs/coaching/methodology.md#adaptation-triggers)
