@@ -86,22 +86,7 @@ sce risk taper-status --race-date 2026-03-15 --metrics metrics.json --recent-wee
 - `too_fresh`: Projected TSB >+15, risk over-taper
 - `uncertain`: Erratic recent training, hard to predict
 
-**Common taper trajectories** (by race distance):
-
-**5K/10K** (7-10 day taper):
-- Start: TSB -5 to -10
-- Race day: TSB +5 to +10
-- Strategy: Maintain intensity, reduce volume 40-50%
-
-**Half Marathon** (10-14 day taper):
-- Start: TSB -10 to -15
-- Race day: TSB +8 to +12
-- Strategy: Reduce volume 50-60%, maintain some intensity
-
-**Marathon** (14-21 day taper):
-- Start: TSB -15 to -20
-- Race day: TSB +10 to +15
-- Strategy: Gradual volume reduction, minimal intensity
+**Common taper trajectories** (by race distance): See [TAPER_TRAJECTORIES.md](references/TAPER_TRAJECTORIES.md) for detailed progressions.
 
 #### CTL (Chronic Training Load) - Fitness Stability
 
@@ -221,85 +206,15 @@ sce risk taper-status --race-date 2026-03-15 --metrics metrics.json --recent-wee
 
 **Generate race week schedule based on race distance**:
 
-#### 5K/10K Race Week (Example: Saturday race)
+- **5K/10K**: See [race_week_5k.md](templates/race_week_5k.md)
+- **Half Marathon**: See [race_week_half.md](templates/race_week_half.md)
+- **Marathon**: See [race_week_marathon.md](templates/race_week_marathon.md)
 
-**Monday**: Easy 30min + 6 × 100m strides
-- Purpose: Maintain leg turnover, keep sharp
-- Intensity: Easy run (RPE 3), strides at race pace
-
-**Tuesday**: Rest or easy 20min
-- Purpose: Recovery
-
-**Wednesday**: Easy 30min + 4 × 200m race-pace strides
-- Purpose: Final sharpening, race-pace feel
-- Intensity: Easy run (RPE 3), strides at race pace (RPE 8)
-
-**Thursday**: Rest
-- Purpose: Maximum recovery before race
-
-**Friday**: Easy 15min jog + dynamic stretching
-- Purpose: Loosen up, stay mobile
-- Intensity: Very easy (RPE 2)
-
-**Saturday**: RACE DAY
-- Warm-up: 15min easy jog + drills + 4 × 100m strides
-
-**Sunday**: Rest or easy 20min recovery jog
-
-#### Half Marathon Race Week (Example: Sunday race)
-
-**Monday**: Easy 40min
-- Purpose: Light recovery, start taper
-- Intensity: Easy (RPE 3)
-
-**Tuesday**: Easy 30min + 5 × 200m race-pace strides
-- Purpose: Maintain sharpness
-- Intensity: Easy run, strides at M-pace (half marathon pace)
-
-**Wednesday**: Rest or easy 20min
-- Purpose: Recovery
-
-**Thursday**: Easy 30min + 4 × 200m race-pace strides
-- Purpose: Final race-pace feel
-- Intensity: Easy run, strides at M-pace
-
-**Friday**: Rest
-- Purpose: Maximum recovery
-
-**Saturday**: Easy 15min jog + dynamic stretching
-- Purpose: Loosen up, stay mobile
-
-**Sunday**: RACE DAY
-- Warm-up: 10-15min easy jog + dynamic stretching + 3 × 100m strides
-
-**Monday**: Rest or easy 20min recovery jog
-
-#### Marathon Race Week (Example: Sunday race)
-
-**Monday**: Easy 40min
-- Purpose: Very light maintenance
-- Intensity: Easy (RPE 3)
-
-**Tuesday**: Easy 30min
-- Purpose: Maintain routine, minimal load
-
-**Wednesday**: Rest or easy 20min
-- Purpose: Deep recovery
-
-**Thursday**: Easy 20min + 3 × 200m M-pace strides (optional)
-- Purpose: Final race-pace reminder (optional - some skip this)
-
-**Friday**: Rest (recommended) or easy 15min if feeling stiff
-- Purpose: Maximum recovery
-
-**Saturday**: Easy 10min jog + dynamic stretching (optional)
-- Purpose: Shake out stiffness, stay mobile
-- Many marathoners rest completely
-
-**Sunday**: RACE DAY
-- Warm-up: 5-10min easy jog + dynamic stretching
-
-**Monday**: Rest (complete)
+**Key principles**:
+- Maintain routine, reduce volume
+- Final hard workout: 5K (3 days out), Marathon (10 days out)
+- Race-pace strides 2-3 days before race
+- Complete rest 1 day before (5K/10K) or 2 days before (half/marathon)
 
 ---
 
@@ -382,47 +297,14 @@ sce vdot adjust --pace 4:15 --condition heat --severity 28
 
 ### Step 6: Pre-Race Checklist
 
-**3 Days Before Race**:
-- ✓ Carb load begins (55-60% carbs in diet)
-- ✓ Hydration increase (urine pale yellow)
-- ✓ Review course map and elevation profile
-- ✓ Plan race day logistics (start time, parking, gear)
+See [pre_race_checklist.md](templates/pre_race_checklist.md) for complete timeline (3 days, 2 days, 1 day, race morning) and gear checklist.
 
-**2 Days Before Race**:
-- ✓ Easy short run + strides (if scheduled)
-- ✓ Lay out race day gear (test everything)
-- ✓ Check weather forecast
-- ✓ Finalize pace plan
-
-**1 Day Before Race**:
-- ✓ Rest or very easy jog (10-15min max)
-- ✓ Pre-race meal (familiar foods, 60-70% carbs)
-- ✓ Hydrate (but don't overdo - clear urine = over-hydrated)
-- ✓ Early to bed (sleep 2 nights before matters more than night before)
-- ✓ Pack race day bag
-
-**Race Morning**:
-- ✓ Wake 3 hours before start (allow digestion time)
-- ✓ Pre-race meal (familiar breakfast, 300-500 calories)
-- ✓ Arrive 45-60min before start
-- ✓ Warm-up routine (15min jog + strides for 5K/10K, 10min for half, 5min for marathon)
-- ✓ Final bathroom stop (15-20min before start)
-- ✓ Line up in appropriate pace corral
-
-**Gear checklist**:
-- Race bib (pinned or race belt)
-- Running shoes (broken in, not new)
-- Race outfit (tested in training)
-- Watch (charged, pace alerts set)
-- Anti-chafe (apply to hot spots)
-- Sunscreen (if sunny)
-- Sunglasses (optional)
-- Hat/visor (optional, helps in heat)
-
-**Nutrition (race day)**:
-- 5K/10K: No fueling needed (hydration only)
-- Half Marathon: Optional gel at 10K mark
-- Marathon: Gel/chew every 45min starting at 60min + water every aid station
+**Key items**:
+- Carb load begins 3 days before (8-10g/kg body weight)
+- Lay out and test all race gear 2 days before
+- Early to bed 1 day before (sleep 2 nights before matters most)
+- Wake 3 hours before race (digestion time)
+- Nothing new on race day (gear, nutrition, routine)
 
 ---
 
@@ -585,149 +467,36 @@ You've done the work. Now it's time to execute. Good luck!
 
 ## Decision Trees
 
-### Q: TSB is projected +18 (very fresh). Over-tapered?
+For guidance on common race preparation decisions, see [DECISION_TREES.md](references/DECISION_TREES.md):
 
-**Factors to consider**:
-1. **How many days to race?**
-   - 7+ days: Add short tempo or race-pace strides (increase TSB load slightly)
-   - 3-5 days: Add easy run with strides
-   - 1-2 days: Too late to adjust, trust fitness
-
-2. **Is CTL stable?**
-   - If CTL stable: Over-rested but fitness intact, should be fine
-   - If CTL declining: Lost fitness, race expectations should adjust
-
-3. **How does athlete feel?**
-   - Feeling sluggish: Over-rested, add short sharp run
-   - Feeling bouncy: Good sign, likely OK
-
-**Decision**: If >5 days to race and CTL stable, add 1 short quality session (20min tempo or race-pace strides). If <5 days, proceed with current plan.
-
-### Q: Readiness is declining during taper (was 72, now 58). Why?
-
-**Common causes**:
-1. **Illness brewing**: Check for cold symptoms, elevated resting HR
-2. **Poor sleep**: Stress, travel, pre-race nerves
-3. **Under-fueling**: Athlete cut calories during taper (bad idea)
-4. **Over-taper**: Boredom, loss of routine
-
-**Action**:
-- Illness: Extra rest, consider DNS if severe
-- Sleep: Sleep hygiene coaching, relaxation techniques
-- Under-fueling: Increase carbs, ensure adequate calories
-- Over-taper: Add short easy run to maintain routine
-
-### Q: Athlete feels great but TSB is still negative (-3) with 3 days to race. Proceed?
-
-**Risk assessment**:
-- **5K/10K**: Acceptable (short races tolerate slight fatigue)
-- **Half Marathon**: Borderline (may struggle in final 5K)
-- **Marathon**: Risky (likely to hit wall earlier)
-
-**Decision**:
-- If feeling great + readiness >75: Proceed (subjective trumps metric for short races)
-- If any doubt: Extra rest day, aim for TSB 0-+5 minimum
-- Adjust race expectations slightly (B-goal instead of A-goal)
-
-### Q: Should race-pace strides be included in taper?
-
-**Yes** - for sharpness and race-pace feel:
-- 5K/10K: 4-6 × 200m at race pace, 2-3 days before race
-- Half Marathon: 4-5 × 200m at M-pace (race pace), 3-4 days before race
-- Marathon: Optional - some athletes skip, others do 3-4 × 200m M-pace 4-5 days before
-
-**Purpose**: Maintain leg turnover, remind body of race pace, build confidence
-
-**Caution**: Don't overdo volume - strides are <5% of weekly volume during taper
+- TSB is projected +18 (very fresh) - Over-tapered?
+- Readiness declining during taper - Why?
+- Athlete feels great but TSB still negative 3 days out - Proceed?
+- Should race-pace strides be included in taper?
 
 ---
 
 ## Common Taper Mistakes
 
-### Mistake 1: Training Through Taper
+See [TAPER_MISTAKES.md](references/TAPER_MISTAKES.md) for 5 common mistakes:
 
-**Symptom**: CTL rising during taper, TSB staying negative
+1. **Training Through Taper** - Athlete doesn't trust taper, keeps training hard
+2. **Complete Rest (Couch Taper)** - Rests completely, loses sharpness
+3. **Pre-Race Jitters** - Adds extra workouts from lack of confidence
+4. **Carb Depletion Before Carb Load** - Outdated method, risky
+5. **New Gear on Race Day** - Blister/chafing risk
 
-**Cause**: Athlete doesn't trust taper, keeps training hard
-
-**Fix**: Explain taper science - fitness maintains for 2-3 weeks, rest allows expression of fitness
-
-**Messaging**: "You can't gain fitness in the final 2 weeks, but you CAN arrive too tired to perform. Trust the taper."
-
-### Mistake 2: Complete Rest (Couch Taper)
-
-**Symptom**: CTL dropping >5 points, TSB >+20
-
-**Cause**: Athlete rests completely (no running at all)
-
-**Fix**: Easy short runs maintain routine, prevent staleness
-
-**Messaging**: "Taper is reduced volume, not elimination. Short easy runs keep you sharp."
-
-### Mistake 3: Pre-Race Jitters (Unnecessary Workouts)
-
-**Symptom**: Athlete adds extra tempo or long run 5 days before race
-
-**Cause**: Lack of confidence, fear of "losing fitness"
-
-**Fix**: Reassure with data (CTL stable, TSB trending positive)
-
-**Messaging**: "Your CTL is 52, same as 2 weeks ago. Your fitness is intact. Extra work now only adds fatigue."
-
-### Mistake 4: Carb Depletion Before Carb Load
-
-**Some athletes**: Deplete glycogen (low-carb 2-3 days) before carb loading
-
-**Problem**: Outdated method, leaves athlete depleted if done incorrectly
-
-**Recommendation**: Skip depletion, just increase carbs 3 days before race (8-10g/kg)
-
-### Mistake 5: New Gear on Race Day
-
-**Problem**: New shoes, new shorts, new anything = blister/chafing risk
-
-**Rule**: "Nothing new on race day"
-
-**Fix**: Test all gear in training (including race outfit, nutrition, watch settings)
+**Golden rule**: "Nothing new on race day"
 
 ---
 
 ## VDOT-Based Performance Prediction
 
-**Use VDOT to predict race performance**:
+See [VDOT_PREDICTION.md](references/VDOT_PREDICTION.md) for complete guidance on using VDOT predictions to set realistic race goals.
 
-```bash
-# Athlete ran 42:30 (10K), predict half marathon
-sce vdot predict --race-type 10k --time 42:30 --goal-race half_marathon
-```
+**Key use**: Compare predicted times to athlete's goals to validate expectations.
 
-**Returns**:
-```json
-{
-  "vdot": 48,
-  "equivalent_times": {
-    "5k": "20:45",
-    "10k": "42:30",
-    "half_marathon": "1:32:30",
-    "marathon": "3:12:00"
-  }
-}
-```
-
-**Use predictions to**:
-- Set realistic race goals
-- Validate goal times (is 1:30:00 half marathon realistic with VDOT 48? → Stretch goal)
-- Adjust pacing if fitness changed since last race
-
-**Important**: Predictions assume:
-- Proper taper (TSB +5 to +15)
-- Good race day conditions
-- Athlete trained for target distance
-
-**Adjust expectations if**:
-- Taper execution poor (TSB <+5)
-- Extreme conditions (heat, wind, hilly course)
-- Athlete under-trained for distance (e.g., VDOT from 10K but limited long run experience for marathon)
+**Important**: Predictions assume proper taper (TSB +5 to +15), good conditions, and distance-appropriate training.
 
 ---
 
@@ -748,63 +517,12 @@ sce vdot predict --race-type 10k --time 42:30 --goal-race half_marathon
 
 ## Edge Cases
 
-### Edge Case 1: Race Canceled or Postponed
+For unusual race preparation situations, see [EDGE_CASES.md](references/EDGE_CASES.md):
 
-**Problem**: Race canceled 1 week before due to weather/COVID/etc.
-
-**Action**:
-1. Assess athlete's options:
-   - Option A: Find replacement race within 2-3 weeks
-   - Option B: Time trial (solo race effort on measured course)
-   - Option C: Return to training (reverse taper, rebuild CTL)
-
-2. If no replacement race:
-   - Week 1: Easy running (maintain taper volume)
-   - Week 2: Gradual return to pre-taper volume
-   - Week 3+: Resume normal training
-
-**Key**: Don't let peak fitness go to waste - time trial or replacement race preferred
-
-### Edge Case 2: Illness in Final Week
-
-**Problem**: Athlete gets cold 5 days before race.
-
-**Decision tree**:
-- **Fever**: DNS (do not start) - racing with fever risks serious illness
-- **Above neck** (sniffles, sore throat): Possible to race, expectations adjusted
-- **Below neck** (chest congestion, body aches): DNS recommended
-
-**If racing with minor illness**:
-- Adjust goals (B-goal or C-goal)
-- Conservative pacing (no A-goal attempts)
-- Monitor during race (stop if feeling worse)
-
-### Edge Case 3: Injury Flare-Up in Taper
-
-**Problem**: Old injury (e.g., IT band) flares 10 days before race.
-
-**Action**:
-1. Rest completely until pain-free (may sacrifice some fitness for health)
-2. Cross-train if possible (pool running, cycling)
-3. Race day decision:
-   - Pain-free with running: Proceed (adjusted goals)
-   - Pain persists: DNS (long-term health > single race)
-
-**Use AskUserQuestion** to discuss priorities (race vs long-term health)
-
-### Edge Case 4: Over-Tapered (TSB +22, CTL dropped 6 points)
-
-**Problem**: Athlete rested too much, lost sharpness.
-
-**Action** (if >5 days to race):
-- Add 1-2 short tempo runs (20-30min at T-pace)
-- Include race-pace strides
-- Increase easy run volume slightly
-
-**Action** (if <5 days to race):
-- Too late to fix, adjust expectations
-- Focus on executing race plan within current fitness
-- Post-race: Learn lesson for next taper
+1. **Race Canceled or Postponed** - Replacement race or reverse taper options
+2. **Illness in Final Week** - DNS decision tree (fever vs above/below neck)
+3. **Injury Flare-Up in Taper** - Race vs long-term health priorities
+4. **Over-Tapered** - Lost sharpness, how to recover
 
 ---
 
@@ -817,103 +535,26 @@ sce vdot predict --race-type 10k --time 42:30 --goal-race half_marathon
 
 ---
 
-## CLI Command Reference
+## Additional Resources
 
-**Taper Verification**:
-```bash
-sce risk taper-status --race-date [YYYY-MM-DD] --metrics metrics.json --recent-weeks recent_weeks.json
-```
+**Decision support**:
+- [Decision Trees](references/DECISION_TREES.md) - Common taper decisions
+- [Edge Cases](references/EDGE_CASES.md) - Unusual situations
 
-**Performance Prediction**:
-```bash
-sce vdot predict --race-type [5k|10k|half_marathon|marathon] --time [HH:MM:SS] --goal-race [race_type]
-sce vdot calculate --race-type [type] --time [HH:MM:SS]  # Get VDOT from race result
-```
+**Reference material**:
+- [Taper Mistakes](references/TAPER_MISTAKES.md) - 5 common mistakes to avoid
+- [VDOT Prediction](references/VDOT_PREDICTION.md) - Performance prediction guidance
+- [Taper Trajectories](references/TAPER_TRAJECTORIES.md) - Distance-specific TSB progressions
+- [CLI Reference](references/CLI_REFERENCE.md) - Command quick reference
 
-**Environmental Adjustments**:
-```bash
-sce vdot adjust --pace [M:SS] --condition [heat|altitude|wind] --severity [value]
-```
+**Templates**:
+- [Race Week Schedules](templates/) - 5K, 10K, Half, Marathon week-by-week
+- [Pre-Race Checklist](templates/pre_race_checklist.md) - 3-day countdown + gear
+- [Race Preparation Template](templates/race_preparation.md) - Structured output format
 
-**Recovery Protocol**:
-```bash
-sce guardrails race-recovery --distance [5k|10k|half_marathon|marathon] --age [N] --effort [easy|moderate|hard]
-```
-
-**Status**:
-```bash
-sce status        # Current metrics (CTL/ATL/TSB/readiness)
-sce week          # Recent training summary
-```
-
----
-
-## Output Template
-
-After completing race preparation assessment, provide structured output:
-
-```
-# Race Preparation Summary
-
-**Race**: [Name] - [Distance]
-**Date**: [YYYY-MM-DD] ([N] days away)
-**Goal**: [Time or finish comfortably]
-
----
-
-## Race Readiness: [EXCELLENT/GOOD/MODERATE/POOR]
-
-**Taper Status**:
-- TSB: [Current] → [Projected] (Target: +5 to +15) - [on_track/too_fatigued/too_fresh]
-- CTL: [Current] → [Projected] ([Stability level])
-- Readiness: [Current] ([Trend])
-
-**Assessment**: [Brief interpretation]
-
----
-
-## Race Week Schedule
-
-[Day-by-day schedule with purpose for each workout]
-
----
-
-## Race Day Strategy
-
-**Pacing**: [Goal pace with conservative/aggressive/negative split approach]
-**Conditions**: [Weather adjustments if needed]
-**Mental approach**: [Key mantras/strategies]
-
----
-
-## Pre-Race Checklist
-
-[Key items for 3 days, 2 days, 1 day, race morning]
-
----
-
-## Confidence Builder
-
-[Data-driven confidence statement referencing training quality, taper execution, VDOT predictions]
-
-You've done the work. The hay is in the barn. Now it's time to trust your training and race with confidence. Good luck!
-```
-
----
-
-## Testing Race Preparation
-
-**Manual test scenarios**:
-
-1. Perfect taper (TSB on track, CTL stable) → "Excellent readiness"
-2. Under-tapered (TSB still negative 3 days out) → "Moderate readiness, extra rest recommended"
-3. Over-tapered (TSB >+20, CTL dropped) → "Fair readiness, lost some sharpness"
-4. Illness during taper → "DNS recommended" or "Adjusted expectations"
-5. 5K vs Half vs Marathon → Different taper schedules and warm-up protocols
-
-**Success criteria**:
-- Taper status correctly interpreted
-- TSB trajectory validated against targets
-- Race week schedule appropriate for distance
-- Pacing strategy aligns with VDOT predictions
-- Athlete feels prepared and confident
+**Training methodology**:
+- [Advanced Marathoning](../../../docs/training_books/advanced_marathoning_pete_pfitzinger.md)
+- [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md)
+- [Faster Road Racing](../../../docs/training_books/faster_road_racing_pete_pfitzinger.md)
+- [80/20 Running](../../../docs/training_books/80_20_matt_fitzgerald.md)
+- [Coaching Methodology](../../../docs/coaching/methodology.md)
