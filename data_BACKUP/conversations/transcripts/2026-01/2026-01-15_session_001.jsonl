@@ -53,3 +53,13 @@
 {"timestamp": "2026-01-15T17:10:47.891225+00:00", "role": "system", "content": "Weekly status: 2/0 workouts, 63 minutes, CTL=26.3", "metadata": {}}
 {"timestamp": "2026-01-15T17:10:51.542027+00:00", "role": "user", "content": "get_todays_workout(date=2026-01-15)", "metadata": {}}
 {"timestamp": "2026-01-15T17:10:51.566797+00:00", "role": "system", "content": "No workout for 2026-01-15: No workout scheduled for 2026-01-15", "metadata": {}}
+{"timestamp": "2026-01-15T17:41:30.169575+00:00", "role": "user", "content": "analyze_profile_from_activities()", "metadata": {}}
+{"timestamp": "2026-01-15T17:41:30.262237+00:00", "role": "system", "content": "Analyzed 85 activities in 134-day window (2025-09-03 to 2026-01-14)", "metadata": {}}
+{"timestamp": "2026-01-15T17:41:30.913276+00:00", "role": "user", "content": "get_current_metrics()", "metadata": {}}
+{"timestamp": "2026-01-15T17:41:30.917657+00:00", "role": "system", "content": "Returned metrics for 2026-01-15: CTL=26, TSB=+5, readiness=49/100", "metadata": {}}
+{"timestamp": "2026-01-15T17:41:31.563904+00:00", "role": "user", "content": "get_weekly_status()", "metadata": {}}
+{"timestamp": "2026-01-15T17:41:31.667093+00:00", "role": "system", "content": "Weekly status: 2/0 workouts, 63 minutes, CTL=26.3", "metadata": {}}
+{"timestamp": "2026-01-15T17:43:30.071101+00:00", "role": "user", "content": "get_profile()", "metadata": {}}
+{"timestamp": "2026-01-15T17:43:30.072579+00:00", "role": "system", "content": "Returned profile: The Big D, goal=marathon", "metadata": {}}
+{"timestamp": "2026-01-15T17:43:37.936220+00:00", "role": "user", "content": "sync_strava(since=2025-09-17 18:43:37.932790)", "metadata": {}}
+{"timestamp": "2026-01-15T17:43:38.347330+00:00", "role": "system", "content": "Sync failed: rate limit exceeded - Rate limit exceeded", "metadata": {}}

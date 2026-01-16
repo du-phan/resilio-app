@@ -5,12 +5,15 @@ Get or update athlete profile fields like name, max_hr, resting_hr, etc.
 """
 
 from typing import Optional
+import os
+import subprocess
 
 import typer
 
 from sports_coach_engine.api import create_profile, get_profile, update_profile
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json
+from sports_coach_engine.schemas.profile import Weekday, TimePreference, DetailLevel, CoachingStyle, IntensityMetric
 
 # Create subcommand app
 app = typer.Typer(help="Manage athlete profile")
@@ -23,9 +26,9 @@ def profile_create_command(
     age: Optional[int] = typer.Option(None, "--age", help="Age in years"),
     max_hr: Optional[int] = typer.Option(None, "--max-hr", help="Maximum heart rate"),
     resting_hr: Optional[int] = typer.Option(None, "--resting-hr", help="Resting heart rate"),
-    running_priority: str = typer.Option(
+    run_priority: str = typer.Option(
         "equal",
-        "--running-priority",
+        "--run-priority",
         help="Running priority: primary, secondary, or equal"
     ),
     conflict_policy: str = typer.Option(
@@ -35,6 +38,36 @@ def profile_create_command(
     ),
     min_run_days: int = typer.Option(2, "--min-run-days", help="Minimum run days per week"),
     max_run_days: int = typer.Option(4, "--max-run-days", help="Maximum run days per week"),
+    available_days: Optional[str] = typer.Option(
+        None,
+        "--available-days",
+        help="Available run days (comma-separated, e.g., 'monday,wednesday,friday')"
+    ),
+    preferred_days: Optional[str] = typer.Option(
+        None,
+        "--preferred-days",
+        help="Preferred run days (comma-separated subset of available)"
+    ),
+    time_preference: Optional[str] = typer.Option(
+        None,
+        "--time-preference",
+        help="Time preference: morning, evening, or flexible"
+    ),
+    detail_level: Optional[str] = typer.Option(
+        None,
+        "--detail-level",
+        help="Coaching detail level: brief, moderate, or detailed"
+    ),
+    coaching_style: Optional[str] = typer.Option(
+        None,
+        "--coaching-style",
+        help="Coaching style: supportive, direct, or analytical"
+    ),
+    intensity_metric: Optional[str] = typer.Option(
+        None,
+        "--intensity-metric",
+        help="Intensity metric: pace, hr, or rpe"
+    ),
 ) -> None:
     """Create a new athlete profile.
 
@@ -43,18 +76,105 @@ def profile_create_command(
 
     Examples:
         sce profile create --name "Alex" --age 32 --max-hr 190
-        sce profile create --name "Sam" --running-priority primary
+        sce profile create --name "Sam" --run-priority primary
+        sce profile create --name "Alex" --available-days "monday,wednesday,friday" --time-preference morning
     """
+    # Parse constraint fields (comma-separated days to List[Weekday])
+    available_days_list = None
+    if available_days:
+        try:
+            available_days_list = [Weekday(d.strip().lower()) for d in available_days.split(',')]
+        except ValueError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid day in --available-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    preferred_days_list = None
+    if preferred_days:
+        try:
+            preferred_days_list = [Weekday(d.strip().lower()) for d in preferred_days.split(',')]
+        except ValueError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid day in --preferred-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    time_pref_enum = None
+    if time_preference:
+        try:
+            time_pref_enum = TimePreference(time_preference.lower())
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --time-preference: {time_preference}. Use: morning, evening, or flexible",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    # Parse preference enums
+    detail_level_enum = None
+    if detail_level:
+        try:
+            detail_level_enum = DetailLevel(detail_level.lower())
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --detail-level: {detail_level}. Use: brief, moderate, or detailed",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    coaching_style_enum = None
+    if coaching_style:
+        try:
+            coaching_style_enum = CoachingStyle(coaching_style.lower())
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --coaching-style: {coaching_style}. Use: supportive, direct, or analytical",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    intensity_metric_enum = None
+    if intensity_metric:
+        try:
+            intensity_metric_enum = IntensityMetric(intensity_metric.lower())
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --intensity-metric: {intensity_metric}. Use: pace, hr, or rpe",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
     # Call API
     result = create_profile(
         name=name,
         age=age,
         max_hr=max_hr,
         resting_hr=resting_hr,
-        running_priority=running_priority,
+        running_priority=run_priority,
         conflict_policy=conflict_policy,
         min_run_days=min_run_days,
         max_run_days=max_run_days,
+        available_run_days=available_days_list,
+        preferred_run_days=preferred_days_list,
+        time_preference=time_pref_enum,
+        detail_level=detail_level_enum,
+        coaching_style=coaching_style_enum,
+        intensity_metric=intensity_metric_enum,
     )
 
     # Convert to envelope
@@ -131,6 +251,36 @@ def profile_set_command(
         "--max-session-minutes",
         help="Maximum session duration in minutes (e.g., 90, 180)"
     ),
+    available_days: Optional[str] = typer.Option(
+        None,
+        "--available-days",
+        help="Available run days (comma-separated, e.g., 'monday,wednesday,friday')"
+    ),
+    preferred_days: Optional[str] = typer.Option(
+        None,
+        "--preferred-days",
+        help="Preferred run days (comma-separated subset of available)"
+    ),
+    time_preference: Optional[str] = typer.Option(
+        None,
+        "--time-preference",
+        help="Time preference: morning, evening, or flexible"
+    ),
+    detail_level: Optional[str] = typer.Option(
+        None,
+        "--detail-level",
+        help="Coaching detail level: brief, moderate, or detailed"
+    ),
+    coaching_style: Optional[str] = typer.Option(
+        None,
+        "--coaching-style",
+        help="Coaching style: supportive, direct, or analytical"
+    ),
+    intensity_metric: Optional[str] = typer.Option(
+        None,
+        "--intensity-metric",
+        help="Intensity metric: pace, hr, or rpe"
+    ),
 ) -> None:
     """Update athlete profile fields.
 
@@ -143,6 +293,8 @@ def profile_set_command(
         sce profile set --conflict-policy ask_each_time
         sce profile set --min-run-days 3 --max-run-days 4
         sce profile set --max-session-minutes 180
+        sce profile set --available-days "tuesday,thursday,saturday,sunday"
+        sce profile set --time-preference morning
     """
     # Collect non-None fields
     fields = {}
@@ -170,6 +322,88 @@ def profile_set_command(
     if max_session_minutes is not None:
         constraint_updates["max_time_per_session_minutes"] = max_session_minutes
 
+    # Parse new constraint fields
+    if available_days is not None:
+        try:
+            available_days_list = [Weekday(d.strip().lower()) for d in available_days.split(',')]
+            constraint_updates["available_run_days"] = available_days_list
+        except ValueError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid day in --available-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    if preferred_days is not None:
+        try:
+            preferred_days_list = [Weekday(d.strip().lower()) for d in preferred_days.split(',')]
+            constraint_updates["preferred_run_days"] = preferred_days_list
+        except ValueError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid day in --preferred-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    if time_preference is not None:
+        try:
+            time_pref_enum = TimePreference(time_preference.lower())
+            constraint_updates["time_preference"] = time_pref_enum
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --time-preference: {time_preference}. Use: morning, evening, or flexible",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    # Parse preference fields (nested in profile.preferences)
+    preference_updates = {}
+
+    if detail_level is not None:
+        try:
+            detail_level_enum = DetailLevel(detail_level.lower())
+            preference_updates["detail_level"] = detail_level_enum
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --detail-level: {detail_level}. Use: brief, moderate, or detailed",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    if coaching_style is not None:
+        try:
+            coaching_style_enum = CoachingStyle(coaching_style.lower())
+            preference_updates["coaching_style"] = coaching_style_enum
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --coaching-style: {coaching_style}. Use: supportive, direct, or analytical",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    if intensity_metric is not None:
+        try:
+            intensity_metric_enum = IntensityMetric(intensity_metric.lower())
+            preference_updates["intensity_metric"] = intensity_metric_enum
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid --intensity-metric: {intensity_metric}. Use: pace, hr, or rpe",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
     # If constraint updates exist, need to load current profile and merge
     if constraint_updates:
         current_profile = get_profile()
@@ -188,8 +422,28 @@ def profile_set_command(
         current_constraints.update(constraint_updates)
         fields["constraints"] = current_constraints
 
+    # If preference updates exist, need to load current profile and merge
+    if preference_updates:
+        if not constraint_updates:
+            # Profile not loaded yet (constraints weren't updated)
+            current_profile = get_profile()
+            if hasattr(current_profile, 'error_type'):
+                # Profile doesn't exist
+                envelope = create_error_envelope(
+                    error_type="not_found",
+                    message=f"Cannot update preferences: {current_profile.message}",
+                    data={}
+                )
+                output_json(envelope)
+                raise typer.Exit(code=2)
+
+        # Merge current preferences with updates
+        current_preferences = current_profile.preferences.model_dump()
+        current_preferences.update(preference_updates)
+        fields["preferences"] = current_preferences
+
     # Validate that at least one field was provided
-    if not fields and not constraint_updates:
+    if not fields and not constraint_updates and not preference_updates:
         envelope = create_error_envelope(
             error_type="validation",
             message="No fields specified. Use --name, --age, --max-hr, --min-run-days, --max-session-minutes, etc.",
@@ -277,3 +531,249 @@ def profile_analyze_command(ctx: typer.Context) -> None:
     # Exit with appropriate code
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
+
+
+@app.command(name="add-sport")
+def profile_add_sport_command(
+    ctx: typer.Context,
+    sport: str = typer.Option(..., "--sport", help="Sport name (e.g., climbing, yoga, cycling)"),
+    days: str = typer.Option(..., "--days", help="Days (comma-separated, e.g., 'tuesday,thursday')"),
+    duration: int = typer.Option(..., "--duration", help="Typical session duration in minutes"),
+    intensity: str = typer.Option(..., "--intensity", help="Intensity: easy, moderate, hard, moderate_to_hard"),
+    fixed: bool = typer.Option(True, "--fixed/--flexible", help="Fixed commitment or flexible"),
+    notes: Optional[str] = typer.Option(None, "--notes", help="Optional notes about the commitment"),
+) -> None:
+    """Add a sport commitment to your profile.
+
+    This tracks your regular sport commitments (climbing, yoga, cycling, etc.)
+    so the coach can account for multi-sport training load.
+
+    Examples:
+        sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard
+        sce profile add-sport --sport yoga --days monday --duration 60 --intensity easy --notes "Morning yoga 7am"
+    """
+    from sports_coach_engine.api.profile import add_sport_to_profile
+
+    # Parse days
+    try:
+        day_list = [Weekday(d.strip().lower()) for d in days.split(',')]
+    except ValueError as e:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Invalid day in --days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+            data={}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Call API
+    result = add_sport_to_profile(
+        sport=sport,
+        days=day_list,
+        duration=duration,
+        intensity=intensity,
+        fixed=fixed,
+        notes=notes
+    )
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Added sport commitment: {sport} on {days}",
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="remove-sport")
+def profile_remove_sport_command(
+    ctx: typer.Context,
+    sport: str = typer.Option(..., "--sport", help="Sport name to remove (case-insensitive)"),
+) -> None:
+    """Remove a sport commitment from your profile.
+
+    Example:
+        sce profile remove-sport --sport climbing
+    """
+    from sports_coach_engine.api.profile import remove_sport_from_profile
+
+    # Call API
+    result = remove_sport_from_profile(sport=sport)
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Removed sport commitment: {sport}",
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="list-sports")
+def profile_list_sports_command(ctx: typer.Context) -> None:
+    """List all sport commitments in your profile.
+
+    Shows all configured sport commitments with days, duration, and intensity.
+
+    Example:
+        sce profile list-sports
+    """
+    # Call get_profile API
+    profile = get_profile()
+
+    # Check for errors
+    if hasattr(profile, 'error_type'):
+        envelope = api_result_to_envelope(
+            profile,
+            success_message="",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=2)
+
+    # Format sports data
+    if not profile.other_sports:
+        envelope = api_result_to_envelope(
+            profile,
+            success_message="No sport commitments configured",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    # Build sports list
+    sports_data = []
+    for sport_commitment in profile.other_sports:
+        sports_data.append({
+            "sport": sport_commitment.sport,
+            "days": [d.value for d in sport_commitment.days],
+            "duration_minutes": sport_commitment.typical_duration_minutes,
+            "intensity": sport_commitment.typical_intensity,
+            "fixed": sport_commitment.is_fixed,
+            "notes": sport_commitment.notes
+        })
+
+    envelope = api_result_to_envelope(
+        profile,
+        success_message=f"Found {len(sports_data)} sport commitment(s)",
+    )
+
+    # Add sports data to envelope
+    if envelope.get("ok"):
+        envelope["data"]["sports"] = sports_data
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="edit")
+def profile_edit_command(ctx: typer.Context) -> None:
+    """Open profile YAML in $EDITOR for direct editing.
+
+    This is a power-user feature for editing the profile YAML directly.
+    The profile will be validated after editing to ensure data integrity.
+
+    Environment Variables:
+        EDITOR: Your preferred editor (default: nano)
+                Supports: nano, vim, emacs, code, etc.
+
+    Examples:
+        sce profile edit                    # Uses $EDITOR (default: nano)
+        EDITOR=vim sce profile edit         # Use vim
+        EDITOR=code sce profile edit        # Use VS Code
+
+    After editing, the profile is validated. If validation fails,
+    you'll see the error and can re-edit or revert changes.
+    """
+    from sports_coach_engine.core.paths import athlete_profile_path
+    from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+    from sports_coach_engine.schemas.profile import AthleteProfile
+    from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+    profile_path_str = str(profile_path)
+
+    # Check if profile exists
+    result = repo.read_yaml(
+        profile_path, AthleteProfile, ReadOptions(should_validate=True)
+    )
+
+    if isinstance(result, RepoError):
+        if result.error_type == RepoErrorType.NOT_FOUND:
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message="Profile not found. Create a profile first using 'sce profile create'",
+                data={"profile_path": profile_path_str}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=2)
+        else:
+            envelope = create_error_envelope(
+                error_type="unknown",
+                message=f"Failed to load profile: {result.message}",
+                data={"profile_path": profile_path_str}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=1)
+
+    # Get editor from environment (default: nano)
+    editor = os.environ.get('EDITOR', 'nano')
+
+    try:
+        # Open editor (blocking - waits for user to close editor)
+        subprocess.run([editor, profile_path_str], check=True)
+
+        # Validate profile after editing
+        validation_result = repo.read_yaml(
+            profile_path, AthleteProfile, ReadOptions(should_validate=True)
+        )
+
+        if isinstance(validation_result, RepoError):
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Profile validation failed after editing: {validation_result.message}",
+                data={
+                    "profile_path": profile_path_str,
+                    "next_steps": "Review the error, fix the YAML, and run 'sce profile edit' again"
+                }
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        # Success - profile edited and validated
+        envelope = api_result_to_envelope(
+            validation_result,
+            success_message="Profile updated and validated successfully",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    except subprocess.CalledProcessError as e:
+        envelope = create_error_envelope(
+            error_type="unknown",
+            message=f"Editor exited with error: {str(e)}",
+            data={"editor": editor, "profile_path": profile_path_str}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=1)
+    except FileNotFoundError:
+        envelope = create_error_envelope(
+            error_type="unknown",
+            message=f"Editor not found: {editor}. Set EDITOR environment variable to a valid editor.",
+            data={"editor": editor, "available_editors": "nano, vim, emacs, code"}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=1)

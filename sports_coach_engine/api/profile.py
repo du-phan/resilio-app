@@ -24,6 +24,10 @@ from sports_coach_engine.schemas.profile import (
     ConflictPolicy,
     TimePreference,
     VitalSigns,
+    CommunicationPreferences,
+    DetailLevel,
+    CoachingStyle,
+    IntensityMetric,
 )
 from sports_coach_engine.schemas.activity import NormalizedActivity
 
@@ -49,12 +53,26 @@ class ProfileError:
 def create_profile(
     name: str,
     age: Optional[int] = None,
+    email: Optional[str] = None,
     max_hr: Optional[int] = None,
     resting_hr: Optional[int] = None,
+    lthr: Optional[int] = None,
+    injury_history: Optional[str] = None,
+    running_experience_years: Optional[int] = None,
+    current_weekly_run_km: Optional[float] = None,
+    current_run_days_per_week: Optional[int] = None,
+    vdot: Optional[float] = None,
     running_priority: str = "equal",
+    primary_sport: Optional[str] = None,
     conflict_policy: str = "ask_each_time",
     min_run_days: int = 2,
     max_run_days: int = 4,
+    available_run_days: Optional[List[Weekday]] = None,
+    preferred_run_days: Optional[List[Weekday]] = None,
+    time_preference: Optional[TimePreference] = None,
+    detail_level: Optional["DetailLevel"] = None,
+    coaching_style: Optional["CoachingStyle"] = None,
+    intensity_metric: Optional["IntensityMetric"] = None,
 ) -> Union[AthleteProfile, ProfileError]:
     """
     Create a new athlete profile with sensible defaults.
@@ -72,9 +90,17 @@ def create_profile(
     Args:
         name: Athlete name (required)
         age: Age in years (optional)
+        email: Contact email (optional)
         max_hr: Maximum heart rate (optional)
         resting_hr: Resting heart rate (optional)
+        lthr: Lactate threshold heart rate (optional)
+        injury_history: Free-text injury description (optional)
+        running_experience_years: Years of running experience (optional)
+        current_weekly_run_km: Current weekly run volume baseline (optional)
+        current_run_days_per_week: Current run frequency baseline (optional)
+        vdot: Jack Daniels VDOT (optional, 30.0-85.0)
         running_priority: "primary", "secondary", or "equal" (default: "equal")
+        primary_sport: Primary sport name for multi-sport athletes (optional)
         conflict_policy: "primary_sport_wins", "running_goal_wins", or "ask_each_time" (default: "ask_each_time")
         min_run_days: Minimum run days per week (default: 2)
         max_run_days: Maximum run days per week (default: 4)
@@ -143,22 +169,34 @@ def create_profile(
             message=f"Invalid conflict_policy '{conflict_policy}'. Valid values: {valid}",
         )
 
-    # Create vital signs if HR values provided
+    # Create vital signs if any HR values provided
     vital_signs = None
-    if max_hr is not None or resting_hr is not None:
+    if max_hr is not None or resting_hr is not None or lthr is not None:
         vital_signs = VitalSigns(
             max_hr=max_hr,
             resting_hr=resting_hr,
+            lthr=lthr,
         )
 
-    # Create default constraints
-    # Start with all days available, user can refine later
-    all_days = [day for day in Weekday]
+    # Create constraints
+    # Use provided values, or defaults
+    if available_run_days is None:
+        # Default: all days available
+        available_run_days = [day for day in Weekday]
+
     constraints = TrainingConstraints(
-        available_run_days=all_days,
+        available_run_days=available_run_days,
+        preferred_run_days=preferred_run_days,
         min_run_days_per_week=min_run_days,
         max_run_days_per_week=max_run_days,
-        time_preference=TimePreference.FLEXIBLE,
+        time_preference=time_preference if time_preference is not None else TimePreference.FLEXIBLE,
+    )
+
+    # Create preferences with provided values or defaults
+    preferences = CommunicationPreferences(
+        detail_level=detail_level if detail_level is not None else DetailLevel.MODERATE,
+        coaching_style=coaching_style if coaching_style is not None else CoachingStyle.SUPPORTIVE,
+        intensity_metric=intensity_metric if intensity_metric is not None else IntensityMetric.PACE,
     )
 
     # Create default goal (general fitness)
@@ -168,13 +206,21 @@ def create_profile(
     try:
         profile = AthleteProfile(
             name=name,
+            email=email,
             created_at=datetime.now().date().isoformat(),
             age=age,
             vital_signs=vital_signs,
+            injury_history=injury_history,
+            running_experience_years=running_experience_years,
+            current_weekly_run_km=current_weekly_run_km,
+            current_run_days_per_week=current_run_days_per_week,
+            vdot=vdot,
             constraints=constraints,
             running_priority=priority_enum,
+            primary_sport=primary_sport,
             conflict_policy=policy_enum,
             goal=goal,
+            preferences=preferences,
         )
     except Exception as e:
         log_message(
@@ -337,27 +383,16 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
 
     profile = result
 
-    # Update fields
-    # Note: This uses simple attribute assignment
-    # For nested objects (like constraints), the field should be passed as a dict
-    # which Pydantic will handle during validation
-    for field_name, field_value in fields.items():
-        if not hasattr(profile, field_name):
-            log_message(
-                repo,
-                MessageRole.SYSTEM,
-                f"Invalid field: {field_name}",
-            )
-            return ProfileError(
-                error_type="validation",
-                message=f"Invalid field: {field_name}",
-            )
+    # Update fields using dict-merging (safer than setattr)
+    # Convert profile to dict, merge updates, then validate
+    profile_dict = profile.model_dump(mode='json')
 
-        setattr(profile, field_name, field_value)
+    # Merge updates into profile dict
+    profile_dict.update(fields)
 
-    # Validate updated profile by reconstructing it
+    # Validate updated profile (Pydantic will catch invalid fields and validation errors)
     try:
-        profile = AthleteProfile.model_validate(profile.model_dump())
+        profile = AthleteProfile.model_validate(profile_dict)
     except Exception as e:
         log_message(
             repo,
@@ -818,3 +853,170 @@ def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) ->
         'run_days': suggested_run_days,
         'running_priority': priority
     }
+
+
+# ============================================================
+# MULTI-SPORT MANAGEMENT
+# ============================================================
+
+
+def add_sport_to_profile(
+    sport: str,
+    days: List[Weekday],
+    duration: int,
+    intensity: str,
+    fixed: bool = True,
+    notes: Optional[str] = None
+) -> Union[AthleteProfile, ProfileError]:
+    """
+    Add a sport commitment to the athlete's profile.
+
+    Args:
+        sport: Name of the sport (e.g., "climbing", "yoga", "cycling")
+        days: Days of the week for this sport
+        duration: Typical session duration in minutes
+        intensity: Intensity level (easy, moderate, hard, moderate_to_hard)
+        fixed: Whether this commitment is fixed (True) or flexible (False)
+        notes: Optional notes about the commitment
+
+    Returns:
+        Updated AthleteProfile or ProfileError
+
+    Example:
+        >>> add_sport_to_profile("climbing", [Weekday.TUESDAY, Weekday.THURSDAY], 120, "moderate_to_hard", notes="Gym 6-7pm")
+    """
+    from sports_coach_engine.schemas.profile import OtherSport
+
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+
+    # Load current profile
+    result = repo.read_yaml(
+        profile_path, AthleteProfile, ReadOptions(should_validate=True)
+    )
+
+    if isinstance(result, RepoError):
+        if result.error_type == RepoErrorType.NOT_FOUND:
+            return ProfileError(
+                error_type="not_found",
+                message="Profile not found. Create a profile first using 'sce profile create'",
+            )
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to load profile: {result.message}",
+        )
+
+    profile = result
+
+    # Create new sport commitment
+    new_sport = OtherSport(
+        sport=sport,
+        days=days,
+        typical_duration_minutes=duration,
+        typical_intensity=intensity,
+        is_fixed=fixed,
+        notes=notes
+    )
+
+    # Add to profile's other_sports list
+    if profile.other_sports is None:
+        profile.other_sports = []
+
+    profile.other_sports.append(new_sport)
+
+    # Save updated profile
+    write_result = repo.write_yaml(profile_path, profile)
+    if isinstance(write_result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to save profile: {write_result.message}",
+        )
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to save profile: {write_result.message}",
+        )
+
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"Added sport commitment: {sport} on {[d.value for d in days]}",
+    )
+
+    return profile
+
+
+def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]:
+    """
+    Remove a sport commitment from the athlete's profile.
+
+    Args:
+        sport: Name of the sport to remove (case-insensitive)
+
+    Returns:
+        Updated AthleteProfile or ProfileError
+
+    Example:
+        >>> remove_sport_from_profile("climbing")
+    """
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+
+    # Load current profile
+    result = repo.read_yaml(
+        profile_path, AthleteProfile, ReadOptions(should_validate=True)
+    )
+
+    if isinstance(result, RepoError):
+        if result.error_type == RepoErrorType.NOT_FOUND:
+            return ProfileError(
+                error_type="not_found",
+                message="Profile not found. Create a profile first using 'sce profile create'",
+            )
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to load profile: {result.message}",
+        )
+
+    profile = result
+
+    # Check if any sports configured
+    if not profile.other_sports:
+        return ProfileError(
+            error_type="validation",
+            message="No sports configured in profile"
+        )
+
+    # Remove sport (case-insensitive match)
+    sport_lower = sport.lower()
+    updated_sports = [s for s in profile.other_sports if s.sport.lower() != sport_lower]
+
+    # Check if sport was found
+    if len(updated_sports) == len(profile.other_sports):
+        return ProfileError(
+            error_type="validation",
+            message=f"Sport '{sport}' not found in profile. Use 'sce profile list-sports' to see configured sports."
+        )
+
+    profile.other_sports = updated_sports
+
+    # Save updated profile
+    write_result = repo.write_yaml(profile_path, profile)
+    if isinstance(write_result, RepoError):
+        log_message(
+            repo,
+            MessageRole.SYSTEM,
+            f"Failed to save profile: {write_result.message}",
+        )
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to save profile: {write_result.message}",
+        )
+
+    log_message(
+        repo,
+        MessageRole.SYSTEM,
+        f"Removed sport commitment: {sport}",
+    )
+
+    return profile

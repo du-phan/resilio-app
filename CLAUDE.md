@@ -91,9 +91,17 @@ sce week           # Weekly summary
 
 **Profile & goals**:
 ```bash
-sce profile get              # View athlete profile
-sce profile set --max-hr 190 # Update profile fields
-sce profile analyze          # Analyze synced data for profile suggestions
+# Profile management (28 fields fully accessible)
+sce profile create --name "Alex" --age 32 --max-hr 199 --run-priority equal  # 19 flags available
+sce profile get                                                               # View profile
+sce profile set --max-hr 190 --available-days "mon,wed,fri"                  # Update any field
+sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
+sce profile remove-sport --sport yoga                                         # Remove sport
+sce profile list-sports                                                       # Show all sports
+sce profile edit                                                              # Open in $EDITOR
+sce profile analyze                                                           # Analyze Strava history
+
+# Goal setting
 sce goal --type 10k --date 2026-06-01
 ```
 

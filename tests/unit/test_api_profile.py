@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
 from sports_coach_engine.api.profile import (
+    create_profile,
     get_profile,
     update_profile,
     set_goal,
@@ -167,10 +168,10 @@ class TestUpdateProfile:
 
         result = update_profile(invalid_field="value")
 
-        # Should return ProfileError
+        # Should return ProfileError (Pydantic catches invalid fields during validation)
         assert isinstance(result, ProfileError)
         assert result.error_type == "validation"
-        assert "Invalid field" in result.message
+        assert "validation error" in result.message.lower()
 
     @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
@@ -396,3 +397,318 @@ class TestSetGoal:
         assert result.type == GoalType.TEN_K
         assert result.target_date == target_date.isoformat()  # Goal stores as ISO string
         assert result.target_time is None
+
+
+# ============================================================
+# PR1: NEW FIELD TESTS
+# ============================================================
+
+
+class TestPR1NewFields:
+    """Test new profile fields added in PR1."""
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_dict_merge_not_setattr(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Verify update_profile uses dict-merging instead of setattr."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        # Mock model_dump to return dict
+        mock_profile.model_dump.return_value = {"name": "Test", "age": 30}
+
+        # Mock model_validate to return updated profile
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(age=35)
+
+        # Verify dict-merging was used (model_dump + model_validate)
+        mock_profile.model_dump.assert_called_once_with(mode='json')
+        mock_profile_cls.model_validate.assert_called_once()
+        assert isinstance(result, Mock)
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_email(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with email field."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        mock_profile.model_dump.return_value = {"name": "Test", "email": None}
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(email="test@example.com")
+
+        assert isinstance(result, Mock)
+        mock_repo.write_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_injury_history(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with injury_history field."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        mock_profile.model_dump.return_value = {"name": "Test", "injury_history": None}
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(injury_history="Right ankle injury Nov 2025")
+
+        assert isinstance(result, Mock)
+        mock_repo.write_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_lthr(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with lthr (lactate threshold HR) field."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        mock_profile.model_dump.return_value = {
+            "name": "Test",
+            "vital_signs": {"max_hr": 199, "resting_hr": 55, "lthr": None}
+        }
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(vital_signs={"max_hr": 199, "resting_hr": 55, "lthr": 175})
+
+        assert isinstance(result, Mock)
+        mock_repo.write_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_vdot(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with vdot field."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        mock_profile.model_dump.return_value = {"name": "Test", "vdot": None}
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(vdot=48.5)
+
+        assert isinstance(result, Mock)
+        mock_repo.write_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_running_experience_years(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with running_experience_years field."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        mock_profile.model_dump.return_value = {"name": "Test", "running_experience_years": None}
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(running_experience_years=3)
+
+        assert isinstance(result, Mock)
+        mock_repo.write_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_weekly_km(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with current_weekly_run_km field."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        mock_profile.model_dump.return_value = {"name": "Test", "current_weekly_run_km": None}
+        mock_profile_cls.model_validate.return_value = mock_profile
+
+        result = update_profile(current_weekly_run_km=22.5)
+
+        assert isinstance(result, Mock)
+        mock_repo.write_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_validation_immediate(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test that Pydantic validation happens immediately during update."""
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+
+        mock_profile.model_dump.return_value = {"name": "Test", "vdot": None}
+
+        # Mock Pydantic validation error
+        mock_profile_cls.model_validate.side_effect = ValueError("VDOT must be between 30-85")
+
+        result = update_profile(vdot=150)  # Invalid VDOT
+
+        # Should return ProfileError due to validation failure
+        assert isinstance(result, ProfileError)
+        assert result.error_type == "validation"
+        assert "Invalid profile data" in result.message
+
+
+class TestPR2ConstraintFields:
+    """Test constraint fields added in PR2."""
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_create_profile_with_available_days(self, mock_repo_cls, mock_log):
+        """Test creating profile with available_run_days constraint."""
+        from sports_coach_engine.schemas.profile import Weekday
+
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = None  # No existing profile
+        mock_repo.write_yaml.return_value = None
+
+        available_days = [Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY]
+
+        result = create_profile(
+            name="Test Athlete",
+            available_run_days=available_days,
+        )
+
+        # Should return AthleteProfile
+        assert isinstance(result, AthleteProfile)
+        assert result.name == "Test Athlete"
+        assert result.constraints.available_run_days == available_days
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    def test_update_profile_with_preferred_days(
+        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
+    ):
+        """Test updating profile with preferred_run_days constraint."""
+        from sports_coach_engine.schemas.profile import Weekday
+
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = mock_profile
+
+        # Mock current profile with constraints
+        mock_constraints = Mock()
+        mock_constraints.model_dump.return_value = {
+            "available_run_days": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"],
+            "preferred_run_days": None,
+            "min_run_days_per_week": 2,
+            "max_run_days_per_week": 4,
+            "max_time_per_session_minutes": 90,
+            "time_preference": "flexible",
+        }
+        mock_profile.constraints = mock_constraints
+        mock_profile.model_dump.return_value = {"name": "Test"}
+
+        mock_profile_cls.model_validate.return_value = mock_profile
+        mock_repo.write_yaml.return_value = None
+
+        preferred_days = [Weekday.SATURDAY, Weekday.SUNDAY]
+
+        result = update_profile(
+            constraints={"preferred_run_days": preferred_days}
+        )
+
+        # Should return updated AthleteProfile
+        assert isinstance(result, AthleteProfile)
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_create_profile_with_time_preference(self, mock_repo_cls, mock_log):
+        """Test creating profile with time_preference constraint."""
+        from sports_coach_engine.schemas.profile import TimePreference
+
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = None  # No existing profile
+        mock_repo.write_yaml.return_value = None
+
+        result = create_profile(
+            name="Test Athlete",
+            time_preference=TimePreference.MORNING,
+        )
+
+        # Should return AthleteProfile
+        assert isinstance(result, AthleteProfile)
+        assert result.constraints.time_preference == TimePreference.MORNING
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_create_profile_with_all_constraint_fields(self, mock_repo_cls, mock_log):
+        """Test creating profile with all 3 new constraint fields."""
+        from sports_coach_engine.schemas.profile import Weekday, TimePreference
+
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = None  # No existing profile
+        mock_repo.write_yaml.return_value = None
+
+        available_days = [Weekday.TUESDAY, Weekday.THURSDAY, Weekday.SATURDAY, Weekday.SUNDAY]
+        preferred_days = [Weekday.SATURDAY, Weekday.SUNDAY]
+
+        result = create_profile(
+            name="Test Athlete",
+            available_run_days=available_days,
+            preferred_run_days=preferred_days,
+            time_preference=TimePreference.EVENING,
+        )
+
+        # Should return AthleteProfile
+        assert isinstance(result, AthleteProfile)
+        assert result.constraints.available_run_days == available_days
+        assert result.constraints.preferred_run_days == preferred_days
+        assert result.constraints.time_preference == TimePreference.EVENING
+
+    @patch("sports_coach_engine.api.profile.log_message")
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_create_profile_constraint_defaults(self, mock_repo_cls, mock_log):
+        """Test that constraint fields use sensible defaults when not provided."""
+        from sports_coach_engine.schemas.profile import Weekday, TimePreference
+
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = None  # No existing profile
+        mock_repo.write_yaml.return_value = None
+
+        result = create_profile(name="Test Athlete")
+
+        # Should return AthleteProfile with defaults
+        assert isinstance(result, AthleteProfile)
+        # Default: all days available
+        assert len(result.constraints.available_run_days) == 7
+        assert Weekday.MONDAY in result.constraints.available_run_days
+        # Default: no preferred days
+        assert result.constraints.preferred_run_days is None
+        # Default: flexible time preference
+        assert result.constraints.time_preference == TimePreference.FLEXIBLE
