@@ -310,201 +310,38 @@ sce plan show | jq '.weeks[] | select(.week_number == 5)'
 
 ## Decision Trees
 
-### Q: How severe is the illness?
+For guidance on common decisions during plan adaptation, see [DECISION_TREES.md](references/DECISION_TREES.md):
 
-**Decision factors**:
-- Above neck (sniffles, sore throat) → Minor
-- Body aches, fatigue, full cold → Moderate
-- Fever, chest congestion, flu → Severe
-
-**Actions**:
-- Minor: 1-2 days rest, return with easy runs
-- Moderate: 3-7 days rest, use `sce guardrails illness-recovery --severity moderate`
-- Severe: 7-14 days rest, use `sce guardrails illness-recovery --severity severe` + partial replan
-
-### Q: Can the goal still be achieved?
-
-**Factors to consider**:
-- Weeks remaining to goal
-- CTL drop from disruption
-- Training phase (base is flexible, peak/taper less so)
-- Goal difficulty (time goal vs finish comfortably)
-
-**Decision**:
-1. Calculate CTL projection with adapted plan
-2. Use `sce vdot predict` to estimate race performance at projected CTL
-3. Compare to goal time
-4. Present options using **AskUserQuestion**:
-   - Option A: Keep goal, accept higher training load
-   - Option B: Adjust goal (more realistic time)
-   - Option C: Move race date (if possible)
-
-### Q: Should quality workouts be reduced or eliminated?
-
-**During illness recovery**:
-- Week 1 back: Easy runs only (no quality)
-- Week 2 back: Light tempo if feeling good (reduced duration)
-- Week 3+ back: Resume quality gradually
-
-**During injury recovery**:
-- Until pain-free: No quality workouts
-- First week pain-free: Short tempo test (if successful, continue)
-- Rebuild intensity over 2-4 weeks
-
-**Check readiness**:
-```bash
-sce status | jq '.data.readiness'
-```
-
-If readiness < 50 after return, delay quality workouts.
-
-### Q: What if they miss a long run?
-
-**Options**:
-1. **Move to next available day** (if within same week)
-2. **Skip and continue** (if recent long run was adequate)
-3. **Reduce and reschedule** (shorter version later in week)
-4. **Extend next week's long run** (add 10-15 min)
-
-**Use AskUserQuestion** to present options with context:
-- Current CTL
-- Previous long run date/duration
-- Upcoming schedule constraints
-- Goal proximity
-
-### Q: What if schedule change is permanent?
-
-**Example**: "I can no longer run on Thursdays"
-
-**Workflow**:
-1. Identify affected workouts (quality sessions, long runs)
-2. Map to new available days
-3. Validate with multi-sport constraints (see training-plan-design/references/MULTI_SPORT.md)
-4. Update affected weeks using `sce plan update-week` (multiple calls)
-
-**Considerations**:
-- Quality sessions need 48 hours separation
-- Long runs need recovery day after
-- Other sports: avoid quality run + hard climbing on consecutive days
+- How severe is the illness? (Minor/Moderate/Severe)
+- Can the goal still be achieved?
+- Should quality workouts be reduced or eliminated?
+- What if they miss a long run?
+- What if schedule change is permanent?
 
 ---
 
 ## Common Adaptation Scenarios
 
-### Scenario 1: Mild Illness (3 days missed)
+See [ADAPTATION_SCENARIOS.md](examples/ADAPTATION_SCENARIOS.md) for 5 complete examples with CLI commands and JSON structures:
 
-**Situation**: Athlete caught cold, missed Tuesday tempo and Thursday easy run. Feeling better Friday.
-
-**Assessment**:
-```bash
-sce guardrails illness-recovery --severity minor --days-missed 3
-```
-
-**Returns**: "2 days easy running before resuming quality"
-
-**Action**: Update current week only
-- Skip missed workouts (don't reschedule)
-- Replace Saturday long run with moderate easy run (70% duration)
-- Next week: Resume normal plan with volume -10%
-
-**JSON**: Single week update (`sce plan update-week`)
-
-### Scenario 2: Severe Illness (10 days missed, flu)
-
-**Situation**: Athlete had flu with fever, missed entire week + 3 days of next week.
-
-**Assessment**:
-```bash
-sce guardrails illness-recovery --severity severe --days-missed 10
-```
-
-**Returns**: "7 days easy running before quality, reduce volume 30% first week"
-
-**Action**: Partial replan from current week
-- Week N: 3 easy runs, 60% of planned volume
-- Week N+1: 4 easy runs, 75% of planned volume
-- Week N+2: Resume quality (short tempo), 85% volume
-- Week N+3: Normal progression resumes
-
-**JSON**: Partial replan (`sce plan update-from`)
-
-### Scenario 3: Injury (2 weeks off, knee pain)
-
-**Situation**: Athlete rested 14 days for knee tendonitis, did swimming 3x/week.
-
-**Assessment**:
-```bash
-sce guardrails break-return --days 14 --ctl 44 --cross-training moderate
-```
-
-**Returns**: "Start at 18 km/week, +5% weekly increase, 4 weeks to pre-injury volume"
-
-**Action**: Partial replan with conservative buildup
-- Extend base phase by 2 weeks
-- Reduce peak volume by 10%
-- Monitor knee pain signals (check notes in activities)
-
-**JSON**: Partial replan with modified phases
-
-### Scenario 4: Training Break (3 weeks vacation)
-
-**Situation**: Athlete took 21 days off for travel, no training.
-
-**Assessment**:
-```bash
-sce guardrails break-return --days 21 --ctl 44 --cross-training none
-```
-
-**Returns**: "CTL dropped to ~30. Start at 15 km/week, rebuild over 6 weeks"
-
-**Action**: Major replan
-- Restart base phase (or extend existing base)
-- Adjust goal if timeline compromised
-- Use conservative progression (+5% per week)
-
-**JSON**: Partial replan, possibly full plan regeneration if goal date affected
-
-### Scenario 5: Missed Long Run (Travel)
-
-**Situation**: Athlete traveling for work, can't do Saturday 18km long run.
-
-**Assessment**: No guardrails needed, simple rescheduling.
-
-**Action**: Use AskUserQuestion to present options
-- Option A: Run Sunday instead (move long run 1 day)
-- Option B: Run Friday before travel (earlier in week)
-- Option C: Skip this week, extend next week's long run to 20km
-
-**JSON**: Single week update if rescheduling, or skip + adjust next week
+1. **Mild Illness** (3 days) - Single week update
+2. **Severe Illness** (10 days, flu) - Partial replan
+3. **Injury** (2 weeks off, knee pain) - Conservative buildup
+4. **Training Break** (3 weeks vacation) - Major replan
+5. **Missed Long Run** (Travel) - Rescheduling options
 
 ---
 
 ## Validation Checklist
 
-**Before saving adapted plan**, verify:
+Before saving any adapted plan, verify all criteria in [VALIDATION_CHECKLIST.md](references/VALIDATION_CHECKLIST.md):
 
-1. **ACWR Safety**: Projected ACWR stays <1.3 after return
-   ```bash
-   sce risk forecast --weeks 3 --metrics metrics.json --plan adapted_plan.json
-   ```
-
-2. **Volume Progression**: No week exceeds +10% increase
-   ```bash
-   sce guardrails progression --previous [X] --current [Y]
-   ```
-
-3. **Recovery Protocol**: Adequate easy-only period per guardrails
-
-4. **Goal Feasibility**: Still realistic given new CTL trajectory
-   ```bash
-   sce validation assess-goal --goal-type [type] --goal-time [time] --goal-date [date] --current-vdot [vdot] --current-ctl [ctl]
-   ```
-
-5. **80/20 Distribution**: Plan maintains intensity balance
-   - Use `sce analysis intensity` after 2-3 weeks back
-
-6. **Multi-Sport Conflicts**: Adjusted schedule respects other sports
-   - Review with athlete if climbing/cycling days affected
+- ✓ ACWR Safety (<1.3)
+- ✓ Volume Progression (≤+10% per week)
+- ✓ Recovery Protocol (adequate easy-only period)
+- ✓ Goal Feasibility (still realistic)
+- ✓ 80/20 Distribution (maintained)
+- ✓ Multi-Sport Conflicts (respected)
 
 ---
 
@@ -536,53 +373,12 @@ sce guardrails break-return --days 21 --ctl 44 --cross-training none
 
 ## Edge Cases
 
-### Edge Case 1: Illness During Taper
+For unusual adaptation situations, see [EDGE_CASES.md](references/EDGE_CASES.md):
 
-**Problem**: Athlete gets sick 10 days before race.
-
-**Decision**:
-- If fever/severe: Consider skipping race (no safe adaptation)
-- If mild: Maintain taper volume reduction, skip quality sessions
-- Race day: Start conservatively, adjust goals to "finish comfortably"
-
-**No plan update needed** - focus on recovery and race readiness.
-
-### Edge Case 2: Injury During Peak Phase
-
-**Problem**: Acute injury 4 weeks before race, peak phase training.
-
-**Decision**:
-- 1-2 weeks off: Possible to salvage race with reduced goals
-- 3+ weeks off: Recommend moving race date or DNS (do not start)
-
-**Use AskUserQuestion** to discuss options:
-- Option A: Race with adjusted goals (finish, not time)
-- Option B: Move to later race
-- Option C: DNS, replan for different goal
-
-### Edge Case 3: Multiple Disruptions in Short Period
-
-**Problem**: Illness → recovered → injury → recovered (4 weeks total disruption).
-
-**Decision**: Full plan regeneration likely needed.
-
-**Action**:
-1. Assess current CTL
-2. Calculate weeks to goal
-3. Use training-plan-design skill to regenerate plan
-4. Present new plan (not adaptation, but fresh start)
-
-### Edge Case 4: Schedule Change Affects Key Long Run Day
-
-**Problem**: Athlete can no longer run on Sundays (traditional long run day).
-
-**Decision**: Permanent schedule restructure.
-
-**Action**:
-1. Identify new long run day (Saturday? Friday?)
-2. Validate with multi-sport constraints
-3. Update all future weeks with new schedule pattern
-4. Use `sce plan update-from` with restructured weekly pattern
+1. **Illness During Taper** - Race proximity decisions
+2. **Injury During Peak Phase** - Goal feasibility assessment
+3. **Multiple Disruptions** - When to regenerate vs. adapt
+4. **Schedule Change Affects Key Long Run Day** - Permanent restructure
 
 ---
 
@@ -595,81 +391,25 @@ sce guardrails break-return --days 21 --ctl 44 --cross-training none
 
 ---
 
-## CLI Command Reference
+## Additional Resources
 
-**Guardrails**:
-```bash
-sce guardrails illness-recovery --severity [minor|moderate|severe] --days-missed [N]
-sce guardrails break-return --days [N] --ctl [X] --cross-training [none|light|moderate|high]
-sce guardrails race-recovery --distance [type] --age [N] --effort [easy|moderate|hard]
-sce guardrails progression --previous [X] --current [Y]
-```
+**Decision support**:
+- [Decision Trees](references/DECISION_TREES.md) - Common scenario guidance
+- [Edge Cases](references/EDGE_CASES.md) - Handling unusual situations
 
-**Plan Updates**:
-```bash
-sce plan update-week --week [N] --from-json [file.json]      # Single week object
-sce plan update-from --week [N] --from-json [file.json]      # Weeks array from N onward
-sce plan show                                                 # View current plan
-```
+**Reference material**:
+- [CLI Reference](references/CLI_REFERENCE.md) - Command quick reference
+- [Validation Checklist](references/VALIDATION_CHECKLIST.md) - Pre-save verification
 
-**Validation**:
-```bash
-sce risk forecast --weeks [N] --metrics metrics.json --plan plan.json
-sce validation assess-goal --goal-type [type] --goal-time [time] --goal-date [date] --current-vdot [vdot] --current-ctl [ctl]
-```
+**Examples**:
+- [Adaptation Scenarios](examples/ADAPTATION_SCENARIOS.md) - 5 complete examples
 
-**Status**:
-```bash
-sce status        # Current metrics (CTL/ATL/TSB/ACWR/readiness)
-sce week          # Recent training pattern
-```
+**Templates**:
+- [Adaptation Plan Template](templates/adaptation_plan.md) - Structured output format
 
----
+**Training methodology**:
+- [Pfitzinger's Advanced Marathoning](../../../docs/training_books/advanced_marathoning_pete_pfitzinger.md)
+- [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md)
+- [80/20 Running](../../../docs/training_books/80_20_matt_fitzgerald.md)
+- [Coaching Methodology](../../../docs/coaching/methodology.md#adaptation-triggers)
 
-## Output Template
-
-After completing adaptation, provide structured output:
-
-```
-# Plan Adaptation Complete
-
-**Situation**: [Brief description]
-**Action taken**: [Single week update / Partial replan / Full replan]
-**Affected weeks**: [Week range]
-
-**Key changes**:
-- Week [N]: [Summary of changes]
-- [Additional weeks as needed]
-
-**Updated metrics**:
-- Volume: [Old] → [New] km/week
-- Projected CTL: [Value] by Week [N]
-- ACWR: [Value] (safe range)
-
-**Next steps**:
-- [Immediate action, e.g., "Easy 30min run tomorrow"]
-- [Monitoring, e.g., "Watch for knee pain signals"]
-- [Timeline, e.g., "Resume quality workouts Week 7"]
-
-**Goal status**: [On track / Adjusted expectations / Timeline extended]
-```
-
----
-
-## Testing Plan Adaptation
-
-**Manual test scenarios**:
-
-1. Mild illness (3 days) → Single week update
-2. Severe illness (10 days) → Partial replan
-3. Injury (2 weeks) → Partial replan with conservative return
-4. Training break (3 weeks) → Major replan
-5. Missed long run → Rescheduling decision
-6. Permanent schedule change → Multi-week update
-
-**Success criteria**:
-- Guardrails consulted before plan changes
-- ACWR stays <1.3 after return
-- Volume progression respects 10% rule
-- Athlete approves adapted plan before save
-- JSON structure correct (week object vs weeks array)
