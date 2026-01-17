@@ -113,13 +113,29 @@ Coach: [Store actual value]
 
 #### 4b. Injury History (Context-Aware with Memory System)
 
-**Check for activity gaps first** (from `sce profile analyze` or `sce status`):
+**Gather injury signals from multiple sources**:
 
-- CTL drops from 45 → 20 over 3 weeks
-- 14+ day gaps between activities
-- Activity notes mention pain/injury keywords
+```bash
+# Check for activity gaps (CTL drops, training breaks)
+sce profile analyze
 
-**If gap detected**:
+# NEW: Search activity notes for pain/injury mentions
+sce activity search --query "pain injury sore hurt" --since 120d
+
+# NEW: List activities with notes for context
+sce activity list --since 90d --has-notes --sport run
+```
+
+**Activity note signals to flag**:
+- "stopped early due to knee pain" → ask about this injury
+- "ankle felt weird after mile 5" → potential concern
+- "took a week off, achilles acting up" → recurring issue
+
+**Other signals to check**:
+- CTL drops from 45 → 20 over 3 weeks (training break)
+- 14+ day gaps between activities (potential injury/illness)
+
+**If gap or pain mention detected**:
 
 ```
 Coach: "I noticed you had a break from running in November (2-week gap, CTL dropped from 44 to 28). Was that due to injury?"

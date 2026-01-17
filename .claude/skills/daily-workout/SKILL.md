@@ -18,9 +18,9 @@ This skill provides intelligent daily workout recommendations by:
 
 ## Workflow
 
-### Step 0: Retrieve Relevant Memories (Context Loading)
+### Step 0: Retrieve Relevant Context
 
-**Before making recommendations, load athlete's training response patterns and preferences.**
+**Before making recommendations, load athlete's training response patterns, preferences, AND recent activity notes.**
 
 ```bash
 # Check training response patterns
@@ -31,7 +31,18 @@ sce memory search --query "readiness recovery fatigue"
 
 # Check override preferences
 sce memory search --query "override rest"
+
+# NEW: Check recent activity notes for wellness signals
+sce activity list --since 3d --has-notes
+
+# NEW: Search for any pain/discomfort in recent activities
+sce activity search --query "pain sore tight" --since 7d
 ```
+
+**Recent activity notes reveal real-time wellness** that informs today's recommendation:
+- Yesterday's note "ankle felt tight at end" → monitor today
+- Last 3 days "felt great, strong legs" → green light for quality
+- 2 days ago "stopped early, knee pain" → downgrade today
 
 **Use retrieved memories to inform recommendations**:
 - If memory shows "Prefers to train through low readiness", acknowledge this pattern when presenting options

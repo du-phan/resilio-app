@@ -132,6 +132,23 @@ sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
 
 Identify trends and recurring issues from the week's data.
 
+**First, review activity notes for qualitative signals**:
+```bash
+# List this week's activities with notes
+sce activity list --since 7d --has-notes
+
+# Search for wellness signals
+sce activity search --query "tired fatigue flat heavy" --since 7d
+
+# Search for pain/discomfort signals
+sce activity search --query "pain sore tight discomfort" --since 7d
+```
+
+**Activity notes provide qualitative context** that metrics miss:
+- "Felt flat on the long run" → fatigue accumulating despite OK metrics
+- "Legs heavy from climbing yesterday" → multi-sport interaction signal
+- "Best tempo in months" → positive adaptation signal
+
 **Patterns to look for**:
 
 1. **Consistency patterns**:

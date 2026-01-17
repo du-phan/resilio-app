@@ -12,7 +12,7 @@ import typer
 
 from sports_coach_engine.api import create_profile, get_profile, update_profile
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, output_json
+from sports_coach_engine.cli.output import create_error_envelope, output_json, OutputEnvelope
 from sports_coach_engine.schemas.profile import Weekday, TimePreference, DetailLevel, CoachingStyle, IntensityMetric
 
 # Create subcommand app
@@ -661,14 +661,12 @@ def profile_list_sports_command(ctx: typer.Context) -> None:
             "notes": sport_commitment.notes
         })
 
-    envelope = api_result_to_envelope(
-        profile,
-        success_message=f"Found {len(sports_data)} sport commitment(s)",
+    # Create envelope with sports data directly
+    envelope = OutputEnvelope(
+        ok=True,
+        message=f"Found {len(sports_data)} sport commitment(s)",
+        data={"sports": sports_data},
     )
-
-    # Add sports data to envelope
-    if envelope.get("ok"):
-        envelope["data"]["sports"] = sports_data
 
     # Output JSON
     output_json(envelope)

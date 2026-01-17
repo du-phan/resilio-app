@@ -15,6 +15,8 @@ Complete reference for Sports Coach Engine command-line interface.
 | **`sce auth url`**                      | Get OAuth URL                | url, instructions for authorization                                 |
 | **`sce auth exchange --code`**          | Exchange auth code           | status, expires_at, next_steps                                      |
 | **`sce auth status`**                   | Check token validity         | authenticated, expires_at, expires_in_hours                         |
+| **`sce activity list [--since 30d]`**   | List activities with notes   | activities (id, date, sport, description, private_note)             |
+| **`sce activity search --query`**       | Search activity notes        | matches (id, date, matched_field, matched_text)                     |
 | **`sce profile get`**                   | Get athlete profile          | name, age, max_hr, goal, constraints, preferences                   |
 | **`sce profile set --field value`**     | Update profile               | updated profile with all fields                                     |
 | **`sce plan show`**                     | Get current plan             | goal, total_weeks, weeks array, phases, workouts                    |
@@ -325,6 +327,145 @@ sce sync --since 2026-01-01
 
 - Strava: 100 requests / 15 minutes, 1000 requests / day
 - If hit, exit code 4, retry after indicated time
+
+---
+
+### Activity Commands
+
+Commands to list and search activities with their notes (description, private_note).
+These tools surface raw data for the AI coach to interpret.
+
+#### `sce activity list [--since PERIOD] [--sport TYPE] [--has-notes]`
+
+List activities in a date range with their notes.
+
+**Usage:**
+
+```bash
+# List activities from last 30 days (default)
+sce activity list
+
+# List activities from last 60 days
+sce activity list --since 60d
+
+# Filter by sport type
+sce activity list --since 30d --sport run
+
+# Only activities with notes
+sce activity list --since 14d --has-notes
+
+# Specific date range
+sce activity list --since 2026-01-01
+```
+
+**Parameters:**
+
+- `--since` (optional): Time period - '30d' for 30 days, or 'YYYY-MM-DD' (default: 30d)
+- `--sport` (optional): Filter by sport type (e.g., 'run', 'climb', 'cycle', 'yoga')
+- `--has-notes` (optional): Only return activities with description or private_note
+
+**Returns:**
+
+```json
+{
+  "ok": true,
+  "data": {
+    "activities": [
+      {
+        "id": "strava_17050189802",
+        "date": "2026-01-14",
+        "sport": "run",
+        "name": "Evening Run",
+        "duration_minutes": 35,
+        "distance_km": 5.27,
+        "average_hr": 157.1,
+        "description": "",
+        "private_note": "30 minutes @ 6:00 min/km. At minute 10, the right ankle started to feel a bit weird..."
+      }
+    ],
+    "count": 15,
+    "date_range": {
+      "start": "2025-12-17",
+      "end": "2026-01-17"
+    },
+    "filters": {
+      "sport": null,
+      "has_notes": false
+    }
+  }
+}
+```
+
+**Use cases:**
+
+- Review recent training notes for patterns
+- Find activities with injury/wellness mentions
+- Get context for coaching decisions
+
+---
+
+#### `sce activity search --query KEYWORDS [--since PERIOD] [--sport TYPE]`
+
+Search activities by text content in notes.
+
+**Usage:**
+
+```bash
+# Search for ankle mentions
+sce activity search --query "ankle"
+
+# Multiple keywords (OR match)
+sce activity search --query "tired fatigue sore"
+
+# Filter by sport and time period
+sce activity search --query "pain" --sport run --since 60d
+```
+
+**Parameters:**
+
+- `--query` (required): Keywords to search (space-separated = OR match)
+- `--since` (optional): Time period (default: 30d)
+- `--sport` (optional): Filter by sport type
+
+**Returns:**
+
+```json
+{
+  "ok": true,
+  "data": {
+    "matches": [
+      {
+        "id": "strava_17050189802",
+        "date": "2026-01-14",
+        "sport": "run",
+        "name": "Evening Run",
+        "duration_minutes": 35,
+        "matched_field": "private_note",
+        "matched_keywords": ["ankle"],
+        "matched_text": "...right ankle started to feel a bit weird and not comfortable...",
+        "full_note": "30 minutes @ 6:00 min/km. At minute 10, the right ankle..."
+      }
+    ],
+    "query": "ankle",
+    "total_matches": 4,
+    "activities_searched": 45,
+    "date_range": {
+      "start": "2025-12-17",
+      "end": "2026-01-17"
+    },
+    "filters": {
+      "sport": null
+    }
+  }
+}
+```
+
+**Use cases:**
+
+- Find injury/pain mentions across activities
+- Search for fatigue/wellness signals
+- Identify recurring patterns
+- Gather evidence for memory creation
 
 ---
 

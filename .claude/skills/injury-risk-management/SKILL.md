@@ -22,13 +22,13 @@ This skill provides **proactive injury risk assessment** and **evidence-based mi
 
 ### Step 0: Load Injury History and Patterns
 
-**Before assessing current risk, retrieve relevant injury history and training response patterns.**
+**Before assessing current risk, retrieve relevant injury history, training response patterns, AND recent activity notes.**
 
 ```bash
-# Retrieve injury history
+# Retrieve injury history from memories
 sce memory list --type INJURY_HISTORY
 
-# Search for pain/injury patterns
+# Search for pain/injury patterns in memories
 sce memory search --query "injury pain soreness"
 
 # Check load tolerance patterns
@@ -36,7 +36,18 @@ sce memory search --query "load threshold trigger"
 
 # Check training response patterns
 sce memory list --type TRAINING_RESPONSE
+
+# NEW: Search recent activity notes for pain/injury signals
+sce activity search --query "pain sore tight discomfort" --since 30d
+
+# NEW: List recent activities with notes for context
+sce activity list --since 14d --has-notes
 ```
+
+**Activity notes are raw athlete input** - the AI coach interprets what's relevant:
+- "right ankle felt weird" → flag right ankle for monitoring
+- "stopped early due to knee pain" → immediate concern
+- "felt tired but no issues" → low concern, general fatigue
 
 **Use retrieved memories to:**
 - Identify known injury-prone areas (e.g., "left knee pain after long runs >18km")

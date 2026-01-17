@@ -56,7 +56,7 @@ def main(
 
 
 # Import and register commands
-from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, validation, memory
+from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, validation, memory, activity
 from sports_coach_engine.cli.commands.goal import goal_set_command
 from sports_coach_engine.cli.commands.init_cmd import init_command
 from sports_coach_engine.cli.commands.status import status_command
@@ -83,3 +83,4 @@ app.add_typer(analysis.app, name="analysis", help="Weekly analysis and risk asse
 app.add_typer(analysis.risk_app, name="risk", help="Risk assessment commands")
 app.add_typer(validation.app, name="validation", help="Interval/plan structure validation and goal feasibility")
 app.add_typer(memory.app, name="memory", help="Manage athlete memories and insights")
+app.add_typer(activity.app, name="activity", help="List and search activities")

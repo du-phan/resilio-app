@@ -76,6 +76,8 @@ Verify taper status and race readiness
 
 ## CLI Quick Reference
 
+> **Note**: All `sce` commands must be run via Poetry: `poetry run sce <command>`. For brevity, examples below show just `sce`.
+
 **Session initialization (CRITICAL - always start here)**:
 ```bash
 sce auth status    # Check authentication (exit code 3 = expired)
@@ -94,7 +96,7 @@ sce week           # Weekly summary
 # Profile management (28 fields fully accessible)
 sce profile create --name "Alex" --age 32 --max-hr 199 --run-priority equal  # 19 flags available
 sce profile get                                                               # View profile
-sce profile set --max-hr 190 --available-days "mon,wed,fri"                  # Update any field
+sce profile set --max-hr 190 --max-run-days 4 --max-session-minutes 120      # Update any field
 sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
 sce profile remove-sport --sport yoga                                         # Remove sport
 sce profile list-sports                                                       # Show all sports
@@ -137,6 +139,19 @@ sce memory list --type INSIGHT               # Pattern insights detected by coac
 # Search memories by content
 sce memory search --query "knee pain"
 sce memory search --query "taper"
+```
+
+**Activity notes & search**:
+```bash
+# List activities with notes (description, private_note)
+sce activity list --since 30d                    # Last 30 days
+sce activity list --since 60d --sport run        # Filter by sport
+sce activity list --since 14d --has-notes        # Only activities with notes
+
+# Search activities by keyword
+sce activity search --query "ankle"              # Find ankle mentions
+sce activity search --query "tired fatigue"      # OR match (any keyword)
+sce activity search --query "pain" --sport run   # Filter by sport
 ```
 
 **When to capture memories**:

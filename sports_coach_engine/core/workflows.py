@@ -748,6 +748,9 @@ def run_sync_workflow(
             training_history_path = athlete_training_history_path()
             if repo.file_exists(training_history_path):
                 history = repo.read_yaml(training_history_path, schema=None)
+                # If read failed (RepoError), start fresh
+                if isinstance(history, RepoError) or history is None:
+                    history = {}
             else:
                 history = {}
 

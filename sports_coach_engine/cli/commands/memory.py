@@ -6,11 +6,12 @@ Types: INJURY_HISTORY, PREFERENCE, CONTEXT, INSIGHT, TRAINING_RESPONSE.
 """
 
 from typing import Optional
+from datetime import datetime
 import uuid
 
 import typer
 
-from sports_coach_engine.api import get_repo
+from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.core.memory import (
     save_memory,
     load_memories,
@@ -76,9 +77,9 @@ def memory_add_command(
     """
     # Validate memory type
     try:
-        mem_type = MemoryType(memory_type.upper())
-    except ValueError:
-        valid_types = [t.value for t in MemoryType]
+        mem_type = MemoryType[memory_type.upper()]
+    except KeyError:
+        valid_types = [t.name for t in MemoryType]
         envelope = create_error_envelope(
             error_type="validation",
             message=f"Invalid memory type: {memory_type}. Valid types: {', '.join(valid_types)}",
@@ -88,9 +89,9 @@ def memory_add_command(
 
     # Validate confidence
     try:
-        mem_confidence = MemoryConfidence(confidence.upper())
-    except ValueError:
-        valid_confidences = [c.value for c in MemoryConfidence]
+        mem_confidence = MemoryConfidence[confidence.upper()]
+    except KeyError:
+        valid_confidences = [c.name for c in MemoryConfidence]
         envelope = create_error_envelope(
             error_type="validation",
             message=f"Invalid confidence: {confidence}. Valid: {', '.join(valid_confidences)}",
@@ -104,6 +105,7 @@ def memory_add_command(
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
     # Create memory
+    now = datetime.now()
     memory = Memory(
         id=f"mem_{uuid.uuid4().hex[:8]}",
         type=mem_type,
@@ -111,15 +113,17 @@ def memory_add_command(
         source=MemorySource.CLAUDE_CODE,
         confidence=mem_confidence,
         tags=tag_list,
+        created_at=now,
+        updated_at=now,
     )
 
     # Save memory
     try:
-        repo = get_repo()
+        repo = RepositoryIO()
         final_memory, archived_memory = save_memory(memory, repo)
 
         # Build response
-        result_message = f"Memory saved: {final_memory.type.value}"
+        result_message = f"Memory saved: {final_memory.type}"
         if archived_memory:
             result_message += f" (superseded old memory: {archived_memory.id})"
         elif final_memory.occurrences > 1:
@@ -166,16 +170,16 @@ def memory_list_command(
         sce memory list --tag "body:knee"
     """
     try:
-        repo = get_repo()
+        repo = RepositoryIO()
         memories = load_memories(repo)
 
         # Apply filters
         if memory_type:
             try:
-                mem_type = MemoryType(memory_type.upper())
-                memories = get_memories_by_type(repo, mem_type)
-            except ValueError:
-                valid_types = [t.value for t in MemoryType]
+                mem_type = MemoryType[memory_type.upper()]
+                memories = get_memories_by_type(mem_type, repo)
+            except KeyError:
+                valid_types = [t.name for t in MemoryType]
                 envelope = create_error_envelope(
                     error_type="validation",
                     message=f"Invalid memory type: {memory_type}. Valid types: {', '.join(valid_types)}",
@@ -229,7 +233,7 @@ def memory_search_command(
         sce memory search --query "injury" --limit 5
     """
     try:
-        repo = get_repo()
+        repo = RepositoryIO()
 
         # Use get_relevant_memories for intelligent search
         relevant_memories = get_relevant_memories(
