@@ -219,7 +219,7 @@ class OtherSport(BaseModel):
     days: list[Weekday]
     typical_duration_minutes: int
     typical_intensity: SportIntensity
-    is_fixed: bool          # Won't move these
+    is_flexible: bool       # Can this be rescheduled?
     notes: Optional[str] = None
 
 
@@ -751,7 +751,7 @@ def get_fixed_sports_on_day(day: Weekday) -> list[OtherSport]:
         1. Load profile with load_profile()
         2. If profile is None or error, return []
         3. Filter profile.other_sports where:
-           - sport.is_fixed == True
+           - sport.is_flexible == False  # Fixed commitments
            - day in sport.days
         4. Return filtered list
     """
@@ -826,7 +826,7 @@ other_sports:
     days: [monday, thursday]
     typical_duration_minutes: 120
     typical_intensity: "moderate_to_hard"
-    is_fixed: true
+    is_flexible: false  # Fixed commitment
 
 # Priority Settings
 running_priority: "secondary"
@@ -1417,7 +1417,7 @@ class TestOtherSports:
             days=[Weekday.WEDNESDAY, Weekday.FRIDAY],
             typical_duration_minutes=90,
             typical_intensity=SportIntensity.MODERATE,
-            is_fixed=True
+            is_flexible=False  # Fixed commitment
         )
 
         result = upsert_other_sport(sport)
@@ -1433,7 +1433,7 @@ class TestOtherSports:
             days=[Weekday.WEDNESDAY],
             typical_duration_minutes=60,
             typical_intensity=SportIntensity.EASY,
-            is_fixed=False
+            is_flexible=True  # Flexible scheduling
         )
         upsert_other_sport(sport1)
 
@@ -1443,7 +1443,7 @@ class TestOtherSports:
             days=[Weekday.WEDNESDAY, Weekday.FRIDAY],
             typical_duration_minutes=90,
             typical_intensity=SportIntensity.MODERATE,
-            is_fixed=True
+            is_flexible=False  # Fixed commitment
         )
         result = upsert_other_sport(sport2)
 
@@ -1464,9 +1464,9 @@ class TestOtherSports:
         # Assumes profile has some sports
         fixed = get_fixed_sports_on_day(Weekday.MONDAY)
 
-        # All returned sports should be fixed and include Monday
+        # All returned sports should be fixed (not flexible) and include Monday
         for sport in fixed:
-            assert sport.is_fixed == True
+            assert sport.is_flexible == False  # Fixed commitment
             assert Weekday.MONDAY in sport.days
 ```
 

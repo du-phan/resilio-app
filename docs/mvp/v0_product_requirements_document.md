@@ -378,14 +378,14 @@ other_sports:
     days: [monday, thursday]
     typical_duration_minutes: 120
     typical_intensity: "moderate_to_hard" # easy, moderate, hard, moderate_to_hard
-    is_fixed: true # Won't move these
+    is_flexible: false # Fixed commitment - won't move these
     notes: "Indoor gym, Arkose Montmartre"
 
   - sport: "cycling"
     days: [sunday]
     typical_duration_minutes: 90
     typical_intensity: "easy_to_moderate"
-    is_fixed: false
+    is_flexible: true # Can reschedule based on weather
     notes: "Weather dependent, outdoor"
 
 # Priority Setting

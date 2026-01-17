@@ -125,10 +125,10 @@ class OtherSport(BaseModel):
     """Other sport commitment."""
 
     sport: str
-    days: List[Weekday]
-    typical_duration_minutes: int = Field(ge=0)
-    typical_intensity: str  # easy, moderate, hard, moderate_to_hard
-    is_fixed: bool = True
+    days: Optional[List[Weekday]] = None
+    typical_duration_minutes: int = Field(default=60, ge=0)
+    typical_intensity: str = "moderate"  # easy, moderate, hard, moderate_to_hard
+    is_flexible: bool = False  # Can this commitment be rescheduled?
     notes: Optional[str] = None
 
 

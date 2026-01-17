@@ -741,10 +741,10 @@ def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) ->
 
 def add_sport_to_profile(
     sport: str,
-    days: List[Weekday],
-    duration: int,
-    intensity: str,
-    fixed: bool = True,
+    days: Optional[List[Weekday]] = None,
+    duration: int = 60,
+    intensity: str = "moderate",
+    flexible: bool = False,
     notes: Optional[str] = None
 ) -> Union[AthleteProfile, ProfileError]:
     """
@@ -752,17 +752,18 @@ def add_sport_to_profile(
 
     Args:
         sport: Name of the sport (e.g., "climbing", "yoga", "cycling")
-        days: Days of the week for this sport
-        duration: Typical session duration in minutes
-        intensity: Intensity level (easy, moderate, hard, moderate_to_hard)
-        fixed: Whether this commitment is fixed (True) or flexible (False)
+        days: Days of the week for this sport (optional, None for flexible scheduling)
+        duration: Typical session duration in minutes (default: 60)
+        intensity: Intensity level (easy, moderate, hard, moderate_to_hard) (default: moderate)
+        flexible: Whether this commitment is flexible (True) or fixed (False)
         notes: Optional notes about the commitment
 
     Returns:
         Updated AthleteProfile or ProfileError
 
-    Example:
+    Examples:
         >>> add_sport_to_profile("climbing", [Weekday.TUESDAY, Weekday.THURSDAY], 120, "moderate_to_hard", notes="Gym 6-7pm")
+        >>> add_sport_to_profile("yoga", intensity="easy")  # Flexible scheduling
     """
     from sports_coach_engine.schemas.profile import OtherSport
 
@@ -793,7 +794,7 @@ def add_sport_to_profile(
         days=days,
         typical_duration_minutes=duration,
         typical_intensity=intensity,
-        is_fixed=fixed,
+        is_flexible=flexible,
         notes=notes
     )
 

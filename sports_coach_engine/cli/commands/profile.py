@@ -537,10 +537,10 @@ def profile_analyze_command(ctx: typer.Context) -> None:
 def profile_add_sport_command(
     ctx: typer.Context,
     sport: str = typer.Option(..., "--sport", help="Sport name (e.g., climbing, yoga, cycling)"),
-    days: str = typer.Option(..., "--days", help="Days (comma-separated, e.g., 'tuesday,thursday')"),
-    duration: int = typer.Option(..., "--duration", help="Typical session duration in minutes"),
-    intensity: str = typer.Option(..., "--intensity", help="Intensity: easy, moderate, hard, moderate_to_hard"),
-    fixed: bool = typer.Option(True, "--fixed/--flexible", help="Fixed commitment or flexible"),
+    days: Optional[str] = typer.Option(None, "--days", help="Days (comma-separated, e.g., 'tuesday,thursday'). Optional for flexible scheduling."),
+    duration: int = typer.Option(60, "--duration", help="Typical session duration in minutes (default: 60)"),
+    intensity: str = typer.Option("moderate", "--intensity", help="Intensity: easy, moderate, hard, moderate_to_hard (default: moderate)"),
+    flexible: bool = typer.Option(False, "--flexible/--fixed", help="Flexible scheduling (True) or fixed commitment (False)"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Optional notes about the commitment"),
 ) -> None:
     """Add a sport commitment to your profile.
@@ -549,22 +549,25 @@ def profile_add_sport_command(
     so the coach can account for multi-sport training load.
 
     Examples:
-        sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard
-        sce profile add-sport --sport yoga --days monday --duration 60 --intensity easy --notes "Morning yoga 7am"
+        sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard --fixed
+        sce profile add-sport --sport yoga --days monday --duration 60 --intensity easy --notes "Morning yoga 7am" --flexible
+        sce profile add-sport --sport swimming --intensity moderate --flexible  # Flexible scheduling, no fixed days
     """
     from sports_coach_engine.api.profile import add_sport_to_profile
 
-    # Parse days
-    try:
-        day_list = [Weekday(d.strip().lower()) for d in days.split(',')]
-    except ValueError as e:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Invalid day in --days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
-            data={}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
+    # Parse days if provided
+    day_list = None
+    if days:
+        try:
+            day_list = [Weekday(d.strip().lower()) for d in days.split(',')]
+        except ValueError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid day in --days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                data={}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
 
     # Call API
     result = add_sport_to_profile(
@@ -572,14 +575,20 @@ def profile_add_sport_command(
         days=day_list,
         duration=duration,
         intensity=intensity,
-        fixed=fixed,
+        flexible=flexible,
         notes=notes
     )
+
+    # Build success message
+    if days:
+        success_msg = f"Added sport commitment: {sport} on {days}"
+    else:
+        success_msg = f"Added sport commitment: {sport} (flexible scheduling)"
 
     # Convert to envelope
     envelope = api_result_to_envelope(
         result,
-        success_message=f"Added sport commitment: {sport} on {days}",
+        success_message=success_msg,
     )
 
     # Output JSON
@@ -654,10 +663,10 @@ def profile_list_sports_command(ctx: typer.Context) -> None:
     for sport_commitment in profile.other_sports:
         sports_data.append({
             "sport": sport_commitment.sport,
-            "days": [d.value for d in sport_commitment.days],
+            "days": [d.value for d in sport_commitment.days] if sport_commitment.days else [],
             "duration_minutes": sport_commitment.typical_duration_minutes,
             "intensity": sport_commitment.typical_intensity,
-            "fixed": sport_commitment.is_fixed,
+            "flexible": sport_commitment.is_flexible,
             "notes": sport_commitment.notes
         })
 

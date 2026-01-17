@@ -19,6 +19,7 @@ from sports_coach_engine.schemas.profile import (
     Weekday,
     RunningPriority,
     ConflictPolicy,
+    OtherSport,
 )
 
 
@@ -28,7 +29,7 @@ class TestProfileService:
     def test_load_profile_returns_none_when_not_exists(self, tmp_path, monkeypatch):
         """Should return None when profile doesn't exist."""
         (tmp_path / ".git").mkdir()
-        (tmp_path / "data" / "athlete").mkdir()
+        (tmp_path / "data" / "athlete").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
 
         repo = RepositoryIO()
@@ -268,7 +269,7 @@ class TestProfileService:
                     days=[Weekday.MONDAY, Weekday.THURSDAY],
                     typical_duration_minutes=120,
                     typical_intensity="moderate_to_hard",
-                    is_fixed=True,
+                    is_flexible=False,  # Inverted: was is_fixed=True, now not flexible
                 )
             ],
         )
@@ -284,6 +285,43 @@ class TestProfileService:
         assert loaded.recent_race.time == "47:00"
         assert len(loaded.other_sports) == 1
         assert loaded.other_sports[0].sport == "bouldering"
+
+    def test_other_sport_is_flexible_field(self, tmp_path, monkeypatch):
+        """Test that is_flexible field works correctly."""
+        (tmp_path / ".git").mkdir()
+        monkeypatch.chdir(tmp_path)
+
+        # Test fixed commitment (is_flexible=False)
+        fixed_sport = {
+            "sport": "climbing",
+            "days": ["monday"],
+            "typical_duration_minutes": 120,
+            "typical_intensity": "moderate_to_hard",
+            "is_flexible": False,
+        }
+        sport_fixed = OtherSport.model_validate(fixed_sport)
+        assert sport_fixed.is_flexible == False
+
+        # Test flexible commitment (is_flexible=True)
+        flexible_sport = {
+            "sport": "yoga",
+            "days": ["wednesday"],
+            "typical_duration_minutes": 60,
+            "typical_intensity": "easy",
+            "is_flexible": True,
+        }
+        sport_flexible = OtherSport.model_validate(flexible_sport)
+        assert sport_flexible.is_flexible == True
+
+        # Test default value (should be False - fixed by default)
+        default_sport = {
+            "sport": "swimming",
+            "days": ["friday"],
+            "typical_duration_minutes": 45,
+            "typical_intensity": "moderate",
+        }
+        sport_default = OtherSport.model_validate(default_sport)
+        assert sport_default.is_flexible == False
 
 
 class TestProfileValidation:

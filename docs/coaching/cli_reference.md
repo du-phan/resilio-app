@@ -916,17 +916,18 @@ Add a sport commitment to track multi-sport training load.
 
 **Required:**
 - `--sport` (string) - Sport name (e.g., climbing, yoga, cycling)
-- `--days` (comma-separated) - Days for this sport
-- `--duration` (integer) - Typical session duration in minutes
-- `--intensity` (string) - Intensity level: easy, moderate, hard, moderate_to_hard
 
 **Optional:**
-- `--fixed` / `--flexible` (boolean) - Fixed commitment or flexible (default: --fixed)
+- `--days` (comma-separated) - Days for this sport (omit for flexible scheduling)
+- `--duration` (integer) - Typical session duration in minutes (default: 60)
+- `--intensity` (string) - Intensity level: easy, moderate, hard, moderate_to_hard (default: moderate)
+- `--flexible` / `--fixed` (boolean) - Flexible scheduling (True) or fixed commitment (False) (default: --fixed)
 - `--notes` (string) - Optional notes about the commitment
 
 **Examples:**
 
 ```bash
+# Fixed commitment with specific days and duration/intensity (default --fixed)
 sce profile add-sport \
   --sport climbing \
   --days tuesday,thursday \
@@ -934,12 +935,20 @@ sce profile add-sport \
   --intensity moderate_to_hard \
   --notes "Bouldering gym 6-7pm"
 
+# Flexible commitment - can reschedule if needed
 sce profile add-sport \
   --sport yoga \
   --days monday \
-  --duration 60 \
   --intensity easy \
   --flexible
+
+# Sport with flexible scheduling (no fixed days)
+sce profile add-sport \
+  --sport climbing \
+  --intensity moderate_to_hard
+
+# Sport with all defaults (flexible scheduling, 60min, moderate intensity)
+sce profile add-sport --sport yoga
 ```
 
 ---
