@@ -13,7 +13,6 @@ from collections import defaultdict, Counter
 from sports_coach_engine.core.paths import athlete_profile_path, get_activities_dir
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
-from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.profile import (
     AthleteProfile,
     Goal,
@@ -57,7 +56,6 @@ def create_profile(
     max_hr: Optional[int] = None,
     resting_hr: Optional[int] = None,
     lthr: Optional[int] = None,
-    injury_history: Optional[str] = None,
     running_experience_years: Optional[int] = None,
     current_weekly_run_km: Optional[float] = None,
     current_run_days_per_week: Optional[int] = None,
@@ -94,7 +92,6 @@ def create_profile(
         max_hr: Maximum heart rate (optional)
         resting_hr: Resting heart rate (optional)
         lthr: Lactate threshold heart rate (optional)
-        injury_history: Free-text injury description (optional)
         running_experience_years: Years of running experience (optional)
         current_weekly_run_km: Current weekly run volume baseline (optional)
         current_run_days_per_week: Current run frequency baseline (optional)
@@ -123,14 +120,6 @@ def create_profile(
         ...     print(f"Created profile for {profile.name}")
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(
-        repo,
-        MessageRole.USER,
-        f"create_profile(name={name}, age={age}, max_hr={max_hr})",
-    )
-
     # Check if profile already exists
     profile_path = athlete_profile_path()
     existing_result = repo.read_yaml(
@@ -140,11 +129,6 @@ def create_profile(
     # allow_missing=True returns None if file doesn't exist, RepoError on other errors
     # So we need to check if it's an AthleteProfile (not None, not RepoError)
     if existing_result is not None and not isinstance(existing_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "Profile already exists. Use update_profile() to modify it.",
-        )
         return ProfileError(
             error_type="validation",
             message="Profile already exists. Use 'sce profile set' to update it or delete the existing profile first.",
@@ -210,7 +194,6 @@ def create_profile(
             created_at=datetime.now().date().isoformat(),
             age=age,
             vital_signs=vital_signs,
-            injury_history=injury_history,
             running_experience_years=running_experience_years,
             current_weekly_run_km=current_weekly_run_km,
             current_run_days_per_week=current_run_days_per_week,
@@ -223,11 +206,6 @@ def create_profile(
             preferences=preferences,
         )
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Validation failed: {str(e)}",
-        )
         return ProfileError(
             error_type="validation",
             message=f"Invalid profile data: {str(e)}",
@@ -236,23 +214,10 @@ def create_profile(
     # Save profile
     write_result = repo.write_yaml(profile_path, profile)
     if isinstance(write_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to save profile: {str(write_result)}",
-        )
         return ProfileError(
             error_type="unknown",
             message=f"Failed to save profile: {str(write_result)}",
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Created profile: {name}, priority={running_priority}",
-    )
-
     return profile
 
 
@@ -288,20 +253,11 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
         ...     print(f"Runs per week: {profile.constraints.runs_per_week}")
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_profile()")
-
     # Load profile
     profile_path = athlete_profile_path()
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load profile: {str(result)}",
-        )
         error_type = "not_found" if result.error_type == RepoErrorType.FILE_NOT_FOUND else "validation"
         return ProfileError(
             error_type=error_type,
@@ -309,15 +265,7 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
         )
 
     profile = result
-
-    # Log response
     goal_str = f", goal={profile.goal.type.value}" if profile.goal else ", no goal set"
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Returned profile: {profile.name}{goal_str}",
-    )
-
     return profile
 
 
@@ -361,21 +309,11 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
         ...     print(f"Updated: {profile.constraints.runs_per_week} runs/week")
     """
     repo = RepositoryIO()
-
-    # Log user request
-    field_names = ", ".join(fields.keys())
-    log_message(repo, MessageRole.USER, f"update_profile(fields={field_names})")
-
-    # Load current profile
+    field_names = ", ".join(fields.keys())# Load current profile
     profile_path = athlete_profile_path()
     result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load profile: {str(result)}",
-        )
         return ProfileError(
             error_type="not_found",
             message=f"Failed to load profile: {str(result)}",
@@ -394,11 +332,6 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
     try:
         profile = AthleteProfile.model_validate(profile_dict)
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Validation failed: {str(e)}",
-        )
         return ProfileError(
             error_type="validation",
             message=f"Invalid profile data: {str(e)}",
@@ -407,23 +340,10 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
     # Save updated profile
     write_result = repo.write_yaml(profile_path, profile)
     if isinstance(write_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to save profile: {str(write_result)}",
-        )
         return ProfileError(
             error_type="unknown",
             message=f"Failed to save profile: {str(write_result)}",
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Updated profile: {field_names}",
-    )
-
     return profile
 
 
@@ -470,24 +390,11 @@ def set_goal(
         ...     # Plan generation happens later via Claude Code conversation
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(
-        repo,
-        MessageRole.USER,
-        f"set_goal(race_type={race_type}, target_date={target_date}, target_time={target_time})",
-    )
-
     # Parse race type
     try:
         goal_type = GoalType(race_type.lower())
     except ValueError:
         valid_types = ", ".join([t.value for t in GoalType])
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Invalid race type: {race_type}",
-        )
         return ProfileError(
             error_type="validation",
             message=f"Invalid race type '{race_type}'. Valid types: {valid_types}",
@@ -508,11 +415,6 @@ def set_goal(
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(profile_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load profile: {str(profile_result)}",
-        )
         return ProfileError(
             error_type="not_found",
             message=f"Failed to load profile: {str(profile_result)}",
@@ -524,23 +426,10 @@ def set_goal(
     # Save updated profile
     write_result = repo.write_yaml(profile_path, profile)
     if isinstance(write_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to save profile: {str(write_result)}",
-        )
         return ProfileError(
             error_type="unknown",
             message=f"Failed to save profile: {str(write_result)}",
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Set goal: {goal.type.value} on {goal.target_date}",
-    )
-
     return goal
 
 
@@ -639,10 +528,6 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
     Note: Dates reflect synced data window, not athlete's full training history.
     """
     repo = RepositoryIO()
-
-    # Log operation
-    log_message(repo, MessageRole.USER, "analyze_profile_from_activities()")
-
     # Load all activities
     try:
         activities = _load_all_activities(repo)
@@ -711,12 +596,6 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
         suggested_weekly_km=recommendations['weekly_km'],
         suggested_run_days=recommendations['run_days'],
         suggested_running_priority=recommendations['running_priority'],
-    )
-
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Analyzed {activities_synced} activities in {data_window_days}-day window ({synced_start} to {synced_end})"
     )
 
     return analysis
@@ -927,23 +806,11 @@ def add_sport_to_profile(
     # Save updated profile
     write_result = repo.write_yaml(profile_path, profile)
     if isinstance(write_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to save profile: {write_result.message}",
-        )
         return ProfileError(
             error_type="unknown",
             message=f"Failed to save profile: {write_result.message}",
         )
-
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Added sport commitment: {sport} on {[d.value for d in days]}",
-    )
-
-    return profile
+        return profile
 
 
 def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]:
@@ -1003,20 +870,8 @@ def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]
     # Save updated profile
     write_result = repo.write_yaml(profile_path, profile)
     if isinstance(write_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to save profile: {write_result.message}",
-        )
         return ProfileError(
             error_type="unknown",
             message=f"Failed to save profile: {write_result.message}",
         )
-
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Removed sport commitment: {sport}",
-    )
-
-    return profile
+        return profile

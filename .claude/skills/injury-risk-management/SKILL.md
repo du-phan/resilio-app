@@ -20,6 +20,37 @@ This skill provides **proactive injury risk assessment** and **evidence-based mi
 
 ## Core Workflow
 
+### Step 0: Load Injury History and Patterns
+
+**Before assessing current risk, retrieve relevant injury history and training response patterns.**
+
+```bash
+# Retrieve injury history
+sce memory list --type INJURY_HISTORY
+
+# Search for pain/injury patterns
+sce memory search --query "injury pain soreness"
+
+# Check load tolerance patterns
+sce memory search --query "load threshold trigger"
+
+# Check training response patterns
+sce memory list --type TRAINING_RESPONSE
+```
+
+**Use retrieved memories to:**
+- Identify known injury-prone areas (e.g., "left knee pain after long runs >18km")
+- Understand load tolerance thresholds (e.g., "lower-body load >600 AU/week triggers knee soreness")
+- Detect frequency-based triggers (e.g., ">3 consecutive running days causes achilles tightness")
+- Reference past injury resolution strategies (e.g., "IT band resolved with hip strengthening")
+
+**Example application**:
+```
+Memory: "Right achilles tightness appears with >3 consecutive running days"
+Current plan: 4 consecutive running days scheduled this week
+Risk assessment: Flag this proactively - "Your plan has 4 consecutive running days. Based on your history, this may trigger right achilles tightness. Consider adding rest day on day 3."
+```
+
 ### Step 1: Assess Current Risk
 
 **Run risk assessment**:
@@ -438,6 +469,83 @@ See [GUARDRAILS.md](references/GUARDRAILS.md) for complete guardrails documentat
 See [COMMUNICATION.md](references/COMMUNICATION.md) for techniques on explaining injury risk effectively.
 
 **Key principle**: Create mental models through narrative, not just numbers. Explain what metrics mean, show trends, connect to injury risk, provide clear action.
+
+---
+
+### Step 6: Capture Injury Risk Patterns as Memories
+
+**After assessing risk and implementing mitigation, capture significant patterns for future reference.**
+
+**When to capture**:
+- ACWR spike pattern detected 2+ times with consistent trigger
+- Athlete reports pain/discomfort with specific load threshold
+- Frequency-based injury pattern observed (e.g., consecutive running days)
+- Load tolerance threshold identified (e.g., weekly volume limit)
+- Successful mitigation strategy that resolved injury risk
+
+**Patterns to capture**:
+
+1. **ACWR spike triggers** (if ACWR >1.4 triggered by specific pattern):
+   ```bash
+   sce memory add --type INSIGHT \
+     --content "ACWR spikes above 1.4 when weekly volume increases >15% or when climbing volume adds >200 AU in same week as long run" \
+     --tags "acwr:spike,volume:progression,sport:climbing,injury-risk:high" \
+     --confidence high
+   ```
+
+2. **Body-specific pain patterns** (if recurring pain reported):
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "Right achilles tightness appears after 3+ consecutive running days, resolves with rest day insertion" \
+     --tags "body:achilles,trigger:frequency,threshold:3-days,solution:rest" \
+     --confidence high
+   ```
+
+3. **Load tolerance thresholds** (if observed):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Lower-body load >600 AU/week triggers left knee soreness, stays comfortable below 550 AU" \
+     --tags "load:lower-body,body:knee,threshold:600,safe-zone:550" \
+     --confidence high
+   ```
+
+4. **Multi-sport interaction patterns** (if observed):
+   ```bash
+   sce memory add --type INSIGHT \
+     --content "Hard climbing session (>300 AU lower-body) within 24h before long run increases knee strain risk" \
+     --tags "sport:climbing,timing:24h,body:knee,risk:elevated" \
+     --confidence medium
+   ```
+
+5. **Volume progression limits** (if identified):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Weekly volume increases >12% trigger ACWR spikes, 8-10% progression works well" \
+     --tags "volume:progression,limit:12%,safe-zone:8-10%,acwr:safe" \
+     --confidence high
+   ```
+
+6. **Successful mitigation strategies** (if injury risk resolved):
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "IT band tightness resolved with 2 rest days + hip strengthening exercises, volume capped at 45km for 3 weeks" \
+     --tags "body:it-band,solution:rest,solution:strength,volume:cap,status:resolved" \
+     --confidence high
+   ```
+
+**Guidelines**:
+- Capture specific thresholds/numbers (e.g., "ACWR >1.4", "600 AU", "3+ days", ">15%")
+- Include both problem AND solution when applicable (e.g., "trigger X causes Y, resolved with Z")
+- HIGH confidence for 3+ occurrences, MEDIUM for 2 occurrences
+- Tag multiple dimensions: body part, trigger type, threshold, solution
+- Reference in future risk assessments to provide personalized context
+
+**Example application in next session**:
+```
+Memory loaded: "Right achilles tightness after 3+ consecutive running days"
+Current plan: Shows 5 consecutive running days next week
+Proactive flag: "I notice your plan has 5 consecutive running days. Based on your history with right achilles tightness, let's add a rest day on day 3 or 4 to prevent issues."
+```
 
 ---
 

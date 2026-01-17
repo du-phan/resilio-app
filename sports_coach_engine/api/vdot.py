@@ -83,7 +83,7 @@ def calculate_vdot_from_race(
         except ValueError:
             return VDOTError(
                 error_type="invalid_input",
-                message=f"Invalid race distance '{race_distance}'. Valid: mile, 5k, 10k, 15k, half_marathon, marathon"
+                message=f"Invalid race distance '{race_distance}'. Valid: mile, 5k, 10k, 15k, half_marathon, marathon",
             )
 
         # Parse race time
@@ -91,8 +91,7 @@ def calculate_vdot_from_race(
             race_time_seconds = parse_time_string(race_time)
         except ValueError as e:
             return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid race time '{race_time}': {e}"
+                error_type="invalid_input", message=f"Invalid race time '{race_time}': {e}"
             )
 
         # Calculate VDOT
@@ -120,15 +119,9 @@ def calculate_vdot_from_race(
         return vdot_result
 
     except ValueError as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"VDOT calculation failed: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"VDOT calculation failed: {e}")
     except Exception as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def get_training_paces(
@@ -156,8 +149,7 @@ def get_training_paces(
         # Validate VDOT range
         if vdot < 30 or vdot > 85:
             return VDOTError(
-                error_type="out_of_range",
-                message=f"VDOT must be between 30 and 85, got {vdot}"
+                error_type="out_of_range", message=f"VDOT must be between 30 and 85, got {vdot}"
             )
 
         # Validate unit
@@ -166,7 +158,7 @@ def get_training_paces(
         except ValueError:
             return VDOTError(
                 error_type="invalid_input",
-                message=f"Invalid unit '{unit}'. Valid: min_per_km, min_per_mile"
+                message=f"Invalid unit '{unit}'. Valid: min_per_km, min_per_mile",
             )
 
         # Calculate paces
@@ -174,15 +166,9 @@ def get_training_paces(
         return paces
 
     except ValueError as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Pace calculation failed: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Pace calculation failed: {e}")
     except Exception as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def predict_race_times(
@@ -210,7 +196,7 @@ def predict_race_times(
         except ValueError:
             return VDOTError(
                 error_type="invalid_input",
-                message=f"Invalid race distance '{race_distance}'. Valid: mile, 5k, 10k, 15k, half_marathon, marathon"
+                message=f"Invalid race distance '{race_distance}'. Valid: mile, 5k, 10k, 15k, half_marathon, marathon",
             )
 
         # Parse race time
@@ -218,8 +204,7 @@ def predict_race_times(
             race_time_seconds = parse_time_string(race_time)
         except ValueError as e:
             return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid race time '{race_time}': {e}"
+                error_type="invalid_input", message=f"Invalid race time '{race_time}': {e}"
             )
 
         # Calculate equivalents
@@ -227,15 +212,9 @@ def predict_race_times(
         return equivalents
 
     except ValueError as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Race prediction failed: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Race prediction failed: {e}")
     except Exception as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def apply_six_second_rule_paces(mile_time: str) -> Union[SixSecondRulePaces, VDOTError]:
@@ -262,8 +241,7 @@ def apply_six_second_rule_paces(mile_time: str) -> Union[SixSecondRulePaces, VDO
             mile_time_seconds = parse_time_string(mile_time)
         except ValueError as e:
             return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid mile time '{mile_time}': {e}"
+                error_type="invalid_input", message=f"Invalid mile time '{mile_time}': {e}"
             )
 
         # Apply six-second rule
@@ -272,14 +250,10 @@ def apply_six_second_rule_paces(mile_time: str) -> Union[SixSecondRulePaces, VDO
 
     except ValueError as e:
         return VDOTError(
-            error_type="calculation_failed",
-            message=f"Six-second rule calculation failed: {e}"
+            error_type="calculation_failed", message=f"Six-second rule calculation failed: {e}"
         )
     except Exception as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def adjust_pace_for_environment(
@@ -310,10 +284,7 @@ def adjust_pace_for_environment(
         try:
             base_pace_seconds = parse_time_string(base_pace)
         except ValueError as e:
-            return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid pace '{base_pace}': {e}"
-            )
+            return VDOTError(error_type="invalid_input", message=f"Invalid pace '{base_pace}': {e}")
 
         # Validate condition type
         try:
@@ -321,7 +292,7 @@ def adjust_pace_for_environment(
         except ValueError:
             return VDOTError(
                 error_type="invalid_input",
-                message=f"Invalid condition '{condition_type}'. Valid: altitude, heat, humidity, hills"
+                message=f"Invalid condition '{condition_type}'. Valid: altitude, heat, humidity, hills",
             )
 
         # Apply adjustment
@@ -329,12 +300,6 @@ def adjust_pace_for_environment(
         return adjustment
 
     except ValueError as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Pace adjustment failed: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Pace adjustment failed: {e}")
     except Exception as e:
-        return VDOTError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")

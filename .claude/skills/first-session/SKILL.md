@@ -111,7 +111,7 @@ Athlete: "Yeah, that sounds right" OR "Actually, I think it's 190"
 Coach: [Store actual value]
 ```
 
-#### 4b. Injury History (Context-Aware)
+#### 4b. Injury History (Context-Aware with Memory System)
 
 **Check for activity gaps first** (from `sce profile analyze` or `sce status`):
 
@@ -132,14 +132,59 @@ Athlete: "Yeah, left knee tendonitis. It's healed now but I watch mileage."
 Coach: "Any past injuries I should know about? Helps me watch for warning signs and adjust training load appropriately."
 ```
 
-**Storage**: Record exactly as athlete describes. Don't sanitize or categorize.
+**IMPORTANT: Store each injury as a structured memory (NOT in profile.injury_history field)**
 
-Examples:
+**Storage approach**: Create separate memory for each distinct injury with specific tags.
 
-- ✅ "Left knee tendonitis 2023, fully healed"
-- ✅ "Right Achilles tightness if I run 3 days in a row"
-- ✅ "Took break Nov 2025 - knee pain, better now but watch mileage"
-- ❌ "Knee injury" (too vague)
+**Examples**:
+
+1. **Past resolved injury**:
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "Left knee tendonitis Nov 2023, fully healed, watches mileage" \
+     --tags "body:knee,year:2023,status:resolved,caution:mileage" \
+     --confidence high
+   ```
+
+2. **Frequency-triggered issue**:
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "Right achilles tightness when running >3 consecutive days" \
+     --tags "body:achilles,trigger:frequency,threshold:3-days,status:current" \
+     --confidence high
+   ```
+
+3. **Volume-triggered issue**:
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "Left knee pain after long runs >18km, resolved with reduced volume in 2024" \
+     --tags "body:knee,trigger:long-run,threshold:18km,year:2024,status:resolved" \
+     --confidence high
+   ```
+
+4. **Past injury with resolution strategy**:
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "IT band syndrome 2023, resolved with hip strengthening and form adjustments" \
+     --tags "body:it-band,year:2023,status:resolved,solution:strength,solution:form" \
+     --confidence high
+   ```
+
+**Why use memory system instead of profile field**:
+- Each injury is independently searchable
+- Rich tagging (body part, trigger type, threshold, status, solution)
+- Automatic deduplication if athlete mentions same injury again
+- Confidence scoring for recurring patterns
+- Can reference resolution strategies in future coaching
+
+**Tag conventions**:
+- `body:{part}` - knee, achilles, hamstring, it-band, etc.
+- `trigger:{type}` - frequency, long-run, volume, speed, etc.
+- `threshold:{value}` - 3-days, 18km, 50km-week, etc.
+- `status:{state}` - current, resolved, monitoring, etc.
+- `solution:{method}` - rest, strength, form, volume-cap, etc.
+- `year:{YYYY}` - When injury occurred
+- `caution:{area}` - Ongoing vigilance areas
 
 #### 4c. Sport Priority (Natural Conversation)
 
@@ -191,11 +236,7 @@ Once all data collected, create profile:
 sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
 ```
 
-If athlete mentioned injury history, add via natural conversation after profile creation:
-
-```bash
-sce profile set --injury-history "Left knee tendonitis 2023, fully healed"
-```
+**Note**: Injury history is stored separately in memory system (see Step 4b above), not in profile.
 
 ### Step 5: Goal Setting
 

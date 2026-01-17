@@ -96,14 +96,13 @@ def validate_quality_volume(
         # Validate inputs are non-negative
         if t_pace_km < 0 or i_pace_km < 0 or r_pace_km < 0:
             return GuardrailsError(
-                error_type="invalid_input",
-                message="Pace volumes must be non-negative"
+                error_type="invalid_input", message="Pace volumes must be non-negative"
             )
 
         if weekly_mileage_km <= 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Weekly mileage must be positive, got {weekly_mileage_km}"
+                message=f"Weekly mileage must be positive, got {weekly_mileage_km}",
             )
 
         # Validate paces don't exceed weekly volume
@@ -111,7 +110,7 @@ def validate_quality_volume(
         if total_quality > weekly_mileage_km:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Total quality volume ({total_quality:.1f}km) exceeds weekly mileage ({weekly_mileage_km:.1f}km)"
+                message=f"Total quality volume ({total_quality:.1f}km) exceeds weekly mileage ({weekly_mileage_km:.1f}km)",
             )
 
         # Call core function
@@ -120,14 +119,10 @@ def validate_quality_volume(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Quality volume validation failed: {e}"
+            error_type="calculation_failed", message=f"Quality volume validation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def validate_weekly_progression(
@@ -158,16 +153,14 @@ def validate_weekly_progression(
         # Validate inputs are non-negative
         if previous_volume_km < 0 or current_volume_km < 0:
             return GuardrailsError(
-                error_type="invalid_input",
-                message="Volume values must be non-negative"
+                error_type="invalid_input", message="Volume values must be non-negative"
             )
 
         # Allow previous_volume_km to be zero (first week of training)
         # but current_volume_km should be positive
         if current_volume_km == 0:
             return GuardrailsError(
-                error_type="invalid_input",
-                message="Current volume must be positive"
+                error_type="invalid_input", message="Current volume must be positive"
             )
 
         # Call core function
@@ -176,14 +169,10 @@ def validate_weekly_progression(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Progression validation failed: {e}"
+            error_type="calculation_failed", message=f"Progression validation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def validate_long_run_limits(
@@ -222,37 +211,37 @@ def validate_long_run_limits(
         if long_run_km <= 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Long run distance must be positive, got {long_run_km}"
+                message=f"Long run distance must be positive, got {long_run_km}",
             )
 
         if long_run_duration_minutes <= 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Long run duration must be positive, got {long_run_duration_minutes}"
+                message=f"Long run duration must be positive, got {long_run_duration_minutes}",
             )
 
         if weekly_volume_km <= 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Weekly volume must be positive, got {weekly_volume_km}"
+                message=f"Weekly volume must be positive, got {weekly_volume_km}",
             )
 
         if long_run_km > weekly_volume_km:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Long run ({long_run_km}km) exceeds weekly volume ({weekly_volume_km}km)"
+                message=f"Long run ({long_run_km}km) exceeds weekly volume ({weekly_volume_km}km)",
             )
 
         if pct_limit <= 0 or pct_limit > 100:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Percentage limit must be between 0 and 100, got {pct_limit}"
+                message=f"Percentage limit must be between 0 and 100, got {pct_limit}",
             )
 
         if duration_limit_minutes <= 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Duration limit must be positive, got {duration_limit_minutes}"
+                message=f"Duration limit must be positive, got {duration_limit_minutes}",
             )
 
         # Call core function
@@ -267,14 +256,10 @@ def validate_long_run_limits(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Long run validation failed: {e}"
+            error_type="calculation_failed", message=f"Long run validation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def calculate_safe_volume_range(
@@ -312,8 +297,7 @@ def calculate_safe_volume_range(
         # Validate CTL
         if current_ctl < 0:
             return GuardrailsError(
-                error_type="invalid_input",
-                message=f"CTL must be non-negative, got {current_ctl}"
+                error_type="invalid_input", message=f"CTL must be non-negative, got {current_ctl}"
             )
 
         # Validate goal type
@@ -321,7 +305,7 @@ def calculate_safe_volume_range(
         if goal_type.lower() not in valid_goals:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid goal type '{goal_type}'. Valid: {', '.join(valid_goals)}"
+                message=f"Invalid goal type '{goal_type}'. Valid: {', '.join(valid_goals)}",
             )
 
         # Validate age if provided
@@ -329,7 +313,7 @@ def calculate_safe_volume_range(
             if athlete_age < 18 or athlete_age > 100:
                 return GuardrailsError(
                     error_type="out_of_range",
-                    message=f"Age must be between 18 and 100, got {athlete_age}"
+                    message=f"Age must be between 18 and 100, got {athlete_age}",
                 )
 
         # Call core function
@@ -338,14 +322,10 @@ def calculate_safe_volume_range(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Safe volume range calculation failed: {e}"
+            error_type="calculation_failed", message=f"Safe volume range calculation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 # ============================================================
@@ -389,19 +369,19 @@ def calculate_break_return_plan(
         if break_days <= 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Break duration must be positive, got {break_days}"
+                message=f"Break duration must be positive, got {break_days}",
             )
 
         if break_days > 365:
             return GuardrailsError(
                 error_type="out_of_range",
-                message=f"Break duration exceeds 1 year ({break_days} days). Consider rebuilding from scratch."
+                message=f"Break duration exceeds 1 year ({break_days} days). Consider rebuilding from scratch.",
             )
 
         if pre_break_ctl < 0:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Pre-break CTL must be non-negative, got {pre_break_ctl}"
+                message=f"Pre-break CTL must be non-negative, got {pre_break_ctl}",
             )
 
         # Validate cross-training level
@@ -409,7 +389,7 @@ def calculate_break_return_plan(
         if cross_training_level.lower() not in valid_levels:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid cross-training level '{cross_training_level}'. Valid: {', '.join(valid_levels)}"
+                message=f"Invalid cross-training level '{cross_training_level}'. Valid: {', '.join(valid_levels)}",
             )
 
         # Call core function
@@ -418,14 +398,10 @@ def calculate_break_return_plan(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Break return plan calculation failed: {e}"
+            error_type="calculation_failed", message=f"Break return plan calculation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def calculate_masters_recovery(
@@ -458,8 +434,7 @@ def calculate_masters_recovery(
         # Validate age
         if age < 18 or age > 100:
             return GuardrailsError(
-                error_type="out_of_range",
-                message=f"Age must be between 18 and 100, got {age}"
+                error_type="out_of_range", message=f"Age must be between 18 and 100, got {age}"
             )
 
         # Validate workout type
@@ -467,7 +442,7 @@ def calculate_masters_recovery(
         if workout_type.lower() not in valid_types:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid workout type '{workout_type}'. Valid: {', '.join(valid_types)}"
+                message=f"Invalid workout type '{workout_type}'. Valid: {', '.join(valid_types)}",
             )
 
         # Call core function
@@ -476,14 +451,10 @@ def calculate_masters_recovery(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Masters recovery calculation failed: {e}"
+            error_type="calculation_failed", message=f"Masters recovery calculation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def calculate_race_recovery(
@@ -524,14 +495,14 @@ def calculate_race_recovery(
         if race_distance.lower() not in valid_distances:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid race distance '{race_distance}'. Valid: {', '.join(valid_distances)}"
+                message=f"Invalid race distance '{race_distance}'. Valid: {', '.join(valid_distances)}",
             )
 
         # Validate age
         if athlete_age < 18 or athlete_age > 100:
             return GuardrailsError(
                 error_type="out_of_range",
-                message=f"Age must be between 18 and 100, got {athlete_age}"
+                message=f"Age must be between 18 and 100, got {athlete_age}",
             )
 
         # Validate effort level
@@ -539,7 +510,7 @@ def calculate_race_recovery(
         if finishing_effort.lower() not in valid_efforts:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid effort level '{finishing_effort}'. Valid: {', '.join(valid_efforts)}"
+                message=f"Invalid effort level '{finishing_effort}'. Valid: {', '.join(valid_efforts)}",
             )
 
         # Call core function
@@ -548,14 +519,10 @@ def calculate_race_recovery(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Race recovery calculation failed: {e}"
+            error_type="calculation_failed", message=f"Race recovery calculation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
 
 
 def generate_illness_recovery_plan(
@@ -595,14 +562,14 @@ def generate_illness_recovery_plan(
         except ValueError:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid date format. Use ISO format 'YYYY-MM-DD'"
+                message=f"Invalid date format. Use ISO format 'YYYY-MM-DD'",
             )
 
         # Validate date order
         if end_dt < start_dt:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"End date ({illness_end_date}) is before start date ({illness_start_date})"
+                message=f"End date ({illness_end_date}) is before start date ({illness_start_date})",
             )
 
         # Calculate duration
@@ -611,7 +578,7 @@ def generate_illness_recovery_plan(
         if illness_duration > 60:
             return GuardrailsError(
                 error_type="out_of_range",
-                message=f"Illness duration exceeds 60 days. Consider medical consultation and full fitness rebuild."
+                message=f"Illness duration exceeds 60 days. Consider medical consultation and full fitness rebuild.",
             )
 
         # Validate severity
@@ -620,7 +587,7 @@ def generate_illness_recovery_plan(
         except ValueError:
             return GuardrailsError(
                 error_type="invalid_input",
-                message=f"Invalid severity '{severity}'. Valid: mild, moderate, severe"
+                message=f"Invalid severity '{severity}'. Valid: mild, moderate, severe",
             )
 
         # Call core function
@@ -629,11 +596,7 @@ def generate_illness_recovery_plan(
 
     except ValueError as e:
         return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Illness recovery plan generation failed: {e}"
+            error_type="calculation_failed", message=f"Illness recovery plan generation failed: {e}"
         )
     except Exception as e:
-        return GuardrailsError(
-            error_type="calculation_failed",
-            message=f"Unexpected error: {e}"
-        )
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **What is this?** An AI-powered adaptive running coach for multi-sport athletes. The system runs entirely within Claude Code terminal sessions using local YAML/JSON files for persistence.
 
-**Current Status**: Phase 1-7 complete (as of 2026-01-14). All 14 modules operational with 416 passing tests. System ready for coaching sessions.
+**Current Status**: Phase 1-7 complete (as of 2026-01-14). All 13 modules operational with 416 passing tests. System ready for coaching sessions.
 
 **Your Role**: You are the AI coach. You use computational tools (CLI commands) to make coaching decisions, design training plans, detect adaptation triggers, and provide personalized guidance.
 
@@ -118,6 +118,33 @@ sce vdot paces --vdot 48                         # Get training pace zones
 sce vdot predict --race-type 10k --time 42:30    # Predict equivalent race times
 sce vdot adjust --pace 5:00 --condition altitude --severity 7000  # Pace adjustments
 ```
+
+**Memory & insights**:
+```bash
+# Add structured memories (injury history, preferences, training responses)
+sce memory add --type INJURY_HISTORY \
+  --content "Left knee pain after long runs >18km" \
+  --tags "body:knee,trigger:long-run,threshold:18km" \
+  --confidence high
+
+# List memories by type
+sce memory list --type INJURY_HISTORY        # Past injuries
+sce memory list --type TRAINING_RESPONSE     # How athlete responds to training stimuli
+sce memory list --type PREFERENCE            # Athlete preferences
+sce memory list --type CONTEXT               # Ongoing context (schedule, constraints)
+sce memory list --type INSIGHT               # Pattern insights detected by coach
+
+# Search memories by content
+sce memory search --query "knee pain"
+sce memory search --query "taper"
+```
+
+**When to capture memories**:
+- **Injury history**: During first-session onboarding or when athlete mentions past/current injuries
+- **Training responses**: After detecting patterns 3+ times (e.g., "consistently skips Tuesdays")
+- **Preferences**: When athlete expresses preferences about training (e.g., "prefers frequency over volume")
+- **Context**: Schedule constraints, work travel, life events affecting training
+- **Insights**: Significant patterns detected during weekly analysis or risk assessment
 
 **For complete CLI reference with all commands, parameters, and JSON formats**: See `docs/coaching/cli_reference.md`
 

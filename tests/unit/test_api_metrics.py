@@ -74,8 +74,6 @@ def mock_enriched_metrics():
 
 class TestGetCurrentMetrics:
     """Test get_current_metrics() function."""
-
-    @patch("sports_coach_engine.api.metrics.log_message")
     @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     @patch("sports_coach_engine.api.metrics.enrich_metrics")
@@ -103,10 +101,7 @@ class TestGetCurrentMetrics:
         assert result == mock_enriched_metrics
 
         # Verify enrichment was called with repo
-        mock_enrich.assert_called_once_with(mock_daily_metrics, mock_repo)
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        mock_enrich.assert_called_once_with(mock_daily_metrics, mock_repo)    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     def test_get_current_metrics_no_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test metrics retrieval when no data exists."""
@@ -121,10 +116,7 @@ class TestGetCurrentMetrics:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "not_found"
-        assert "No metrics available" in result.message
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "No metrics available" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     def test_get_current_metrics_validation_error(self, mock_find_date, mock_repo_cls, mock_log):
         """Test metrics retrieval with validation error."""
@@ -141,10 +133,7 @@ class TestGetCurrentMetrics:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "validation"
-        assert "Failed to load metrics" in result.message
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "Failed to load metrics" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     @patch("sports_coach_engine.api.metrics.enrich_metrics")
     def test_get_current_metrics_enrichment_failure(
@@ -175,8 +164,6 @@ class TestGetCurrentMetrics:
 
 class TestGetReadiness:
     """Test get_readiness() function."""
-
-    @patch("sports_coach_engine.api.metrics.log_message")
     @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     def test_get_readiness_success(self, mock_find_date, mock_repo_cls, mock_log, mock_daily_metrics):
@@ -192,10 +179,7 @@ class TestGetReadiness:
         # Should return ReadinessScore
         assert isinstance(result, Mock)  # Mock of ReadinessScore
         assert result == mock_daily_metrics.readiness
-        assert result.score == 68
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert result.score == 68    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     def test_get_readiness_no_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test readiness retrieval when no metrics exist."""
@@ -209,10 +193,7 @@ class TestGetReadiness:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "not_found"
-        assert "No readiness data available" in result.message
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "No readiness data available" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     def test_get_readiness_insufficient_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test readiness retrieval when readiness is not computed."""
@@ -242,8 +223,6 @@ class TestGetReadiness:
 
 class TestGetIntensityDistribution:
     """Test get_intensity_distribution() function."""
-
-    @patch("sports_coach_engine.api.metrics.log_message")
     @patch("sports_coach_engine.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_success(self, mock_repo_cls, mock_log):
         """Test successful intensity distribution retrieval."""
@@ -276,10 +255,7 @@ class TestGetIntensityDistribution:
 
         # Check 80/20 compliance
         assert result.is_compliant is not None
-        assert result.target_low_percent == 80.0
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert result.target_low_percent == 80.0    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_no_data(self, mock_repo_cls, mock_log):
         """Test intensity distribution when no data exists."""
         mock_repo = Mock()
@@ -293,10 +269,7 @@ class TestGetIntensityDistribution:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "not_found"
-        assert "No training data" in result.message
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "No training data" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_no_training_time(self, mock_repo_cls, mock_log):
         """Test intensity distribution when no training time recorded."""
         mock_repo = Mock()
@@ -318,10 +291,7 @@ class TestGetIntensityDistribution:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "insufficient_data"
-        assert "No training time recorded" in result.message
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "No training time recorded" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_partial_data(self, mock_repo_cls, mock_log):
         """Test intensity distribution with partial data (some days missing)."""
         mock_repo = Mock()
@@ -352,10 +322,7 @@ class TestGetIntensityDistribution:
         assert isinstance(result, IntensityDistribution)
         assert result.low_minutes == 40 * 3  # 120
         assert result.moderate_minutes == 5 * 3  # 15
-        assert result.high_minutes == 5 * 3  # 15
-
-    @patch("sports_coach_engine.api.metrics.log_message")
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert result.high_minutes == 5 * 3  # 15    @patch("sports_coach_engine.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_custom_days(self, mock_repo_cls, mock_log):
         """Test intensity distribution with custom day range."""
         mock_repo = Mock()
@@ -442,8 +409,6 @@ class TestFindLatestMetricsDate:
 
 class TestEdgeCases:
     """Test edge cases and error conditions."""
-
-    @patch("sports_coach_engine.api.metrics.log_message")
     @patch("sports_coach_engine.api.metrics.RepositoryIO")
     def test_intensity_distribution_skip_invalid_files(self, mock_repo_cls, mock_log):
         """Test that invalid metrics files are skipped gracefully."""

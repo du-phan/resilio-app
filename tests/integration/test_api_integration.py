@@ -14,7 +14,6 @@ from sports_coach_engine.core.paths import (
     get_activities_dir,
     get_metrics_dir,
     get_plans_dir,
-    get_conversations_dir,
     athlete_profile_path,
 )
 from sports_coach_engine.schemas.config import Config, Settings, Secrets, StravaSecrets
@@ -45,8 +44,6 @@ def integration_repo(tmp_path):
     repo.ensure_directory(f"{get_metrics_dir()}/daily")
     repo.ensure_directory(get_plans_dir())
     repo.ensure_directory("config")
-    repo.ensure_directory(f"{get_conversations_dir()}/transcripts")
-    repo.ensure_directory(f"{get_conversations_dir()}/summaries")
 
     # Create minimal profile
     today = date.today()
@@ -384,20 +381,6 @@ class TestCrossModuleIntegration:
         # Get profile again - should reflect update
         profile2 = get_profile()
         assert profile2.name == "Updated Test Athlete"
-
-    def test_api_creates_conversation_logs(self, integration_repo, tmp_path, monkeypatch):
-        """Test that API calls create conversation logs."""
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
-        monkeypatch.setattr("sports_coach_engine.core.logger.RepositoryIO", lambda: integration_repo)
-
-        # Make an API call
-        get_profile()
-
-        # Check that conversation logs were created
-        transcripts_dir = tmp_path / "data" / "conversations" / "transcripts"
-        if transcripts_dir.exists():
-            # Should have at least created a directory
-            assert transcripts_dir.is_dir()
 
 
 # ============================================================

@@ -18,6 +18,33 @@ This skill provides intelligent daily workout recommendations by:
 
 ## Workflow
 
+### Step 0: Retrieve Relevant Memories (Context Loading)
+
+**Before making recommendations, load athlete's training response patterns and preferences.**
+
+```bash
+# Check training response patterns
+sce memory list --type TRAINING_RESPONSE
+
+# Check readiness/recovery patterns
+sce memory search --query "readiness recovery fatigue"
+
+# Check override preferences
+sce memory search --query "override rest"
+```
+
+**Use retrieved memories to inform recommendations**:
+- If memory shows "Prefers to train through low readiness", acknowledge this pattern when presenting options
+- If memory shows "Low readiness persists 3+ days after hard weeks", anticipate this pattern
+- If memory shows past override decisions, reference them: "I know you typically push through, but..."
+
+**Example memory application**:
+```
+Memory: "Reports feeling flat after back-to-back quality days"
+Today's context: Yesterday was interval session, today is tempo
+Your response: "I see you had intervals yesterday. You've mentioned in past weeks that back-to-back quality leaves you flat. How are you feeling today?"
+```
+
 ### Step 1: Get Scheduled Workout
 
 Check what's planned for today from the athlete's training plan.
@@ -423,6 +450,65 @@ Sound fair?
 ✅ **Good**: "I strongly recommend rest (ACWR 1.52, readiness 32). But if you want to run, here's the safest option: easy 20 minutes."
 
 **Present options** - even when recommendation is clear, give athlete agency.
+
+---
+
+### Step 7: Capture Significant Patterns as Memories
+
+**After athlete makes decisions (especially when overriding recommendations), capture recurring patterns.**
+
+**When to capture**:
+- Pattern appears 3+ times
+- Athlete reveals new preference or constraint
+- Significant fatigue/recovery pattern observed
+
+**Patterns to capture**:
+
+1. **Override patterns** (if athlete overrides rest/downgrade 3+ times):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Prefers to train through low readiness (<40), typically proceeds with planned workout despite elevated ACWR" \
+     --tags "readiness:override,acwr:elevated,preference:train-through" \
+     --confidence high
+   ```
+
+2. **Recovery patterns** (if observed 2+ times):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Reports feeling flat after back-to-back quality days (intervals + tempo)" \
+     --tags "recovery:poor,quality:consecutive,pattern:fatigue" \
+     --confidence medium
+   ```
+
+3. **Fatigue signals** (if readiness <40 for 3+ consecutive days):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Low readiness (<40) persists for 3+ days after hard training weeks (ACWR >1.3)" \
+     --tags "readiness:low,recovery:slow,acwr:spike" \
+     --confidence high
+   ```
+
+4. **Wellness signals** (if athlete mentions subjective feel):
+   ```bash
+   sce memory add --type CONTEXT \
+     --content "Reports knee tightness on days following climbing sessions with >300 AU lower-body load" \
+     --tags "body:knee,sport:climbing,load:lower-body,threshold:300" \
+     --confidence medium
+   ```
+
+5. **Schedule constraints** (if recurring conflict):
+   ```bash
+   sce memory add --type CONTEXT \
+     --content "Morning runs preferred due to evening work commitments (5pm meetings)" \
+     --tags "schedule:morning,constraint:work,time:evening" \
+     --confidence high
+   ```
+
+**Guidelines**:
+- Only capture patterns with sufficient evidence (2-3+ occurrences)
+- HIGH confidence for 3+ occurrences, MEDIUM for 2 occurrences, LOW for single observation but high significance
+- Tag appropriately for future retrieval
+- Include specific thresholds/numbers when relevant (e.g., "readiness <40", "ACWR >1.3", "load >300 AU")
 
 ---
 

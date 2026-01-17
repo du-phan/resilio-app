@@ -21,7 +21,6 @@ from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_adaptation_check, WorkflowError
 from sports_coach_engine.core.enrichment import enrich_workout, enrich_metrics
 from sports_coach_engine.core.metrics import compute_weekly_summary
-from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
 from sports_coach_engine.schemas.metrics import DailyMetrics
 from sports_coach_engine.schemas.activity import NormalizedActivity
@@ -60,7 +59,9 @@ class WeeklyStatus:
     total_load_au: float
 
     # Activities summary
-    activities: list[dict] = field(default_factory=list)  # Brief activity summaries (date, day_of_week, day_name, sport_type, duration_minutes, systemic_load_au)
+    activities: list[dict] = field(
+        default_factory=list
+    )  # Brief activity summaries (date, day_of_week, day_name, sport_type, duration_minutes, systemic_load_au)
 
     # Metrics snapshot
     current_ctl: Optional[float] = None
@@ -139,28 +140,15 @@ def get_todays_workout(
     if target_date is None:
         target_date = date.today()
 
-    # Log user request
-    log_message(repo, MessageRole.USER, f"get_todays_workout(date={target_date})")
-
     # Call M1 adaptation check workflow
     try:
         result = run_adaptation_check(repo, target_date=target_date)
     except WorkflowError as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Adaptation check failed: {str(e)}",
-        )
         return CoachError(
             error_type="unknown",
             message=f"Failed to check workout: {str(e)}",
         )
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Adaptation check failed: {str(e)}",
-        )
         return CoachError(
             error_type="unknown",
             message=f"Unexpected error: {str(e)}",
@@ -169,11 +157,6 @@ def get_todays_workout(
     # Handle workflow failure or missing workout
     if not result.success or result.workout is None:
         error_msg = "; ".join(result.warnings) if result.warnings else "No workout available"
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"No workout for {target_date}: {error_msg}",
-        )
 
         # Check if it's because there's no plan
         if "plan" in error_msg.lower() or "not found" in error_msg.lower():
@@ -189,32 +172,29 @@ def get_todays_workout(
 
     # Load metrics and profile for enrichment
     metrics_path = daily_metrics_path(target_date)
-    metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
+    metrics_result = repo.read_yaml(
+        metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True)
+    )
 
     # For future dates or missing metrics, use most recent available metrics for context
     if isinstance(metrics_result, RepoError) or metrics_result is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"No metrics for {target_date}, checking for most recent metrics",
-        )
         # Try to find most recent metrics (look back up to 7 days)
         metrics = None
         for days_back in range(1, 8):
             past_date = target_date - timedelta(days=days_back)
             past_metrics_path = daily_metrics_path(past_date)
-            past_result = repo.read_yaml(past_metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
+            past_result = repo.read_yaml(
+                past_metrics_path,
+                DailyMetrics,
+                ReadOptions(allow_missing=True, should_validate=True),
+            )
             if not isinstance(past_result, RepoError) and past_result is not None:
                 metrics = past_result
-                log_message(
-                    repo,
-                    MessageRole.SYSTEM,
-                    f"Using metrics from {past_date} for context",
-                )
                 break
 
         if metrics is None:
-            # No historical metrics either - return error
+            # No historical metrics either -
+            return error
             return CoachError(
                 error_type="insufficient_data",
                 message="No training data available yet. Sync activities to generate metrics.",
@@ -227,11 +207,6 @@ def get_todays_workout(
     profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
     if isinstance(profile_result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load profile: {str(profile_result)}",
-        )
         return CoachError(
             error_type="validation",
             message=f"Failed to load profile: {str(profile_result)}",
@@ -248,23 +223,10 @@ def get_todays_workout(
             suggestions=result.triggers,  # Pass triggers as suggestions
         )
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to enrich workout: {str(e)}",
-        )
         return CoachError(
             error_type="unknown",
             message=f"Failed to enrich workout: {str(e)}",
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Workout for {target_date}: {enriched.workout_type_display}, "
-        f"{enriched.duration_minutes}min, RPE {enriched.target_rpe}",
-    )
 
     return enriched
 
@@ -314,9 +276,6 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     """
     repo = RepositoryIO()
 
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_weekly_status()")
-
     # Determine current week boundaries (Monday-Sunday)
     today = date.today()
     week_start = today - timedelta(days=today.weekday())  # Monday
@@ -332,15 +291,17 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
         repo.write_yaml(summary_path, weekly_summary, atomic=True)
     except Exception as e:
         # Non-critical - continue with stale or missing summary
-        # Log the error but don't fail the week command
         import logging
+
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to refresh weekly summary: {e}")
 
     # Load current plan to count planned workouts
     planned_workouts = 0
     plan_path = current_plan_path()
-    plan_result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, should_validate=True))
+    plan_result = repo.read_yaml(
+        plan_path, MasterPlan, ReadOptions(allow_missing=True, should_validate=True)
+    )
 
     if isinstance(plan_result, RepoError):
         # Plan load error
@@ -360,7 +321,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
 
     for i in range(7):
         check_date = week_start + timedelta(days=i)
-        activity_dir = activities_month_dir(check_date.strftime('%Y-%m'))
+        activity_dir = activities_month_dir(check_date.strftime("%Y-%m"))
         activity_files = repo.list_files(f"{activity_dir}/*.yaml")
 
         for activity_file in activity_files:
@@ -385,14 +346,18 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
                 else:
                     systemic_load = 0.0
 
-                activities.append({
-                    "date": str(activity.date),
-                    "day_of_week": activity.date.weekday(),  # 0=Monday, 6=Sunday
-                    "day_name": activity.date.strftime('%A').lower(),  # "monday", "tuesday", etc.
-                    "sport_type": activity.sport_type,
-                    "duration_minutes": activity.duration_minutes,
-                    "systemic_load_au": systemic_load,
-                })
+                activities.append(
+                    {
+                        "date": str(activity.date),
+                        "day_of_week": activity.date.weekday(),  # 0=Monday, 6=Sunday
+                        "day_name": activity.date.strftime(
+                            "%A"
+                        ).lower(),  # "monday", "tuesday", etc.
+                        "sport_type": activity.sport_type,
+                        "duration_minutes": activity.duration_minutes,
+                        "systemic_load_au": systemic_load,
+                    }
+                )
 
     # Calculate completion rate
     completion_rate = 0.0
@@ -407,7 +372,9 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
     tsb_change = None
 
     metrics_path = daily_metrics_path(today)
-    metrics_result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
+    metrics_result = repo.read_yaml(
+        metrics_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True)
+    )
 
     if not isinstance(metrics_result, RepoError) and metrics_result is not None:
         current_ctl = metrics_result.ctl_atl.ctl
@@ -448,14 +415,6 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
         pending_suggestions=pending_suggestions,
     )
 
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Weekly status: {completed_workouts}/{planned_workouts} workouts, "
-        f"{total_duration} minutes, CTL={current_ctl}",
-    )
-
     return status
 
 
@@ -488,17 +447,9 @@ def get_training_status() -> Union[EnrichedMetrics, CoachError]:
     """
     repo = RepositoryIO()
 
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_training_status()")
-
     # Find most recent metrics
     latest_metrics_date = _find_latest_metrics_date(repo)
     if latest_metrics_date is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No training data available",
-        )
         return CoachError(
             error_type="not_found",
             message="No training data available yet. Sync activities to generate metrics.",
@@ -509,11 +460,6 @@ def get_training_status() -> Union[EnrichedMetrics, CoachError]:
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load metrics: {str(result)}",
-        )
         return CoachError(
             error_type="validation",
             message=f"Failed to load metrics: {str(result)}",
@@ -525,24 +471,10 @@ def get_training_status() -> Union[EnrichedMetrics, CoachError]:
     try:
         enriched = enrich_metrics(daily_metrics, repo)
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to enrich metrics: {str(e)}",
-        )
         return CoachError(
             error_type="unknown",
             message=f"Failed to enrich metrics: {str(e)}",
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Training status: CTL={enriched.ctl.formatted_value}, "
-        f"TSB={enriched.tsb.formatted_value}, "
-        f"readiness={enriched.readiness.formatted_value}",
-    )
 
     return enriched
 

@@ -77,8 +77,6 @@ def mock_profile():
 
 class TestGetTodaysWorkout:
     """Test get_todays_workout() function."""
-
-    @patch("sports_coach_engine.api.coach.log_message")
     @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     @patch("sports_coach_engine.api.coach.enrich_workout")
@@ -118,10 +116,7 @@ class TestGetTodaysWorkout:
         assert result == mock_enriched_workout
 
         # Verify workflow was called
-        mock_workflow.assert_called_once()
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        mock_workflow.assert_called_once()    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_workout(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval when no workout scheduled."""
@@ -140,10 +135,7 @@ class TestGetTodaysWorkout:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "not_found"
-        assert "No workout scheduled" in result.message
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert "No workout scheduled" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_plan(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval when no plan exists."""
@@ -162,10 +154,7 @@ class TestGetTodaysWorkout:
         # Should return CoachError with no_plan type
         assert isinstance(result, CoachError)
         assert result.error_type == "no_plan"
-        assert "No training plan found" in result.message
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert "No training plan found" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_metrics(
         self, mock_workflow, mock_repo_cls, mock_log, mock_workout
@@ -189,10 +178,7 @@ class TestGetTodaysWorkout:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "insufficient_data"
-        assert "No metrics available" in result.message
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert "No metrics available" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     def test_get_todays_workout_workflow_error(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval with workflow error."""
@@ -209,10 +195,7 @@ class TestGetTodaysWorkout:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "unknown"
-        assert "Failed to check workout" in result.message
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert "Failed to check workout" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     def test_get_todays_workout_custom_date(
         self, mock_workflow, mock_repo_cls, mock_log, mock_workout, mock_daily_metrics, mock_profile
@@ -252,8 +235,6 @@ class TestGetTodaysWorkout:
 
 class TestGetWeeklyStatus:
     """Test get_weekly_status() function."""
-
-    @patch("sports_coach_engine.api.coach.log_message")
     @patch("sports_coach_engine.api.coach.RepositoryIO")
     def test_get_weekly_status_success(self, mock_repo_cls, mock_log):
         """Test successful weekly status retrieval."""
@@ -295,10 +276,7 @@ class TestGetWeeklyStatus:
         assert isinstance(result, WeeklyStatus)
         assert result.planned_workouts == 3
         assert result.completed_workouts == 0
-        assert result.completion_rate == 0.0
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert result.completion_rate == 0.0    @patch("sports_coach_engine.api.coach.RepositoryIO")
     def test_get_weekly_status_no_plan(self, mock_repo_cls, mock_log):
         """Test weekly status when no plan exists."""
         mock_repo = Mock()
@@ -334,8 +312,6 @@ class TestGetWeeklyStatus:
 
 class TestGetTrainingStatus:
     """Test get_training_status() function."""
-
-    @patch("sports_coach_engine.api.coach.log_message")
     @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
     @patch("sports_coach_engine.api.coach.enrich_metrics")
@@ -369,10 +345,7 @@ class TestGetTrainingStatus:
         assert result == mock_enriched
 
         # Verify enrichment was called
-        mock_enrich.assert_called_once()
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        mock_enrich.assert_called_once()    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
     def test_get_training_status_no_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test training status when no data available."""
@@ -387,10 +360,7 @@ class TestGetTrainingStatus:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "not_found"
-        assert "No training data available" in result.message
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert "No training data available" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
     def test_get_training_status_load_error(self, mock_find_date, mock_repo_cls, mock_log):
         """Test training status with metrics load error."""
@@ -407,10 +377,7 @@ class TestGetTrainingStatus:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "validation"
-        assert "Failed to load metrics" in result.message
-
-    @patch("sports_coach_engine.api.coach.log_message")
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert "Failed to load metrics" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
     @patch("sports_coach_engine.api.coach.enrich_metrics")
     def test_get_training_status_enrichment_error(

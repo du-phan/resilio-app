@@ -20,6 +20,29 @@ This skill provides **comprehensive race readiness assessment** and **race week 
 
 ## Core Workflow
 
+### Step 0: Retrieve Relevant Memories
+
+**Before assessing taper, load athlete's past race/taper experiences to inform strategy.**
+
+```bash
+# Retrieve past taper responses
+sce memory search --query "taper race"
+
+# Retrieve training response patterns
+sce memory list --type TRAINING_RESPONSE
+
+# Check for body concerns
+sce memory search --query "pain injury body"
+```
+
+**Apply retrieved memories**:
+- Reference past taper experiences (e.g., "felt flat with 2-week taper, better with 10-day")
+- Account for known sensitivities (e.g., "right achilles tight after >3 consecutive days")
+- Adjust race-day pacing based on training responses
+- Consider past race-day nutrition/strategy successes
+
+---
+
 ### Step 1: Verify Taper Status
 
 **Run taper verification**:
@@ -462,6 +485,40 @@ You've done the work. Now it's time to execute. Good luck!
 - Emphasize taper execution quality
 - Build confidence with concrete data
 - Provide clear race day plan
+
+---
+
+### Step 8: Post-Race Memory Capture
+
+**After race completion, capture significant experiences as memories for future reference:**
+
+```bash
+# Capture taper response
+sce memory add --type TRAINING_RESPONSE \
+  --content "10-day taper felt optimal, felt strong at race start" \
+  --tags "taper:10-days,race:10k,feeling:strong" \
+  --confidence high
+
+# Capture pacing strategy outcome
+sce memory add --type TRAINING_RESPONSE \
+  --content "Conservative start (5s/km slower) allowed strong finish" \
+  --tags "race:pacing,strategy:conservative,outcome:success" \
+  --confidence high
+
+# Capture nutrition/gear successes or issues
+sce memory add --type PREFERENCE \
+  --content "Pre-race oatmeal 3h before worked perfectly" \
+  --tags "nutrition:pre-race,timing:3h,food:oatmeal" \
+  --confidence high
+```
+
+**Patterns to capture**:
+- Taper duration effectiveness
+- Race-day pacing strategy outcomes
+- Nutrition/hydration successes or failures
+- Gear issues (blisters, chafing)
+- Mental strategy effectiveness
+- Body responses during race
 
 ---
 

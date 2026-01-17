@@ -109,6 +109,17 @@ from sports_coach_engine.api.validation import (
     ValidationError,
 )
 
+from sports_coach_engine.core.memory import (
+    save_memory,
+    load_memories,
+    get_memories_by_type,
+    get_relevant_memories,
+    get_memories_with_tag,
+    analyze_memory_patterns,
+)
+
+from sports_coach_engine.core.repository import RepositoryIO
+
 __all__ = [
     # Coach operations
     "get_todays_workout",
@@ -185,4 +196,13 @@ __all__ = [
     "api_validate_plan_structure",
     "api_assess_goal_feasibility",
     "ValidationError",
+    # Memory operations
+    "save_memory",
+    "load_memories",
+    "get_memories_by_type",
+    "get_relevant_memories",
+    "get_memories_with_tag",
+    "analyze_memory_patterns",
+    # Repository access
+    "RepositoryIO",
 ]

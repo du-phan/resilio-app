@@ -159,6 +159,58 @@ Identify trends and recurring issues from the week's data.
    - "Readiness declined from 68 → 45" (accumulating fatigue)
    - "TSB dropped from -8 → -18" (productive but monitor closely)
 
+### Step 5.5: Capture Significant Patterns as Memories
+
+**When a pattern appears 3+ times or is highly significant, persist it as a memory for future coaching context.**
+
+**Patterns to capture**:
+
+1. **Consistency patterns** (3+ occurrences):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Consistently skips Tuesday runs due to work schedule" \
+     --tags "schedule:tuesday,pattern:skip" \
+     --confidence high
+   ```
+
+2. **Intensity patterns** (recurring):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Easy runs consistently 0.5 min/km too fast (RPE 6 instead of 4)" \
+     --tags "intensity:easy,violation:pace" \
+     --confidence high
+   ```
+
+3. **Multi-sport conflicts** (if detected):
+   ```bash
+   sce memory add --type INSIGHT \
+     --content "Long run scheduled day after climbing comp consistently impacts quality" \
+     --tags "sport:climbing,conflict:schedule" \
+     --confidence high
+   ```
+
+4. **Volume tolerance** (if observed):
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Volume increases >15% per week consistently trigger ACWR spikes above 1.4" \
+     --tags "volume:progression,acwr:spike,injury-risk:high" \
+     --confidence high
+   ```
+
+5. **Recovery patterns** (if significant):
+   ```bash
+   sce memory add --type CONTEXT \
+     --content "Reports feeling flat after hard climbing sessions" \
+     --tags "recovery:poor,sport:climbing,readiness:low" \
+     --confidence medium
+   ```
+
+**Guidelines**:
+- Only capture patterns with 3+ occurrences or high coaching significance
+- Use HIGH confidence for 3+ occurrences, MEDIUM for 2 occurrences
+- Tag appropriately for future retrieval (e.g., `schedule:tuesday`, `body:knee`, `sport:climbing`)
+- Deduplication is automatic - if similar memory exists, occurrences will increment
+
 ### Step 6: Synthesize and Communicate
 
 Combine all analyses into a coherent weekly review.

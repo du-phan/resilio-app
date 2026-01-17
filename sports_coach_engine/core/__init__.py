@@ -4,7 +4,7 @@ Core Modules - Internal domain logic.
 These modules are NOT imported directly by Claude Code. They are called
 by the API layer to implement coaching functionality.
 
-Modules (M1-M14):
+Modules (M1-M13):
     - M1 workflows: Multi-step operation orchestration
     - M2 config: Configuration and secrets
     - M3 repository: File I/O operations
@@ -18,7 +18,6 @@ Modules (M1-M14):
     - M11 adaptation: Workout adaptation
     - M12 enrichment: Data context enrichment
     - M13 memory: Insights extraction
-    - M14 logger: Conversation logging
 """
 
 # Note: These are NOT re-exported at package level

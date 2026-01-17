@@ -23,6 +23,21 @@ This skill handles mid-cycle training plan adjustments due to:
 
 ## Core Workflow
 
+### Step 0: Load Adaptation History
+
+**Retrieve past illness/injury recovery patterns and adaptation preferences:**
+
+```bash
+sce memory search --query "illness injury recovery"
+sce memory list --type CONTEXT
+sce memory list --type PREFERENCE
+```
+
+**Apply retrieved patterns**:
+- Reference past recovery timelines (e.g., "Last flu took 10 days to return to full volume")
+- Acknowledge known constraints (e.g., "Work travel typically disrupts 1 week/month")
+- Respect preferences (e.g., "Prefers maintaining frequency over volume")
+
 ### Step 1: Assess Current State
 
 **Check metrics and plan status**:
@@ -355,6 +370,51 @@ Before saving any adapted plan, verify all criteria in [VALIDATION_CHECKLIST.md]
 
 ---
 
+### Step 6: Capture Adaptation Patterns
+
+**After implementing adaptation, capture patterns for future reference:**
+
+**When to capture**:
+- Illness/injury recovery took specific duration
+- Athlete reveals schedule constraint or preference
+- Adaptation strategy worked particularly well or poorly
+
+**Patterns to capture**:
+
+1. **Recovery timelines**:
+   ```bash
+   sce memory add --type TRAINING_RESPONSE \
+     --content "Returned to full training volume 10 days after flu, needed 14 days for intensity work" \
+     --tags "illness:flu,recovery-time:10-days,intensity-delay:14-days" \
+     --confidence high
+   ```
+
+2. **Schedule constraints**:
+   ```bash
+   sce memory add --type CONTEXT \
+     --content "Work travel disrupts training first week of each month, prefers easy runs during travel" \
+     --tags "schedule:travel,frequency:monthly,adaptation:easy-runs" \
+     --confidence high
+   ```
+
+3. **Adaptation preferences**:
+   ```bash
+   sce memory add --type PREFERENCE \
+     --content "Prefers maintaining 4 runs/week over total volume when time-constrained" \
+     --tags "adaptation:frequency,constraint:time,priority:frequency-over-volume" \
+     --confidence medium
+   ```
+
+4. **Injury recovery protocols that worked**:
+   ```bash
+   sce memory add --type INJURY_HISTORY \
+     --content "Achilles issue resolved with 5 days off + 2 weeks easy-only, gradual return successful" \
+     --tags "body:achilles,recovery:5-days-off,protocol:2-weeks-easy,status:resolved" \
+     --confidence high
+   ```
+
+---
+
 ## Training Methodology References
 
 **Illness Recovery**:
@@ -412,4 +472,3 @@ For unusual adaptation situations, see [EDGE_CASES.md](references/EDGE_CASES.md)
 - [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md)
 - [80/20 Running](../../../docs/training_books/80_20_matt_fitzgerald.md)
 - [Coaching Methodology](../../../docs/coaching/methodology.md#adaptation-triggers)
-

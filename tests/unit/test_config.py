@@ -48,7 +48,6 @@ class TestLoadConfig:
                 "activities_dir": "data/activities",
                 "metrics_dir": "data/metrics",
                 "plans_dir": "data/plans",
-                "conversations_dir": "data/conversations",
                 "backup_dir": "data/backup",
             }
         }

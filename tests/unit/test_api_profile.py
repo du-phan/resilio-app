@@ -53,8 +53,6 @@ def mock_profile_with_goal():
 
 class TestGetProfile:
     """Test get_profile() function."""
-
-    @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_get_profile_success(self, mock_repo_cls, mock_log, mock_profile):
         """Test successful profile retrieval."""
@@ -69,10 +67,7 @@ class TestGetProfile:
         # Should return AthleteProfile
         assert isinstance(result, Mock)  # Mock of AthleteProfile
         assert result == mock_profile
-        assert result.name == "Test Athlete"
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert result.name == "Test Athlete"    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_get_profile_with_goal(self, mock_repo_cls, mock_log, mock_profile_with_goal):
         """Test profile retrieval with goal set."""
         mock_repo = Mock()
@@ -85,10 +80,7 @@ class TestGetProfile:
         # Should return AthleteProfile with goal
         assert isinstance(result, Mock)
         assert result.goal is not None
-        assert result.goal.type == GoalType.HALF_MARATHON
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert result.goal.type == GoalType.HALF_MARATHON    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_get_profile_not_found(self, mock_repo_cls, mock_log):
         """Test profile retrieval when file not found."""
         mock_repo = Mock()
@@ -102,10 +94,7 @@ class TestGetProfile:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "not_found"
-        assert "Failed to load profile" in result.message
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "Failed to load profile" in result.message    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_get_profile_validation_error(self, mock_repo_cls, mock_log):
         """Test profile retrieval with validation error."""
         mock_repo = Mock()
@@ -129,8 +118,6 @@ class TestGetProfile:
 
 class TestUpdateProfile:
     """Test update_profile() function."""
-
-    @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_success(self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile):
@@ -155,10 +142,7 @@ class TestUpdateProfile:
         assert result == mock_profile
 
         # Verify save was called
-        mock_repo.write_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        mock_repo.write_yaml.assert_called_once()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_update_profile_invalid_field(self, mock_repo_cls, mock_log, mock_profile):
         """Test updating profile with invalid field."""
         mock_repo = Mock()
@@ -171,10 +155,7 @@ class TestUpdateProfile:
         # Should return ProfileError (Pydantic catches invalid fields during validation)
         assert isinstance(result, ProfileError)
         assert result.error_type == "validation"
-        assert "validation error" in result.message.lower()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "validation error" in result.message.lower()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_update_profile_not_found(self, mock_repo_cls, mock_log):
         """Test updating profile when file not found."""
         mock_repo = Mock()
@@ -188,10 +169,7 @@ class TestUpdateProfile:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "not_found"
-        assert "Failed to load profile" in result.message
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "Failed to load profile" in result.message    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_validation_error(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -211,10 +189,7 @@ class TestUpdateProfile:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "validation"
-        assert "Invalid profile data" in result.message
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "Invalid profile data" in result.message    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_save_error(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -245,8 +220,6 @@ class TestUpdateProfile:
 
 class TestSetGoal:
     """Test set_goal() function."""
-
-    @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.regenerate_plan")
     def test_set_goal_success(self, mock_regenerate, mock_repo_cls, mock_log, mock_profile):
@@ -277,10 +250,7 @@ class TestSetGoal:
         assert result.target_time == "1:45:00"
 
         # Verify plan was regenerated
-        mock_regenerate.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        mock_regenerate.assert_called_once()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_set_goal_invalid_race_type(self, mock_repo_cls, mock_log):
         """Test setting goal with invalid race type."""
         mock_repo = Mock()
@@ -294,10 +264,7 @@ class TestSetGoal:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "validation"
-        assert "Invalid race type" in result.message
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "Invalid race type" in result.message    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_set_goal_profile_not_found(self, mock_repo_cls, mock_log):
         """Test setting goal when profile not found."""
         mock_repo = Mock()
@@ -314,10 +281,7 @@ class TestSetGoal:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "not_found"
-        assert "Failed to load profile" in result.message
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "Failed to load profile" in result.message    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_set_goal_save_error(self, mock_repo_cls, mock_log, mock_profile):
         """Test setting goal with save error."""
         mock_repo = Mock()
@@ -336,10 +300,7 @@ class TestSetGoal:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "unknown"
-        assert "Failed to save profile" in result.message
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "Failed to save profile" in result.message    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.regenerate_plan")
     def test_set_goal_plan_generation_error(
         self, mock_regenerate, mock_repo_cls, mock_log, mock_profile
@@ -367,10 +328,7 @@ class TestSetGoal:
         # Should return ProfileError
         assert isinstance(result, ProfileError)
         assert result.error_type == "unknown"
-        assert "plan generation failed" in result.message.lower()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert "plan generation failed" in result.message.lower()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.regenerate_plan")
     def test_set_goal_without_target_time(
         self, mock_regenerate, mock_repo_cls, mock_log, mock_profile
@@ -406,8 +364,6 @@ class TestSetGoal:
 
 class TestPR1NewFields:
     """Test new profile fields added in PR1."""
-
-    @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_dict_merge_not_setattr(
@@ -430,10 +386,7 @@ class TestPR1NewFields:
         # Verify dict-merging was used (model_dump + model_validate)
         mock_profile.model_dump.assert_called_once_with(mode='json')
         mock_profile_cls.model_validate.assert_called_once()
-        assert isinstance(result, Mock)
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert isinstance(result, Mock)    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_with_email(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -452,27 +405,6 @@ class TestPR1NewFields:
         assert isinstance(result, Mock)
         mock_repo.write_yaml.assert_called_once()
 
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
-    def test_update_profile_with_injury_history(
-        self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
-    ):
-        """Test updating profile with injury_history field."""
-        mock_repo = Mock()
-        mock_repo_cls.return_value = mock_repo
-        mock_repo.read_yaml.return_value = mock_profile
-        mock_repo.write_yaml.return_value = None
-
-        mock_profile.model_dump.return_value = {"name": "Test", "injury_history": None}
-        mock_profile_cls.model_validate.return_value = mock_profile
-
-        result = update_profile(injury_history="Right ankle injury Nov 2025")
-
-        assert isinstance(result, Mock)
-        mock_repo.write_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_with_lthr(
@@ -493,10 +425,7 @@ class TestPR1NewFields:
         result = update_profile(vital_signs={"max_hr": 199, "resting_hr": 55, "lthr": 175})
 
         assert isinstance(result, Mock)
-        mock_repo.write_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        mock_repo.write_yaml.assert_called_once()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_with_vdot(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -513,10 +442,7 @@ class TestPR1NewFields:
         result = update_profile(vdot=48.5)
 
         assert isinstance(result, Mock)
-        mock_repo.write_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        mock_repo.write_yaml.assert_called_once()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_with_running_experience_years(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -533,10 +459,7 @@ class TestPR1NewFields:
         result = update_profile(running_experience_years=3)
 
         assert isinstance(result, Mock)
-        mock_repo.write_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        mock_repo.write_yaml.assert_called_once()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_with_weekly_km(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -553,10 +476,7 @@ class TestPR1NewFields:
         result = update_profile(current_weekly_run_km=22.5)
 
         assert isinstance(result, Mock)
-        mock_repo.write_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        mock_repo.write_yaml.assert_called_once()    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_validation_immediate(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -581,8 +501,6 @@ class TestPR1NewFields:
 
 class TestPR2ConstraintFields:
     """Test constraint fields added in PR2."""
-
-    @patch("sports_coach_engine.api.profile.log_message")
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_create_profile_with_available_days(self, mock_repo_cls, mock_log):
         """Test creating profile with available_run_days constraint."""
@@ -603,10 +521,7 @@ class TestPR2ConstraintFields:
         # Should return AthleteProfile
         assert isinstance(result, AthleteProfile)
         assert result.name == "Test Athlete"
-        assert result.constraints.available_run_days == available_days
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert result.constraints.available_run_days == available_days    @patch("sports_coach_engine.api.profile.RepositoryIO")
     @patch("sports_coach_engine.api.profile.AthleteProfile")
     def test_update_profile_with_preferred_days(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
@@ -641,10 +556,7 @@ class TestPR2ConstraintFields:
         )
 
         # Should return updated AthleteProfile
-        assert isinstance(result, AthleteProfile)
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert isinstance(result, AthleteProfile)    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_create_profile_with_time_preference(self, mock_repo_cls, mock_log):
         """Test creating profile with time_preference constraint."""
         from sports_coach_engine.schemas.profile import TimePreference
@@ -661,10 +573,7 @@ class TestPR2ConstraintFields:
 
         # Should return AthleteProfile
         assert isinstance(result, AthleteProfile)
-        assert result.constraints.time_preference == TimePreference.MORNING
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert result.constraints.time_preference == TimePreference.MORNING    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_create_profile_with_all_constraint_fields(self, mock_repo_cls, mock_log):
         """Test creating profile with all 3 new constraint fields."""
         from sports_coach_engine.schemas.profile import Weekday, TimePreference
@@ -688,10 +597,7 @@ class TestPR2ConstraintFields:
         assert isinstance(result, AthleteProfile)
         assert result.constraints.available_run_days == available_days
         assert result.constraints.preferred_run_days == preferred_days
-        assert result.constraints.time_preference == TimePreference.EVENING
-
-    @patch("sports_coach_engine.api.profile.log_message")
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+        assert result.constraints.time_preference == TimePreference.EVENING    @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_create_profile_constraint_defaults(self, mock_repo_cls, mock_log):
         """Test that constraint fields use sensible defaults when not provided."""
         from sports_coach_engine.schemas.profile import Weekday, TimePreference

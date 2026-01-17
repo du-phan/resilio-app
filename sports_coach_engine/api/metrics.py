@@ -13,7 +13,6 @@ from sports_coach_engine.core.paths import daily_metrics_path
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.enrichment import enrich_metrics
-from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.metrics import DailyMetrics, ReadinessScore, IntensityDistribution
 from sports_coach_engine.schemas.enrichment import EnrichedMetrics
 
@@ -80,17 +79,9 @@ def get_current_metrics() -> Union[EnrichedMetrics, MetricsError]:
     """
     repo = RepositoryIO()
 
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_current_metrics()")
-
     # Find most recent metrics file
     latest_metrics_date = _find_latest_metrics_date(repo)
     if latest_metrics_date is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No metrics found - no training data available",
-        )
         return MetricsError(
             error_type="not_found",
             message="No metrics available yet. Sync activities or log workouts to generate metrics.",
@@ -101,11 +92,6 @@ def get_current_metrics() -> Union[EnrichedMetrics, MetricsError]:
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load metrics: {str(result)}",
-        )
         return MetricsError(
             error_type="validation",
             message=f"Failed to load metrics: {str(result)}",
@@ -117,26 +103,10 @@ def get_current_metrics() -> Union[EnrichedMetrics, MetricsError]:
     try:
         enriched = enrich_metrics(daily_metrics, repo)
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to enrich metrics: {str(e)}",
-        )
         return MetricsError(
             error_type="unknown",
             message=f"Failed to enrich metrics: {str(e)}",
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Returned metrics for {enriched.date}: "
-        f"CTL={enriched.ctl.formatted_value}, "
-        f"TSB={enriched.tsb.formatted_value}, "
-        f"readiness={enriched.readiness.formatted_value}",
-    )
-
     return enriched
 
 
@@ -176,17 +146,9 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
     """
     repo = RepositoryIO()
 
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_readiness()")
-
     # Find most recent metrics
     latest_metrics_date = _find_latest_metrics_date(repo)
     if latest_metrics_date is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No metrics found - cannot compute readiness",
-        )
         return MetricsError(
             error_type="not_found",
             message="No readiness data available yet. Sync activities to generate metrics.",
@@ -197,11 +159,6 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
     result = repo.read_yaml(metrics_path, DailyMetrics, ReadOptions(should_validate=True))
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load metrics: {str(result)}",
-        )
         return MetricsError(
             error_type="validation",
             message=f"Failed to load metrics: {str(result)}",
@@ -211,11 +168,6 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
 
     # Extract readiness
     if daily_metrics.readiness is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "Readiness not computed - insufficient data",
-        )
         return MetricsError(
             error_type="insufficient_data",
             message="Readiness requires at least 7 days of training data",
@@ -223,14 +175,6 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
         )
 
     readiness = daily_metrics.readiness
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Readiness: {readiness.score}/100 ({readiness.level.value})",
-    )
-
     return readiness
 
 
@@ -275,10 +219,6 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
         ...         print(f"80/20 compliance: {status}")
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, f"get_intensity_distribution(days={days})")
-
     # Load metrics for the period
     intensity_data = []
     today = date.today()
@@ -300,11 +240,6 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
 
     # Check if we have any data
     if not intensity_data:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"No intensity data found for last {days} days",
-        )
         return MetricsError(
             error_type="not_found",
             message=f"No training data available for the last {days} days",
@@ -318,11 +253,6 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
 
     # Calculate percentages
     if total_minutes == 0:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"No training minutes found in last {days} days",
-        )
         return MetricsError(
             error_type="insufficient_data",
             message=f"No training time recorded in the last {days} days",
@@ -351,19 +281,9 @@ def get_intensity_distribution(days: int = 7) -> Union[IntensityDistribution, Me
         is_compliant=is_compliant,
         target_low_percent=target_low_percent,
     )
-
-    # Log response
     compliance_str = ""
     if is_compliant is not None:
         compliance_str = f", 80/20: {'✓' if is_compliant else '✗'}"
-
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Intensity distribution ({days} days): "
-        f"Low={low_percent:.0f}%, Moderate={moderate_percent:.0f}%, High={high_percent:.0f}%{compliance_str}",
-    )
-
     return distribution
 
 

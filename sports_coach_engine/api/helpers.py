@@ -41,7 +41,17 @@ def is_error(result) -> bool:
 
     return isinstance(
         result,
-        (ProfileError, SyncError, CoachError, MetricsError, PlanError, VDOTError, GuardrailsError, AnalysisError, ValidationError),
+        (
+            ProfileError,
+            SyncError,
+            CoachError,
+            MetricsError,
+            PlanError,
+            VDOTError,
+            GuardrailsError,
+            AnalysisError,
+            ValidationError,
+        ),
     )
 
 

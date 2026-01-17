@@ -13,7 +13,6 @@ from sports_coach_engine.core.paths import current_plan_path, athlete_profile_pa
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.workflows import run_plan_generation, WorkflowError
-from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.schemas.plan import MasterPlan
 from sports_coach_engine.schemas.profile import Goal, AthleteProfile
 from sports_coach_engine.schemas.adaptation import Suggestion
@@ -107,49 +106,26 @@ def get_current_plan() -> Union[MasterPlan, PlanError]:
         ...             break
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_current_plan()")
-
     # Load current plan
     plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(allow_missing=True, should_validate=True))
 
     if result is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No current plan found",
-        )
         return PlanError(
             error_type="not_found",
             message="No training plan found. Set a goal to generate a plan.",
         )
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load plan: {str(result)}",
-        )
         return PlanError(
             error_type="validation",
             message=f"Failed to load plan: {str(result)}",
         )
 
     plan = result
-
-    # Log response
     # Get goal type for logging (plan.goal is a dict, not Goal object)
     goal_type = plan.goal.get('type') if isinstance(plan.goal, dict) else plan.goal.type
     goal_type_str = goal_type.value if hasattr(goal_type, 'value') else str(goal_type)
-
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Returned plan: {plan.total_weeks} weeks, goal={goal_type_str}",
-    )
-
     return plan
 
 
@@ -194,27 +170,12 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
     """
     repo = RepositoryIO()
 
-    # Log user request
-    if goal:
-        log_message(
-            repo,
-            MessageRole.USER,
-            f"regenerate_plan(goal={goal.type.value}, target_date={goal.target_date})",
-        )
-    else:
-        log_message(repo, MessageRole.USER, "regenerate_plan()")
-
     # Update profile with new goal if provided
     if goal:
         profile_path = athlete_profile_path()
         profile_result = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
 
         if isinstance(profile_result, RepoError):
-            log_message(
-                repo,
-                MessageRole.SYSTEM,
-                f"Failed to load profile: {str(profile_result)}",
-            )
             return PlanError(
                 error_type="validation",
                 message=f"Failed to load profile: {str(profile_result)}",
@@ -226,11 +187,6 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
         # Save updated profile
         write_result = repo.write_yaml(profile_path, profile)
         if isinstance(write_result, RepoError):
-            log_message(
-                repo,
-                MessageRole.SYSTEM,
-                f"Failed to save profile: {str(write_result)}",
-            )
             return PlanError(
                 error_type="validation",
                 message=f"Failed to save profile: {str(write_result)}",
@@ -240,21 +196,11 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
     try:
         result = run_plan_generation(repo, goal=goal)
     except WorkflowError as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Plan generation failed: {str(e)}",
-        )
         return PlanError(
             error_type="unknown",
             message=f"Failed to generate plan: {str(e)}",
         )
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Plan generation failed: {str(e)}",
-        )
         return PlanError(
             error_type="unknown",
             message=f"Unexpected error: {str(e)}",
@@ -262,14 +208,7 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
 
     # Handle workflow failure
     if not result.success or result.plan is None:
-        error_msg = "; ".join(result.warnings) if result.warnings else "Plan generation failed"
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Plan generation failed: {error_msg}",
-        )
-
-        # Check if it's because there's no goal
+        error_msg = "; ".join(result.warnings) if result.warnings else "Plan generation failed"        # Check if it's because there's no goal
         if "goal" in error_msg.lower():
             return PlanError(
                 error_type="no_goal",
@@ -285,27 +224,13 @@ def regenerate_plan(goal: Optional[Goal] = None) -> Union[MasterPlan, PlanError]
     try:
         plan = MasterPlan.model_validate(result.plan)
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to parse plan: {str(e)}",
-        )
         return PlanError(
             error_type="unknown",
             message=f"Failed to parse generated plan: {str(e)}",
         )
-
-    # Log response
     # Get goal type for logging (plan.goal is a dict, not Goal object)
     goal_type = plan.goal.get('type') if isinstance(plan.goal, dict) else plan.goal.type
     goal_type_str = goal_type.value if hasattr(goal_type, 'value') else str(goal_type)
-
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Generated new plan: {plan.total_weeks} weeks, goal={goal_type_str}",
-    )
-
     return plan
 
 
@@ -341,20 +266,9 @@ def get_pending_suggestions() -> list[Suggestion]:
     """
     repo = RepositoryIO()
 
-    # Log user request
-    log_message(repo, MessageRole.USER, "get_pending_suggestions()")
-
     # Simplified for v0: return empty list
     # Full implementation would scan suggestions/ directory
     suggestions = []
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Returned {len(suggestions)} pending suggestions",
-    )
-
     return suggestions
 
 
@@ -396,17 +310,7 @@ def accept_suggestion(suggestion_id: str) -> Union[AcceptResult, PlanError]:
         ...     print(result.confirmation_message)
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, f"accept_suggestion(id={suggestion_id})")
-
-    # Simplified for v0: not implemented
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        "Suggestion management not fully implemented in v0",
-    )
-
+    #  Simplified for v0: not implemented
     return PlanError(
         error_type="not_found",
         message=f"Suggestion {suggestion_id} not found. Suggestion management is simplified in v0.",
@@ -448,17 +352,7 @@ def decline_suggestion(suggestion_id: str) -> Union[DeclineResult, PlanError]:
         ...     print("Suggestion declined, keeping original workout")
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, f"decline_suggestion(id={suggestion_id})")
-
-    # Simplified for v0: not implemented
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        "Suggestion management not fully implemented in v0",
-    )
-
+    #  Simplified for v0: not implemented
     return PlanError(
         error_type="not_found",
         message=f"Suggestion {suggestion_id} not found. Suggestion management is simplified in v0.",
@@ -501,31 +395,17 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
         >>> plan = populate_plan_workouts(weeks)
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, f"populate_plan_workouts(weeks={len(weeks_data)})")
-
     # 1. Load current plan
     plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No plan found for populate",
-        )
         return PlanError(
             error_type="not_found",
             message="No plan found. Run 'sce plan regen' first to create skeleton.",
         )
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load plan: {str(result)}",
-        )
         return PlanError(
             error_type="validation",
             message=f"Failed to load plan: {str(result)}",
@@ -538,7 +418,6 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
         from sports_coach_engine.schemas.plan import WeekPlan
         validated_weeks = [WeekPlan.model_validate(w) for w in weeks_data]
     except Exception as e:
-        log_message(repo, MessageRole.SYSTEM, f"Validation failed: {str(e)}")
         return PlanError(
             error_type="validation",
             message=f"Invalid week data: {str(e)}",
@@ -551,7 +430,6 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
     try:
         complete_plan = MasterPlan.model_validate(plan.model_dump())
     except Exception as e:
-        log_message(repo, MessageRole.SYSTEM, f"Plan validation failed: {str(e)}")
         return PlanError(
             error_type="validation",
             message=f"Complete plan validation failed: {str(e)}",
@@ -560,7 +438,6 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
     # 5. Save to YAML
     write_result = repo.write_yaml(plan_path, complete_plan)
     if isinstance(write_result, RepoError):
-        log_message(repo, MessageRole.SYSTEM, f"Failed to save plan: {str(write_result)}")
         return PlanError(
             error_type="unknown",
             message=f"Failed to save plan: {str(write_result)}",
@@ -568,11 +445,6 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     # 6. Log success
     total_workouts = sum(len(w.workouts) for w in validated_weeks)
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Populated {len(validated_weeks)} weeks with {total_workouts} workouts",
-    )
 
     return complete_plan
 
@@ -612,31 +484,17 @@ def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, Pla
         >>> plan = update_plan_week(5, week5)
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, f"update_plan_week(week={week_number})")
-
     # 1. Load current plan
     plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No plan found for update",
-        )
         return PlanError(
             error_type="not_found",
             message="No plan found. Run 'sce plan regen' first to create skeleton.",
         )
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load plan: {str(result)}",
-        )
         return PlanError(
             error_type="validation",
             message=f"Failed to load plan: {str(result)}",
@@ -649,7 +507,6 @@ def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, Pla
         from sports_coach_engine.schemas.plan import WeekPlan
         validated_week = WeekPlan.model_validate(week_data)
     except Exception as e:
-        log_message(repo, MessageRole.SYSTEM, f"Validation failed: {str(e)}")
         return PlanError(
             error_type="validation",
             message=f"Invalid week data: {str(e)}",
@@ -679,7 +536,6 @@ def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, Pla
     try:
         complete_plan = MasterPlan.model_validate(plan.model_dump())
     except Exception as e:
-        log_message(repo, MessageRole.SYSTEM, f"Plan validation failed: {str(e)}")
         return PlanError(
             error_type="validation",
             message=f"Complete plan validation failed: {str(e)}",
@@ -688,7 +544,6 @@ def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, Pla
     # 5. Save to YAML
     write_result = repo.write_yaml(plan_path, complete_plan)
     if isinstance(write_result, RepoError):
-        log_message(repo, MessageRole.SYSTEM, f"Failed to save plan: {str(write_result)}")
         return PlanError(
             error_type="unknown",
             message=f"Failed to save plan: {str(write_result)}",
@@ -697,12 +552,6 @@ def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, Pla
     # 6. Log success
     action = "Updated" if week_found else "Added"
     total_workouts = len(validated_week.workouts)
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"{action} week {week_number} with {total_workouts} workouts",
-    )
-
     return complete_plan
 
 
@@ -739,31 +588,17 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
         >>> plan = update_plan_from_week(5, remaining_weeks)
     """
     repo = RepositoryIO()
-
-    # Log user request
-    log_message(repo, MessageRole.USER, f"update_plan_from_week(start={start_week}, weeks={len(weeks_data)})")
-
     # 1. Load current plan
     plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            "No plan found for update",
-        )
         return PlanError(
             error_type="not_found",
             message="No plan found. Run 'sce plan regen' first to create skeleton.",
         )
 
     if isinstance(result, RepoError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Failed to load plan: {str(result)}",
-        )
         return PlanError(
             error_type="validation",
             message=f"Failed to load plan: {str(result)}",
@@ -776,7 +611,6 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
         from sports_coach_engine.schemas.plan import WeekPlan
         validated_weeks = [WeekPlan.model_validate(w) for w in weeks_data]
     except Exception as e:
-        log_message(repo, MessageRole.SYSTEM, f"Validation failed: {str(e)}")
         return PlanError(
             error_type="validation",
             message=f"Invalid week data: {str(e)}",
@@ -799,7 +633,6 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
     try:
         complete_plan = MasterPlan.model_validate(plan.model_dump())
     except Exception as e:
-        log_message(repo, MessageRole.SYSTEM, f"Plan validation failed: {str(e)}")
         return PlanError(
             error_type="validation",
             message=f"Complete plan validation failed: {str(e)}",
@@ -808,7 +641,6 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
     # 5. Save to YAML
     write_result = repo.write_yaml(plan_path, complete_plan)
     if isinstance(write_result, RepoError):
-        log_message(repo, MessageRole.SYSTEM, f"Failed to save plan: {str(write_result)}")
         return PlanError(
             error_type="unknown",
             message=f"Failed to save plan: {str(write_result)}",
@@ -816,10 +648,5 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
 
     # 6. Log success
     total_workouts = sum(len(w.workouts) for w in validated_weeks)
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Updated {len(validated_weeks)} weeks from week {start_week} onwards with {total_workouts} workouts",
-    )
 
     return complete_plan

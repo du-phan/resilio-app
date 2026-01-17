@@ -160,7 +160,9 @@ def api_validate_plan_structure(
             )
 
     if not isinstance(weekly_volumes_km, list) or len(weekly_volumes_km) == 0:
-        return ValidationError("weekly_volumes_km must be a non-empty list", "INVALID_WEEKLY_VOLUMES")
+        return ValidationError(
+            "weekly_volumes_km must be a non-empty list", "INVALID_WEEKLY_VOLUMES"
+        )
 
     for idx, vol in enumerate(weekly_volumes_km, 1):
         if not isinstance(vol, (int, float)) or vol < 0:
@@ -250,7 +252,9 @@ def api_assess_goal_feasibility(
 
     if current_vdot is not None:
         if not isinstance(current_vdot, int) or current_vdot <= 0:
-            return ValidationError("current_vdot must be a positive integer or None", "INVALID_CURRENT_VDOT")
+            return ValidationError(
+                "current_vdot must be a positive integer or None", "INVALID_CURRENT_VDOT"
+            )
 
     if not isinstance(current_ctl, (int, float)) or current_ctl < 0:
         return ValidationError("current_ctl must be a non-negative number", "INVALID_CURRENT_CTL")

@@ -56,8 +56,6 @@ def mock_profile():
 
 class TestGetCurrentPlan:
     """Test get_current_plan() function."""
-
-    @patch("sports_coach_engine.api.plan.log_message")
     @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_get_current_plan_success(self, mock_repo_cls, mock_log, mock_plan):
         """Test successful plan retrieval."""
@@ -75,10 +73,7 @@ class TestGetCurrentPlan:
         assert result.total_weeks == 12
 
         # Verify read_yaml was called correctly
-        mock_repo.read_yaml.assert_called_once()
-
-    @patch("sports_coach_engine.api.plan.log_message")
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        mock_repo.read_yaml.assert_called_once()    @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_get_current_plan_not_found(self, mock_repo_cls, mock_log):
         """Test plan retrieval when no plan exists."""
         mock_repo = Mock()
@@ -92,10 +87,7 @@ class TestGetCurrentPlan:
         # Should return PlanError
         assert isinstance(result, PlanError)
         assert result.error_type == "not_found"
-        assert "No training plan found" in result.message
-
-    @patch("sports_coach_engine.api.plan.log_message")
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert "No training plan found" in result.message    @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_get_current_plan_validation_error(self, mock_repo_cls, mock_log):
         """Test plan retrieval with validation error."""
         mock_repo = Mock()
@@ -119,8 +111,6 @@ class TestGetCurrentPlan:
 
 class TestRegeneratePlan:
     """Test regenerate_plan() function."""
-
-    @patch("sports_coach_engine.api.plan.log_message")
     @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_no_goal(self, mock_workflow, mock_repo_cls, mock_log, mock_plan):
@@ -144,10 +134,7 @@ class TestRegeneratePlan:
         # Verify workflow was called
         mock_workflow.assert_called_once()
         call_args = mock_workflow.call_args
-        assert call_args.kwargs["goal"] is None
-
-    @patch("sports_coach_engine.api.plan.log_message")
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert call_args.kwargs["goal"] is None    @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_with_new_goal(
         self, mock_workflow, mock_repo_cls, mock_log, mock_plan, mock_profile
@@ -186,10 +173,7 @@ class TestRegeneratePlan:
         # Verify workflow was called with goal
         mock_workflow.assert_called_once()
         call_args = mock_workflow.call_args
-        assert call_args.kwargs["goal"] == new_goal
-
-    @patch("sports_coach_engine.api.plan.log_message")
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert call_args.kwargs["goal"] == new_goal    @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_regenerate_plan_profile_error(self, mock_repo_cls, mock_log):
         """Test regenerating plan with profile error."""
         mock_repo = Mock()
@@ -209,10 +193,7 @@ class TestRegeneratePlan:
         # Should return PlanError
         assert isinstance(result, PlanError)
         assert result.error_type == "validation"
-        assert "Failed to load profile" in result.message
-
-    @patch("sports_coach_engine.api.plan.log_message")
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert "Failed to load profile" in result.message    @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_workflow_failure(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan with workflow failure."""
@@ -229,10 +210,7 @@ class TestRegeneratePlan:
         # Should return PlanError
         assert isinstance(result, PlanError)
         assert result.error_type == "unknown"
-        assert "Failed to generate plan" in result.message
-
-    @patch("sports_coach_engine.api.plan.log_message")
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert "Failed to generate plan" in result.message    @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_no_goal_set(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan when no goal is set."""
@@ -261,8 +239,6 @@ class TestRegeneratePlan:
 
 class TestGetPendingSuggestions:
     """Test get_pending_suggestions() function."""
-
-    @patch("sports_coach_engine.api.plan.log_message")
     @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_get_pending_suggestions_empty(self, mock_repo_cls, mock_log):
         """Test getting pending suggestions (v0 simplified)."""
@@ -283,8 +259,6 @@ class TestGetPendingSuggestions:
 
 class TestAcceptSuggestion:
     """Test accept_suggestion() function."""
-
-    @patch("sports_coach_engine.api.plan.log_message")
     @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_accept_suggestion_v0_simplified(self, mock_repo_cls, mock_log):
         """Test accepting suggestion (v0 simplified)."""
@@ -306,8 +280,6 @@ class TestAcceptSuggestion:
 
 class TestDeclineSuggestion:
     """Test decline_suggestion() function."""
-
-    @patch("sports_coach_engine.api.plan.log_message")
     @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_decline_suggestion_v0_simplified(self, mock_repo_cls, mock_log):
         """Test declining suggestion (v0 simplified)."""

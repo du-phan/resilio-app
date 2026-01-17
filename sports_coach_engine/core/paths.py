@@ -64,11 +64,6 @@ def get_plans_dir() -> str:
     return _get_paths().plans_dir
 
 
-def get_conversations_dir() -> str:
-    """Get conversations data directory path."""
-    return _get_paths().conversations_dir
-
-
 def get_backup_dir() -> str:
     """Get backup data directory path."""
     return _get_paths().backup_dir
@@ -197,56 +192,3 @@ def plan_workouts_dir(week_number: int) -> str:
     return f"{get_plans_dir()}/workouts/week_{week_number:02d}"
 
 
-# ==========================================================================
-# CONVERSATIONS PATHS
-# ==========================================================================
-
-
-def transcripts_dir(year_month: str) -> str:
-    """Get path to conversation transcripts for a month.
-
-    Args:
-        year_month: Month in YYYY-MM format
-
-    Returns:
-        Path to transcripts directory
-    """
-    return f"{get_conversations_dir()}/transcripts/{year_month}"
-
-
-def summaries_dir(year_month: str) -> str:
-    """Get path to conversation summaries for a month.
-
-    Args:
-        year_month: Month in YYYY-MM format
-
-    Returns:
-        Path to summaries directory
-    """
-    return f"{get_conversations_dir()}/summaries/{year_month}"
-
-
-def transcript_path(year_month: str, session_id: str) -> str:
-    """Get path to a specific transcript file.
-
-    Args:
-        year_month: Month in YYYY-MM format
-        session_id: Session identifier
-
-    Returns:
-        Path to transcript file (e.g., "data/conversations/transcripts/2026-01/session_001.jsonl")
-    """
-    return f"{get_conversations_dir()}/transcripts/{year_month}/{session_id}.jsonl"
-
-
-def summary_path(year_month: str, date_str: str) -> str:
-    """Get path to a specific summary file.
-
-    Args:
-        year_month: Month in YYYY-MM format
-        date_str: Date string
-
-    Returns:
-        Path to summary file
-    """
-    return f"{get_conversations_dir()}/summaries/{year_month}/{date_str}_summary.json"

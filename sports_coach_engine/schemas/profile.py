@@ -171,7 +171,6 @@ class AthleteProfile(BaseModel):
 
     # Running Background
     running_experience_years: Optional[int] = Field(default=None, ge=0)
-    injury_history: Optional[str] = None
 
     # Recent Fitness Snapshot
     recent_race: Optional[RecentRace] = None

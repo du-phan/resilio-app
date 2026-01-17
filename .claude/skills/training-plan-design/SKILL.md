@@ -24,6 +24,32 @@ This skill designs evidence-based training plans using:
 
 ## Workflow
 
+### Step 0: Retrieve Relevant Memories
+
+**Before designing plan, load athlete's history to inform volume/intensity decisions.**
+
+```bash
+# Retrieve injury history
+sce memory list --type INJURY_HISTORY
+
+# Retrieve training response patterns
+sce memory list --type TRAINING_RESPONSE
+
+# Retrieve preferences
+sce memory list --type PREFERENCE
+
+# Search for specific concerns
+sce memory search --query "volume injury recovery"
+```
+
+**Apply retrieved memories**:
+- Cap weekly volume based on past injury triggers (e.g., "knee pain after 18km+")
+- Adjust recovery based on observed patterns (e.g., "needs 3 easy days after hard climbing")
+- Respect schedule constraints (e.g., "Tuesday work travel monthly")
+- Reference preferences (e.g., "prefers frequency over volume")
+
+---
+
 ### Step 1: Gather Context
 
 Get athlete's current state and confirm training constraints.

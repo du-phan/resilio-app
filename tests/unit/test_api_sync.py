@@ -72,8 +72,6 @@ def mock_manual_result(mock_activity):
 
 class TestSyncStrava:
     """Test sync_strava() function."""
-
-    @patch("sports_coach_engine.api.sync.log_message")
     @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     @patch("sports_coach_engine.api.sync.enrich_metrics")
@@ -98,10 +96,7 @@ class TestSyncStrava:
         assert result.activities_failed == 0
 
         # Verify workflow was called
-        mock_workflow.assert_called_once()
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.load_config")
+        mock_workflow.assert_called_once()    @patch("sports_coach_engine.api.sync.load_config")
     def test_sync_strava_config_error(self, mock_config, mock_log):
         """Test sync failure due to config error."""
         # Mock config error
@@ -115,10 +110,7 @@ class TestSyncStrava:
         # Should return SyncError
         assert isinstance(result, SyncError)
         assert result.error_type == "config"
-        assert "Config" in result.message
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.load_config")
+        assert "Config" in result.message    @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     def test_sync_strava_workflow_failure(self, mock_workflow, mock_config, mock_log):
         """Test sync failure in workflow."""
@@ -139,10 +131,7 @@ class TestSyncStrava:
 
         # Should return SyncError
         assert isinstance(result, SyncError)
-        assert result.error_type in ["partial", "unknown"]
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.load_config")
+        assert result.error_type in ["partial", "unknown"]    @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     def test_sync_strava_with_since_parameter(self, mock_workflow, mock_config, mock_log, mock_sync_result):
         """Test sync with 'since' parameter."""
@@ -155,10 +144,7 @@ class TestSyncStrava:
         # Verify 'since' was passed to workflow
         mock_workflow.assert_called_once()
         call_args = mock_workflow.call_args
-        assert call_args.kwargs.get("since") == since_date
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.load_config")
+        assert call_args.kwargs.get("since") == since_date    @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     @patch("sports_coach_engine.api.sync.enrich_metrics")
     def test_sync_strava_enrichment_failure_fallback(
@@ -184,8 +170,6 @@ class TestSyncStrava:
 
 class TestLogActivity:
     """Test log_activity() function."""
-
-    @patch("sports_coach_engine.api.sync.log_message")
     @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
     def test_log_activity_success(self, mock_workflow, mock_log, mock_manual_result):
         """Test successful manual activity logging."""
@@ -207,10 +191,7 @@ class TestLogActivity:
         call_args = mock_workflow.call_args
         assert call_args.kwargs["sport_type"] == "run"
         assert call_args.kwargs["duration_minutes"] == 45
-        assert call_args.kwargs["rpe"] == 6
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+        assert call_args.kwargs["rpe"] == 6    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
     def test_log_activity_with_distance(self, mock_workflow, mock_log, mock_manual_result):
         """Test logging activity with distance."""
         mock_workflow.return_value = mock_manual_result
@@ -223,10 +204,7 @@ class TestLogActivity:
 
         # Verify distance was passed
         call_args = mock_workflow.call_args
-        assert call_args.kwargs["distance_km"] == 10.5
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+        assert call_args.kwargs["distance_km"] == 10.5    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
     def test_log_activity_defaults_to_today(self, mock_workflow, mock_log, mock_manual_result):
         """Test that activity date defaults to today."""
         mock_workflow.return_value = mock_manual_result
@@ -238,10 +216,7 @@ class TestLogActivity:
 
         # Verify date defaults to today
         call_args = mock_workflow.call_args
-        assert call_args.kwargs["activity_date"] == date.today()
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+        assert call_args.kwargs["activity_date"] == date.today()    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
     def test_log_activity_workflow_failure(self, mock_workflow, mock_log):
         """Test manual activity logging with workflow failure."""
         # Mock workflow failure
@@ -259,10 +234,7 @@ class TestLogActivity:
 
         # Should return SyncError
         assert isinstance(result, SyncError)
-        assert result.error_type == "validation"
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+        assert result.error_type == "validation"    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
     def test_log_activity_exception_handling(self, mock_workflow, mock_log):
         """Test exception handling in manual activity logging."""
         # Mock exception
@@ -285,8 +257,6 @@ class TestLogActivity:
 
 class TestErrorClassification:
     """Test error classification helper."""
-
-    @patch("sports_coach_engine.api.sync.log_message")
     @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     def test_strava_error_classification(self, mock_workflow, mock_config, mock_log):
@@ -299,10 +269,7 @@ class TestErrorClassification:
         result = sync_strava()
 
         assert isinstance(result, SyncError)
-        assert result.error_type == "auth"
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.load_config")
+        assert result.error_type == "auth"    @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     def test_rate_limit_error_classification(self, mock_workflow, mock_config, mock_log):
         """Test rate limit errors are classified correctly."""
@@ -314,10 +281,7 @@ class TestErrorClassification:
         result = sync_strava()
 
         assert isinstance(result, SyncError)
-        assert result.error_type == "rate_limit"
-
-    @patch("sports_coach_engine.api.sync.log_message")
-    @patch("sports_coach_engine.api.sync.load_config")
+        assert result.error_type == "rate_limit"    @patch("sports_coach_engine.api.sync.load_config")
     @patch("sports_coach_engine.api.sync.run_sync_workflow")
     def test_network_error_classification(self, mock_workflow, mock_config, mock_log):
         """Test network errors are classified correctly."""

@@ -17,7 +17,6 @@ from sports_coach_engine.core.workflows import (
     WorkflowError,
 )
 from sports_coach_engine.core.strava import StravaRateLimitError
-from sports_coach_engine.core.logger import log_message, MessageRole
 from sports_coach_engine.core.enrichment import enrich_metrics, interpret_load
 from sports_coach_engine.schemas.enrichment import SyncSummary
 from sports_coach_engine.schemas.activity import NormalizedActivity
@@ -101,11 +100,6 @@ def sync_strava(
     repo = RepositoryIO()
     config_result = load_config(repo.repo_root)
     if isinstance(config_result, ConfigError):
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Sync failed: config error - {config_result.message}",
-        )
         return SyncError(
             error_type="config",
             message=f"Configuration error: {config_result.message}",
@@ -113,22 +107,10 @@ def sync_strava(
 
     config = config_result
 
-    # Log user request
-    log_message(
-        repo,
-        MessageRole.USER,
-        f"sync_strava(since={since})",
-    )
-
     # Call M1 workflow
     try:
         result = run_sync_workflow(repo, config, since=since)
     except StravaRateLimitError as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Sync failed: rate limit exceeded - {str(e)}",
-        )
         return SyncError(
             error_type="rate_limit",
             message="Rate limit exceeded. Please wait and try again.",
@@ -136,21 +118,11 @@ def sync_strava(
         )
     except WorkflowError as e:
         error_type = _classify_workflow_error(e)
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Sync workflow failed: {error_type} - {str(e)}",
-        )
         return SyncError(
             error_type=error_type,
             message=str(e),
         )
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Sync workflow failed: unknown error - {str(e)}",
-        )
         return SyncError(
             error_type="unknown",
             message=f"Unexpected error: {str(e)}",
@@ -159,11 +131,6 @@ def sync_strava(
     # Handle workflow failure
     if not result.success:
         error_msg = "; ".join(result.warnings) if result.warnings else "Sync failed"
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Sync completed with errors: {error_msg}",
-        )
         return SyncError(
             error_type="partial" if result.partial_failure else "unknown",
             message=error_msg,
@@ -177,21 +144,7 @@ def sync_strava(
     except Exception as e:
         # Enrichment failure shouldn't block returning the result
         # Fall back to basic summary
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Warning: enrichment failed, returning basic summary: {str(e)}",
-        )
         sync_summary = _build_basic_sync_summary(result)
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Synced {sync_summary.activities_imported} activities, "
-        f"{sync_summary.activities_failed} failed, "
-        f"{sync_summary.suggestions_generated} suggestions generated",
-    )
 
     return sync_summary
 
@@ -248,17 +201,7 @@ def log_activity(
 
     # Default activity date to today
     if activity_date is None:
-        activity_date = date.today()
-
-    # Log user request
-    log_message(
-        repo,
-        MessageRole.USER,
-        f"log_activity(sport_type={sport_type}, duration={duration_minutes}min, "
-        f"rpe={rpe}, date={activity_date})",
-    )
-
-    # Call M1 workflow
+        activity_date = date.today()  # Call M1 workflow
     try:
         result = run_manual_activity_workflow(
             repo=repo,
@@ -271,21 +214,11 @@ def log_activity(
         )
     except WorkflowError as e:
         error_type = _classify_workflow_error(e)
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Manual activity workflow failed: {error_type} - {str(e)}",
-        )
         return SyncError(
             error_type=error_type,
             message=str(e),
         )
     except Exception as e:
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Manual activity workflow failed: unknown error - {str(e)}",
-        )
         return SyncError(
             error_type="unknown",
             message=f"Unexpected error: {str(e)}",
@@ -294,25 +227,10 @@ def log_activity(
     # Handle workflow failure
     if not result.success or result.activity is None:
         error_msg = "; ".join(result.warnings) if result.warnings else "Activity logging failed"
-        log_message(
-            repo,
-            MessageRole.SYSTEM,
-            f"Activity logging failed: {error_msg}",
-        )
         return SyncError(
             error_type="validation",
             message=error_msg,
         )
-
-    # Log response
-    log_message(
-        repo,
-        MessageRole.SYSTEM,
-        f"Logged {result.activity.sport_type}: "
-        f"{result.activity.calculated.systemic_load_au:.0f} AU systemic, "
-        f"{result.activity.calculated.lower_body_load_au:.0f} AU lower-body",
-    )
-
     return result.activity
 
 
@@ -345,8 +263,7 @@ def _build_sync_summary(repo: RepositoryIO, result) -> SyncSummary:
     # Calculate totals
     total_duration = sum(a.duration_minutes for a in result.activities_imported)
     total_load = sum(
-        a.calculated.systemic_load_au if a.calculated else 0.0
-        for a in result.activities_imported
+        a.calculated.systemic_load_au if a.calculated else 0.0 for a in result.activities_imported
     )
 
     # Enrich metrics (after sync)
@@ -395,8 +312,7 @@ def _build_basic_sync_summary(result) -> SyncSummary:
     activity_types = list(set(a.sport_type for a in result.activities_imported))
     total_duration = sum(a.duration_minutes for a in result.activities_imported)
     total_load = sum(
-        a.calculated.systemic_load_au if a.calculated else 0.0
-        for a in result.activities_imported
+        a.calculated.systemic_load_au if a.calculated else 0.0 for a in result.activities_imported
     )
 
     return SyncSummary(
