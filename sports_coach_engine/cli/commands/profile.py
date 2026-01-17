@@ -228,6 +228,7 @@ def profile_set_command(
     age: Optional[int] = typer.Option(None, "--age", help="Age in years"),
     max_hr: Optional[int] = typer.Option(None, "--max-hr", help="Maximum heart rate"),
     resting_hr: Optional[int] = typer.Option(None, "--resting-hr", help="Resting heart rate"),
+    vdot: Optional[int] = typer.Option(None, "--vdot", help="VDOT (running fitness level)"),
     run_priority: Optional[str] = typer.Option(
         None, "--run-priority", help="Running priority: primary, secondary, or equal"
     ),
@@ -289,6 +290,7 @@ def profile_set_command(
     Examples:
         sce profile set --name "Alex" --age 32
         sce profile set --max-hr 190 --resting-hr 55
+        sce profile set --vdot 42
         sce profile set --run-priority primary
         sce profile set --conflict-policy ask_each_time
         sce profile set --min-run-days 3 --max-run-days 4
@@ -309,6 +311,8 @@ def profile_set_command(
         fields["max_hr"] = max_hr
     if resting_hr is not None:
         fields["resting_hr"] = resting_hr
+    if vdot is not None:
+        fields["vdot"] = vdot
     if run_priority is not None:
         fields["run_priority"] = run_priority
     if conflict_policy is not None:
@@ -468,6 +472,8 @@ def profile_set_command(
         updated_fields.append("max_hr")
     if resting_hr is not None:
         updated_fields.append("resting_hr")
+    if vdot is not None:
+        updated_fields.append("vdot")
     if run_priority is not None:
         updated_fields.append("run_priority")
     if conflict_policy is not None:

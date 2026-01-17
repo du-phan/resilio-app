@@ -22,6 +22,38 @@ from datetime import date, timedelta
 from typing import Dict, List, Any, Optional
 
 
+def get_next_monday(from_date: date = None) -> date:
+    """
+    Get the next Monday from a given date.
+
+    If from_date is already Monday, returns the following Monday (7 days ahead).
+    Otherwise returns the upcoming Monday.
+
+    Args:
+        from_date: Starting date (defaults to today)
+
+    Returns:
+        Next Monday as date object
+
+    Examples:
+        >>> get_next_monday(date(2026, 1, 17))  # Saturday
+        datetime.date(2026, 1, 19)
+        >>> get_next_monday(date(2026, 1, 19))  # Monday
+        datetime.date(2026, 1, 26)
+    """
+    if from_date is None:
+        from_date = date.today()
+
+    # Calculate days until next Monday
+    days_until_monday = (7 - from_date.weekday()) % 7
+
+    # If today is Monday (days_until_monday == 0), return next Monday
+    if days_until_monday == 0:
+        days_until_monday = 7
+
+    return from_date + timedelta(days=days_until_monday)
+
+
 def run_sce_command(cmd: List[str]) -> Dict[str, Any]:
     """
     Run sce CLI command and return parsed JSON result.
@@ -258,7 +290,8 @@ def generate_plan_json(
 
     # For now, create a skeleton JSON structure
     weeks = []
-    start_date = date.today() + timedelta(days=7)  # Start next week
+    start_date = get_next_monday(date.today())
+    print(f"  ✓ Plan start date: {start_date} ({start_date.strftime('%A')})")
 
     for week_num, volume in enumerate(volumes, start=1):
         # Determine phase

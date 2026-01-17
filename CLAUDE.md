@@ -46,6 +46,21 @@ Design periodized training plans using proven methodologies
 - **Workflow**: Assess CTL → Periodization → Volume progression → Workout design → Validation → Markdown review
 - **Key commands**: `sce plan`, `sce vdot`, `sce guardrails`, `sce validation`
 
+**Date Handling Requirements (CRITICAL)**:
+
+Training plans must align to Monday-Sunday weeks.
+
+**Before plan generation**:
+```bash
+# Get current date and next Monday
+python3 -c "from datetime import date, timedelta; today = date.today(); print(f'Today: {today} ({today.strftime(\"%A\")}'); next_mon = today + timedelta(days=(7-today.weekday())%7 or 7); print(f'Next Monday: {next_mon}')"
+```
+
+**In plan JSON**:
+- All `week.start_date` must be Monday (weekday() == 0)
+- All `week.end_date` must be Sunday (weekday() == 6)
+- Validate before `sce plan populate`
+
 ### 5. **plan-adaptation**
 Adjust plans mid-cycle for illness, injury, or schedule changes
 - **Use when**: "I got sick", "adjust my plan", "missed workouts", "schedule changed"

@@ -170,7 +170,7 @@ class AthleteProfile(BaseModel):
     strava: Optional[StravaConnection] = None
 
     # Running Background
-    running_experience_years: Optional[int] = Field(default=None, ge=0)
+    running_experience_years: Optional[float] = Field(default=None, ge=0)
 
     # Recent Fitness Snapshot
     recent_race: Optional[RecentRace] = None

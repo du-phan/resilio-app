@@ -24,7 +24,28 @@ This skill designs evidence-based training plans using:
 
 ## Workflow
 
-### Step 0: Retrieve Relevant Memories
+### Step 0: Get Current Date and Calculate Start Date
+
+**CRITICAL**: Before any planning, establish correct dates.
+
+```bash
+# Get current date
+date +%Y-%m-%d
+date +%A  # Day of week
+
+# Calculate next Monday (if not Monday today)
+# Use Python one-liner:
+python3 -c "from datetime import date, timedelta; today = date.today(); next_monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7); print(f'Next Monday: {next_monday} ({next_monday.strftime(\"%A\")})')"
+```
+
+**Validation**:
+- Verify day of week is Monday (weekday() == 0)
+- Confirm with athlete: "Start training on [Monday, DATE]?"
+- Never assume dates - always calculate programmatically
+
+---
+
+### Step 1: Retrieve Relevant Memories
 
 **Before designing plan, load athlete's history to inform volume/intensity decisions.**
 
@@ -50,7 +71,7 @@ sce memory search --query "volume injury recovery"
 
 ---
 
-### Step 1: Gather Context
+### Step 2: Gather Context
 
 Get athlete's current state and confirm training constraints.
 
@@ -79,7 +100,7 @@ See [COMMON_PITFALLS.md](references/COMMON_PITFALLS.md#category-5-communication-
 
 ---
 
-### Step 2: Calculate Periodization
+### Step 3: Calculate Periodization
 
 Divide weeks into phases (base, build, peak, taper) using race distance and weeks available.
 
@@ -97,7 +118,7 @@ Divide weeks into phases (base, build, peak, taper) using race distance and week
 
 ---
 
-### Step 3: Design Volume Progression
+### Step 4: Design Volume Progression
 
 Use CTL to determine safe starting and peak volumes.
 
@@ -120,7 +141,7 @@ Returns: starting volume, peak volume, weekly progression strategy
 
 ---
 
-### Step 4: Calculate VDOT & Training Paces
+### Step 5: Calculate VDOT & Training Paces
 
 **Get VDOT** from recent race or estimate:
 ```bash
@@ -139,7 +160,7 @@ See [PACE_ZONES.md](references/PACE_ZONES.md) for workout type guidance.
 
 ---
 
-### Step 5: Prescribe Workouts by Phase
+### Step 6: Prescribe Workouts by Phase
 
 Design weekly structure based on phase focus.
 
@@ -158,7 +179,7 @@ See [PACE_ZONES.md](references/PACE_ZONES.md) for workout type prescriptions by 
 
 ---
 
-### Step 6: Integrate Multi-Sport Constraints
+### Step 7: Integrate Multi-Sport Constraints
 
 Map running workouts around other sports.
 
@@ -187,7 +208,7 @@ sce analysis load --activities activities.json --days 7 --priority equal
 
 ---
 
-### Step 7: Validate Against Guardrails
+### Step 8: Validate Against Guardrails
 
 Check plan compliance with evidence-based safety rules.
 
@@ -215,14 +236,22 @@ sce validation validate-plan --total-weeks 16 --goal-type half_marathon \
 
 ---
 
-### Step 8: Present Plan for Review (CRITICAL)
+### Step 9: Present Plan for Review (CRITICAL)
 
 **NEVER save directly**. Always present markdown for athlete approval first.
 
 **Workflow**:
 1. Create `/tmp/training_plan_review_YYYY_MM_DD.md` using template at `/templates/plan_presentation.md`
 2. Include: Goal overview, plan structure, constraints, weekly breakdown, training paces, guardrails check
-3. Present to athlete:
+3. **Verify week start dates** (CRITICAL):
+   ```bash
+   # Extract first week start date from plan JSON
+   start_date=$(jq -r '.weeks[0].start_date' /tmp/plan.json)
+
+   # Verify it's Monday
+   python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); assert d.weekday() == 0, f'Week starts on {d.strftime(\"%A\")}, not Monday'; print(f'✓ Week 1 starts Monday, {d}')"
+   ```
+4. Present to athlete:
    ```
    I've designed your [race] plan ([weeks] weeks).
 
@@ -231,11 +260,11 @@ sce validation validate-plan --total-weeks 16 --goal-type half_marathon \
 
    Approve, request changes, or ask questions?
    ```
-4. Handle response: Approve → save, Modify → clarify + regenerate, Questions → answer + re-confirm
+5. Handle response: Approve → save, Modify → clarify + regenerate, Questions → answer + re-confirm
 
 ---
 
-### Step 9: Save Plan to System
+### Step 10: Save Plan to System
 
 After athlete approval, convert plan to JSON and populate.
 

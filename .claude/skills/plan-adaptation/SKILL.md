@@ -19,6 +19,8 @@ This skill handles mid-cycle training plan adjustments due to:
 
 **Philosophy**: Adaptation is coaching. The best plan is one that responds to reality while maintaining long-term progression toward the goal.
 
+**Date Handling**: When creating week JSON for plan updates, ensure all weeks follow Monday-Sunday structure. The core system enforces this constraint; manual JSON must align to prevent validation errors. See Date Validation section below.
+
 ---
 
 ## Core Workflow
@@ -126,6 +128,32 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
 ---
 
+### Date Validation (CRITICAL)
+
+**Before modifying any week**, verify Monday-Sunday alignment:
+
+```bash
+# Check current plan week dates
+sce plan show | jq '.data.weeks[] | {week: .week_number, start: .start_date, end: .end_date}'
+
+# Verify all weeks start on Monday
+sce plan show | jq -r '.data.weeks[].start_date' | while read d; do
+  python3 -c "from datetime import date; day = date.fromisoformat('$d'); print(f'Week starts {day.strftime(\"%A\")}'); assert day.weekday() == 0, 'Not Monday!'"
+done
+```
+
+**When creating modified week JSON**:
+- `start_date` MUST be Monday (weekday() == 0)
+- `end_date` MUST be Sunday (weekday() == 6)
+- Use date utilities: `from sports_coach_engine.utils.dates import get_next_monday, get_week_boundaries`
+
+**Important - Current week vs. future week adaptation**:
+- **Current/past weeks**: Dates are already set correctly in the plan. Extract the week JSON, modify workouts only, keep dates unchanged. Validation ensures you don't accidentally change them during manual editing.
+- **Future weeks not yet in plan**: Calculate dates using `get_next_monday()` to ensure Monday alignment.
+- **No need to recalculate existing week dates** - just preserve and validate them.
+
+---
+
 ### Step 4: Choose Update Strategy
 
 #### Strategy A: Single Week Update (`sce plan update-week`)
@@ -175,6 +203,21 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
 **CRITICAL**: JSON must be a single week object, NOT an array of weeks.
 
+**Date Validation** (before running `update-week`):
+```bash
+# Extract dates from your week JSON
+start_date=$(jq -r '.start_date' /tmp/week_5_updated.json)
+end_date=$(jq -r '.end_date' /tmp/week_5_updated.json)
+
+# Verify Monday start
+python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); assert d.weekday() == 0, f'Week starts {d.strftime(\"%A\")}, not Monday'"
+
+# Verify Sunday end
+python3 -c "from datetime import date; d = date.fromisoformat('$end_date'); assert d.weekday() == 6, f'Week ends {d.strftime(\"%A\")}, not Sunday'"
+
+echo "✓ Week dates valid (Monday-Sunday)"
+```
+
 #### Strategy B: Partial Replan (`sce plan update-from`)
 
 **Use when**:
@@ -221,6 +264,21 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 - JSON must contain `"weeks"` array
 - Preserves weeks 1 to N-1 (before starting week)
 - Replaces weeks N to end
+
+**Date Validation** (before running `update-from`):
+```bash
+# Verify all weeks in array start on Monday
+jq -r '.weeks[].start_date' /tmp/weeks_5_to_16.json | while read d; do
+  python3 -c "from datetime import date; day = date.fromisoformat('$d'); print(f'Week {day}: {day.strftime(\"%A\")}'); assert day.weekday() == 0, 'Not Monday!'"
+done
+
+# Verify all weeks end on Sunday
+jq -r '.weeks[].end_date' /tmp/weeks_5_to_16.json | while read d; do
+  python3 -c "from datetime import date; day = date.fromisoformat('$d'); assert day.weekday() == 6, 'Not Sunday!'"
+done
+
+echo "✓ All week dates valid (Monday-Sunday boundaries)"
+```
 
 ---
 
@@ -351,6 +409,7 @@ See [ADAPTATION_SCENARIOS.md](examples/ADAPTATION_SCENARIOS.md) for 5 complete e
 
 Before saving any adapted plan, verify all criteria in [VALIDATION_CHECKLIST.md](references/VALIDATION_CHECKLIST.md):
 
+- ✓ Week Dates Aligned (all weeks start Monday, end Sunday - verify with: `jq -r '.weeks[].start_date' plan.json | xargs -I {} python3 -c "from datetime import date; print(date.fromisoformat('{}').strftime('%A'))"`)
 - ✓ ACWR Safety (<1.3)
 - ✓ Volume Progression (≤+10% per week)
 - ✓ Recovery Protocol (adequate easy-only period)

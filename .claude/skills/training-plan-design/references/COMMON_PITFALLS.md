@@ -494,6 +494,40 @@ Plan misalignment grows
 
 ---
 
+### Pitfall 5.3: Not Verifying Week Start Dates
+
+**The Problem**:
+Manually entering dates without checking day of week, resulting in weeks that don't start on Monday.
+
+**Why It Happens**:
+- Manual JSON creation without date calculation
+- Trusting "7 days from today" without Monday alignment
+- Not using programmatic date verification
+
+**What Goes Wrong**:
+```
+Coach: "Week 1 starts Monday, January 20"
+Reality: January 20 is Tuesday
+Result: Confusion, misaligned weeks, metrics validation errors
+```
+
+**Solution**:
+```bash
+# ALWAYS use Python to calculate dates:
+python3 -c "from datetime import date, timedelta; today = date.today(); next_mon = today + timedelta(days=(7-today.weekday())%7 or 7); print(f'{next_mon} is {next_mon.strftime(\"%A\")}')"
+
+# Verify in plan JSON before presenting:
+start_date=$(jq -r '.weeks[0].start_date' /tmp/plan.json)
+python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); assert d.weekday() == 0, f'Week starts on {d.strftime(\"%A\")}, not Monday'"
+```
+
+**Guardrail**:
+- Before presenting plan, verify first week `start_date` is Monday
+- Use `generate_plan.py` script which enforces Monday alignment
+- Never manually calculate dates in your head
+
+---
+
 ## Summary: Common Pitfall Categories
 
 | Category | Common Mistakes | Prevention |
@@ -502,7 +536,7 @@ Plan misalignment grows
 | **Intensity** | Over-quality, no recovery, no 80/20 validation | Daniels limits, 48h spacing, calculate 80/20 after design |
 | **Structure** | Missing recovery weeks, no plan review, no validation | Place recovery every 4-5 weeks, markdown presentation, validate before saving |
 | **Multi-Sport** | Ignoring load, ignoring conflict policy, overestimating capacity | Check multi-sport baseline, apply conflict policy, reduce peak volume |
-| **Communication** | Constraints not confirmed, changes not communicated | Explicit constraint discussion, periodic re-verification |
+| **Communication** | Constraints not confirmed, changes not communicated, incorrect week start dates | Explicit constraint discussion, periodic re-verification, verify Monday starts |
 
 ---
 
@@ -519,6 +553,7 @@ Plan misalignment grows
 - [ ] Multi-sport load calculated (if applicable)
 - [ ] Conflict policy applied (if applicable)
 - [ ] Plan structure validated: phases, recovery weeks, race week taper
+- [ ] Week start dates verified: All weeks start on Monday
 - [ ] Markdown presentation created and reviewed
 - [ ] Athlete approval obtained before saving to system
 

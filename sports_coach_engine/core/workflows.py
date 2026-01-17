@@ -63,6 +63,7 @@ from sports_coach_engine.core.adaptation import (
 )
 from sports_coach_engine.core.memory import save_memory, Memory, MemoryType, MemorySource
 from sports_coach_engine.core.plan import calculate_periodization, suggest_volume_adjustment
+from sports_coach_engine.utils.dates import get_next_monday
 from sports_coach_engine.schemas.activity import (
     RawActivity,
     NormalizedActivity,
@@ -897,9 +898,9 @@ def run_plan_generation(
             # Default to 12 weeks if no goal date
             target_date = today + timedelta(weeks=12)
 
-        # Align start_date to Monday for proper week structure (Monday=0, Sunday=6)
-        # This ensures all weeks follow Monday-Sunday convention
-        start_date = today - timedelta(days=today.weekday())
+        # Align start_date to next Monday for proper week structure (Monday=0, Sunday=6)
+        # This ensures all weeks follow Monday-Sunday convention and plan starts in the future
+        start_date = get_next_monday(today)
         total_weeks = max(1, (target_date - start_date).days // 7)
         end_date = target_date
 
