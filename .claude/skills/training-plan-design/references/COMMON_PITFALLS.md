@@ -528,6 +528,210 @@ python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); as
 
 ---
 
+## Category 6: Workout Prescription Errors
+
+### Pitfall 6.1: Forgetting to Populate Workout Prescriptions
+
+**The Problem**:
+Saving training plan with empty `workouts: []` arrays, focusing only on markdown presentation and week metadata.
+
+**Why It Happens**:
+- Focusing on human-readable markdown (plan review file)
+- Forgetting YAML is the source of truth for CLI tools
+- Misunderstanding relationship between markdown (presentation) and YAML (data)
+- Skipping Step 5b in skill workflow
+
+**What Goes Wrong**:
+```
+Plan saved to data/plans/current_plan.yaml:
+
+weeks:
+  - week_number: 1
+    phase: base
+    start_date: "2026-01-19"
+    target_volume_km: 22.0
+    workouts: []        ← EMPTY! No workout objects
+
+Result:
+  - sce today → "No workout scheduled for today" (incorrect)
+  - sce week → Shows empty week schedule (incorrect)
+  - YAML is structurally valid but functionally useless
+  - Markdown review file has all the detail, but CLI can't read it
+```
+
+**Real Example**:
+```
+Coach designs plan:
+  ✓ Creates periodization (phases, weeks, volumes)
+  ✓ Designs workouts (types, paces, purposes)
+  ✓ Writes markdown presentation with full detail
+  ✓ Athlete approves plan
+  ✗ Saves plan with only week metadata (workouts: [])
+
+Week 1 Monday:
+  Athlete: "What's my workout today?"
+  CLI: sce today → "No workout scheduled"
+  Athlete: "But the markdown says easy 5km?"
+  Coach: "Oh no, I forgot to populate the workout objects!"
+```
+
+**What Should Happen**:
+Each week must have complete `WorkoutPrescription` objects with all 20+ fields:
+
+```yaml
+workouts:
+  - id: "w_2026-01-20_easy_a1b2c3"
+    week_number: 1
+    day_of_week: 0
+    date: "2026-01-20"
+    workout_type: "easy"
+    phase: "base"
+    duration_minutes: 35
+    distance_km: 5.0
+    intensity_zone: "zone_2"
+    target_rpe: 4
+    pace_range_min_km: "6:20"
+    pace_range_max_km: "6:30"
+    hr_range_low: 129
+    hr_range_high: 149
+    intervals: null
+    warmup_minutes: 10
+    cooldown_minutes: 10
+    purpose: "Recovery and aerobic maintenance..."
+    notes: "Keep conversation-pace easy..."
+    key_workout: false
+    status: "scheduled"
+    execution: null
+```
+
+**Solution**:
+1. **Never skip Step 5b** in training-plan-design skill workflow
+2. **Use generate_workouts.py script** to convert workout outlines → complete JSON:
+   ```bash
+   python .claude/skills/training-plan-design/scripts/generate_workouts.py plan \
+     --plan-outline /tmp/plan_outline.json \
+     --vdot 39 \
+     --max-hr 199 \
+     --output /tmp/complete_plan.json
+   ```
+3. **Validate before saving**:
+   ```bash
+   # Check workouts array is populated
+   jq '.weeks[0].workouts | length' /tmp/plan.json
+   # Should show 4-5 workouts, NOT 0
+
+   # Validate structure
+   python .claude/skills/training-plan-design/scripts/generate_workouts.py validate \
+     --file /tmp/plan.json \
+     --type plan
+   ```
+4. **Test CLI after saving**:
+   ```bash
+   sce plan populate --from-json /tmp/plan.json
+   sce today  # Should show Monday's workout
+   sce week   # Should show full week schedule
+   ```
+
+**Prevention**:
+- Add to checklist: "Workouts array populated with complete WorkoutPrescription objects"
+- Use generate_workouts.py script (enforces complete structure)
+- Validate plan JSON before presenting to athlete
+- Test `sce today` immediately after populating plan
+
+---
+
+### Pitfall 6.2: Missing Required Workout Fields
+
+**The Problem**:
+Creating workout objects but omitting required fields like `pace_range_min_km`, `purpose`, or `intensity_zone`.
+
+**Why It Happens**:
+- Manual JSON creation without schema reference
+- Copying incomplete examples
+- Not understanding which fields are required vs. optional
+- Forgetting to calculate pace/HR ranges from VDOT
+
+**What Goes Wrong**:
+```json
+{
+  "id": "w_2026-01-20_easy",
+  "week_number": 1,
+  "date": "2026-01-20",
+  "workout_type": "easy",
+  "distance_km": 5.0
+  ← Missing: day_of_week, phase, duration_minutes, intensity_zone,
+             target_rpe, purpose, warmup_minutes, cooldown_minutes, etc.
+}
+```
+
+Result: Plan validation fails, CLI tools crash, or incorrect guidance provided.
+
+**Solution**:
+1. **Use COMPLETE_WORKOUT_EXAMPLE.json as template** - Shows all 20+ fields populated
+2. **Use generate_workouts.py** - Automatically fills all required fields
+3. **Reference WORKOUT_PRESCRIPTION_FIELDS.md** - Field-by-field documentation
+4. **Validate before saving**:
+   ```bash
+   python .claude/skills/training-plan-design/scripts/generate_workouts.py validate \
+     --file /tmp/plan.json \
+     --type plan
+   ```
+
+**Required fields checklist**:
+- ✓ Identity: id, week_number, day_of_week, date
+- ✓ Type: workout_type, phase
+- ✓ Duration: duration_minutes
+- ✓ Intensity: intensity_zone, target_rpe
+- ✓ Structure: warmup_minutes, cooldown_minutes
+- ✓ Purpose: purpose
+- ✓ Metadata: key_workout, status
+
+---
+
+### Pitfall 6.3: Incorrect Date Alignment
+
+**The Problem**:
+Setting `day_of_week: 0` (Monday) but `date: "2026-01-21"` (which is actually Tuesday).
+
+**Why It Happens**:
+- Manual date entry without verification
+- Copy-paste errors
+- Not using programmatic date calculation
+- Trusting mental math for dates
+
+**What Goes Wrong**:
+```json
+{
+  "day_of_week": 0,  ← Says Monday
+  "date": "2026-01-21"  ← Actually Tuesday!
+}
+```
+
+Result:
+- Week navigation broken
+- CLI tools show wrong dates
+- Metrics calculations incorrect
+- Athlete sees wrong workout on wrong day
+
+**Solution**:
+1. **Always use generate_workouts.py** - Calculates dates programmatically from week start_date
+2. **Verify week dates** before generation:
+   ```bash
+   python3 -c "from datetime import date; d = date.fromisoformat('2026-01-20'); print(f'{d} is {d.strftime(\"%A\")} (weekday {d.weekday()})')"
+   # Output: 2026-01-20 is Monday (weekday 0)
+   ```
+3. **Validation catches misalignment**:
+   ```bash
+   python .claude/skills/training-plan-design/scripts/generate_workouts.py validate \
+     --file /tmp/plan.json \
+     --type plan
+   # Error: "Week 1: start_date 2026-01-21 is not Monday (weekday 1)"
+   ```
+
+**Critical rule**: All weeks must start Monday (weekday 0) and end Sunday (weekday 6).
+
+---
+
 ## Summary: Common Pitfall Categories
 
 | Category | Common Mistakes | Prevention |
@@ -537,6 +741,7 @@ python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); as
 | **Structure** | Missing recovery weeks, no plan review, no validation | Place recovery every 4-5 weeks, markdown presentation, validate before saving |
 | **Multi-Sport** | Ignoring load, ignoring conflict policy, overestimating capacity | Check multi-sport baseline, apply conflict policy, reduce peak volume |
 | **Communication** | Constraints not confirmed, changes not communicated, incorrect week start dates | Explicit constraint discussion, periodic re-verification, verify Monday starts |
+| **Workout Prescription** | Empty workouts arrays, missing required fields, date misalignment | Use generate_workouts.py, validate structure, test CLI after saving |
 
 ---
 
@@ -554,7 +759,11 @@ python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); as
 - [ ] Conflict policy applied (if applicable)
 - [ ] Plan structure validated: phases, recovery weeks, race week taper
 - [ ] Week start dates verified: All weeks start on Monday
+- [ ] **Workout prescriptions populated**: All weeks have complete WorkoutPrescription objects (NOT empty arrays)
+- [ ] **Required workout fields present**: All 20+ fields populated for each workout
+- [ ] **Workout dates aligned**: day_of_week matches actual date weekday
 - [ ] Markdown presentation created and reviewed
 - [ ] Athlete approval obtained before saving to system
+- [ ] **CLI tools tested**: `sce today` and `sce week` work after populating plan
 
 If any checkbox is unchecked, the plan needs fixing before presentation.

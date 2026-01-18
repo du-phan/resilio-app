@@ -1410,8 +1410,20 @@ def _generate_approval_block(
     date_str = timestamp.strftime("%B %d, %Y")
 
     # Format goal type for display
-    goal_display = plan.goal.goal_type.replace("_", " ").title()
-    race_date_str = plan.goal.target_date.strftime("%B %d, %Y")
+    # Handle plan.goal as dict (from YAML) or object (from schema)
+    if isinstance(plan.goal, dict):
+        goal_type = plan.goal.get('type', 'unknown')
+        target_date = plan.goal.get('target_date')
+        # Parse target_date if it's a string
+        if isinstance(target_date, str):
+            from datetime import date as date_cls
+            target_date = date_cls.fromisoformat(target_date)
+    else:
+        goal_type = plan.goal.goal_type if hasattr(plan.goal, 'goal_type') else plan.goal.type
+        target_date = plan.goal.target_date
+
+    goal_display = str(goal_type).replace("_", " ").title()
+    race_date_str = target_date.strftime("%B %d, %Y")
 
     footer = f"""
 ---
@@ -1604,14 +1616,28 @@ def initialize_training_log(
     timestamp = datetime.now()
 
     # Format goal for display
-    goal_display = plan.goal.goal_type.replace("_", " ").title()
-    race_date_str = plan.goal.target_date.strftime("%B %d, %Y")
-    start_date_str = plan.plan_start.strftime("%B %d, %Y")
+    # Handle plan.goal as dict (from YAML) or object (from schema)
+    if isinstance(plan.goal, dict):
+        goal_type = plan.goal.get('type', 'unknown')
+        target_date = plan.goal.get('target_date')
+        target_time = plan.goal.get('target_time')
+        # Parse target_date if it's a string
+        if isinstance(target_date, str):
+            from datetime import date as date_cls
+            target_date = date_cls.fromisoformat(target_date)
+    else:
+        goal_type = plan.goal.goal_type if hasattr(plan.goal, 'goal_type') else plan.goal.type
+        target_date = plan.goal.target_date
+        target_time = plan.goal.target_time if hasattr(plan.goal, 'target_time') else None
+
+    goal_display = str(goal_type).replace("_", " ").title()
+    race_date_str = target_date.strftime("%B %d, %Y")
+    start_date_str = plan.start_date.strftime("%B %d, %Y")
 
     # Format goal time if available
     goal_time_str = ""
-    if hasattr(plan.goal, 'target_time') and plan.goal.target_time:
-        goal_time_str = f"\n**Goal Time**: {plan.goal.target_time}"
+    if target_time:
+        goal_time_str = f"\n**Goal Time**: {target_time}"
 
     # Create log header
     athlete_line = f"**Athlete**: {athlete_name}\n" if athlete_name else ""

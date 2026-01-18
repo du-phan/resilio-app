@@ -160,6 +160,76 @@ See [PACE_ZONES.md](references/PACE_ZONES.md) for workout type guidance.
 
 ---
 
+### Step 5b: Generate Workout Prescriptions (CRITICAL)
+
+**IMPORTANT**: The markdown plan is for humans. The YAML needs actual `WorkoutPrescription` objects with all 20+ fields populated.
+
+**DO NOT skip this step!** Without populated workouts, the YAML is useless and CLI tools (`sce today`, `sce week`) will fail.
+
+**Use the workout generator script** (recommended):
+```bash
+# Option 1: Generate complete plan from outline JSON
+python .claude/skills/training-plan-design/scripts/generate_workouts.py plan \
+  --plan-outline /tmp/plan_outline.json \
+  --vdot 39 \
+  --max-hr 199 \
+  --output /tmp/complete_plan.json
+
+# Option 2: Generate single week
+python .claude/skills/training-plan-design/scripts/generate_workouts.py week \
+  --week-file /tmp/week1_outline.json \
+  --vdot 39 \
+  --max-hr 199 \
+  --output /tmp/week1_complete.json
+
+# Option 3: Validate existing plan/week structure
+python .claude/skills/training-plan-design/scripts/generate_workouts.py validate \
+  --file /tmp/plan.json \
+  --type plan
+```
+
+**Required fields for each workout** (20+ fields total):
+- **Identity**: `id`, `week_number`, `day_of_week` (0=Mon, 6=Sun), `date` (ISO format)
+- **Type**: `workout_type` (easy|long_run|tempo|intervals|rest), `phase`
+- **Duration**: `duration_minutes`, `distance_km` (optional)
+- **Intensity**: `intensity_zone` (zone_2|zone_4|zone_5), `target_rpe` (1-10)
+- **Pacing**: `pace_range_min_km`, `pace_range_max_km` (from VDOT tables, e.g., "5:30")
+- **HR**: `hr_range_low`, `hr_range_high` (from %HRmax)
+- **Structure**: `intervals` (null or structure), `warmup_minutes`, `cooldown_minutes`
+- **Purpose**: `purpose` (training stimulus), `notes` (execution cues)
+- **Metadata**: `key_workout` (bool), `status` ("scheduled"), `execution` (null initially)
+
+**Full field reference**: See [WORKOUT_PRESCRIPTION_FIELDS.md](references/WORKOUT_PRESCRIPTION_FIELDS.md)
+
+**Complete example**: See [COMPLETE_WORKOUT_EXAMPLE.json](references/COMPLETE_WORKOUT_EXAMPLE.json)
+
+**Week outline JSON structure** (input to generate_workouts.py):
+```json
+{
+  "week_number": 1,
+  "phase": "base",
+  "start_date": "2026-01-19",
+  "end_date": "2026-01-25",
+  "target_volume_km": 22.0,
+  "workout_schedule": [
+    {"day": "monday", "type": "easy", "purpose": "Recovery"},
+    {"day": "wednesday", "type": "easy", "purpose": "Base building"},
+    {"day": "friday", "type": "easy", "purpose": "Pre-long run"},
+    {"day": "sunday", "type": "long_run", "purpose": "Endurance foundation"}
+  ]
+}
+```
+
+**Validation** (script checks automatically):
+- ✓ `start_date` is Monday (weekday 0)
+- ✓ `end_date` is Sunday (weekday 6)
+- ✓ All workouts have required fields
+- ✓ Total workout volume ≈ target volume (±10%)
+- ✓ Pace ranges match VDOT
+- ✓ HR zones within 50-100% max_hr
+
+---
+
 ### Step 6: Prescribe Workouts by Phase
 
 Design weekly structure based on phase focus.
