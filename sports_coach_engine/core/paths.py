@@ -192,3 +192,21 @@ def plan_workouts_dir(week_number: int) -> str:
     return f"{get_plans_dir()}/workouts/week_{week_number:02d}"
 
 
+def current_plan_review_path() -> str:
+    """Get path to current plan review markdown.
+
+    Returns:
+        Path to current_plan_review.md (e.g., "data/plans/current_plan_review.md")
+    """
+    return f"{get_plans_dir()}/current_plan_review.md"
+
+
+def current_training_log_path() -> str:
+    """Get path to current training log markdown.
+
+    Returns:
+        Path to current_training_log.md (e.g., "data/plans/current_training_log.md")
+    """
+    return f"{get_plans_dir()}/current_training_log.md"
+
+

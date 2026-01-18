@@ -34,6 +34,7 @@ from typing import Optional
 from pathlib import Path
 import uuid
 import shutil
+import os
 from sports_coach_engine.schemas.plan import (
     GoalType,
     PlanPhase,
@@ -47,6 +48,8 @@ from sports_coach_engine.core.paths import (
     current_plan_path,
     plan_workouts_dir,
     get_plans_dir,
+    current_plan_review_path,
+    current_training_log_path,
 )
 from sports_coach_engine.core.repository import RepositoryIO
 
@@ -1255,6 +1258,10 @@ def archive_current_plan(reason: str, repo: Optional[RepositoryIO] = None) -> Op
     # Create fresh plans/ directory
     plans_dir.mkdir(parents=True, exist_ok=True)
 
+    # Note: Plan review and training log are already included in the archived plans/ directory
+    # No need to copy them separately since they're in data/plans/current_plan_review.md
+    # and data/plans/current_training_log.md which get moved with the directory
+
     # Write archive info file
     archive_info = {
         "archived_at": timestamp,
@@ -1267,3 +1274,521 @@ def archive_current_plan(reason: str, repo: Optional[RepositoryIO] = None) -> Op
         yaml.safe_dump(archive_info, f)
 
     return str(archive_dir)
+
+
+# ============================================================
+# PLAN REVIEW AND TRAINING LOG FUNCTIONS
+# ============================================================
+
+
+def _get_adherence_message(adherence_pct: float) -> str:
+    """Get friendly adherence message based on percentage.
+
+    Args:
+        adherence_pct: Adherence percentage (0-100)
+
+    Returns:
+        Encouraging message appropriate for adherence level
+    """
+    if adherence_pct >= 95:
+        return "excellent consistency!"
+    elif adherence_pct >= 85:
+        return "great work staying on track!"
+    elif adherence_pct >= 75:
+        return "solid effort!"
+    elif adherence_pct >= 60:
+        return "keep building that routine"
+    else:
+        return "let's aim higher next week"
+
+
+def _get_hr_context(hr_avg: int) -> str:
+    """Get friendly context for heart rate value.
+
+    Args:
+        hr_avg: Average heart rate
+
+    Returns:
+        Contextual comment about HR
+    """
+    # These are general guidelines - actual zones depend on max HR
+    if hr_avg < 130:
+        return " (nice and easy)"
+    elif hr_avg < 150:
+        return " (good aerobic pace)"
+    elif hr_avg < 165:
+        return " (moderate effort)"
+    elif hr_avg < 180:
+        return " (working hard)"
+    else:
+        return " (high intensity)"
+
+
+def _explain_ctl_change(ctl_start: float, ctl_end: float) -> str:
+    """Explain CTL change in plain English.
+
+    Args:
+        ctl_start: CTL at week start
+        ctl_end: CTL at week end
+
+    Returns:
+        Athlete-friendly explanation
+    """
+    change = ctl_end - ctl_start
+
+    if change > 3:
+        return f"Your aerobic fitness is building nicely (fitness score: {ctl_start:.0f} → {ctl_end:.0f})"
+    elif change > 0:
+        return f"Your aerobic fitness is building steadily (fitness score: {ctl_start:.0f} → {ctl_end:.0f})"
+    elif change > -2:
+        return f"Your fitness is holding steady (fitness score: {ctl_end:.0f})"
+    else:
+        return f"Taking a lighter week to absorb training (fitness score: {ctl_start:.0f} → {ctl_end:.0f})"
+
+
+def _explain_tsb(tsb_value: float) -> str:
+    """Explain TSB (Training Stress Balance) in plain English.
+
+    Args:
+        tsb_value: Current TSB value
+
+    Returns:
+        Athlete-friendly explanation
+    """
+    if tsb_value > 15:
+        return f"You're very fresh and rested (recovery score: {tsb_value:+.0f})"
+    elif tsb_value > 5:
+        return f"You're well-recovered and race-ready (recovery score: {tsb_value:+.0f})"
+    elif tsb_value > -10:
+        return f"Good training balance - absorbing workload well (recovery score: {tsb_value:+.0f})"
+    elif tsb_value > -20:
+        return f"Building fitness with some fatigue - normal for training (recovery score: {tsb_value:+.0f})"
+    else:
+        return f"High training load - watch for signs of overtraining (recovery score: {tsb_value:+.0f})"
+
+
+def _explain_acwr(acwr_value: float) -> str:
+    """Explain ACWR (Acute:Chronic Workload Ratio) in plain English.
+
+    Args:
+        acwr_value: Current ACWR value
+
+    Returns:
+        Athlete-friendly explanation
+    """
+    if acwr_value < 0.8:
+        return f"Training load is light - safe to increase volume (load ratio: {acwr_value:.2f})"
+    elif acwr_value <= 1.3:
+        return f"Training load is in the sweet spot - low injury risk (load ratio: {acwr_value:.2f})"
+    elif acwr_value <= 1.5:
+        return f"Training load is elevated - monitor how you feel (load ratio: {acwr_value:.2f})"
+    else:
+        return f"⚠️ Training load spike detected - injury risk is elevated (load ratio: {acwr_value:.2f})"
+
+
+def _generate_approval_block(
+    plan: MasterPlan,
+    athlete_name: Optional[str],
+    approved: bool,
+    timestamp: datetime
+) -> str:
+    """Generate athlete-friendly footer for review markdown.
+
+    Returns clean, readable markdown footer with plan metadata.
+    Keeps metadata minimal and athlete-focused.
+
+    Args:
+        plan: Current MasterPlan object
+        athlete_name: Athlete name from profile (optional)
+        approved: True if approved, False for draft review
+        timestamp: Approval timestamp
+
+    Returns:
+        Markdown footer string
+    """
+    status = "✅ **Plan Approved**" if approved else "📋 **Draft Plan**"
+    date_str = timestamp.strftime("%B %d, %Y")
+
+    # Format goal type for display
+    goal_display = plan.goal.goal_type.replace("_", " ").title()
+    race_date_str = plan.goal.target_date.strftime("%B %d, %Y")
+
+    footer = f"""
+---
+
+{status}: {date_str}
+
+**Race Day**: {race_date_str} ({goal_display})
+**Training Duration**: {plan.total_weeks} weeks
+
+Good luck with your training! 🏃
+
+---
+"""
+    return footer
+
+
+def save_plan_review(
+    review_file_path: str,
+    plan: MasterPlan,
+    athlete_name: Optional[str] = None,
+    approved: bool = True,
+    repo: Optional[RepositoryIO] = None
+) -> dict:
+    """Save plan review markdown to repository.
+
+    Workflow:
+    1. Read review markdown from source file (usually /tmp/)
+    2. Generate approval metadata block with plan details
+    3. Append metadata to markdown content
+    4. Save to data/plans/current_plan_review.md
+
+    Args:
+        review_file_path: Path to source review markdown (e.g., /tmp/training_plan_review_2026_01_20.md)
+        plan: Current MasterPlan object
+        athlete_name: Athlete name from profile (optional)
+        approved: True if approved, False for draft review
+        repo: RepositoryIO instance (creates new one if None)
+
+    Returns:
+        {
+            "saved_path": "data/plans/current_plan_review.md",
+            "approval_timestamp": "2026-01-17T14:23:00Z"
+        }
+
+    Raises:
+        FileNotFoundError: If review_file_path doesn't exist
+        IOError: If save fails
+    """
+    if repo is None:
+        repo = RepositoryIO()
+
+    # Read source review markdown
+    if not os.path.exists(review_file_path):
+        raise FileNotFoundError(f"Review file not found: {review_file_path}")
+
+    with open(review_file_path, 'r') as f:
+        review_content = f.read()
+
+    # Generate approval block
+    timestamp = datetime.now()
+    approval_block = _generate_approval_block(plan, athlete_name, approved, timestamp)
+
+    # Combine content with approval block
+    full_content = review_content + "\n" + approval_block
+
+    # Save to repository
+    target_path = current_plan_review_path()
+    target_abs_path = repo.resolve_path(target_path)
+
+    with open(target_abs_path, 'w') as f:
+        f.write(full_content)
+
+    return {
+        "saved_path": target_path,
+        "approval_timestamp": timestamp.isoformat()
+    }
+
+
+def append_plan_adaptation(
+    adaptation_file_path: str,
+    plan: MasterPlan,
+    reason: str,
+    timestamp: Optional[datetime] = None,
+    repo: Optional[RepositoryIO] = None
+) -> dict:
+    """Append plan adaptation to existing review markdown.
+
+    Workflow:
+    1. Read existing review markdown from data/plans/current_plan_review.md
+    2. Read adaptation markdown from source file (e.g., /tmp/plan_adaptation_2026_02_15.md)
+    3. Generate adaptation header block with date, reason, and context
+    4. Append adaptation content to existing review
+    5. Save updated review back to repository
+
+    Args:
+        adaptation_file_path: Path to adaptation markdown (e.g., /tmp/plan_adaptation_2026_02_15.md)
+        plan: Current MasterPlan object
+        reason: Adaptation reason (e.g., "illness", "injury", "schedule_change")
+        timestamp: Adaptation timestamp (defaults to now)
+        repo: RepositoryIO instance (creates new one if None)
+
+    Returns:
+        {
+            "review_path": "data/plans/current_plan_review.md",
+            "adaptation_timestamp": "2026-02-15T10:30:00Z",
+            "reason": "illness"
+        }
+
+    Raises:
+        FileNotFoundError: If review doesn't exist (plan never approved)
+        IOError: If save fails
+    """
+    if repo is None:
+        repo = RepositoryIO()
+
+    if timestamp is None:
+        timestamp = datetime.now()
+
+    # Read existing review
+    review_path = current_plan_review_path()
+    review_abs_path = repo.resolve_path(review_path)
+
+    if not review_abs_path.exists():
+        raise FileNotFoundError(
+            f"Plan review not found. Generate and approve plan first with save_plan_review()"
+        )
+
+    with open(review_abs_path, 'r') as f:
+        existing_content = f.read()
+
+    # Read adaptation markdown
+    if not os.path.exists(adaptation_file_path):
+        raise FileNotFoundError(f"Adaptation file not found: {adaptation_file_path}")
+
+    with open(adaptation_file_path, 'r') as f:
+        adaptation_content = f.read()
+
+    # Generate adaptation header
+    date_str = timestamp.strftime("%B %d, %Y")
+    reason_display = reason.replace("_", " ").title()
+
+    adaptation_header = f"""
+
+---
+
+## 📋 Plan Adaptation - {date_str}
+
+**Reason**: {reason_display}
+**Adapted by**: AI Coach
+
+"""
+
+    # Combine: existing + header + adaptation content
+    updated_content = existing_content + "\n" + adaptation_header + adaptation_content
+
+    # Save updated review
+    with open(review_abs_path, 'w') as f:
+        f.write(updated_content)
+
+    return {
+        "review_path": review_path,
+        "adaptation_timestamp": timestamp.isoformat(),
+        "reason": reason
+    }
+
+
+def initialize_training_log(
+    plan: MasterPlan,
+    athlete_name: Optional[str] = None,
+    repo: Optional[RepositoryIO] = None
+) -> dict:
+    """Initialize training log markdown for a new plan.
+
+    Creates initial log file with header and plan context.
+
+    Args:
+        plan: Current MasterPlan object
+        athlete_name: Athlete name from profile (optional)
+        repo: RepositoryIO instance (creates new one if None)
+
+    Returns:
+        {
+            "log_path": "data/plans/current_training_log.md",
+            "created_timestamp": "2026-01-17T14:23:00Z"
+        }
+    """
+    if repo is None:
+        repo = RepositoryIO()
+
+    timestamp = datetime.now()
+
+    # Format goal for display
+    goal_display = plan.goal.goal_type.replace("_", " ").title()
+    race_date_str = plan.goal.target_date.strftime("%B %d, %Y")
+    start_date_str = plan.plan_start.strftime("%B %d, %Y")
+
+    # Format goal time if available
+    goal_time_str = ""
+    if hasattr(plan.goal, 'target_time') and plan.goal.target_time:
+        goal_time_str = f"\n**Goal Time**: {plan.goal.target_time}"
+
+    # Create log header
+    athlete_line = f"**Athlete**: {athlete_name}\n" if athlete_name else ""
+
+    log_content = f"""# Training Log: {goal_display} - {race_date_str}
+
+{athlete_line}**Plan Start**: {start_date_str}
+**Race Date**: {race_date_str} ({plan.total_weeks} weeks){goal_time_str}
+
+---
+
+"""
+
+    # Save log file
+    log_path = current_training_log_path()
+    log_abs_path = repo.resolve_path(log_path)
+
+    with open(log_abs_path, 'w') as f:
+        f.write(log_content)
+
+    return {
+        "log_path": log_path,
+        "created_timestamp": timestamp.isoformat()
+    }
+
+
+def append_weekly_summary(
+    week_data: dict,
+    plan: MasterPlan,
+    repo: Optional[RepositoryIO] = None
+) -> dict:
+    """Append weekly training summary to training log.
+
+    Called by weekly-analysis skill after each week completes.
+
+    Args:
+        week_data: Weekly summary data including:
+            - week_number: int
+            - week_dates: str (e.g., "Jan 20-26")
+            - planned_volume_km: float
+            - actual_volume_km: float
+            - adherence_pct: float
+            - completed_workouts: list[dict] with workout details
+            - key_metrics: dict with CTL, TSB, ACWR
+            - coach_observations: str
+            - milestones: list[str] (optional)
+        plan: Current MasterPlan object
+        repo: RepositoryIO instance (creates new one if None)
+
+    Returns:
+        {
+            "log_path": "data/plans/logs/2026-01-20_half_marathon_log.md",
+            "week_number": 1,
+            "appended_timestamp": "2026-01-26T20:00:00Z"
+        }
+
+    Raises:
+        FileNotFoundError: If log doesn't exist (not initialized)
+        ValueError: If week_data structure is invalid
+    """
+    if repo is None:
+        repo = RepositoryIO()
+
+    timestamp = datetime.now()
+
+    # Validate week_data structure
+    required_fields = [
+        "week_number", "week_dates", "planned_volume_km", "actual_volume_km",
+        "adherence_pct", "completed_workouts", "key_metrics", "coach_observations"
+    ]
+    for field in required_fields:
+        if field not in week_data:
+            raise ValueError(f"Missing required field in week_data: {field}")
+
+    # Read existing log
+    log_path = current_training_log_path()
+    log_abs_path = repo.resolve_path(log_path)
+
+    if not log_abs_path.exists():
+        raise FileNotFoundError(
+            f"Training log not found. Initialize it first with initialize_training_log()"
+        )
+
+    with open(log_abs_path, 'r') as f:
+        existing_content = f.read()
+
+    # Get phase for this week
+    week_obj = next((w for w in plan.weeks if w.week_number == week_data["week_number"]), None)
+    phase_display = week_obj.phase.replace("_", " ").title() if week_obj else "Training"
+
+    # Create athlete-friendly opening
+    adherence_msg = _get_adherence_message(week_data['adherence_pct'])
+
+    # Format weekly summary with friendly, narrative style
+    week_summary = f"""## Week {week_data['week_number']}: {phase_display} ({week_data['week_dates']})
+
+You completed **{week_data['actual_volume_km']:.1f} km** of your planned {week_data['planned_volume_km']:.1f} km this week ({week_data['adherence_pct']:.0f}% adherence) - {adherence_msg}
+
+### Your Runs This Week
+
+"""
+
+    # Add workout details in narrative format
+    for workout in week_data['completed_workouts']:
+        # Determine status emoji
+        status_emoji = workout.get('status_emoji', '✅')
+
+        # Format workout type for display
+        workout_type = workout['type'].replace('_', ' ').title()
+
+        # Build workout header
+        if status_emoji == '✅':
+            workout_header = f"**{workout['day']}** - {workout_type} {workout['distance_km']:.1f} km"
+        elif status_emoji == '⏭️':
+            workout_header = f"**{workout['day']}** - {workout_type} (skipped)"
+        else:
+            workout_header = f"**{workout['day']}** - {workout_type} {workout['distance_km']:.1f} km"
+
+        week_summary += workout_header
+
+        # Add pace if completed
+        if status_emoji == '✅' and 'pace_per_km' in workout and workout['pace_per_km']:
+            week_summary += f" @ {workout['pace_per_km']}/km"
+
+        week_summary += "\n"
+
+        # Add HR with friendly context
+        if 'hr_avg' in workout and workout['hr_avg']:
+            hr_context = _get_hr_context(workout.get('hr_avg'))
+            week_summary += f"- Heart rate: {workout['hr_avg']} bpm{hr_context}\n"
+
+        # Add athlete notes in italics for personal touch
+        if 'notes' in workout and workout['notes']:
+            week_summary += f"- _{workout['notes']}_\n"
+
+        week_summary += "\n"
+
+    # Add coach observations with friendly heading
+    week_summary += f"""### Coach's Take
+
+{week_data['coach_observations']}
+"""
+
+    # Add fitness snapshot with plain English explanations
+    ctl_start = week_data['key_metrics'].get('ctl_start', 0)
+    ctl_end = week_data['key_metrics'].get('ctl_end', 0)
+    tsb_start = week_data['key_metrics'].get('tsb_start', 0)
+    tsb_end = week_data['key_metrics'].get('tsb_end', 0)
+    acwr = week_data['key_metrics'].get('acwr', 0)
+
+    ctl_explanation = _explain_ctl_change(ctl_start, ctl_end)
+    tsb_explanation = _explain_tsb(tsb_end)
+    acwr_explanation = _explain_acwr(acwr)
+
+    week_summary += f"""
+### Fitness Snapshot
+- {ctl_explanation}
+- {tsb_explanation}
+- {acwr_explanation}
+"""
+
+    # Add milestones if present
+    if 'milestones' in week_data and week_data['milestones']:
+        week_summary += "\n### Milestones 🎯\n"
+        for milestone in week_data['milestones']:
+            week_summary += f"- {milestone}\n"
+
+    week_summary += "\n---\n"
+
+    # Append to log
+    updated_content = existing_content + "\n" + week_summary
+
+    with open(log_abs_path, 'w') as f:
+        f.write(updated_content)
+
+    return {
+        "log_path": log_path,
+        "week_number": week_data['week_number'],
+        "appended_timestamp": timestamp.isoformat()
+    }

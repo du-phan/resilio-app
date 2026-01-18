@@ -24,6 +24,10 @@ from sports_coach_engine.core.plan import (
     suggest_volume_adjustment,
     create_workout,
     validate_guardrails,
+    save_plan_review,
+    append_plan_adaptation,
+    initialize_training_log,
+    append_weekly_summary,
 )
 from sports_coach_engine.core.adaptation import (
     detect_adaptation_triggers,
@@ -650,3 +654,273 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
     total_workouts = sum(len(w.workouts) for w in validated_weeks)
 
     return complete_plan
+
+# ============================================================
+# PLAN REVIEW AND TRAINING LOG API
+# ============================================================
+
+
+def save_training_plan_review(
+    review_file_path: str,
+    approved: bool = True
+) -> Union[dict, PlanError]:
+    """Save training plan review markdown to repository.
+
+    High-level API function that:
+    1. Loads current plan
+    2. Gets athlete profile for name
+    3. Validates review file exists
+    4. Calls core save_plan_review() function
+    5. Handles all error cases gracefully
+
+    Args:
+        review_file_path: Path to review markdown file
+        approved: True for approved plan, False for draft
+
+    Returns:
+        Success: dict with saved_path, approval_timestamp
+        Error: PlanError with error details
+
+    Example:
+        result = save_training_plan_review("/tmp/training_plan_review_2026_01_20.md")
+        if isinstance(result, PlanError):
+            print(f"Error: {result.message}")
+        else:
+            print(f"Review saved to: {result['saved_path']}")
+    """
+    import os
+    repo = RepositoryIO()
+
+    # 1. Load current plan
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        return plan_result
+
+    plan = plan_result
+
+    # 2. Get athlete profile for name
+    athlete_name = None
+    profile_result = repo.read_yaml(athlete_profile_path(), AthleteProfile, ReadOptions())
+    if not isinstance(profile_result, RepoError):
+        athlete_name = profile_result.name
+
+    # 3. Validate review file exists
+    if not os.path.exists(review_file_path):
+        return PlanError(
+            error_type="not_found",
+            message=f"Review file not found: {review_file_path}"
+        )
+
+    # 4. Call core function
+    try:
+        result = save_plan_review(
+            review_file_path=review_file_path,
+            plan=plan,
+            athlete_name=athlete_name,
+            approved=approved,
+            repo=repo
+        )
+        return result
+    except FileNotFoundError as e:
+        return PlanError(
+            error_type="not_found",
+            message=str(e)
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to save review: {str(e)}"
+        )
+
+
+def append_training_plan_adaptation(
+    adaptation_file_path: str,
+    reason: str
+) -> Union[dict, PlanError]:
+    """Append plan adaptation to existing review markdown.
+
+    High-level API function that:
+    1. Loads current plan
+    2. Validates existing review exists
+    3. Validates adaptation file exists
+    4. Calls core append_plan_adaptation() function
+    5. Handles all error cases gracefully
+
+    Args:
+        adaptation_file_path: Path to adaptation markdown file
+        reason: Adaptation reason (illness/injury/schedule_change/etc)
+
+    Returns:
+        Success: dict with review_path, adaptation_timestamp, reason
+        Error: PlanError with error details
+
+    Example:
+        result = append_training_plan_adaptation("/tmp/plan_adaptation_2026_02_15.md", "illness")
+        if isinstance(result, PlanError):
+            print(f"Error: {result.message}")
+        else:
+            print(f"Adaptation appended to: {result['review_path']}")
+    """
+    import os
+    repo = RepositoryIO()
+
+    # 1. Load current plan
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        return plan_result
+
+    plan = plan_result
+
+    # 2. Validate adaptation file exists
+    if not os.path.exists(adaptation_file_path):
+        return PlanError(
+            error_type="not_found",
+            message=f"Adaptation file not found: {adaptation_file_path}"
+        )
+
+    # 3. Call core function
+    try:
+        result = append_plan_adaptation(
+            adaptation_file_path=adaptation_file_path,
+            plan=plan,
+            reason=reason,
+            repo=repo
+        )
+        return result
+    except FileNotFoundError as e:
+        return PlanError(
+            error_type="not_found",
+            message=str(e)
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to append adaptation: {str(e)}"
+        )
+
+
+def initialize_plan_training_log() -> Union[dict, PlanError]:
+    """Initialize training log for current plan.
+
+    High-level API function that:
+    1. Loads current plan
+    2. Gets athlete profile for name
+    3. Calls core initialize_training_log() function
+    4. Handles all error cases gracefully
+
+    Returns:
+        Success: dict with log_path, created_timestamp
+        Error: PlanError with error details
+
+    Example:
+        result = initialize_plan_training_log()
+        if isinstance(result, PlanError):
+            print(f"Error: {result.message}")
+        else:
+            print(f"Training log initialized: {result['log_path']}")
+    """
+    repo = RepositoryIO()
+
+    # 1. Load current plan
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        return plan_result
+
+    plan = plan_result
+
+    # 2. Get athlete profile for name
+    athlete_name = None
+    profile_result = repo.read_yaml(athlete_profile_path(), AthleteProfile, ReadOptions())
+    if not isinstance(profile_result, RepoError):
+        athlete_name = profile_result.name
+
+    # 3. Call core function
+    try:
+        result = initialize_training_log(
+            plan=plan,
+            athlete_name=athlete_name,
+            repo=repo
+        )
+        return result
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to initialize training log: {str(e)}"
+        )
+
+
+def append_weekly_training_summary(week_data: dict) -> Union[dict, PlanError]:
+    """Append weekly summary to training log.
+
+    High-level API function that:
+    1. Loads current plan
+    2. Validates log exists (initialized with plan)
+    3. Validates week_data structure
+    4. Calls core append_weekly_summary() function
+    5. Handles all error cases gracefully
+
+    Args:
+        week_data: Weekly summary dict (see core function for structure)
+
+    Returns:
+        Success: dict with log_path, week_number, appended_timestamp
+        Error: PlanError with error details
+
+    Example:
+        week_data = {
+            "week_number": 1,
+            "week_dates": "Jan 20-26",
+            "planned_volume_km": 22.0,
+            "actual_volume_km": 20.0,
+            "adherence_pct": 91.0,
+            "completed_workouts": [...],
+            "key_metrics": {"ctl": 30, "tsb": 1, "acwr": 1.1},
+            "coach_observations": "Great first week...",
+            "milestones": []
+        }
+        result = append_weekly_training_summary(week_data)
+    """
+    repo = RepositoryIO()
+
+    # 1. Load current plan
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        return plan_result
+
+    plan = plan_result
+
+    # 2. Validate week_data structure
+    required_fields = [
+        "week_number", "week_dates", "planned_volume_km", "actual_volume_km",
+        "adherence_pct", "completed_workouts", "key_metrics", "coach_observations"
+    ]
+    for field in required_fields:
+        if field not in week_data:
+            return PlanError(
+                error_type="validation",
+                message=f"Missing required field in week_data: {field}"
+            )
+
+    # 3. Call core function
+    try:
+        result = append_weekly_summary(
+            week_data=week_data,
+            plan=plan,
+            repo=repo
+        )
+        return result
+    except FileNotFoundError as e:
+        return PlanError(
+            error_type="not_found",
+            message=str(e)
+        )
+    except ValueError as e:
+        return PlanError(
+            error_type="validation",
+            message=str(e)
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to append weekly summary: {str(e)}"
+        )

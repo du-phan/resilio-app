@@ -1311,3 +1311,23 @@ class TestPlanPersistence:
         archive_path = archive_current_plan("test", repo)
 
         assert archive_path is None
+
+
+class TestPlanReviewAndLogPaths:
+    """Test plan review and training log path functions."""
+
+    def test_current_plan_review_path(self):
+        """Test current plan review path returns correct location."""
+        from sports_coach_engine.core.paths import current_plan_review_path
+
+        path = current_plan_review_path()
+        assert path.endswith("current_plan_review.md")
+        assert "plans" in path
+
+    def test_current_training_log_path(self):
+        """Test current training log path returns correct location."""
+        from sports_coach_engine.core.paths import current_training_log_path
+
+        path = current_training_log_path()
+        assert path.endswith("current_training_log.md")
+        assert "plans" in path
