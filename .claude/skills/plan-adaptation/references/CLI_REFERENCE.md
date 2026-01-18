@@ -31,8 +31,15 @@ sce plan update-week --week [N] --from-json [file.json]
 # Partial replan from week N onward (JSON: weeks array)
 sce plan update-from --week [N] --from-json [file.json]
 
-# View current plan
+# View current plan (entire plan)
 sce plan show
+
+# Get specific week(s) from plan (efficient, smaller output)
+sce plan week                    # Current week
+sce plan week --next             # Next week
+sce plan week --week [N]         # Specific week
+sce plan week --date YYYY-MM-DD  # Week containing date
+sce plan week --week [N] --count 2  # Multiple consecutive weeks
 ```
 
 ---

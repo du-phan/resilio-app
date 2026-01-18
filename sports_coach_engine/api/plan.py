@@ -70,6 +70,18 @@ class DeclineResult:
     original_kept: dict
 
 
+@dataclass
+class PlanWeeksResult:
+    """Result from getting specific weeks from plan."""
+
+    weeks: list  # List of WeekPlan objects
+    goal: dict  # Goal details (type, date, time)
+    current_week_number: int  # Current week in plan (1-indexed)
+    total_weeks: int  # Total weeks in plan
+    week_range: str  # "Week 5 of 12" or "Weeks 5-6 of 12"
+    plan_context: dict  # Additional context (volumes, policy)
+
+
 # ============================================================
 # PUBLIC API FUNCTIONS
 # ============================================================
@@ -360,6 +372,133 @@ def decline_suggestion(suggestion_id: str) -> Union[DeclineResult, PlanError]:
     return PlanError(
         error_type="not_found",
         message=f"Suggestion {suggestion_id} not found. Suggestion management is simplified in v0.",
+    )
+
+
+def get_plan_weeks(
+    week_number: Optional[int] = None,
+    target_date: Optional[date] = None,
+    next_week: bool = False,
+    count: int = 1
+) -> Union[PlanWeeksResult, PlanError]:
+    """
+    Get specific week(s) from the training plan.
+
+    Args:
+        week_number: Explicit week number (1-indexed). Takes priority.
+        target_date: Date to find week for. Second priority.
+        next_week: If True, return next week. Third priority.
+        count: Number of consecutive weeks to return (default: 1)
+
+    Returns:
+        PlanWeeksResult with requested weeks and context
+        PlanError on failure
+
+    Example:
+        >>> # Get current week
+        >>> result = get_plan_weeks()
+        >>> if isinstance(result, PlanError):
+        ...     print(f"Error: {result.message}")
+        ... else:
+        ...     print(f"{result.week_range}: {len(result.weeks[0].workouts)} workouts")
+
+        >>> # Get next week
+        >>> result = get_plan_weeks(next_week=True)
+
+        >>> # Get specific week
+        >>> result = get_plan_weeks(week_number=5)
+
+        >>> # Get week by date
+        >>> result = get_plan_weeks(target_date=date(2026, 2, 15))
+
+        >>> # Get multiple weeks
+        >>> result = get_plan_weeks(week_number=5, count=2)
+    """
+    # 1. Load current plan
+    plan = get_current_plan()
+    if isinstance(plan, PlanError):
+        return plan
+
+    # 2. Determine current week
+    today = date.today()
+    current_week_num = None
+    before_plan_start = False
+
+    for week in plan.weeks:
+        if week.start_date <= today <= week.end_date:
+            current_week_num = week.week_number
+            break
+
+    # If today is not within any week
+    if current_week_num is None:
+        if today > plan.end_date:
+            # Past plan end - treat last week as current
+            current_week_num = plan.total_weeks
+        else:
+            # Before plan start - week 1 hasn't started yet
+            # Treat as "week 0" so next_week returns week 1
+            before_plan_start = True
+            current_week_num = 0  # Week 0 means "before plan starts"
+
+    # 3. Determine target week number
+    if week_number is not None:
+        target_week = week_number
+    elif target_date is not None:
+        target_week = None
+        for week in plan.weeks:
+            if week.start_date <= target_date <= week.end_date:
+                target_week = week.week_number
+                break
+        if target_week is None:
+            return PlanError(
+                error_type="not_found",
+                message=f"No week found containing date {target_date}"
+            )
+    elif next_week:
+        target_week = current_week_num + 1
+        if target_week > plan.total_weeks:
+            return PlanError(
+                error_type="not_found",
+                message="Next week is beyond plan end date"
+            )
+    else:
+        # Default: current week
+        # If before plan start, show week 1 (the upcoming week)
+        target_week = max(current_week_num, 1)
+
+    # 4. Validate week number
+    if target_week < 1 or target_week > plan.total_weeks:
+        return PlanError(
+            error_type="validation",
+            message=f"Week {target_week} out of range (plan has {plan.total_weeks} weeks)"
+        )
+
+    # 5. Extract requested weeks
+    end_week = min(target_week + count - 1, plan.total_weeks)
+    requested_weeks = [w for w in plan.weeks if target_week <= w.week_number <= end_week]
+
+    # 6. Build week range string
+    if len(requested_weeks) == 1:
+        week_range = f"Week {target_week} of {plan.total_weeks}"
+    else:
+        week_range = f"Weeks {target_week}-{end_week} of {plan.total_weeks}"
+
+    # 7. Return result
+    return PlanWeeksResult(
+        weeks=requested_weeks,
+        goal={
+            "type": plan.goal.get("type") if isinstance(plan.goal, dict) else plan.goal.type,
+            "target_date": plan.goal.get("target_date") if isinstance(plan.goal, dict) else plan.goal.target_date,
+            "target_time": plan.goal.get("target_time") if isinstance(plan.goal, dict) else plan.goal.target_time
+        },
+        current_week_number=current_week_num,
+        total_weeks=plan.total_weeks,
+        week_range=week_range,
+        plan_context={
+            "starting_volume_km": plan.starting_volume_km,
+            "peak_volume_km": plan.peak_volume_km,
+            "conflict_policy": plan.conflict_policy,
+        }
     )
 
 

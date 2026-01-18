@@ -6,11 +6,13 @@ View current plan or regenerate based on goal.
 
 import json
 from pathlib import Path
+from typing import Optional
 
 import typer
 
 from sports_coach_engine.api import get_current_plan, regenerate_plan
 from sports_coach_engine.api.plan import (
+    get_plan_weeks,
     populate_plan_workouts,
     update_plan_week,
     update_plan_from_week,
@@ -78,6 +80,79 @@ def plan_regen_command(ctx: typer.Context) -> None:
     envelope = api_result_to_envelope(
         result,
         success_message="Regenerated training plan based on current goal",
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="week")
+def plan_week_command(
+    ctx: typer.Context,
+    week: Optional[int] = typer.Option(
+        None,
+        "--week",
+        help="Week number (1-indexed). Defaults to current week."
+    ),
+    next_week: bool = typer.Option(
+        False,
+        "--next",
+        help="Get next week instead of current week"
+    ),
+    date_str: Optional[str] = typer.Option(
+        None,
+        "--date",
+        help="Get week containing this date (YYYY-MM-DD)"
+    ),
+    count: int = typer.Option(
+        1,
+        "--count",
+        help="Number of consecutive weeks to return (default: 1)"
+    ),
+) -> None:
+    """Get specific week(s) from the training plan.
+
+    Returns just the requested week(s) with workouts, not the entire plan.
+    Useful for previewing upcoming training or reviewing specific weeks.
+
+    Examples:
+        sce plan week                    # Current week
+        sce plan week --next             # Next week
+        sce plan week --week 5           # Week 5 specifically
+        sce plan week --date 2026-02-15  # Week containing this date
+        sce plan week --week 5 --count 2 # Weeks 5-6
+    """
+    # Parse date if provided
+    target_date = None
+    if date_str:
+        try:
+            from datetime import datetime
+            target_date = datetime.fromisoformat(date_str).date()
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid date format: {date_str}. Use YYYY-MM-DD",
+                data={"provided": date_str}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    # Call API
+    result = get_plan_weeks(
+        week_number=week,
+        target_date=target_date,
+        next_week=next_week,
+        count=count
+    )
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=_build_week_message(result),
     )
 
     # Output JSON
@@ -352,6 +427,28 @@ def _build_plan_message(result: any) -> str:
         return f"Current plan: {result.total_weeks} weeks for {goal_type}"
 
     return "Retrieved current training plan"
+
+
+def _build_week_message(result: any) -> str:
+    """Build human-readable message for plan weeks.
+
+    Args:
+        result: PlanWeeksResult from API
+
+    Returns:
+        Human-readable message
+    """
+    from sports_coach_engine.api.plan import PlanWeeksResult
+
+    if not isinstance(result, PlanWeeksResult):
+        return "Plan weeks retrieved"
+
+    if len(result.weeks) == 1:
+        week = result.weeks[0]
+        return f"{result.week_range}: {week.phase} phase ({week.start_date} to {week.end_date})"
+    else:
+        return f"{result.week_range}: {len(result.weeks)} weeks retrieved"
+
 
 @app.command(name="save-review")
 def plan_save_review_command(

@@ -12,12 +12,14 @@ from unittest.mock import Mock, patch
 from sports_coach_engine.api.plan import (
     get_current_plan,
     regenerate_plan,
+    get_plan_weeks,
     get_pending_suggestions,
     accept_suggestion,
     decline_suggestion,
     PlanError,
     AcceptResult,
     DeclineResult,
+    PlanWeeksResult,
 )
 from sports_coach_engine.schemas.plan import MasterPlan
 from sports_coach_engine.schemas.profile import Goal, GoalType, AthleteProfile
@@ -292,3 +294,201 @@ class TestDeclineSuggestion:
         assert isinstance(result, PlanError)
         assert result.error_type == "not_found"
         assert "not found" in result.message.lower()
+
+
+# ============================================================
+# GET_PLAN_WEEKS TESTS
+# ============================================================
+
+
+@pytest.fixture
+def mock_plan_with_weeks():
+    """Mock MasterPlan with multiple weeks."""
+    plan = Mock(spec=MasterPlan)
+    plan.total_weeks = 9
+    plan.end_date = date.today() + timedelta(weeks=9)
+    plan.starting_volume_km = 20.0
+    plan.peak_volume_km = 45.19
+    plan.conflict_policy = "running_goal_wins"
+
+    # Create mock goal
+    plan.goal = {
+        "type": "marathon",
+        "target_date": date.today() + timedelta(weeks=9),
+        "target_time": "4:34:00"
+    }
+
+    # Create mock weeks
+    plan.weeks = []
+    for i in range(1, 10):
+        week = Mock()
+        week.week_number = i
+        week.phase = "build" if i < 7 else "taper"
+        week.start_date = date.today() + timedelta(weeks=i-3)
+        week.end_date = week.start_date + timedelta(days=6)
+        week.workouts = [Mock(), Mock()]  # 2 mock workouts per week
+        plan.weeks.append(week)
+
+    return plan
+
+
+class TestGetPlanWeeks:
+    """Test get_plan_weeks() function."""
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_current_week_default(self, mock_get_plan, mock_plan_with_weeks):
+        """Test retrieving current week (default behavior)."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks()
+
+        # Should return PlanWeeksResult
+        assert isinstance(result, PlanWeeksResult)
+        assert len(result.weeks) == 1
+        assert result.current_week_number == 3  # Week containing today
+        assert result.total_weeks == 9
+        assert "Week 3 of 9" in result.week_range
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_next_week(self, mock_get_plan, mock_plan_with_weeks):
+        """Test retrieving next week with --next flag."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks(next_week=True)
+
+        # Should return next week
+        assert isinstance(result, PlanWeeksResult)
+        assert len(result.weeks) == 1
+        assert result.weeks[0].week_number == 4  # Next week
+        assert "Week 4 of 9" in result.week_range
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_specific_week_number(self, mock_get_plan, mock_plan_with_weeks):
+        """Test retrieving specific week by number."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks(week_number=5)
+
+        # Should return week 5
+        assert isinstance(result, PlanWeeksResult)
+        assert len(result.weeks) == 1
+        assert result.weeks[0].week_number == 5
+        assert "Week 5 of 9" in result.week_range
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_week_by_date(self, mock_get_plan, mock_plan_with_weeks):
+        """Test retrieving week containing specific date."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        # Get week 5's start date
+        target_date = mock_plan_with_weeks.weeks[4].start_date
+
+        result = get_plan_weeks(target_date=target_date)
+
+        # Should return week 5
+        assert isinstance(result, PlanWeeksResult)
+        assert len(result.weeks) == 1
+        assert result.weeks[0].week_number == 5
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_multiple_consecutive_weeks(self, mock_get_plan, mock_plan_with_weeks):
+        """Test retrieving multiple consecutive weeks with --count."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks(week_number=5, count=2)
+
+        # Should return weeks 5-6
+        assert isinstance(result, PlanWeeksResult)
+        assert len(result.weeks) == 2
+        assert result.weeks[0].week_number == 5
+        assert result.weeks[1].week_number == 6
+        assert "Weeks 5-6 of 9" in result.week_range
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_week_out_of_range(self, mock_get_plan, mock_plan_with_weeks):
+        """Test error when week number is out of range."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks(week_number=99)
+
+        # Should return PlanError
+        assert isinstance(result, PlanError)
+        assert result.error_type == "validation"
+        assert "out of range" in result.message
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_next_week_beyond_plan_end(self, mock_get_plan, mock_plan_with_weeks):
+        """Test error when next week is beyond plan end."""
+        # Adjust all weeks so week 9 is the current week
+        # Set weeks 1-8 to be in the past, week 9 to contain today
+        today = date.today()
+        for i, week in enumerate(mock_plan_with_weeks.weeks):
+            if i < 8:  # Weeks 1-8 are in the past
+                week.start_date = today - timedelta(weeks=(9-i))
+                week.end_date = week.start_date + timedelta(days=6)
+            else:  # Week 9 contains today
+                week.start_date = today
+                week.end_date = today + timedelta(days=6)
+
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks(next_week=True)
+
+        # Should return PlanError
+        assert isinstance(result, PlanError)
+        assert result.error_type == "not_found"
+        assert "beyond plan end" in result.message
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_week_by_date_not_found(self, mock_get_plan, mock_plan_with_weeks):
+        """Test error when date is not in any week."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        # Use a date far in the past
+        old_date = date.today() - timedelta(days=365)
+
+        result = get_plan_weeks(target_date=old_date)
+
+        # Should return PlanError
+        assert isinstance(result, PlanError)
+        assert result.error_type == "not_found"
+        assert "No week found" in result.message
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_get_weeks_no_plan_exists(self, mock_get_plan):
+        """Test error when no plan exists."""
+        mock_get_plan.return_value = PlanError(
+            error_type="not_found",
+            message="No training plan found"
+        )
+
+        result = get_plan_weeks()
+
+        # Should return PlanError
+        assert isinstance(result, PlanError)
+        assert result.error_type == "not_found"
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_plan_context_included(self, mock_get_plan, mock_plan_with_weeks):
+        """Test that plan context is included in result."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks()
+
+        # Should include plan context
+        assert isinstance(result, PlanWeeksResult)
+        assert result.plan_context["starting_volume_km"] == 20.0
+        assert result.plan_context["peak_volume_km"] == 45.19
+        assert result.plan_context["conflict_policy"] == "running_goal_wins"
+
+    @patch("sports_coach_engine.api.plan.get_current_plan")
+    def test_goal_details_included(self, mock_get_plan, mock_plan_with_weeks):
+        """Test that goal details are included in result."""
+        mock_get_plan.return_value = mock_plan_with_weeks
+
+        result = get_plan_weeks()
+
+        # Should include goal details
+        assert isinstance(result, PlanWeeksResult)
+        assert result.goal["type"] == "marathon"
+        assert result.goal["target_time"] == "4:34:00"

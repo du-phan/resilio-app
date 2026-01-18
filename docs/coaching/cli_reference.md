@@ -21,6 +21,7 @@ Complete reference for Sports Coach Engine command-line interface.
 | **`sce profile set --field value`**     | Update profile               | updated profile with all fields                                     |
 | **`sce plan show`**                     | Get current plan             | goal, total_weeks, weeks array, phases, workouts                    |
 | **`sce plan regen`**                    | Regenerate plan              | new plan based on current goal                                      |
+| **`sce plan week [--next\|--week N]`**  | Get specific week(s)         | week(s) with workouts, goal, current_week, plan_context             |
 | **`sce vdot calculate`**                | Calculate VDOT from race     | vdot, source_race, confidence, formatted_time                       |
 | **`sce vdot paces`**                    | Get training pace zones      | easy/marathon/threshold/interval/repetition pace ranges             |
 | **`sce vdot predict`**                  | Predict race times           | equivalent times for all distances                                  |
@@ -765,6 +766,101 @@ sce plan regen
 - After injury recovery (CTL dropped)
 - Profile constraints changed significantly
 - Want fresh plan with same goal
+
+---
+
+#### `sce plan week`
+
+Get specific week(s) from the training plan without loading the entire plan.
+
+**Usage:**
+
+```bash
+# Current week (default)
+sce plan week
+
+# Next week
+sce plan week --next
+
+# Specific week by number
+sce plan week --week 5
+
+# Week containing a specific date
+sce plan week --date 2026-02-15
+
+# Multiple consecutive weeks
+sce plan week --week 5 --count 2
+```
+
+**Parameters:**
+
+- `--week N` - Week number (1-indexed). Takes priority over other flags.
+- `--next` - Get next week instead of current week
+- `--date YYYY-MM-DD` - Get week containing this date
+- `--count N` - Number of consecutive weeks to return (default: 1)
+
+**Returns:**
+
+```json
+{
+  "ok": true,
+  "message": "Week 5 of 9: build phase (2026-02-16 to 2026-02-22)",
+  "data": {
+    "weeks": [
+      {
+        "week_number": 5,
+        "phase": "build",
+        "start_date": "2026-02-16",
+        "end_date": "2026-02-22",
+        "target_volume_km": 35.0,
+        "target_systemic_load_au": 245.0,
+        "is_recovery_week": false,
+        "notes": "Week 5 - Build phase: Introducing tempo work",
+        "workouts": [
+          {
+            "id": "w_2026-02-16_easy_754e59",
+            "date": "2026-02-16",
+            "workout_type": "easy",
+            "duration_minutes": 31,
+            "distance_km": 5.25,
+            "purpose": "Recovery",
+            "pace_range_min_km": "15:59",
+            "pace_range_max_km": "16:09"
+          }
+        ]
+      }
+    ],
+    "goal": {
+      "type": "marathon",
+      "target_date": "2026-03-28",
+      "target_time": "4:34:00"
+    },
+    "current_week_number": 4,
+    "total_weeks": 9,
+    "week_range": "Week 5 of 9",
+    "plan_context": {
+      "starting_volume_km": 20.0,
+      "peak_volume_km": 45.19,
+      "conflict_policy": "running_goal_wins"
+    }
+  }
+}
+```
+
+**When to use:**
+
+- "What's my training plan for next week?" - Use `--next` flag
+- "What does week 8 look like?" - Use `--week 8`
+- "What training do I have mid-February?" - Use `--date 2026-02-15`
+- Previewing upcoming weeks without loading entire plan
+- More efficient than `sce plan show` when you only need specific weeks
+
+**Benefits:**
+
+- **92% smaller output** - Returns only requested week(s), not entire plan
+- **Single tool call** - No secondary file read required
+- **No file I/O** - Direct data retrieval without persistence
+- **Faster coaching context** - Quickly check next week during coaching sessions
 
 ---
 

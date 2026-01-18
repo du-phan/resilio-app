@@ -361,7 +361,8 @@ sce plan save-review --from-file /tmp/training_plan_review_2026_01_20.md --appro
 sce plan init-log
 
 # 4. Verify all saved correctly
-sce plan show  # Verify plan structure
+sce plan show  # Verify plan structure (entire plan)
+sce plan week --next  # Quick check next week (more efficient)
 sce plan show-review  # Verify review markdown
 sce plan show-log  # Verify log initialized
 ```

@@ -38,12 +38,14 @@ from sports_coach_engine.api.metrics import (
 from sports_coach_engine.api.plan import (
     get_current_plan,
     regenerate_plan,
+    get_plan_weeks,
     get_pending_suggestions,
     accept_suggestion,
     decline_suggestion,
     PlanError,
     AcceptResult,
     DeclineResult,
+    PlanWeeksResult,
     # Toolkit functions
     calculate_periodization,
     calculate_volume_progression,
@@ -139,12 +141,14 @@ __all__ = [
     # Plan operations
     "get_current_plan",
     "regenerate_plan",
+    "get_plan_weeks",
     "get_pending_suggestions",
     "accept_suggestion",
     "decline_suggestion",
     "PlanError",
     "AcceptResult",
     "DeclineResult",
+    "PlanWeeksResult",
     # Toolkit functions
     "calculate_periodization",
     "calculate_volume_progression",
