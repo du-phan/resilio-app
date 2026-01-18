@@ -17,6 +17,9 @@ from sports_coach_engine.schemas.plan import MasterPlan
 from sports_coach_engine.schemas.profile import Goal, AthleteProfile
 from sports_coach_engine.schemas.adaptation import Suggestion
 
+# Import for populate_plan_workouts validation
+from sports_coach_engine.api.profile import get_profile, ProfileError
+
 # Import toolkit functions from core modules
 from sports_coach_engine.core.plan import (
     calculate_periodization,
@@ -565,6 +568,38 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
             error_type="validation",
             message=f"Invalid week data: {str(e)}",
         )
+
+    # 2b. Validate business logic for each week
+    from sports_coach_engine.core.plan import validate_week
+
+    all_violations = []
+    for week in validated_weeks:
+        # Get profile for context-aware validation
+        profile_result = get_profile()
+        profile_dict = profile_result.model_dump() if not isinstance(profile_result, ProfileError) else {}
+
+        violations = validate_week(week, profile_dict)
+        all_violations.extend(violations)
+
+    # Block save only if DANGER violations found (warnings are logged but allowed)
+    danger_violations = [v for v in all_violations if v.severity == "danger"]
+    if danger_violations:
+        violation_messages = "\n".join([
+            f"  - Week {v.week}: {v.message} (Suggestion: {v.suggestion})"
+            for v in danger_violations
+        ])
+        return PlanError(
+            error_type="validation",
+            message=f"Plan validation failed with {len(danger_violations)} critical violation(s):\n{violation_messages}",
+        )
+
+    # Log warnings but don't block
+    warning_violations = [v for v in all_violations if v.severity == "warning"]
+    if warning_violations:
+        import logging
+        logger = logging.getLogger(__name__)
+        for v in warning_violations:
+            logger.warning(f"Week {v.week}: {v.message}")
 
     # 3. Merge into plan (replace weeks array)
     plan.weeks = validated_weeks

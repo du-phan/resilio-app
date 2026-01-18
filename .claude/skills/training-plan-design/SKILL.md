@@ -224,9 +224,83 @@ python .claude/skills/training-plan-design/scripts/generate_workouts.py validate
 - ✓ `start_date` is Monday (weekday 0)
 - ✓ `end_date` is Sunday (weekday 6)
 - ✓ All workouts have required fields
-- ✓ Total workout volume ≈ target volume (±10%)
+- ✓ Total workout volume ≈ target volume (±5%)
 - ✓ Pace ranges match VDOT
 - ✓ HR zones within 50-100% max_hr
+- ✓ No back-to-back hard days
+- ✓ Long run ≤30% weekly volume, ≤2.5h duration
+- ✓ Quality volume within Daniels limits (T≤10%, I≤8%, R≤5%)
+
+**IF VALIDATION FAILS**: Review error messages, adjust workouts, and regenerate. DO NOT save plans with validation errors!
+
+---
+
+### Step 5c: Use Volume Distribution Helper (RECOMMENDED)
+
+**Problem**: Fixed percentage allocations (28% long run, 15% easy) don't account for number of workouts, causing volume mismatches.
+
+**Solution**: Use `distribute_weekly_volume()` toolkit function to calculate distances that sum to target.
+
+**Python helper** (use this when designing workouts):
+```python
+import sys
+sys.path.insert(0, '/Users/duphan/Projects/sports-coach-engine')
+
+from sports_coach_engine.core.plan import distribute_weekly_volume, suggest_long_run_progression
+from sports_coach_engine.schemas.plan import WorkoutType, PlanPhase
+
+# Example: Week 1 with 25km target
+workout_types = [WorkoutType.LONG_RUN, WorkoutType.EASY, WorkoutType.EASY, WorkoutType.EASY]
+allocation = distribute_weekly_volume(
+    weekly_volume_km=25.0,
+    workout_types=workout_types,
+    profile=None  # Or pass profile dict with typical_easy_distance_km, etc.
+)
+
+# Result: {0: 7.0, 1: 6.0, 2: 6.0, 3: 6.0} → sums to 25km!
+# Use these distances when building workout_schedule
+```
+
+**Long run progression helper** (consult athlete's historical capacity):
+```python
+# Get athlete's recent long run distance
+# Example: recent activities show 8km long runs
+
+suggestion = suggest_long_run_progression(
+    current_long_run_km=8.0,
+    weeks_to_peak=10,
+    target_peak_long_run_km=22.0,
+    phase=PlanPhase.BASE
+)
+
+# Returns: {"suggested_distance_km": 9.0, "rationale": "...", "min_safe_km": 7.2, "max_safe_km": 9.2}
+# Use this as REFERENCE - adjust based on athlete context
+```
+
+**⚠️ CRITICAL: Respect Minimum Workout Durations**
+
+When using `distribute_weekly_volume()`:
+- **Always pass the `profile` parameter** with athlete's typical patterns (from `sce profile get`)
+- Verify allocated distances meet minimums (especially easy runs)
+- Generic minimums: Easy runs ≥5km, Long runs ≥8km
+- Profile-aware minimums: 80% of athlete's typical (e.g., if typical easy run is 7km, minimum is 5.6km)
+
+**If target volume is low**, consider:
+- **Reducing run frequency** (3 runs instead of 4) to maintain longer individual runs
+- **Increasing target volume** if athlete's CTL and ACWR allow
+- **Accepting shorter runs with clear justification** (e.g., injury recovery, specific taper phase)
+
+**Common mistake**: 22km target with 4 runs (3 easy + 1 long) creates 3.7km easy runs - too short for most athletes!
+
+**Better approach**: 22km with 3 runs (2 easy + 1 long) creates 6.5km easy runs - more realistic.
+
+**Auto-compute patterns**: Run `poetry run sce profile analyze` to automatically compute athlete's typical workout patterns from recent history (last 60 days).
+
+**Key principle**: Tools SUGGEST, you DECIDE based on:
+- Athlete's recent activity patterns (`sce activity list --since 30d`)
+- Injury history and constraints (`sce memory list --type INJURY_HISTORY`)
+- Multi-sport schedule conflicts
+- Recovery state (TSB, readiness)
 
 ---
 

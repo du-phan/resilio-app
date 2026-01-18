@@ -562,16 +562,22 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
     # 4. Volume analysis
     volume_data = _analyze_volume(activities)
 
-    # 5. Training day patterns
+    # 5. Workout pattern analysis (for profile-aware minimums)
+    workout_patterns = _analyze_workout_patterns(activities)
+
+    # 6. Training day patterns
     day_patterns = _analyze_training_days(activities)
 
-    # 6. Sport distribution
+    # 7. Sport distribution
     sport_data = _analyze_sport_distribution(activities)
 
-    # 7. Generate recommendations
+    # 8. Generate recommendations
     recommendations = _generate_recommendations(
         hr_data, volume_data, day_patterns, sport_data
     )
+
+    # 9. Auto-update profile with workout patterns (if profile exists)
+    _auto_update_profile_patterns(workout_patterns)
 
     # Build result
     analysis = ProfileAnalysis(
@@ -671,6 +677,66 @@ def _analyze_volume(activities: List[NormalizedActivity]) -> Dict:
     }
 
 
+def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
+    """Compute typical workout distances/durations for profile-aware minimums.
+
+    Classifies runs from last 60 days:
+    - Easy runs: 3-10km (typical base runs)
+    - Long runs: 10+ km (weekly long runs)
+
+    Returns averages for each category to set profile-aware minimums.
+    """
+    from datetime import datetime
+
+    # Filter to last 60 days of running activities
+    cutoff_date = date.today() - timedelta(days=60)
+    recent_runs = [
+        a for a in activities
+        if a.sport_type in ["run", "trail_run", "treadmill_run"]
+        and a.date >= cutoff_date
+        and a.distance_km is not None
+        and a.distance_km >= 3.0  # Exclude very short shakeout runs
+    ]
+
+    if not recent_runs:
+        return {
+            'typical_easy_distance_km': None,
+            'typical_easy_duration_min': None,
+            'typical_long_run_distance_km': None,
+            'typical_long_run_duration_min': None
+        }
+
+    # Classify runs by distance (heuristic)
+    easy_runs = [r for r in recent_runs if 3.0 <= r.distance_km < 10.0]
+    long_runs = [r for r in recent_runs if r.distance_km >= 10.0]
+
+    # Compute averages
+    typical_easy_km = None
+    typical_easy_min = None
+    if easy_runs:
+        typical_easy_km = sum(r.distance_km for r in easy_runs) / len(easy_runs)
+        # Only include duration if available
+        easy_with_duration = [r for r in easy_runs if r.duration_minutes]
+        if easy_with_duration:
+            typical_easy_min = sum(r.duration_minutes for r in easy_with_duration) / len(easy_with_duration)
+
+    typical_long_km = None
+    typical_long_min = None
+    if long_runs:
+        typical_long_km = sum(r.distance_km for r in long_runs) / len(long_runs)
+        # Only include duration if available
+        long_with_duration = [r for r in long_runs if r.duration_minutes]
+        if long_with_duration:
+            typical_long_min = sum(r.duration_minutes for r in long_with_duration) / len(long_with_duration)
+
+    return {
+        'typical_easy_distance_km': round(typical_easy_km, 1) if typical_easy_km else None,
+        'typical_easy_duration_min': round(typical_easy_min, 1) if typical_easy_min else None,
+        'typical_long_run_distance_km': round(typical_long_km, 1) if typical_long_km else None,
+        'typical_long_run_duration_min': round(typical_long_min, 1) if typical_long_min else None
+    }
+
+
 def _analyze_training_days(activities: List[NormalizedActivity]) -> Dict:
     """Find which days athlete typically trains."""
     day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
@@ -732,6 +798,40 @@ def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) ->
         'run_days': suggested_run_days,
         'running_priority': priority
     }
+
+
+def _auto_update_profile_patterns(workout_patterns: Dict) -> None:
+    """Automatically update profile with workout patterns if profile exists.
+
+    This makes workout patterns immediately available for profile-aware minimums.
+    Silent operation - no error if profile doesn't exist yet.
+    """
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+
+    # Try to load profile (silently fail if doesn't exist)
+    result = repo.read_yaml(
+        profile_path, AthleteProfile, ReadOptions(should_validate=True, allow_missing=True)
+    )
+
+    # If profile doesn't exist or failed to load, skip update
+    if result is None or isinstance(result, RepoError):
+        return
+
+    profile = result
+
+    # Update pattern fields
+    if workout_patterns['typical_easy_distance_km'] is not None:
+        profile.typical_easy_distance_km = workout_patterns['typical_easy_distance_km']
+    if workout_patterns['typical_easy_duration_min'] is not None:
+        profile.typical_easy_duration_min = workout_patterns['typical_easy_duration_min']
+    if workout_patterns['typical_long_run_distance_km'] is not None:
+        profile.typical_long_run_distance_km = workout_patterns['typical_long_run_distance_km']
+    if workout_patterns['typical_long_run_duration_min'] is not None:
+        profile.typical_long_run_duration_min = workout_patterns['typical_long_run_duration_min']
+
+    # Save updated profile (silently fail if save fails)
+    repo.write_yaml(profile_path, profile)
 
 
 # ============================================================

@@ -266,6 +266,7 @@ def calculate_safe_volume_range(
     current_ctl: float,
     goal_type: str = "fitness",
     athlete_age: Optional[int] = None,
+    recent_weekly_volume_km: Optional[float] = None,
 ) -> Union[SafeVolumeRange, GuardrailsError]:
     """
     Calculate safe weekly volume range based on current fitness and goals.
@@ -278,10 +279,16 @@ def calculate_safe_volume_range(
     - 35-50 (Competitive): 40-65 km/week
     - >50 (Advanced): 55-80+ km/week
 
+    IMPORTANT: If recent_weekly_volume_km is provided, this function will recommend
+    starting at or near that volume to avoid dangerous jumps, even if CTL suggests
+    the athlete could handle more. The 10% rule applies to running-specific volume,
+    not just overall fitness (CTL includes all sports).
+
     Args:
         current_ctl: Current chronic training load
         goal_type: Race goal ("5k", "10k", "half_marathon", "marathon", "fitness")
         athlete_age: Age for masters adjustments (optional)
+        recent_weekly_volume_km: Actual recent running volume (last 4 weeks avg) (optional)
 
     Returns:
         SafeVolumeRange on success, GuardrailsError on failure
@@ -290,8 +297,8 @@ def calculate_safe_volume_range(
         >>> calculate_safe_volume_range(44.0, "half_marathon", 52)
         SafeVolumeRange(recommended_start_km=30, recommended_peak_km=45, ...)
 
-        >>> calculate_safe_volume_range(22.0, "10k")
-        SafeVolumeRange(ctl_zone="recreational", base_volume_range_km=(25, 40), ...)
+        >>> calculate_safe_volume_range(27.0, "marathon", recent_weekly_volume_km=18.0)
+        SafeVolumeRange(recommended_start_km=20, ..., volume_gap_pct=78.0)
     """
     try:
         # Validate CTL
@@ -316,8 +323,18 @@ def calculate_safe_volume_range(
                     message=f"Age must be between 18 and 100, got {athlete_age}",
                 )
 
+        # Validate recent volume if provided
+        if recent_weekly_volume_km is not None:
+            if recent_weekly_volume_km < 0:
+                return GuardrailsError(
+                    error_type="invalid_input",
+                    message=f"Recent volume must be non-negative, got {recent_weekly_volume_km}",
+                )
+
         # Call core function
-        result = core_calculate_safe_range(current_ctl, goal_type, athlete_age)
+        result = core_calculate_safe_range(
+            current_ctl, goal_type, athlete_age, recent_weekly_volume_km
+        )
         return result
 
     except ValueError as e:

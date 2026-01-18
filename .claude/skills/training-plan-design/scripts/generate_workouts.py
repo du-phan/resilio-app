@@ -35,12 +35,13 @@ from typing import Optional
 # Add parent directory to path to import from sports_coach_engine
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from sports_coach_engine.core.plan import create_workout
+from sports_coach_engine.core.plan import create_workout, validate_week as toolkit_validate_week
 from sports_coach_engine.schemas.plan import (
     PlanPhase,
     WorkoutType,
     IntensityZone,
     WorkoutPrescription,
+    WeekPlan,
 )
 
 
@@ -56,6 +57,7 @@ def create_workout_prescription(
     purpose: Optional[str] = None,
     notes: Optional[str] = None,
     key_workout: Optional[bool] = None,
+    distance_km: Optional[float] = None,
 ) -> dict:
     """
     Generate complete WorkoutPrescription dict with all required fields.
@@ -111,6 +113,7 @@ def create_workout_prescription(
         phase=phase_enum,
         volume_target_km=volume_target_km,
         profile=profile,
+        allocated_distance_km=distance_km,
     )
 
     # Override purpose if provided
@@ -229,6 +232,7 @@ def generate_week_workouts(
             purpose=workout_def.get("purpose"),
             notes=workout_def.get("notes"),
             key_workout=workout_def.get("key_workout"),
+            distance_km=workout_def.get("distance_km"),
         )
 
         workouts.append(workout)
@@ -299,7 +303,7 @@ def generate_plan_workouts(
     return plan
 
 
-def validate_week(week: dict) -> list[str]:
+def validate_week(week: dict, profile: Optional[dict] = None) -> list[str]:
     """
     Validate a week structure and return list of errors (empty if valid).
 
@@ -307,7 +311,14 @@ def validate_week(week: dict) -> list[str]:
     - start_date is Monday (weekday 0)
     - end_date is Sunday (weekday 6)
     - All workouts have required fields
-    - Total workout volume ≈ target_volume_km (within 10%)
+    - Business logic constraints (volume, minimums, etc.) via toolkit
+
+    Args:
+        week: Week dict to validate
+        profile: Optional athlete profile for context-aware validation
+
+    Returns:
+        List of error messages (empty if valid)
     """
     errors = []
 
@@ -336,15 +347,16 @@ def validate_week(week: dict) -> list[str]:
             if field not in workout:
                 errors.append(f"Week {week['week_number']}, workout {i}: missing field '{field}'")
 
-    # Check volume match (within 10%)
-    actual_volume = sum(w.get("distance_km", 0) or 0 for w in week["workouts"])
-    target_volume = week["target_volume_km"]
-    volume_diff = abs(actual_volume - target_volume)
-    if volume_diff > target_volume * 0.1:
-        errors.append(
-            f"Week {week['week_number']}: workout volume {actual_volume:.1f}km "
-            f"differs from target {target_volume:.1f}km by {volume_diff:.1f}km (>{target_volume * 0.1:.1f}km)"
-        )
+    # Use toolkit validation for business logic
+    try:
+        week_plan = WeekPlan.model_validate(week)
+        violations = toolkit_validate_week(week_plan, profile or {})
+
+        # Convert violations to error messages
+        for violation in violations:
+            errors.append(f"{violation.message} (Suggestion: {violation.suggestion})")
+    except Exception as e:
+        errors.append(f"Week {week['week_number']}: validation error - {str(e)}")
 
     return errors
 

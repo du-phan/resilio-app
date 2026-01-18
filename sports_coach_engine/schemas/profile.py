@@ -183,6 +183,28 @@ class AthleteProfile(BaseModel):
         description="Jack Daniels VDOT (calculated from recent_race or estimated)"
     )
 
+    # Workout Pattern Fields (computed from activity history)
+    typical_easy_distance_km: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Athlete's typical easy run distance (last 60 days avg)"
+    )
+    typical_easy_duration_min: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Athlete's typical easy run duration (last 60 days avg)"
+    )
+    typical_long_run_distance_km: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Athlete's typical long run distance (last 60 days avg)"
+    )
+    typical_long_run_duration_min: Optional[float] = Field(
+        default=None,
+        ge=0,
+        description="Athlete's typical long run duration (last 60 days avg)"
+    )
+
     # Training Constraints
     constraints: TrainingConstraints
 

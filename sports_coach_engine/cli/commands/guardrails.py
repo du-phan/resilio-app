@@ -246,6 +246,11 @@ def safe_volume_command(
         "--age",
         help="Age for masters adjustments (optional)"
     ),
+    recent_volume: Optional[float] = typer.Option(
+        None,
+        "--recent-volume",
+        help="Recent weekly running volume (km/week, last 4 weeks avg) - prevents dangerous jumps"
+    ),
 ) -> None:
     """Calculate safe weekly volume range based on current fitness and goals.
 
@@ -257,12 +262,19 @@ def safe_volume_command(
     - 35-50 (Competitive): 40-65 km/week
     - >50 (Advanced): 55-80+ km/week
 
+    IMPORTANT: If --recent-volume is provided, the recommendation will start near that
+    volume to avoid dangerous jumps, even if CTL suggests higher capacity. Use this to
+    prevent violating the 10% rule when recent running volume differs from overall CTL.
+
     Examples:
         sce guardrails safe-volume --ctl 44.0 --goal half_marathon --age 52
+        sce guardrails safe-volume --ctl 27.0 --goal marathon --recent-volume 18.0
         sce guardrails safe-volume --ctl 22.0 --goal 10k
 
     Returns:
         - ctl_zone: Fitness level category
+        - recent_weekly_volume_km: Actual recent volume (if provided)
+        - volume_gap_pct: Gap between recent volume and CTL recommendation
         - recommended_start_km: Recommended starting weekly volume
         - recommended_peak_km: Recommended peak weekly volume
         - recommendation: Structured guidance
@@ -272,6 +284,7 @@ def safe_volume_command(
         current_ctl=ctl,
         goal_type=goal,
         athlete_age=age,
+        recent_weekly_volume_km=recent_volume,
     )
 
     # Build success message

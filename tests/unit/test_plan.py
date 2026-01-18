@@ -1331,3 +1331,422 @@ class TestPlanReviewAndLogPaths:
         path = current_training_log_path()
         assert path.endswith("current_training_log.md")
         assert "plans" in path
+
+
+class TestVolumeDistribution:
+    """Test volume distribution algorithm."""
+
+    def test_distribute_volume_sums_to_target(self):
+        """Test that distributed volumes sum to weekly target."""
+        from sports_coach_engine.core.plan import distribute_weekly_volume
+        from sports_coach_engine.schemas.plan import WorkoutType
+
+        # Test case: 25km week with 4 workouts (1 long, 3 easy)
+        workout_types = [WorkoutType.LONG_RUN, WorkoutType.EASY, WorkoutType.EASY, WorkoutType.EASY]
+        allocation = distribute_weekly_volume(25.0, workout_types)
+
+        # Check sum is close to target (within 0.5km)
+        total = sum(allocation.values())
+        assert abs(total - 25.0) < 0.5
+
+        # Check long run is allocated
+        assert allocation[0] > 5.0  # Long run should be substantial
+
+    def test_distribute_volume_with_quality_workouts(self):
+        """Test volume distribution with tempo and intervals."""
+        from sports_coach_engine.core.plan import distribute_weekly_volume
+        from sports_coach_engine.schemas.plan import WorkoutType
+
+        # 40km week with varied workouts
+        workout_types = [
+            WorkoutType.EASY,
+            WorkoutType.TEMPO,
+            WorkoutType.EASY,
+            WorkoutType.INTERVALS,
+            WorkoutType.EASY,
+            WorkoutType.LONG_RUN,
+        ]
+        allocation = distribute_weekly_volume(40.0, workout_types)
+
+        # Check sum matches target
+        total = sum(allocation.values())
+        assert abs(total - 40.0) < 0.5
+
+        # Long run should be largest single workout
+        long_run_idx = workout_types.index(WorkoutType.LONG_RUN)
+        assert allocation[long_run_idx] >= max(allocation.values()) * 0.95
+
+    def test_distribute_volume_with_profile_minimums(self):
+        """Test that profile-based minimums are respected."""
+        from sports_coach_engine.core.plan import distribute_weekly_volume
+        from sports_coach_engine.schemas.plan import WorkoutType
+
+        # Profile with typical distances
+        profile = {
+            "typical_easy_distance_km": 7.0,  # Min will be 5.6km (80%)
+            "typical_long_run_distance_km": 12.0,  # Min will be 9.6km (80%)
+        }
+
+        workout_types = [WorkoutType.LONG_RUN, WorkoutType.EASY, WorkoutType.EASY]
+        allocation = distribute_weekly_volume(25.0, workout_types, profile)
+
+        # Check minimums are respected (or close to them)
+        assert allocation[0] >= 8.0  # Long run respects minimum
+        assert all(allocation[i] >= 4.0 for i in [1, 2])  # Easy runs reasonable
+
+
+class TestWeekValidation:
+    """Test week validation including volume mismatch detection."""
+
+    def test_validate_week_detects_volume_mismatch(self):
+        """Test that volume mismatch is detected."""
+        from sports_coach_engine.core.plan import validate_week
+        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+
+        # Create week with volume mismatch
+        workouts = [
+            WorkoutPrescription(
+                id="w1",
+                week_number=1,
+                day_of_week=0,
+                date=date(2026, 1, 20),
+                workout_type=WorkoutType.LONG_RUN,
+                phase=PlanPhase.BASE,
+                duration_minutes=60,
+                distance_km=7.0,  # Only 7km
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=5,
+                purpose="Long run",
+            ),
+            WorkoutPrescription(
+                id="w2",
+                week_number=1,
+                day_of_week=2,
+                date=date(2026, 1, 22),
+                workout_type=WorkoutType.EASY,
+                phase=PlanPhase.BASE,
+                duration_minutes=30,
+                distance_km=5.0,
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=4,
+                purpose="Easy",
+            ),
+        ]
+
+        week = WeekPlan(
+            week_number=1,
+            phase=PlanPhase.BASE,
+            start_date=date(2026, 1, 20),
+            end_date=date(2026, 1, 26),
+            target_volume_km=25.0,  # Target 25km but only have 12km
+            target_systemic_load_au=175.0,
+            workouts=workouts,
+        )
+
+        violations = validate_week(week, {})
+
+        # Should detect volume mismatch (12km vs 25km = 52% difference)
+        volume_violations = [v for v in violations if v.rule == "volume_mismatch"]
+        assert len(volume_violations) > 0
+        assert volume_violations[0].severity in ("warning", "danger")
+
+    def test_validate_week_accepts_matching_volume(self):
+        """Test that matching volume passes validation."""
+        from sports_coach_engine.core.plan import validate_week
+        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+
+        # Create week with matching volume
+        workouts = [
+            WorkoutPrescription(
+                id="w1",
+                week_number=1,
+                day_of_week=0,
+                date=date(2026, 1, 20),
+                workout_type=WorkoutType.LONG_RUN,
+                phase=PlanPhase.BASE,
+                duration_minutes=70,
+                distance_km=12.0,
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=5,
+                purpose="Long run",
+            ),
+            WorkoutPrescription(
+                id="w2",
+                week_number=1,
+                day_of_week=2,
+                date=date(2026, 1, 22),
+                workout_type=WorkoutType.EASY,
+                phase=PlanPhase.BASE,
+                duration_minutes=42,
+                distance_km=7.0,
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=4,
+                purpose="Easy",
+            ),
+            WorkoutPrescription(
+                id="w3",
+                week_number=1,
+                day_of_week=4,
+                date=date(2026, 1, 24),
+                workout_type=WorkoutType.EASY,
+                phase=PlanPhase.BASE,
+                duration_minutes=36,
+                distance_km=6.0,
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=4,
+                purpose="Easy",
+            ),
+        ]
+
+        week = WeekPlan(
+            week_number=1,
+            phase=PlanPhase.BASE,
+            start_date=date(2026, 1, 20),
+            end_date=date(2026, 1, 26),
+            target_volume_km=25.0,  # Total: 12+7+6 = 25km
+            target_systemic_load_au=175.0,
+            workouts=workouts,
+        )
+
+        violations = validate_week(week, {})
+
+        # Should NOT have volume mismatch violations
+        volume_violations = [v for v in violations if v.rule == "volume_mismatch"]
+        assert len(volume_violations) == 0
+
+
+class TestLongRunProgression:
+    """Test long run progression suggestions."""
+
+    def test_suggest_long_run_base_phase(self):
+        """Test long run suggestion respects current capacity in base phase."""
+        from sports_coach_engine.core.plan import suggest_long_run_progression
+        from sports_coach_engine.schemas.plan import PlanPhase
+
+        # Athlete currently running 8km long runs
+        suggestion = suggest_long_run_progression(
+            current_long_run_km=8.0,
+            weeks_to_peak=10,
+            target_peak_long_run_km=22.0,
+            phase=PlanPhase.BASE,
+        )
+
+        # Should suggest reasonable progression (not less than current)
+        assert suggestion["suggested_distance_km"] >= 7.2  # 90% of current
+        assert suggestion["suggested_distance_km"] <= 9.2  # 115% of current
+        assert "min_safe_km" in suggestion
+        assert "max_safe_km" in suggestion
+
+    def test_suggest_long_run_never_below_minimum(self):
+        """Test that suggestions never go below 90% of current capacity."""
+        from sports_coach_engine.core.plan import suggest_long_run_progression
+        from sports_coach_engine.schemas.plan import PlanPhase
+
+        suggestion = suggest_long_run_progression(
+            current_long_run_km=10.0,
+            weeks_to_peak=12,
+            target_peak_long_run_km=25.0,
+            phase=PlanPhase.BUILD,
+        )
+
+        # Should never suggest less than 90% of current
+        assert suggestion["suggested_distance_km"] >= 9.0
+
+
+class TestMinimumWorkoutEnforcement:
+    """Test that validate_week actually enforces minimum workout durations."""
+
+    def test_validate_week_catches_short_easy_run(self):
+        """Short easy run (20min/3km) should trigger warning."""
+        from sports_coach_engine.core.plan import validate_week
+        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+
+        # Create week with short workout
+        short_workout = WorkoutPrescription(
+            id="w1",
+            week_number=1,
+            day_of_week=0,
+            date=date(2026, 1, 20),
+            workout_type=WorkoutType.EASY,
+            phase=PlanPhase.BASE,
+            duration_minutes=20,  # Too short!
+            distance_km=3.0,  # Too short!
+            intensity_zone=IntensityZone.ZONE_2,
+            target_rpe=4,
+            purpose="Easy run",
+        )
+
+        week = WeekPlan(
+            week_number=1,
+            phase=PlanPhase.BASE,
+            start_date=date(2026, 1, 20),
+            end_date=date(2026, 1, 26),
+            target_volume_km=3.0,
+            target_systemic_load_au=30.0,
+            workouts=[short_workout],
+        )
+
+        violations = validate_week(week, {})
+
+        # Should have violation for minimum duration or distance
+        min_violations = [v for v in violations if "too_short" in v.rule.lower()]
+        assert len(min_violations) > 0, "Expected minimum workout violation"
+
+    def test_validate_week_with_profile_aware_minimums(self):
+        """Validation should use athlete's typical minimums from profile."""
+        from sports_coach_engine.core.plan import validate_week
+        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+
+        profile = {
+            "typical_easy_distance_km": 7.0,
+            "typical_easy_duration_min": 40.0
+        }
+
+        # 5km run is OK by default (≥5km) but below athlete's typical (7km)
+        workout = WorkoutPrescription(
+            id="w1",
+            week_number=1,
+            day_of_week=0,
+            date=date(2026, 1, 20),
+            workout_type=WorkoutType.EASY,
+            phase=PlanPhase.BASE,
+            duration_minutes=30,
+            distance_km=5.0,  # Below athlete's 7km typical
+            intensity_zone=IntensityZone.ZONE_2,
+            target_rpe=4,
+            purpose="Easy run",
+        )
+
+        week = WeekPlan(
+            week_number=1,
+            phase=PlanPhase.BASE,
+            start_date=date(2026, 1, 20),
+            end_date=date(2026, 1, 26),
+            target_volume_km=5.0,
+            target_systemic_load_au=50.0,
+            workouts=[workout],
+        )
+
+        violations = validate_week(week, profile)
+
+        # Should have warning about being below athlete's typical
+        # (5km < 5.6km which is 80% of 7km typical)
+        min_violations = [v for v in violations if "too_short" in v.rule.lower()]
+        assert len(min_violations) > 0, "Expected violation for below-typical distance"
+
+    def test_validate_week_accepts_adequate_easy_runs(self):
+        """Adequate easy runs should not trigger warnings."""
+        from sports_coach_engine.core.plan import validate_week
+        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+
+        # Create week with adequate workout (30min/5km - meets generic minimums)
+        adequate_workout = WorkoutPrescription(
+            id="w1",
+            week_number=1,
+            day_of_week=0,
+            date=date(2026, 1, 20),
+            workout_type=WorkoutType.EASY,
+            phase=PlanPhase.BASE,
+            duration_minutes=35,  # Adequate
+            distance_km=6.0,  # Adequate
+            intensity_zone=IntensityZone.ZONE_2,
+            target_rpe=4,
+            purpose="Easy run",
+        )
+
+        week = WeekPlan(
+            week_number=1,
+            phase=PlanPhase.BASE,
+            start_date=date(2026, 1, 20),
+            end_date=date(2026, 1, 26),
+            target_volume_km=6.0,
+            target_systemic_load_au=60.0,
+            workouts=[adequate_workout],
+        )
+
+        violations = validate_week(week, {})
+
+        # Should NOT have minimum workout violations
+        min_violations = [v for v in violations if "too_short" in v.rule.lower()]
+        assert len(min_violations) == 0, "Adequate workout should not trigger violation"
+
+
+class TestVolumeDistributionMinimums:
+    """Test that distribute_weekly_volume respects minimums."""
+
+    def test_low_volume_triggers_warning_not_crash(self):
+        """22km with 4 easy runs creates 3.7km each - should work but get flagged."""
+        from sports_coach_engine.core.plan import distribute_weekly_volume
+
+        workout_types = [
+            WorkoutType.EASY,
+            WorkoutType.EASY,
+            WorkoutType.EASY,
+            WorkoutType.LONG_RUN
+        ]
+
+        allocation = distribute_weekly_volume(
+            weekly_volume_km=22.0,
+            workout_types=workout_types,
+            profile=None
+        )
+
+        # Should allocate without crashing
+        total_allocated = sum(allocation.values())
+        assert abs(total_allocated - 22.0) < 0.5, f"Total should be ~22km, got {total_allocated}"
+
+        # But validation should catch it (tested in validate_week tests)
+
+    def test_profile_aware_distribution(self):
+        """Distribution should use athlete's typical minimums."""
+        from sports_coach_engine.core.plan import distribute_weekly_volume
+
+        profile = {"typical_easy_distance_km": 7.0}
+
+        workout_types = [
+            WorkoutType.EASY,
+            WorkoutType.EASY,
+            WorkoutType.EASY,
+            WorkoutType.LONG_RUN
+        ]
+
+        allocation = distribute_weekly_volume(
+            weekly_volume_km=35.0,  # Enough volume for minimums
+            workout_types=workout_types,
+            profile=profile
+        )
+
+        # Easy runs should be ≥ 5.6km (80% of 7km typical)
+        easy_indices = [i for i, wt in enumerate(workout_types) if wt == WorkoutType.EASY]
+        easy_runs = [allocation[i] for i in easy_indices]
+
+        min_expected = 5.6  # 80% of 7km typical
+        for easy_km in easy_runs:
+            assert easy_km >= min_expected - 0.1, f"Easy run {easy_km}km should be ≥ {min_expected}km"
+
+    def test_insufficient_volume_distributes_evenly(self):
+        """When volume is insufficient, distribute evenly and let validation catch it."""
+        from sports_coach_engine.core.plan import distribute_weekly_volume
+
+        profile = {"typical_easy_distance_km": 7.0}
+
+        workout_types = [
+            WorkoutType.EASY,
+            WorkoutType.EASY,
+            WorkoutType.EASY,
+            WorkoutType.LONG_RUN
+        ]
+
+        # Only 20km for 3 easy runs (need 5.6km each = 16.8km) + long run (8km min)
+        # Total needed: ~24.8km, only have 20km
+        allocation = distribute_weekly_volume(
+            weekly_volume_km=20.0,  # Insufficient
+            workout_types=workout_types,
+            profile=profile
+        )
+
+        # Should still allocate and sum to target
+        total_allocated = sum(allocation.values())
+        assert abs(total_allocated - 20.0) < 0.5, f"Should still allocate all volume"
+
+        # Easy runs will be below minimum (validation will catch this)

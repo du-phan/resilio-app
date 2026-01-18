@@ -306,6 +306,7 @@ def calculate_safe_volume_range(
     current_ctl: float,
     goal_type: str = "fitness",
     athlete_age: Optional[int] = None,
+    recent_weekly_volume_km: Optional[float] = None,
 ) -> SafeVolumeRange:
     """
     Calculate safe weekly volume range based on current fitness and goals.
@@ -318,17 +319,24 @@ def calculate_safe_volume_range(
     - 35-50 (Competitive): 40-65 km/week
     - >50 (Advanced): 55-80+ km/week
 
+    CRITICAL: If recent_weekly_volume_km is provided, this function will recommend
+    starting at or near that volume to avoid dangerous jumps, even if CTL suggests
+    the athlete could handle more. The 10% rule applies to running-specific volume,
+    not just overall fitness (CTL includes all sports).
+
     Args:
         current_ctl: Current chronic training load
         goal_type: Race goal ("5k", "10k", "half_marathon", "marathon", "fitness")
         athlete_age: Age for masters adjustments (optional)
+        recent_weekly_volume_km: Actual recent running volume (last 4 weeks avg) (optional)
 
     Returns:
         SafeVolumeRange with recommendations
 
     Example:
-        >>> range_info = calculate_safe_volume_range(44.0, "half_marathon", 52)
-        >>> print(f"Start at {range_info.recommended_start_km}km/week")
+        >>> # With recent volume data
+        >>> range_info = calculate_safe_volume_range(27.0, "marathon", recent_weekly_volume_km=18.0)
+        >>> # Recommends starting at ~18km, not 32km (CTL-based), to avoid 78% jump
     """
     # Determine CTL zone and base volume range
     if current_ctl < 20:
@@ -370,17 +378,50 @@ def calculate_safe_volume_range(
 
     # Recommendations
     final_range = masters_adjusted_range if masters_adjusted_range else goal_adjusted_range
-    recommended_start = final_range[0]
-    recommended_peak = final_range[1]
+    ctl_based_start = final_range[0]
+    ctl_based_peak = final_range[1]
 
-    # Build recommendation string
-    if masters_adjusted_range:
-        recommendation = (
-            f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks. "
-            f"Masters adjustment (age {athlete_age}): Reduced volume by 10% for recovery."
-        )
+    # CRITICAL: Adjust for recent volume if provided
+    volume_gap_pct = None
+    if recent_weekly_volume_km is not None:
+        # Calculate gap between recent volume and CTL-based recommendation
+        volume_gap_pct = ((ctl_based_start - recent_weekly_volume_km) / recent_weekly_volume_km * 100)
+
+        # If recent volume is significantly different, start there instead
+        # Allow up to 10% increase from recent volume in first week
+        if volume_gap_pct > 10:  # CTL suggests more than 10% jump
+            recommended_start = int(recent_weekly_volume_km * 1.10)
+            recommendation = (
+                f"Start at {recommended_start}km/week (recent volume: {recent_weekly_volume_km:.0f}km), "
+                f"build gradually to {ctl_based_peak}km. "
+                f"⚠️ CTL suggests {ctl_based_start}km/week, but that's a {volume_gap_pct:.0f}% jump from recent training - "
+                f"starting conservatively to avoid injury."
+            )
+        elif volume_gap_pct < -20:  # Recent volume way above CTL recommendation (detraining?)
+            recommended_start = int(recent_weekly_volume_km * 0.95)
+            recommendation = (
+                f"Start at {recommended_start}km/week (recent volume: {recent_weekly_volume_km:.0f}km), "
+                f"maintain consistency to rebuild CTL before increasing volume."
+            )
+        else:
+            # Recent volume aligns with CTL recommendation
+            recommended_start = int(recent_weekly_volume_km)
+            recommendation = f"Start at {recommended_start}km/week, build to {ctl_based_peak}km over 8-12 weeks"
+
+        recommended_peak = ctl_based_peak
     else:
-        recommendation = f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks"
+        # No recent volume data - use CTL-based recommendation
+        recommended_start = ctl_based_start
+        recommended_peak = ctl_based_peak
+
+        # Build recommendation string
+        if masters_adjusted_range:
+            recommendation = (
+                f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks. "
+                f"Masters adjustment (age {athlete_age}): Reduced volume by 10% for recovery."
+            )
+        else:
+            recommendation = f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks"
 
     return SafeVolumeRange(
         current_ctl=current_ctl,
@@ -388,7 +429,138 @@ def calculate_safe_volume_range(
         base_volume_range_km=base_range,
         goal_adjusted_range_km=goal_adjusted_range,
         masters_adjusted_range_km=masters_adjusted_range,
+        recent_weekly_volume_km=recent_weekly_volume_km,
+        volume_gap_pct=volume_gap_pct,
         recommended_start_km=recommended_start,
         recommended_peak_km=recommended_peak,
         recommendation=recommendation,
     )
+
+
+# ============================================================
+# MINIMUM WORKOUT DURATION/DISTANCE VALIDATION
+# ============================================================
+
+# Minimum workout durations (minutes)
+EASY_RUN_MIN_DURATION = 30.0
+LONG_RUN_MIN_DURATION = 60.0
+TEMPO_MIN_DURATION = 40.0  # Including warmup/cooldown
+INTERVALS_MIN_DURATION = 35.0  # Including warmup/cooldown
+
+# Minimum distances (km)
+EASY_RUN_MIN_DISTANCE = 5.0
+LONG_RUN_MIN_DISTANCE = 8.0
+
+
+def validate_workout_minimums(
+    workout_type: str,
+    duration_minutes: float,
+    distance_km: Optional[float],
+    profile: Optional[dict] = None,
+) -> Optional[Violation]:
+    """
+    Validate workout meets minimum duration/distance requirements.
+
+    Prevents unrealistically short workouts that don't provide adequate
+    training stimulus (e.g., 22-minute easy runs).
+
+    Minimums are inferred from athlete's historical patterns when available,
+    falling back to conservative defaults only when no history exists.
+
+    Default minimums (fallback):
+    - Easy runs: ≥30 minutes OR ≥5 km
+    - Long runs: ≥60 minutes OR ≥8 km
+    - Tempo: ≥40 minutes (includes warmup/cooldown)
+    - Intervals: ≥35 minutes (includes warmup/cooldown)
+
+    Historical minimums (preferred):
+    - Uses athlete's typical shortest workout for each type
+    - Example: If athlete's easy runs typically 6-8km, enforce 5km minimum (80% of typical low end)
+
+    Args:
+        workout_type: Type of workout (easy, long_run, tempo, intervals, etc.)
+        duration_minutes: Planned workout duration
+        distance_km: Planned workout distance (if available)
+        profile: Optional athlete profile with historical workout data
+
+    Returns:
+        Violation if minimums not met, None if valid
+
+    Example:
+        >>> profile = {"typical_easy_distance_km": 7.0, "typical_long_run_km": 10.0}
+        >>> violation = validate_workout_minimums("easy", 22, 3.75, profile)
+        >>> if violation:
+        ...     print(violation.message)
+        'Easy run distance (3.8km) below athlete's typical minimum (5.6km)'
+    """
+    # Rest days have no minimums
+    if workout_type == "rest":
+        return None
+
+    # Determine minimums based on profile or defaults
+    def get_minimum_duration(wtype: str) -> float:
+        """Get minimum duration from profile or default."""
+        if profile:
+            # Try to get from profile (e.g., "typical_easy_duration_minutes")
+            profile_key = f"typical_{wtype}_duration_minutes"
+            if profile_key in profile and profile[profile_key]:
+                # Use 80% of typical duration as minimum
+                return profile[profile_key] * 0.8
+
+        # Fallback to defaults
+        defaults = {
+            "easy": EASY_RUN_MIN_DURATION,
+            "long_run": LONG_RUN_MIN_DURATION,
+            "tempo": TEMPO_MIN_DURATION,
+            "intervals": INTERVALS_MIN_DURATION,
+        }
+        return defaults.get(wtype, 30.0)
+
+    def get_minimum_distance(wtype: str) -> float:
+        """Get minimum distance from profile or default."""
+        if profile:
+            # Try to get from profile (e.g., "typical_easy_distance_km")
+            profile_key = f"typical_{wtype}_distance_km"
+            if profile_key in profile and profile[profile_key]:
+                # Use 80% of typical distance as minimum
+                return profile[profile_key] * 0.8
+
+        # Fallback to defaults
+        defaults = {
+            "easy": EASY_RUN_MIN_DISTANCE,
+            "long_run": LONG_RUN_MIN_DISTANCE,
+        }
+        return defaults.get(wtype, 5.0)
+
+    min_duration = get_minimum_duration(workout_type)
+    min_distance = get_minimum_distance(workout_type)
+
+    # Determine message context (profile-based vs. default)
+    context_msg = "athlete's typical minimum" if profile else "recommended minimum"
+
+    # Check duration
+    if duration_minutes < min_duration:
+        workout_display = workout_type.replace("_", " ").title()
+        return Violation(
+            type=f"{workout_type.upper()}_TOO_SHORT",
+            severity=ViolationSeverity.MODERATE,
+            message=f"{workout_display} duration ({duration_minutes:.0f}min) below {context_msg} ({min_duration:.0f}min)",
+            current_value=duration_minutes,
+            limit_value=min_duration,
+            recommendation=f"Increase duration to at least {min_duration:.0f}min for adequate training stimulus",
+        )
+
+    # Check distance if available (only for easy/long runs)
+    if workout_type in ("easy", "long_run") and distance_km is not None:
+        if distance_km < min_distance:
+            workout_display = workout_type.replace("_", " ").title()
+            return Violation(
+                type=f"{workout_type.upper()}_TOO_SHORT",
+                severity=ViolationSeverity.MODERATE,
+                message=f"{workout_display} distance ({distance_km:.1f}km) below {context_msg} ({min_distance:.1f}km)",
+                current_value=distance_km,
+                limit_value=min_distance,
+                recommendation=f"Increase distance to at least {min_distance:.1f}km",
+            )
+
+    return None

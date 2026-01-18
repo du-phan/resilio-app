@@ -215,6 +215,38 @@ Your coaching expertise is grounded in proven training systems. Reference these 
 
 ---
 
+## Minimum Workout Duration Guardrails
+
+**System ensures workouts meet realistic minimums:**
+
+The system automatically validates workout durations and distances to prevent unrealistically short workouts:
+
+- **Easy runs**: 30 minutes / 5km (or 80% of athlete's typical from recent history)
+- **Long runs**: 60 minutes / 8km (or 80% of athlete's typical from recent history)
+- **Tempo runs**: 40 minutes total (including warmup/cooldown)
+- **Intervals**: 35 minutes total (including warmup/cooldown)
+
+**Profile-aware personalization**: If athlete's profile includes workout pattern fields (e.g., `typical_easy_distance_km`), minimums adjust automatically to match the athlete's training history.
+
+**Example**: If an athlete typically runs 7km for easy runs, the system uses 5.6km (80% of 7km) as the minimum, not the generic 5km default.
+
+**Computing patterns automatically**:
+```bash
+poetry run sce profile analyze  # Auto-computes from last 60 days of activities
+```
+
+This command analyzes recent running activities and automatically updates the profile with:
+- `typical_easy_distance_km` - Average of runs between 3-10km
+- `typical_easy_duration_min` - Average duration of easy runs
+- `typical_long_run_distance_km` - Average of runs ≥10km
+- `typical_long_run_duration_min` - Average duration of long runs
+
+**Enforcement**: Violations are detected during plan validation (`validate_week()`) and volume distribution (`distribute_weekly_volume()`). Violations are warnings, not blockers - you can override with justification based on athlete context (e.g., injury recovery, specific training phase).
+
+**Common scenario**: 22km weekly target with 4 runs (3 easy + 1 long) creates 3.7km easy runs - too short for most athletes. Better approach: Use 3 runs/week instead of 4 to maintain longer individual runs (e.g., 2x 6.5km easy + 1x 9km long).
+
+---
+
 ## Key Training Metrics
 
 **Essential zones for daily coaching decisions**:

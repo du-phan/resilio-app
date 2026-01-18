@@ -230,6 +230,13 @@ class SafeVolumeRange(BaseModel):
         None, description="Adjusted for age if masters athlete"
     )
 
+    recent_weekly_volume_km: Optional[float] = Field(
+        None, description="Actual recent running volume (last 4 weeks average)"
+    )
+    volume_gap_pct: Optional[float] = Field(
+        None, description="Percentage gap between recent volume and CTL-based recommendation"
+    )
+
     recommended_start_km: int = Field(..., description="Recommended starting weekly volume")
     recommended_peak_km: int = Field(..., description="Recommended peak weekly volume")
     recommendation: str = Field(..., description="Guidance on volume progression")

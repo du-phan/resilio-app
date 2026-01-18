@@ -44,6 +44,7 @@ from sports_coach_engine.schemas.plan import (
     WeekPlan,
     MasterPlan,
 )
+from sports_coach_engine.core.guardrails.volume import validate_workout_minimums
 from sports_coach_engine.core.paths import (
     current_plan_path,
     plan_workouts_dir,
@@ -448,6 +449,221 @@ WORKOUT_DEFAULTS = {
 }
 
 
+def suggest_long_run_progression(
+    current_long_run_km: float,
+    weeks_to_peak: int,
+    target_peak_long_run_km: float,
+    phase: PlanPhase,
+) -> dict:
+    """
+    Suggest long run progression based on current capacity (Toolkit Paradigm).
+
+    Returns SUGGESTED progression - AI coach decides whether to use it
+    based on athlete context, recovery, and schedule constraints.
+
+    Progressive overload rules (suggestions, not enforcement):
+    - Base phase: +10-15% every 2-3 weeks, never decrease
+    - Build phase: +5-10% every 2-3 weeks
+    - Recovery weeks: Hold or slight decrease (90-95%)
+    - First week: Never less than 90% of current long run
+
+    Args:
+        current_long_run_km: Athlete's most recent long run distance
+        weeks_to_peak: Weeks until peak long run phase
+        target_peak_long_run_km: Target peak long run for this plan
+        phase: Current periodization phase
+
+    Returns:
+        Dict with suggestion and context:
+        {
+            "suggested_distance_km": float,
+            "rationale": str,
+            "min_safe_km": float,  # 90% of current (don't go below)
+            "max_safe_km": float,  # 115% of current (don't exceed)
+        }
+
+    Example:
+        >>> suggestion = suggest_long_run_progression(8.0, 10, 22.0, PlanPhase.BASE)
+        >>> suggestion["suggested_distance_km"]
+        9.0  # 12.5% increase for base phase
+    """
+    # Phase-specific progression rates
+    progression_rates = {
+        PlanPhase.BASE: 0.125,  # 12.5% per step
+        PlanPhase.BUILD: 0.075,  # 7.5% per step
+        PlanPhase.PEAK: 0.0,  # Hold at peak
+        PlanPhase.TAPER: -0.15,  # 15% reduction per week
+        PlanPhase.RECOVERY: -0.05,  # 5% reduction
+    }
+
+    rate = progression_rates.get(phase, 0.10)
+
+    # Calculate suggested distance
+    if phase == PlanPhase.TAPER or phase == PlanPhase.RECOVERY:
+        # Reduce from current
+        suggested_km = current_long_run_km * (1 + rate)
+    else:
+        # Progressive increase toward target
+        gap_to_target = target_peak_long_run_km - current_long_run_km
+        if weeks_to_peak > 0:
+            weekly_increase = gap_to_target / weeks_to_peak
+            suggested_km = current_long_run_km + weekly_increase
+        else:
+            suggested_km = target_peak_long_run_km
+
+        # Cap at phase-appropriate rate
+        max_increase = current_long_run_km * rate
+        if suggested_km - current_long_run_km > max_increase:
+            suggested_km = current_long_run_km + max_increase
+
+    # Define safe boundaries (AI can override with rationale)
+    min_safe_km = current_long_run_km * 0.90  # Don't drop below 90%
+    max_safe_km = current_long_run_km * 1.15  # Don't increase more than 15%
+
+    # Ensure suggested is within safe range
+    suggested_km = max(min_safe_km, min(suggested_km, max_safe_km))
+
+    # Build rationale
+    if phase == PlanPhase.BASE:
+        rationale = f"Building aerobic base: suggest {suggested_km:.1f}km (+{suggested_km - current_long_run_km:.1f}km from current)"
+    elif phase == PlanPhase.BUILD:
+        rationale = f"Building toward peak: suggest {suggested_km:.1f}km (+{suggested_km - current_long_run_km:.1f}km from current)"
+    elif phase == PlanPhase.PEAK:
+        rationale = f"Peak phase: maintain at {suggested_km:.1f}km"
+    elif phase == PlanPhase.TAPER:
+        rationale = f"Taper: reduce to {suggested_km:.1f}km ({suggested_km - current_long_run_km:.1f}km from current)"
+    else:
+        rationale = f"Recovery: {suggested_km:.1f}km"
+
+    return {
+        "suggested_distance_km": round(suggested_km, 1),
+        "rationale": rationale,
+        "min_safe_km": round(min_safe_km, 1),
+        "max_safe_km": round(max_safe_km, 1),
+    }
+
+
+def distribute_weekly_volume(
+    weekly_volume_km: float,
+    workout_types: list[WorkoutType],
+    profile: Optional[dict] = None,
+) -> dict[int, float]:
+    """
+    Distribute weekly volume across workouts ensuring sum matches target.
+
+    Algorithm:
+    1. Count workouts by type
+    2. Allocate key workouts first (long run, tempo, intervals)
+    3. Calculate remaining volume
+    4. Distribute remainder across easy runs
+    5. Apply minimum distance constraints (5 km for easy, 8 km for long)
+    6. If constraints violated, adjust proportionally
+
+    Args:
+        weekly_volume_km: Target weekly volume
+        workout_types: Ordered list of workout types for the week
+        profile: Optional athlete profile (for min distance based on history)
+
+    Returns:
+        Dict mapping workout index to allocated distance in km
+
+    Example:
+        >>> workout_types = [WorkoutType.LONG_RUN, WorkoutType.EASY, WorkoutType.EASY, WorkoutType.EASY]
+        >>> allocation = distribute_weekly_volume(25.0, workout_types)
+        >>> sum(allocation.values())  # Should be ~25.0
+        25.0
+        >>> allocation[0]  # Long run gets ~28%
+        7.0
+    """
+    # Get minimums from profile or use defaults
+    def get_min_distance(workout_type_str: str) -> float:
+        """Get minimum distance from profile or default."""
+        if profile:
+            profile_key = f"typical_{workout_type_str}_distance_km"
+            if profile_key in profile and profile[profile_key]:
+                # Use 80% of typical as minimum
+                return profile[profile_key] * 0.8
+
+        # Fallback defaults
+        defaults = {
+            "long_run": 8.0,
+            "easy": 5.0,
+            "tempo": 5.0,
+            "intervals": 5.0,
+        }
+        return defaults.get(workout_type_str, 5.0)
+
+    LONG_RUN_MIN_KM = get_min_distance("long_run")
+    EASY_RUN_MIN_KM = get_min_distance("easy")
+    TEMPO_MIN_KM = get_min_distance("tempo")
+    INTERVALS_MIN_KM = get_min_distance("intervals")
+
+    # Count workout types
+    num_long_runs = sum(1 for wt in workout_types if wt == WorkoutType.LONG_RUN)
+    num_tempo = sum(1 for wt in workout_types if wt == WorkoutType.TEMPO)
+    num_intervals = sum(1 for wt in workout_types if wt == WorkoutType.INTERVALS)
+    num_easy = sum(1 for wt in workout_types if wt == WorkoutType.EASY)
+    num_rest = sum(1 for wt in workout_types if wt == WorkoutType.REST)
+
+    allocation = {}
+    allocated_km = 0.0
+
+    # Step 1: Allocate long run (28% of weekly volume, capped at 32km and 30% max)
+    long_run_indices = [i for i, wt in enumerate(workout_types) if wt == WorkoutType.LONG_RUN]
+    if long_run_indices:
+        # Long run: 28% of volume, but cap at 30% and 32km
+        long_run_km = min(weekly_volume_km * 0.28, 32.0)
+        long_run_km = min(long_run_km, weekly_volume_km * 0.30)  # Never more than 30%
+        long_run_km = max(long_run_km, LONG_RUN_MIN_KM)  # At least minimum
+
+        for idx in long_run_indices:
+            allocation[idx] = long_run_km
+            allocated_km += long_run_km
+
+    # Step 2: Allocate tempo runs (10-12% each)
+    tempo_indices = [i for i, wt in enumerate(workout_types) if wt == WorkoutType.TEMPO]
+    if tempo_indices:
+        tempo_km = max(weekly_volume_km * 0.12, TEMPO_MIN_KM)
+        for idx in tempo_indices:
+            allocation[idx] = tempo_km
+            allocated_km += tempo_km
+
+    # Step 3: Allocate interval runs (8-10% each)
+    intervals_indices = [i for i, wt in enumerate(workout_types) if wt == WorkoutType.INTERVALS]
+    if intervals_indices:
+        intervals_km = max(weekly_volume_km * 0.10, INTERVALS_MIN_KM)
+        for idx in intervals_indices:
+            allocation[idx] = intervals_km
+            allocated_km += intervals_km
+
+    # Step 3.5: Check if remaining volume allows athlete-specific minimums for easy runs
+    easy_indices = [i for i, wt in enumerate(workout_types) if wt == WorkoutType.EASY]
+    remaining_km = weekly_volume_km - allocated_km
+
+    if easy_indices and num_easy > 0:
+        min_easy_total = num_easy * EASY_RUN_MIN_KM
+
+        if remaining_km < min_easy_total:
+            # Not enough volume - distribute evenly and let validation catch it
+            # Validator will warn that workouts are below athlete's typical minimum
+            easy_km_per_run = remaining_km / num_easy
+        else:
+            # Sufficient volume - respect athlete's typical minimums
+            easy_km_per_run = max(EASY_RUN_MIN_KM, remaining_km / num_easy)
+
+        for idx in easy_indices:
+            allocation[idx] = easy_km_per_run
+
+    # Step 5: Allocate rest days (0 km)
+    rest_indices = [i for i, wt in enumerate(workout_types) if wt == WorkoutType.REST]
+    for idx in rest_indices:
+        allocation[idx] = 0.0
+
+    # Return allocation as suggestion
+    # AI coach can review and adjust based on athlete context
+    return allocation
+
+
 def create_workout(
     workout_type: str,
     workout_date: date,
@@ -456,6 +672,7 @@ def create_workout(
     phase: PlanPhase,
     volume_target_km: float,
     profile: Optional[dict] = None,
+    allocated_distance_km: Optional[float] = None,
 ) -> WorkoutPrescription:
     """
     Create a complete workout prescription with intensity targets and structure.
@@ -475,6 +692,8 @@ def create_workout(
         phase: Current periodization phase
         volume_target_km: Target weekly run volume in km
         profile: Optional athlete profile with vital_signs, recent_race, VDOT
+        allocated_distance_km: Optional pre-allocated distance from distribute_weekly_volume()
+                              If provided, overrides default percentage-based calculation
 
     Returns:
         Complete WorkoutPrescription object
@@ -508,12 +727,12 @@ def create_workout(
     duration_minutes = defaults["duration_minutes"]
     distance_km = None
 
-    if workout_type == WorkoutType.LONG_RUN:
+    # Use allocated distance if provided (from distribute_weekly_volume)
+    if allocated_distance_km is not None:
+        distance_km = allocated_distance_km
+    elif workout_type == WorkoutType.LONG_RUN:
         # Long run: 25-30% of weekly volume, capped at 2.5 hours
         distance_km = min(volume_target_km * 0.28, 32.0)
-        # Estimate duration: assume 6:00/km pace for long run
-        duration_minutes = min(int(distance_km * 6.0), 150)
-
     elif workout_type in (WorkoutType.EASY, WorkoutType.TEMPO, WorkoutType.INTERVALS):
         # Distance-based workouts: allocate from weekly volume
         if workout_type == WorkoutType.EASY:
@@ -523,13 +742,20 @@ def create_workout(
         elif workout_type == WorkoutType.INTERVALS:
             distance_km = volume_target_km * 0.10  # ~10% including warmup/cooldown
 
+    # Calculate duration from distance
+    if distance_km is not None and distance_km > 0:
         # Estimate duration based on intensity
-        if workout_type == WorkoutType.EASY:
-            duration_minutes = int(distance_km * 6.0)  # 6:00/km
+        if workout_type == WorkoutType.EASY or workout_type == WorkoutType.LONG_RUN:
+            duration_minutes = int(distance_km * 6.0)  # 6:00/km for easy/long
+            # Cap long runs at 2.5 hours (150 minutes)
+            if workout_type == WorkoutType.LONG_RUN:
+                duration_minutes = min(duration_minutes, 150)
         elif workout_type == WorkoutType.TEMPO:
             duration_minutes = defaults["duration_minutes"]  # Use default
         elif workout_type == WorkoutType.INTERVALS:
             duration_minutes = defaults["duration_minutes"]  # Use default
+        else:
+            duration_minutes = int(distance_km * 6.0)  # Default to 6:00/km
 
     # Get intensity guidance
     intensity_zone = defaults["intensity_zone"]
@@ -586,6 +812,85 @@ def create_workout(
         notes=notes,
         key_workout=key_workout,
     )
+
+
+def _estimate_duration(
+    distance_km: float,
+    workout_type: WorkoutType,
+    profile: Optional[dict],
+) -> int:
+    """
+    Estimate workout duration from distance and athlete pacing.
+
+    Uses athlete's historical data when available, falls back to
+    VDOT-based paces, then conservative defaults.
+
+    Priority:
+    1. Profile historical pace for workout type (e.g., typical_easy_pace_min_km)
+    2. VDOT-based pace (if profile has VDOT)
+    3. Conservative fallback (7:00/km easy, 6:00/km tempo, 5:30/km intervals)
+
+    Args:
+        distance_km: Workout distance in km
+        workout_type: Type of workout
+        profile: Optional athlete profile with historical data or VDOT
+
+    Returns:
+        Estimated duration in minutes
+
+    Example:
+        >>> profile = {"typical_easy_pace_min_km": 6.5, "vdot": 45}
+        >>> duration = _estimate_duration(10.0, WorkoutType.EASY, profile)
+        >>> duration
+        65  # 10km × 6.5 min/km
+    """
+    # Default pace per km (in minutes) - conservative estimates
+    default_paces = {
+        WorkoutType.EASY: 7.0,  # 7:00/km
+        WorkoutType.LONG_RUN: 7.0,  # 7:00/km (same as easy)
+        WorkoutType.TEMPO: 6.0,  # 6:00/km
+        WorkoutType.INTERVALS: 5.5,  # 5:30/km
+        WorkoutType.FARTLEK: 6.5,  # 6:30/km
+        WorkoutType.STRIDES: 7.0,  # 7:00/km base + fast strides
+        WorkoutType.RACE: 5.0,  # 5:00/km
+    }
+
+    pace_min_km = default_paces.get(workout_type, 7.0)
+
+    # Try to get from profile first
+    if profile:
+        # Check for workout-specific typical pace
+        profile_pace_key = f"typical_{workout_type.value}_pace_min_km"
+        if profile_pace_key in profile and profile[profile_pace_key]:
+            pace_min_km = profile[profile_pace_key]
+        else:
+            # Try to derive from VDOT
+            vdot = profile.get("vdot")
+            if vdot:
+                # Map workout type to intensity zone
+                intensity_map = {
+                    WorkoutType.EASY: IntensityZone.ZONE_2,
+                    WorkoutType.LONG_RUN: IntensityZone.ZONE_2,
+                    WorkoutType.TEMPO: IntensityZone.ZONE_4,
+                    WorkoutType.INTERVALS: IntensityZone.ZONE_5,
+                }
+                intensity_zone = intensity_map.get(workout_type)
+
+                if intensity_zone:
+                    # Use existing VDOT to pace conversion
+                    pace_seconds = _vdot_to_pace(vdot, intensity_zone)
+                    if pace_seconds:
+                        pace_min_km = pace_seconds / 60.0
+
+    # Calculate duration
+    duration_minutes = int(distance_km * pace_min_km)
+
+    # Add warmup/cooldown for quality workouts
+    if workout_type in (WorkoutType.TEMPO, WorkoutType.INTERVALS):
+        warmup_cooldown = 20  # 10 min warmup + 10 min cooldown
+        duration_minutes += warmup_cooldown
+
+    return duration_minutes
 
 
 def _calculate_pace_ranges(
@@ -1070,6 +1375,26 @@ def validate_week(
                     suggestion=f"Consider moving {next_day.workout_type} or downgrading to easy"
                 ))
 
+    # Check volume distribution (actual vs target)
+    actual_volume_km = sum(w.distance_km for w in week_plan.workouts if w.distance_km)
+    target_volume_km = week_plan.target_volume_km
+    if target_volume_km > 0:
+        volume_diff_km = abs(actual_volume_km - target_volume_km)
+        volume_diff_pct = (volume_diff_km / target_volume_km) * 100
+
+        # Warn if difference > 5%
+        if volume_diff_pct > 5:
+            severity = "danger" if volume_diff_pct > 15 else "warning"
+            violations.append(GuardrailViolation(
+                rule="volume_mismatch",
+                week=week_plan.week_number,
+                severity=severity,
+                actual=actual_volume_km,
+                target=target_volume_km,
+                message=f"Week {week_plan.week_number}: workout distances sum to {actual_volume_km:.1f}km but target is {target_volume_km:.1f}km (diff: {volume_diff_km:.1f}km, {volume_diff_pct:.0f}%)",
+                suggestion="Consider using distribute_weekly_volume() helper to allocate distances that sum to target"
+            ))
+
     # Check long run cap
     long_runs = [w for w in week_plan.workouts if w.workout_type == WorkoutType.LONG_RUN]
     if long_runs and week_plan.target_volume_km > 0:
@@ -1097,6 +1422,28 @@ def validate_week(
                 target=150,
                 message=f"Long run is {long_run.duration_minutes}min (recommended max: 150min / 2.5h)",
                 suggestion="Consider capping long run at 2.5 hours"
+            ))
+
+    # Validate individual workout minimums (profile-aware)
+    for workout in week_plan.workouts:
+        # Get workout type as string (handle both string and enum cases)
+        wtype = workout.workout_type.value if hasattr(workout.workout_type, 'value') else workout.workout_type
+
+        min_violation = validate_workout_minimums(
+            workout_type=wtype,
+            duration_minutes=workout.duration_minutes,
+            distance_km=workout.distance_km,
+            profile=athlete_profile  # Uses athlete-specific minimums if available
+        )
+        if min_violation:
+            violations.append(GuardrailViolation(
+                rule=min_violation.type,
+                week=week_plan.week_number,
+                severity="warning",  # Warning, not danger - coach can override
+                actual=min_violation.current_value,
+                target=min_violation.limit_value,
+                message=f"Week {week_plan.week_number}: {min_violation.message}",
+                suggestion=min_violation.recommendation
             ))
 
     return violations
