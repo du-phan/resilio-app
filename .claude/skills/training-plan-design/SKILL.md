@@ -264,7 +264,9 @@ sce validation validate-plan --total-weeks 16 --goal-type half_marathon \
 
 ---
 
-### Step 10: Save Plan to System
+### Step 10: Save Plan to System (After Approval)
+
+**Critical**: Only save after athlete explicitly approves the plan.
 
 After athlete approval, convert plan to JSON and populate.
 
@@ -277,11 +279,34 @@ python scripts/generate_plan.py --goal-type half_marathon --weeks 16 --output /t
 # Create /tmp/plan.json with week/workout objects
 ```
 
-**Save plan**:
+**Save plan and documents**:
 ```bash
+# 1. Save plan workouts to system
 sce plan populate --from-json /tmp/plan.json
-sce plan show  # Verify saved correctly
+
+# 2. Save review markdown (NEW!)
+sce plan save-review --from-file /tmp/training_plan_review_2026_01_20.md --approved
+
+# 3. Initialize training log (NEW!)
+sce plan init-log
+
+# 4. Verify all saved correctly
+sce plan show  # Verify plan structure
+sce plan show-review  # Verify review markdown
+sce plan show-log  # Verify log initialized
 ```
+
+**What happens**:
+- Plan saved to `data/plans/current_plan.yaml`
+- Workouts saved to `data/plans/workouts/week_XX/`
+- Review saved to `data/plans/current_plan_review.md`
+- Training log initialized at `data/plans/current_training_log.md`
+
+**If athlete wants modifications**:
+- Do NOT save yet
+- Make requested changes
+- Present updated plan for re-approval
+- Save only after final approval
 
 **JSON structure** (see `examples/` for complete examples):
 - `weeks`: Array of week objects
