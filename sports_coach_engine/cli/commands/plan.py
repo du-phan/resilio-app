@@ -20,6 +20,7 @@ from sports_coach_engine.api.plan import (
     append_training_plan_adaptation,
     initialize_plan_training_log,
     append_weekly_training_summary,
+    validate_plan_json_structure,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json
@@ -248,6 +249,82 @@ def plan_populate_command(
     # Exit with appropriate code
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
+
+
+@app.command(name="validate-json")
+def plan_validate_json_command(
+    ctx: typer.Context,
+    file: str = typer.Option(
+        ...,
+        "--file",
+        help="Path to JSON file to validate"
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        help="Show detailed validation output"
+    )
+) -> None:
+    """Validate training plan JSON before populating.
+
+    Checks for:
+    - JSON structure and syntax
+    - Required fields present
+    - Date alignment (Monday-Sunday)
+    - Valid enum values
+    - If using explicit format: workout distances sum to target
+
+    Returns exit code 0 if valid, 1 if errors found.
+
+    Examples:
+        sce plan validate-json --file /tmp/plan.json
+        sce plan validate-json --file /tmp/plan.json --verbose
+    """
+    # Validate file exists
+    json_path = Path(file)
+    if not json_path.exists():
+        envelope = create_error_envelope(
+            error_type="not_found",
+            message=f"JSON file not found: {file}",
+            data={"path": str(json_path.absolute())}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=2)
+
+    # Call API validation
+    is_valid, errors, warnings = validate_plan_json_structure(file, verbose)
+
+    # Build result as plain JSON (not a dataclass envelope)
+    import sys
+    import json as json_module
+
+    if is_valid:
+        result = {
+            "success": True,
+            "message": "JSON is valid and ready to populate!",
+            "data": {
+                "file": file,
+                "warnings": warnings,
+                "warnings_count": len(warnings)
+            }
+        }
+        print(json_module.dumps(result, indent=2))
+        raise typer.Exit(code=0)
+    else:
+        result = {
+            "success": False,
+            "message": f"Found {len(errors)} error(s) in JSON",
+            "error_type": "validation",
+            "data": {
+                "file": file,
+                "errors": errors,
+                "warnings": warnings,
+                "errors_count": len(errors),
+                "warnings_count": len(warnings)
+            }
+        }
+        print(json_module.dumps(result, indent=2))
+        raise typer.Exit(code=1)
 
 
 @app.command(name="update-week")
@@ -1210,6 +1287,60 @@ def generate_month_command(
     cycle_weeks = f"{len(week_nums)}-week"
     success_message = f"Monthly plan generated for month {month_number} ({cycle_weeks} cycle): weeks {min(week_nums)}-{max(week_nums)}"
     envelope = api_result_to_envelope(result, success_message=success_message)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="suggest-run-count")
+def plan_suggest_run_count_command(
+    ctx: typer.Context,
+    volume: float = typer.Option(..., "--volume", help="Weekly volume in km"),
+    max_runs: int = typer.Option(..., "--max-runs", help="Maximum run days from profile"),
+    phase: str = typer.Option("base", "--phase", help="Training phase (base/build/peak/taper/recovery)"),
+    profile_path: Optional[str] = typer.Option(None, "--profile", help="Path to athlete profile (for historical minimums)")
+) -> None:
+    """Suggest optimal number of running sessions for given weekly volume.
+
+    Helps AI Coach choose appropriate run count within max_runs constraint.
+    Considers:
+    - Weekly volume target
+    - Minimum practical workout distances
+    - Athlete's historical patterns (if profile provided)
+    - Training phase (affects long run %)
+
+    Examples:
+        sce plan suggest-run-count --volume 23 --max-runs 4 --phase base
+        sce plan suggest-run-count --volume 48 --max-runs 5 --phase build
+    """
+    from sports_coach_engine.api.plan import suggest_optimal_run_count
+    from sports_coach_engine.api.profile import ProfileError
+
+    # Load profile if provided
+    profile_dict = None
+    if profile_path:
+        from sports_coach_engine.api.profile import get_profile
+        profile_result = get_profile()
+        if not isinstance(profile_result, ProfileError):
+            profile_dict = profile_result.model_dump()
+
+    # Call API
+    result = suggest_optimal_run_count(
+        target_volume_km=volume,
+        max_runs=max_runs,
+        phase=phase,
+        profile=profile_dict
+    )
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Recommend {result['recommended_runs']} runs for {volume}km"
+    )
 
     # Output JSON
     output_json(envelope)

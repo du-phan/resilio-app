@@ -5,9 +5,10 @@ Provides functions for Claude Code to manage training plans and
 handle adaptation suggestions.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass
+import uuid
 
 from sports_coach_engine.core.paths import current_plan_path, athlete_profile_path
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
@@ -505,6 +506,379 @@ def get_plan_weeks(
     )
 
 
+# ============================================================
+# INTENT-BASED WORKOUT GENERATION HELPERS
+# ============================================================
+
+
+def _calculate_date(start_date_str: str, day_of_week: int) -> str:
+    """Calculate workout date from week start and day of week.
+
+    Args:
+        start_date_str: Week start date (Monday) as ISO string
+        day_of_week: ISO weekday (1=Mon, 2=Tue, ..., 7=Sun)
+
+    Returns:
+        Workout date as ISO string
+    """
+    start_date = date.fromisoformat(start_date_str)
+    # ISO weekday: Monday=1, Sunday=7
+    # Calculate offset from Monday
+    offset = day_of_week - 1
+    workout_date = start_date + timedelta(days=offset)
+    return workout_date.isoformat()
+
+
+def _distribute_evenly(total_km: float, num_runs: int) -> list[float]:
+    """Distribute volume evenly across runs, rounding intelligently.
+
+    Args:
+        total_km: Total distance to distribute
+        num_runs: Number of runs to distribute across
+
+    Returns:
+        List of distances that sum exactly to total_km
+
+    Example:
+        >>> _distribute_evenly(12.5, 3)
+        [4.0, 4.5, 4.0]  # Sums to 12.5
+    """
+    per_run = total_km / num_runs
+
+    # Round all but last to nearest 0.5km
+    distances = []
+    for i in range(num_runs - 1):
+        rounded = round(per_run * 2) / 2
+        distances.append(rounded)
+
+    # Last run adjusts to hit total exactly
+    last = total_km - sum(distances)
+    distances.append(round(last * 2) / 2)
+
+    return distances
+
+
+def _create_workout_prescription(
+    week_number: int,
+    date_str: str,
+    day_of_week: int,
+    distance_km: float,
+    workout_type: str,
+    phase: str,
+    pace_range: str,
+    max_hr: int = 189  # Default, can be overridden
+) -> dict:
+    """Create complete WorkoutPrescription dict with all required fields.
+
+    Args:
+        week_number: Week number in plan
+        date_str: Workout date (ISO format)
+        day_of_week: ISO weekday (1-7)
+        distance_km: Workout distance
+        workout_type: "easy", "long_run", "tempo", etc.
+        phase: Training phase
+        pace_range: "6:30-6:50" format
+        max_hr: Athlete max heart rate
+
+    Returns:
+        Complete workout prescription dict
+    """
+    # Parse pace range
+    pace_parts = pace_range.split("-")
+    pace_min = pace_parts[0].strip()
+    pace_max = pace_parts[1].strip() if len(pace_parts) > 1 else pace_min
+
+    # Estimate duration from distance and pace
+    # Assume middle of pace range for estimation
+    # Convert "6:30" to minutes per km
+    pace_min_parts = pace_min.split(":")
+    minutes_per_km = int(pace_min_parts[0]) + int(pace_min_parts[1]) / 60
+    duration_minutes = int(distance_km * minutes_per_km)
+
+    # HR zones based on workout type (using % of max HR)
+    hr_zones = {
+        "easy": (0.65, 0.75),        # Zone 2
+        "long_run": (0.70, 0.78),    # Zone 2-3
+        "tempo": (0.85, 0.90),       # Zone 4
+        "intervals": (0.90, 0.95),   # Zone 5
+        "recovery": (0.55, 0.65),    # Zone 1
+    }
+
+    hr_low_pct, hr_high_pct = hr_zones.get(workout_type, (0.65, 0.75))
+    hr_range_low = int(max_hr * hr_low_pct)
+    hr_range_high = int(max_hr * hr_high_pct)
+
+    # RPE based on workout type
+    rpe_map = {
+        "easy": 4,
+        "long_run": 5,
+        "tempo": 7,
+        "intervals": 8,
+        "recovery": 3,
+    }
+    target_rpe = rpe_map.get(workout_type, 4)
+
+    # Intensity zone
+    intensity_map = {
+        "easy": "zone_2",
+        "long_run": "zone_2",
+        "tempo": "zone_4",
+        "intervals": "zone_5",
+        "recovery": "zone_1",
+    }
+    intensity_zone = intensity_map.get(workout_type, "zone_2")
+
+    # Purpose based on workout type
+    purpose_map = {
+        "easy": "Build aerobic endurance and maintain base fitness",
+        "long_run": "Develop endurance and mental toughness for sustained efforts",
+        "tempo": "Improve lactate threshold and race pace efficiency",
+        "intervals": "Boost VO2max and running economy at high speeds",
+        "recovery": "Active recovery to promote blood flow and adaptation",
+    }
+    purpose = purpose_map.get(workout_type, "Build aerobic endurance")
+
+    return {
+        "id": f"w_{date_str}_{workout_type}_{uuid.uuid4().hex[:6]}",
+        "week_number": week_number,
+        "day_of_week": day_of_week,
+        "date": date_str,
+        "workout_type": workout_type,
+        "phase": phase,
+        "duration_minutes": duration_minutes,
+        "distance_km": distance_km,
+        "intensity_zone": intensity_zone,
+        "target_rpe": target_rpe,
+        "pace_range_min_km": pace_min,
+        "pace_range_max_km": pace_max,
+        "hr_range_low": hr_range_low,
+        "hr_range_high": hr_range_high,
+        "intervals": None,
+        "warmup_minutes": 0,
+        "cooldown_minutes": 0,
+        "purpose": purpose,
+        "notes": f"{workout_type.replace('_', ' ').title()} at controlled pace",
+        "key_workout": workout_type == "long_run",
+        "status": "scheduled",
+        "execution": None,
+    }
+
+
+def _generate_workouts_from_pattern(
+    week_number: int,
+    target_volume_km: float,
+    pattern: dict,
+    start_date: str,
+    phase: str,
+    max_hr: int = 189
+) -> list[dict]:
+    """Generate workout prescriptions from intent-based pattern.
+
+    This function handles the arithmetic so AI Coach doesn't have to.
+
+    Args:
+        week_number: Week number in plan
+        target_volume_km: Total weekly volume target
+        pattern: Intent pattern dict with:
+            - structure: "3 easy + 1 long" (descriptive)
+            - run_days: [1, 3, 5, 6] (ISO weekdays)
+            - long_run_day: 6 (ISO weekday for long run)
+            - long_run_pct: 0.45 (percentage of weekly volume)
+            - easy_run_paces: "6:30-6:50"
+            - long_run_pace: "6:30-6:50"
+        start_date: Week start date (Monday, ISO format)
+        phase: Training phase
+        max_hr: Athlete max heart rate
+
+    Returns:
+        List of complete WorkoutPrescription dicts
+
+    Raises:
+        AssertionError: If calculated distances don't sum to target
+    """
+    # 1. Calculate long run distance
+    long_run_km = round(target_volume_km * pattern["long_run_pct"] * 2) / 2
+
+    # 2. Calculate remaining for easy runs
+    num_easy_runs = len(pattern["run_days"]) - 1  # Subtract long run
+    remaining_km = target_volume_km - long_run_km
+
+    # VALIDATION: Warn if easy runs will be too short
+    num_runs = len(pattern["run_days"])
+    avg_easy = remaining_km / num_easy_runs if num_easy_runs > 0 else 0
+
+    if avg_easy < 5.0 and num_easy_runs > 0:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f"Week {week_number}: {num_runs} runs with {target_volume_km}km results in "
+            f"{avg_easy:.1f}km average easy runs (below 5km minimum). "
+            f"Consider reducing to {num_runs - 1} runs for more substantial sessions."
+        )
+
+    # 3. Distribute evenly, round intelligently
+    easy_distances = _distribute_evenly(remaining_km, num_easy_runs)
+
+    # 4. Validate sum (critical - this ensures no arithmetic errors)
+    total = sum(easy_distances) + long_run_km
+    assert abs(total - target_volume_km) < 0.01, \
+        f"Calculated distances sum to {total}km ≠ target {target_volume_km}km"
+
+    # 5. Create workout objects
+    workouts = []
+    easy_idx = 0
+
+    for day_of_week in pattern["run_days"]:
+        workout_date = _calculate_date(start_date, day_of_week)
+
+        if day_of_week == pattern["long_run_day"]:
+            # Long run
+            workout = _create_workout_prescription(
+                week_number=week_number,
+                date_str=workout_date,
+                day_of_week=day_of_week,
+                distance_km=long_run_km,
+                workout_type="long_run",
+                phase=phase,
+                pace_range=pattern["long_run_pace"],
+                max_hr=max_hr
+            )
+        else:
+            # Easy run
+            workout = _create_workout_prescription(
+                week_number=week_number,
+                date_str=workout_date,
+                day_of_week=day_of_week,
+                distance_km=easy_distances[easy_idx],
+                workout_type="easy",
+                phase=phase,
+                pace_range=pattern["easy_run_paces"],
+                max_hr=max_hr
+            )
+            easy_idx += 1
+
+        workouts.append(workout)
+
+    return workouts
+
+
+def validate_plan_json_structure(
+    json_path: str,
+    verbose: bool = False
+) -> tuple[bool, list[str], list[str]]:
+    """Validate plan JSON structure without saving.
+
+    Checks for:
+    - JSON syntax
+    - Required fields (including workout_pattern)
+    - Date alignment (Monday-Sunday)
+    - Valid enum values
+    - Intent-based pattern structure
+
+    Args:
+        json_path: Path to JSON file to validate
+        verbose: Show detailed validation output
+
+    Returns:
+        Tuple of (is_valid, errors, warnings)
+    """
+    import json
+    from datetime import datetime
+
+    errors = []
+    warnings = []
+
+    # 1. Load and parse JSON
+    try:
+        with open(json_path) as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return False, [f"File not found: {json_path}"], []
+    except json.JSONDecodeError as e:
+        return False, [f"Invalid JSON syntax: {e}"], []
+
+    # 2. Check top-level structure
+    if "weeks" not in data:
+        errors.append("Missing 'weeks' key at top level")
+        return False, errors, warnings
+
+    # 3. Validate each week
+    for week in data["weeks"]:
+        week_num = week.get("week_number", "?")
+
+        # Required week fields
+        required = ["week_number", "phase", "start_date", "end_date", "target_volume_km"]
+        for field in required:
+            if field not in week:
+                errors.append(f"Week {week_num}: Missing required field '{field}'")
+
+        # Date alignment
+        if "start_date" in week:
+            try:
+                start = datetime.fromisoformat(week["start_date"]).date()
+                if start.weekday() != 0:
+                    errors.append(
+                        f"Week {week_num}: start_date must be Monday, "
+                        f"got {start.strftime('%A')}"
+                    )
+            except ValueError as e:
+                errors.append(f"Week {week_num}: Invalid start_date: {e}")
+
+        if "end_date" in week:
+            try:
+                end = datetime.fromisoformat(week["end_date"]).date()
+                if end.weekday() != 6:
+                    errors.append(
+                        f"Week {week_num}: end_date must be Sunday, "
+                        f"got {end.strftime('%A')}"
+                    )
+            except ValueError as e:
+                errors.append(f"Week {week_num}: Invalid end_date: {e}")
+
+        # Check for intent-based format (required)
+        if "workout_pattern" not in week:
+            errors.append(
+                f"Week {week_num}: Missing required field 'workout_pattern'. "
+                f"Only intent-based format is supported."
+            )
+        else:
+            # Validate intent-based format
+            pattern = week["workout_pattern"]
+            required_pattern = ["run_days", "long_run_day", "long_run_pct"]
+            for field in required_pattern:
+                if field not in pattern:
+                    errors.append(
+                        f"Week {week_num}: workout_pattern missing '{field}'"
+                    )
+
+            # Warning if long_run_pct > 50%
+            if "long_run_pct" in pattern and pattern["long_run_pct"] > 0.5:
+                warnings.append(
+                    f"Week {week_num}: long_run_pct is {pattern['long_run_pct']:.0%} "
+                    f"(>50% of weekly volume, consider 0.45-0.50)"
+                )
+
+            # Validate run_days are valid ISO weekdays (1-7)
+            if "run_days" in pattern:
+                for day in pattern["run_days"]:
+                    if not isinstance(day, int) or day < 1 or day > 7:
+                        errors.append(
+                            f"Week {week_num}: Invalid run_day {day}, must be 1-7 (ISO weekday)"
+                        )
+
+        # Validate phase is valid enum value
+        if "phase" in week:
+            valid_phases = ["base", "build", "peak", "taper", "recovery"]
+            if week["phase"] not in valid_phases:
+                errors.append(
+                    f"Week {week_num}: Invalid phase '{week['phase']}', "
+                    f"must be one of: {', '.join(valid_phases)}"
+                )
+
+    is_valid = len(errors) == 0
+    return is_valid, errors, warnings
+
+
 def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanError]:
     """
     Populate weekly workouts in the current training plan.
@@ -559,17 +933,66 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     plan = result
 
-    # 2. Validate weeks_data structure
+    # 2. Process weeks_data - generate workouts from intent-based patterns
+    processed_weeks_data = []
+    for week_data in weeks_data:
+        # Check if using intent-based format (workout_pattern required)
+        if "workout_pattern" not in week_data:
+            return PlanError(
+                error_type="validation",
+                message=f"Week {week_data.get('week_number', '?')}: Missing required field 'workout_pattern'. "
+                        f"Only intent-based format is supported. See docs for JSON structure.",
+            )
+
+        # Generate workouts from pattern
+        try:
+            # Get athlete profile for max_hr
+            profile_result = get_profile()
+            max_hr = 189  # Default
+            if not isinstance(profile_result, ProfileError):
+                max_hr = getattr(profile_result, 'max_hr', 189)
+
+            # Generate workouts from pattern
+            workouts = _generate_workouts_from_pattern(
+                week_number=week_data["week_number"],
+                target_volume_km=week_data["target_volume_km"],
+                pattern=week_data["workout_pattern"],
+                start_date=week_data["start_date"],
+                phase=week_data["phase"],
+                max_hr=max_hr
+            )
+
+            # Add generated workouts to week data
+            week_data_copy = week_data.copy()
+            week_data_copy["workouts"] = workouts
+            processed_weeks_data.append(week_data_copy)
+        except KeyError as e:
+            return PlanError(
+                error_type="validation",
+                message=f"Week {week_data.get('week_number', '?')}: Missing required field in workout_pattern: {str(e)}",
+            )
+        except AssertionError as e:
+            return PlanError(
+                error_type="validation",
+                message=f"Week {week_data.get('week_number', '?')}: Arithmetic error in workout generation: {str(e)}",
+            )
+        except Exception as e:
+            return PlanError(
+                error_type="validation",
+                message=f"Week {week_data.get('week_number', '?')}: Failed to generate workouts from pattern: {str(e)}",
+            )
+
+    # 3. Validate weeks_data structure
     try:
         from sports_coach_engine.schemas.plan import WeekPlan
-        validated_weeks = [WeekPlan.model_validate(w) for w in weeks_data]
+        validated_weeks = [WeekPlan.model_validate(w) for w in processed_weeks_data]
     except Exception as e:
         return PlanError(
             error_type="validation",
             message=f"Invalid week data: {str(e)}",
         )
 
-    # 2b. Validate business logic for each week
+    # 3b. Validate business logic for each week
     from sports_coach_engine.core.plan import validate_week
 
     all_violations = []
@@ -1477,3 +1900,210 @@ def generate_month_plan(
             error_type="unknown",
             message=f"Failed to generate monthly plan: {str(e)}"
         )
+
+
+# ============================================================
+# RUN COUNT SUGGESTION (Intelligent session determination)
+# ============================================================
+
+
+def _score_run_distribution(
+    avg_easy: float,
+    long_km: float,
+    total_km: float,
+    easy_min: float,
+    long_min: float
+) -> float:
+    """Score a run distribution (higher is better).
+
+    Factors:
+    - Easy runs comfortably above minimum (not at boundary)
+    - Long run is substantial but not excessive (40-50% of weekly)
+    - Even distribution (not too lumpy)
+
+    Args:
+        avg_easy: Average easy run distance
+        long_km: Long run distance
+        total_km: Total weekly volume
+        easy_min: Minimum easy run distance
+        long_min: Minimum long run distance
+
+    Returns:
+        Score (higher is better)
+    """
+    score = 100.0
+
+    # Penalize if easy runs below minimum
+    if avg_easy < easy_min:
+        score -= (easy_min - avg_easy) * 10
+
+    # Penalize if easy runs WAY above minimum (inefficient)
+    if avg_easy > easy_min + 3:
+        score -= (avg_easy - easy_min - 3) * 2
+
+    # Reward if easy runs in sweet spot (min + 1km to min + 2km)
+    if easy_min + 1 <= avg_easy <= easy_min + 2:
+        score += 20
+
+    # Long run percentage
+    long_pct = long_km / total_km if total_km > 0 else 0
+
+    # Penalize if long run too small (<35%)
+    if long_pct < 0.35:
+        score -= (0.35 - long_pct) * 100
+
+    # Penalize if long run too large (>55%)
+    if long_pct > 0.55:
+        score -= (long_pct - 0.55) * 100
+
+    # Reward if long run in sweet spot (40-50%)
+    if 0.40 <= long_pct <= 0.50:
+        score += 15
+
+    return score
+
+
+def suggest_optimal_run_count(
+    target_volume_km: float,
+    max_runs: int,
+    phase: str = "base",
+    profile: Optional[dict] = None
+) -> dict:
+    """Suggest optimal number of running sessions for weekly volume.
+
+    Args:
+        target_volume_km: Weekly volume target
+        max_runs: Maximum runs from athlete profile
+        phase: Training phase (affects long run %)
+        profile: Athlete profile (for historical minimums)
+
+    Returns:
+        Dict with recommendation and rationale containing:
+        - target_volume_km: Input volume
+        - max_runs: Input max runs
+        - phase: Input phase
+        - recommended_runs: Optimal number of runs
+        - rationale: Human-readable explanation
+        - distribution_preview: Preview of each option
+        - minimum_volume_for_max_runs: Min km needed for max runs
+        - comfortable_volume_for_max_runs: Comfortable km for max runs
+        - easy_min_km: Minimum easy run distance used
+        - long_min_km: Minimum long run distance used
+    """
+    # Get minimums (from profile if available, else defaults)
+    easy_min = 5.0
+    long_min = 8.0
+
+    if profile:
+        # Use 80% of athlete's typical distances as minimum
+        easy_min = profile.get("typical_easy_distance_km", 5.0) * 0.8
+        long_min = profile.get("typical_long_run_distance_km", 8.0) * 0.8
+
+    # Long run percentage varies by phase
+    long_run_pct = {
+        "base": 0.45,
+        "build": 0.48,
+        "peak": 0.50,
+        "taper": 0.40,
+        "recovery": 0.50
+    }.get(phase, 0.45)
+
+    # Calculate for each possible run count
+    options = []
+    for num_runs in range(2, max_runs + 1):
+        # Calculate long run
+        long_km = round(target_volume_km * long_run_pct * 2) / 2
+        long_km = max(long_km, long_min)  # Enforce minimum
+
+        # Calculate easy runs
+        num_easy = num_runs - 1
+        remaining_km = target_volume_km - long_km
+
+        if remaining_km < 0:
+            # Volume too low for even one long run
+            continue
+
+        avg_easy = remaining_km / num_easy if num_easy > 0 else 0
+
+        # Check concerns
+        concerns = []
+        if avg_easy < easy_min and num_easy > 0:
+            concerns.append(f"Easy runs below {easy_min:.1f}km minimum")
+        if long_km > target_volume_km * 0.55:
+            concerns.append(f"Long run >55% of weekly volume")
+
+        # Calculate distribution preview
+        easy_distances = []
+        if num_easy > 0:
+            for i in range(num_easy - 1):
+                easy_distances.append(round(avg_easy * 2) / 2)
+            # Last easy adjusts for exact sum
+            last_easy = remaining_km - sum(easy_distances)
+            easy_distances.append(round(last_easy * 2) / 2)
+
+        options.append({
+            "num_runs": num_runs,
+            "easy": easy_distances,
+            "long": long_km,
+            "avg_easy": round(avg_easy, 1),
+            "concerns": concerns,
+            "score": _score_run_distribution(avg_easy, long_km, target_volume_km, easy_min, long_min)
+        })
+
+    # Choose best option (highest score without major concerns)
+    viable_options = [opt for opt in options if not opt["concerns"]]
+    if not viable_options:
+        # No perfect option, choose least bad
+        viable_options = sorted(options, key=lambda x: len(x["concerns"]))
+
+    # Sort by score
+    recommended = max(viable_options, key=lambda x: x["score"])
+
+    # Build distribution preview for comparison
+    distribution_preview = {}
+    for opt in options:
+        key = f"with_{opt['num_runs']}_runs"
+        distribution_preview[key] = {
+            "easy": opt["easy"],
+            "long": opt["long"],
+            "avg_easy": opt["avg_easy"],
+            "concerns": opt["concerns"]
+        }
+
+    # Build rationale
+    rationale_parts = []
+    rationale_parts.append(
+        f"{target_volume_km}km spread across {max_runs} runs averages "
+        f"{target_volume_km / max_runs:.1f}km per run."
+    )
+
+    max_runs_opt = next((o for o in options if o["num_runs"] == max_runs), None)
+    if max_runs_opt and max_runs_opt["concerns"]:
+        rationale_parts.append(
+            f"With {max_runs} runs: {', '.join(max_runs_opt['concerns'])}."
+        )
+
+    rationale_parts.append(
+        f"Recommend {recommended['num_runs']} runs: "
+        f"{len(recommended['easy'])}×{recommended['avg_easy']:.1f}km easy + "
+        f"{recommended['long']}km long for more substantial sessions."
+    )
+
+    rationale = " ".join(rationale_parts)
+
+    # Calculate minimum/comfortable volumes for max_runs
+    minimum_volume = (max_runs - 1) * easy_min + long_min
+    comfortable_volume = minimum_volume + (max_runs * 1.0)  # Add 1km buffer per run
+
+    return {
+        "target_volume_km": target_volume_km,
+        "max_runs": max_runs,
+        "phase": phase,
+        "recommended_runs": recommended["num_runs"],
+        "rationale": rationale,
+        "distribution_preview": distribution_preview,
+        "minimum_volume_for_max_runs": round(minimum_volume, 1),
+        "comfortable_volume_for_max_runs": round(comfortable_volume, 1),
+        "easy_min_km": round(easy_min, 1),
+        "long_min_km": round(long_min, 1)
+    }
