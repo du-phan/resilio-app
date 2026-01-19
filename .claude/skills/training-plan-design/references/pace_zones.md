@@ -341,4 +341,4 @@ sce vdot adjust --pace 5:00 --condition altitude --severity 7000
 
 For complete VDOT tables, workout prescriptions, and methodology:
 - [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md) - Complete VDOT system
-- [CLI Reference - VDOT Commands](../../../docs/coaching/cli_reference.md#vdot-commands) - All VDOT CLI commands
+- [VDOT Commands](../../../docs/coaching/cli/cli_vdot.md) - All VDOT CLI commands

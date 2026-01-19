@@ -287,5 +287,5 @@ sce profile set --max-hr 185
 
 ## Additional Resources
 
-- **CLI Reference**: [../../../docs/coaching/cli_reference.md#profile-commands](../../../docs/coaching/cli_reference.md#profile-commands)
+- **CLI Reference**: [Profile Commands](../../../docs/coaching/cli/cli_profile.md)
 - **Profile JSON schema**: See `sports_coach_engine/models/profile.py`

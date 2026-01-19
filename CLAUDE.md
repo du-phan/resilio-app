@@ -178,7 +178,7 @@ sce activity search --query "pain" --sport run   # Filter by sport
 - **Context**: Schedule constraints, work travel, life events affecting training
 - **Insights**: Significant patterns detected during weekly analysis or risk assessment
 
-**For complete CLI reference with all commands, parameters, and JSON formats**: See `docs/coaching/cli_reference.md`
+**For complete CLI reference with all commands, parameters, and JSON formats**: See [CLI Command Index](docs/coaching/cli/index.md)
 
 ---
 
@@ -403,7 +403,7 @@ fi
 
 ## Additional Resources
 
-- **Complete CLI reference**: `docs/coaching/cli_reference.md` (all commands, parameters, JSON formats, error handling)
+- **CLI Command Index**: [docs/coaching/cli/index.md](docs/coaching/cli/index.md) - Command lookup and category reference
 - **Coaching scenarios**: `docs/coaching/scenarios.md` (11 detailed workflow examples)
 - **Training methodology**: `docs/coaching/methodology.md` (metrics, sport multipliers, adaptation triggers, guardrails)
 - **API layer spec**: `docs/specs/api_layer.md` (Python API functions for scripting)

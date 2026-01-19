@@ -478,6 +478,6 @@ Example:
 
 ## See Also
 
-- [CLI Reference](cli_reference.md) - Complete CLI command documentation
+- [CLI Command Index](cli/index.md) - Complete CLI command documentation
 - [Training Methodology](methodology.md) - Understanding metrics and training principles
 - [API Layer Spec](../specs/api_layer.md) - Python API for scripting

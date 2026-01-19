@@ -363,4 +363,4 @@ Let's downgrade to [easy option]. Better safe than sorry.
 - [Sport Multipliers](../../../docs/coaching/methodology.md#sport-multipliers) - Multi-sport load model
 
 **CLI commands**:
-- [Risk Assessment Commands](../../../docs/coaching/cli_reference.md#risk-assessment) - Complete command reference
+- [Risk Assessment Commands](../../../docs/coaching/cli/cli_risk.md) - Complete command reference

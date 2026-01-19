@@ -199,4 +199,4 @@ Let's try syncing again.
 
 - **OAuth 2.0 spec**: https://oauth.net/2/
 - **Strava API docs**: https://developers.strava.com/docs/authentication/
-- **CLI reference**: [../../../docs/coaching/cli_reference.md](../../../docs/coaching/cli_reference.md#authentication-commands)
+- **CLI reference**: [Authentication Commands](../../../docs/coaching/cli/cli_auth.md)

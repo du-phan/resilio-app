@@ -299,5 +299,5 @@ Extra: [list]
 - **Common Pitfalls (detailed)**: [references/pitfalls.md](references/pitfalls.md)
 - **Worked Examples**: [examples/](examples/)
 - **Adherence Patterns**: [Coaching Scenarios - Weekly Review](../../../docs/coaching/scenarios.md#scenario-5-weekly-review)
-- **CLI Reference**: [Analysis Commands](../../../docs/coaching/cli_reference.md#analysis-commands)
+- **CLI Reference**: [Analysis Commands](../../../docs/coaching/cli/cli_analysis.md)
 - **Methodology**: [ACWR Interpretation](../../../docs/coaching/methodology.md#acwr-acutechronic-workload-ratio)

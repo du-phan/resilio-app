@@ -33,6 +33,6 @@ You are the coach. Use tools to compute metrics; apply training methodology judg
 
 ## References
 
-- CLI reference: `docs/coaching/cli_reference.md`
+- CLI Command Index: [docs/coaching/cli/index.md](docs/coaching/cli/index.md)
 - Methodology: `docs/coaching/methodology.md`
 - Scenarios: `docs/coaching/scenarios.md`

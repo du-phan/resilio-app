@@ -372,9 +372,9 @@ This skill handles **monthly cycles** for an existing macro plan. For **initial 
 ## Links to References
 
 **CLI commands used**:
-- `sce plan assess-month` - [CLI Reference](../../docs/coaching/cli_reference.md)
-- `sce plan generate-month` - [CLI Reference](../../docs/coaching/cli_reference.md)
-- `sce plan validate-month` - [CLI Reference](../../docs/coaching/cli_reference.md)
+- `sce plan assess-month` - [Planning Commands](../../docs/coaching/cli/cli_planning.md#sce-plan-assess-month)
+- `sce plan generate-month` - [Planning Commands](../../docs/coaching/cli/cli_planning.md#sce-plan-generate-month)
+- `sce plan validate-month` - [Validation Commands](../../docs/coaching/cli/cli_validation.md#sce-plan-validate-month)
 
 **Training methodology**:
 - [VDOT Recalibration](../training-plan-design/references/pace_zones.md)

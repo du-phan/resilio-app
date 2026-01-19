@@ -777,4 +777,4 @@ sce analysis capacity --activities activities.json --planned-volume 70
 For complete volume progression methodology:
 - [Advanced Marathoning](../../../docs/training_books/advanced_marathoning_pete_pfitzinger.md) - Pfitzinger's volume progressions
 - [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md) - Quality volume limits
-- [CLI Reference - Guardrails](../../../docs/coaching/cli_reference.md#guardrails-commands)
+- [Guardrails Commands](../../../docs/coaching/cli/cli_guardrails.md)

@@ -415,8 +415,8 @@ Would you like me to create a personalized plan now?"
 - [Runner Primary Onboarding](examples/example_onboarding_runner_primary.md) - Race-focused athlete
 
 **CLI documentation**:
-- [Profile Commands](../../../docs/coaching/cli_reference.md#profile-commands) - Complete command reference
-- [Authentication Commands](../../../docs/coaching/cli_reference.md#authentication-commands) - OAuth troubleshooting
+- [Profile Commands](../../../docs/coaching/cli/cli_profile.md) - Complete command reference
+- [Authentication Commands](../../../docs/coaching/cli/cli_auth.md) - OAuth troubleshooting
 
 **Training methodology**:
 - [Coaching Scenarios - First Session](../../../docs/coaching/scenarios.md#scenario-1-first-session) - Detailed walkthrough

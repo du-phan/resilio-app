@@ -559,7 +559,7 @@ When running and other sports conflict:
 
 ## See Also
 
-- [CLI Reference](cli_reference.md) - Command documentation
+- [CLI Command Index](cli/index.md) - Command documentation
 - [Coaching Scenarios](scenarios.md) - Example workflows
 - [API Layer Spec](../specs/api_layer.md) - Python API for scripting
 - [PRD](../mvp/v0_product_requirements_document.md) - Product philosophy

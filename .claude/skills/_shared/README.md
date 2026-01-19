@@ -120,5 +120,5 @@ Potential candidates for shared resources (not yet needed):
 
 See:
 - `docs/coaching/methodology.md` - Training methodology and coaching principles
-- `docs/coaching/cli_reference.md` - Complete CLI command documentation
+- [CLI Command Index](../../docs/coaching/cli/index.md) - Complete CLI command documentation
 - Individual skill SKILL.md files - Skill-specific workflows and guidance
