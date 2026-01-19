@@ -96,7 +96,7 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
 **Returns**: `minimum_days`, `recommended_days`, `recovery_schedule`, `red_flags`
 
-**For complete guardrails reference**: See [references/CLI_REFERENCE.md](references/CLI_REFERENCE.md)
+**For complete guardrails reference**: See [references/cli_reference.md](references/cli_reference.md)
 
 ---
 
@@ -149,7 +149,7 @@ done
 5. Save: `/tmp/weeks_5_to_16.json` (array of weeks)
 6. Update: `sce plan update-from --week 5 --from-json /tmp/weeks_5_to_16.json`
 
-**For complete JSON schemas and examples**: See [references/CLI_REFERENCE.md](references/CLI_REFERENCE.md)
+**For complete JSON schemas and examples**: See [references/cli_reference.md](references/cli_reference.md)
 
 ---
 
@@ -166,7 +166,7 @@ sce validation validate-plan --plan-file /tmp/adapted_plan.json
 - Recovery week placement
 - Load progression (CTL increase rate)
 
-**For complete validation checklist**: See [references/VALIDATION_CHECKLIST.md](references/VALIDATION_CHECKLIST.md)
+**For complete validation checklist**: See [references/validation_checklist.md](references/validation_checklist.md)
 
 ---
 
@@ -233,7 +233,7 @@ sce memory add --type PREFERENCE \
 - **Fitness loss 10-20%** (CTL drop 5-10 points): Adjust goal time by 2-5%
 - **Fitness loss >20%** (CTL drop >10 points): Consider postponing race or adjusting to "finish comfortably"
 
-**For complete decision trees**: See [references/DECISION_TREES.md](references/DECISION_TREES.md)
+**For complete decision trees**: See [references/decision_trees.md](references/decision_trees.md)
 
 ---
 
@@ -251,7 +251,7 @@ See [examples/ADAPTATION_SCENARIOS.md](examples/ADAPTATION_SCENARIOS.md) for com
 
 ## Edge Cases
 
-See [references/EDGE_CASES.md](references/EDGE_CASES.md) for guidance on:
+See [references/edge_cases.md](references/edge_cases.md) for guidance on:
 
 1. **Multiple disruptions** - Compounding issues (illness + injury + schedule)
 2. **Taper disruption** - Illness/injury during taper (7-14 days before race)
@@ -264,12 +264,12 @@ See [references/EDGE_CASES.md](references/EDGE_CASES.md) for guidance on:
 ## Additional Resources
 
 **Decision support**:
-- [Decision Trees](references/DECISION_TREES.md) - Common adaptation decisions
-- [Edge Cases](references/EDGE_CASES.md) - Unusual situations
+- [Decision Trees](references/decision_trees.md) - Common adaptation decisions
+- [Edge Cases](references/edge_cases.md) - Unusual situations
 
 **Reference material**:
-- [CLI Reference](references/CLI_REFERENCE.md) - Complete command documentation
-- [Validation Checklist](references/VALIDATION_CHECKLIST.md) - Pre-update verification
+- [CLI Reference](references/cli_reference.md) - Complete command documentation
+- [Validation Checklist](references/validation_checklist.md) - Pre-update verification
 
 **Templates**:
 - [Adaptation Plan Template](templates/adaptation_plan.md) - Structured output format

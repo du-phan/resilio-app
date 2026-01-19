@@ -62,6 +62,43 @@ Periodization structures training into distinct phases, each with specific adapt
 
 ---
 
+## Phase Allocation Calculation
+
+### Standard Allocation Percentages
+
+Divide weeks into phases (base, build, peak, taper) using race distance and weeks available.
+
+**Standard allocation**:
+- **Base**: 45-50% of total weeks (aerobic foundation)
+- **Build**: 30-35% of total weeks (race-specific intensity)
+- **Peak**: 10-15% of total weeks (maximum load)
+- **Taper**: 8-12% of total weeks (recover, peak fitness)
+
+**Recovery weeks**: Every 4th week during base/build at 70% volume (not during peak/taper).
+
+### Distance-Specific Adjustments
+
+**Marathon-specific**:
+- Extend base phase by +1-2 weeks (aerobic foundation is critical)
+- Longer taper: 3 weeks (recovery from high volume training)
+- Reason: Longer race demands deeper aerobic base and more recovery time
+
+**10K-specific**:
+- Shorter base phase (aerobic base develops faster)
+- No separate peak phase (merge peak into final build weeks)
+- Shorter taper: 1 week (less accumulated fatigue)
+- Reason: Shorter race allows faster progression to intensity
+
+**Calculation example** (16-week half marathon):
+- Base: 16 × 0.47 = 7.5 weeks → 7 weeks (weeks 1-7)
+- Build: 16 × 0.31 = 5.0 weeks → 5 weeks (weeks 8-12)
+- Peak: 16 × 0.12 = 1.9 weeks → 2 weeks (weeks 13-14)
+- Taper: 16 × 0.10 = 1.6 weeks → 2 weeks (weeks 15-16)
+
+**Rounding rule**: Round to nearest whole week, prioritize base phase if rounding needed.
+
+---
+
 ## Phase Allocation Examples
 
 ### 10K (8-12 weeks)

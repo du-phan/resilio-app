@@ -62,7 +62,7 @@ sce risk taper-status --race-date 2026-03-15 --metrics metrics.json --recent-wee
 - +15 to +25: Very fresh, risk over-taper
 - >+25: Over-rested, lost fitness
 
-**For detailed TSB progressions by distance**: See [references/TAPER_TRAJECTORIES.md](references/TAPER_TRAJECTORIES.md)
+**For detailed TSB progressions by distance**: See [references/taper_trajectories.md](references/taper_trajectories.md)
 
 #### CTL (Chronic Training Load) - Fitness Stability
 
@@ -107,7 +107,7 @@ sce risk taper-status --race-date 2026-03-15 --metrics metrics.json --recent-wee
 - Message: "⚠️ Readiness concerning. Consider: DNS, adjust expectations, or last-ditch rest."
 - **Use AskUserQuestion** to present options with trade-offs
 
-**For complete readiness messaging templates**: See [references/DECISION_TREES.md](references/DECISION_TREES.md)
+**For complete readiness messaging templates**: See [references/decision_trees.md](references/decision_trees.md)
 
 ---
 
@@ -237,7 +237,7 @@ sce memory add --type PREFERENCE \
 
 ### Q: Readiness declining during taper
 1. Investigate: Sleep? Stress? Illness?
-2. If illness: Use decision tree in [references/EDGE_CASES.md](references/EDGE_CASES.md)
+2. If illness: Use decision tree in [references/edge_cases.md](references/edge_cases.md)
 3. If stress: Extra rest day, address anxiety
 4. If unknown: Monitor 24-48h, add rest if continues declining
 
@@ -247,13 +247,13 @@ sce memory add --type PREFERENCE \
 3. Re-run taper-status after rest
 4. If still negative: Consider adjusting race expectations
 
-**For complete decision guidance**: See [references/DECISION_TREES.md](references/DECISION_TREES.md)
+**For complete decision guidance**: See [references/decision_trees.md](references/decision_trees.md)
 
 ---
 
 ## Common Taper Mistakes
 
-See [references/TAPER_MISTAKES.md](references/TAPER_MISTAKES.md) for detailed explanations:
+See [references/taper_mistakes.md](references/taper_mistakes.md) for detailed explanations:
 
 1. **Training Through Taper** - Doesn't trust rest, keeps training hard
 2. **Complete Rest (Couch Taper)** - No running, loses sharpness
@@ -268,14 +268,14 @@ See [references/TAPER_MISTAKES.md](references/TAPER_MISTAKES.md) for detailed ex
 ## Additional Resources
 
 **Decision support**:
-- [Decision Trees](references/DECISION_TREES.md) - Common taper decisions with scenarios
-- [Edge Cases](references/EDGE_CASES.md) - Race canceled, illness, injury, over-taper
+- [Decision Trees](references/decision_trees.md) - Common taper decisions with scenarios
+- [Edge Cases](references/edge_cases.md) - Race canceled, illness, injury, over-taper
 
 **Reference material**:
-- [Taper Mistakes](references/TAPER_MISTAKES.md) - 5 mistakes with detailed coaching responses
-- [VDOT Prediction](references/VDOT_PREDICTION.md) - Performance prediction guidance
-- [Taper Trajectories](references/TAPER_TRAJECTORIES.md) - Distance-specific TSB progressions
-- [CLI Reference](references/CLI_REFERENCE.md) - Command quick reference
+- [Taper Mistakes](references/taper_mistakes.md) - 5 mistakes with detailed coaching responses
+- [VDOT Prediction](references/vdot_prediction.md) - Performance prediction guidance
+- [Taper Trajectories](references/taper_trajectories.md) - Distance-specific TSB progressions
+- [CLI Reference](references/cli_reference.md) - Command quick reference
 
 **Templates**:
 - [Race Week Schedules](templates/) - 5K, 10K, Half, Marathon day-by-day

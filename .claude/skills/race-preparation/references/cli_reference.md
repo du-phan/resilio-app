@@ -1,5 +1,7 @@
 # CLI Command Reference
 
+> **Note**: This is a **skill-specific extract** containing only commands relevant to race preparation workflows. For comprehensive CLI documentation, see `docs/coaching/cli_reference.md`.
+
 Quick reference for race preparation commands.
 
 ---

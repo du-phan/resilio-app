@@ -236,25 +236,26 @@ fi
 ```
 
 **Create review document**:
+Use the template at `templates/monthly_review.md` to create a comprehensive review document.
+
 ```bash
-# Update training plan review markdown with month 2 details
-cat > /tmp/training_plan_month_2_review.md <<EOF
-# Month 2 Training Plan (Weeks 5-8)
+# Copy template and fill in month 2 details
+cp .claude/skills/monthly-transition/templates/monthly_review.md /tmp/training_plan_month_2_review.md
 
-## Assessment Summary (Month 1)
-- Adherence: ${ADHERENCE}%
-- CTL Progression: ${CTL_STATUS}
-- VDOT: ${CURRENT_VDOT} ${NEEDS_VDOT ? "(recalibrated)" : "(unchanged)"}
-
-## Next Month Plan
-[Include detailed weekly breakdown from monthly_plan_m2.json]
-
-## Changes from Previous Month
-- Volume adjustments: ${VOLUME_ADJUSTMENT}x
-- Pace zones: ${NEEDS_VDOT ? "Updated" : "Unchanged"}
-- Focus: [Phase-specific emphasis]
-EOF
+# Fill in the template with:
+# - Assessment summary from month 1 (adherence, CTL, VDOT, signals)
+# - Week-by-week performance data
+# - Next month plan details (weeks 5-8 from monthly_plan_m2.json)
+# - Changes from previous month
+# - Coaching recommendations
 ```
+
+**Template includes sections for**:
+- Assessment summary (adherence, CTL progression, VDOT, injury/illness signals)
+- Completed month performance (week-by-week breakdown, load analysis, multi-sport balance)
+- Next month plan (weeks 5-8 structure, volume progression, workout details)
+- Changes from previous month (volume, pace zones, phase, workout focus)
+- Recommendations (training guidance, injury prevention, multi-sport balance)
 
 **Present to athlete**:
 ```
@@ -376,8 +377,8 @@ This skill handles **monthly cycles** for an existing macro plan. For **initial 
 - `sce plan validate-month` - [CLI Reference](../../docs/coaching/cli_reference.md)
 
 **Training methodology**:
-- [VDOT Recalibration](../training-plan-design/references/PACE_ZONES.md)
-- [Volume Progression](../training-plan-design/references/VOLUME_PROGRESSION.md)
+- [VDOT Recalibration](../training-plan-design/references/pace_zones.md)
+- [Volume Progression](../training-plan-design/references/volume_progression.md)
 - [Injury History Management](../../docs/coaching/methodology.md)
 
 **Related skills**:

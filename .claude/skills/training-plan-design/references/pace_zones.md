@@ -156,6 +156,104 @@ sce vdot adjust --pace 5:00 --condition altitude --severity 7000
 
 ---
 
+## Workout Prescription by Training Phase
+
+### Base Phase (Aerobic Foundation)
+**Intensity distribution**: 80-90% easy (E-pace), 10-20% moderate (long runs + optional late-base tempo)
+
+**Workout structure**:
+- Most runs: E-pace easy runs (all conversational)
+- Long run: E-pace with progressive buildup (+10-15 min every 2-3 weeks)
+- Optional late-base tempo: 1 × 20 min T-pace (final 2 weeks of base)
+- No intervals yet (VO2max work comes later)
+
+**Weekly pattern**: 3-4 easy runs + 1 long run (+ optional 1 tempo in late base)
+
+**Purpose**: Build aerobic foundation, increase volume gradually, prepare body for intensity
+
+---
+
+### Build Phase (Race-Specific Intensity)
+**Intensity distribution**: 70-75% easy (E-pace), 25-30% quality (tempo + M-pace + intervals)
+
+**Workout structure**:
+- Easy runs: E-pace for recovery and volume
+- Tempo runs: T-pace 20-40 min continuous, or cruise intervals (3-5 × 5-8 min @ T-pace)
+- M-pace long runs: E-pace with M-pace segments (e.g., 2 × 20 min @ M-pace)
+- Intervals: I-pace for 10K and shorter (4-5 × 1000m @ I-pace)
+- Recovery week: Every 4th week at 70% volume
+
+**Weekly pattern**: 2-3 easy runs + 1 tempo + 1 long run (with quality) + optional 1 interval session
+
+**Purpose**: Add race-specific intensity, maintain volume, build lactate threshold
+
+---
+
+### Peak Phase (Maximum Load)
+**Intensity distribution**: 65-70% easy (E-pace), 30-35% quality (maximum load + race-pace focus)
+
+**Workout structure**:
+- Peak week(s) with maximum volume + intensity
+- Race-pace workouts frequent (M-pace for marathon, T-pace for 10K)
+- Tempo + intervals in same week (highest load)
+- Long runs: E-pace with quality segments at race pace
+- No recovery weeks (maintain peak load)
+
+**Weekly pattern**: 2-3 easy runs + 1 tempo + 1 interval + 1 long run with quality
+
+**Purpose**: Maximum training load, sharpening for race, build confidence at race pace
+
+---
+
+### Taper Phase (Peak Fitness)
+**Intensity distribution**: Maintain pace zones, reduce volume 30-50%
+
+**Workout structure**:
+- Week 1 taper: 70% volume, maintain intensity (shorter tempo, shorter intervals)
+- Week 2 taper: 50% volume, maintain intensity (very short quality sessions)
+- Race week: 40% volume, easy runs + race-pace strides (20-30 sec accelerations)
+- Keep intensity: Quality sessions at race pace, just shorter duration
+- No hard workouts 3-5 days before race
+
+**Weekly pattern**: 2-3 easy runs + 1 short quality session + 1 short long run
+
+**Purpose**: Reduce fatigue, maintain fitness, peak for race day (TSB target: +5 to +15)
+
+---
+
+### Long Run Progression
+
+**Progression rate**: +10-15 minutes every 2-3 weeks (NOT every week)
+
+**Weekly volume cap**: Long run ≤ 30% of weekly volume (injury prevention)
+
+**Example progression** (half marathon plan, 50 km/week peak):
+- Week 1: 90 min (18 km)
+- Week 3: 100 min (20 km)
+- Week 5: 110 min (22 km)
+- Week 7: 120 min (24 km) — cap at 30% of 50 km = 15 km, but duration matters more
+- Taper: 90 min → 75 min → 60 min
+
+**Quality long runs** (build/peak phases only):
+- Base phase: All E-pace (build aerobic base first)
+- Build phase: E-pace with M-pace or T-pace segments (e.g., 10 km E + 2 × 3 km @ M + 5 km E)
+- Peak phase: E-pace with race-pace segments (simulate race conditions)
+
+---
+
+### Quality Session Spacing
+
+**Minimum spacing**: 48 hours between quality sessions (lower-body recovery)
+
+**Safe patterns**:
+- ✅ Mon: Tempo → Tue: Easy → Wed: Easy → Thu: Intervals
+- ✅ Tue: Intervals → Wed: Easy → Thu: Easy → Sat: Long run with quality
+- ❌ Mon: Tempo → Tue: Intervals (insufficient recovery)
+
+**Multi-sport consideration**: Easy runs allowed 24 hours after hard climbing/cycling (systemic recovery ok), but quality runs need 48 hours after any hard session.
+
+---
+
 ## Workout Type by Race Distance
 
 ### 5K Training

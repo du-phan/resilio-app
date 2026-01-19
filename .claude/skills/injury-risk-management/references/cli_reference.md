@@ -1,5 +1,7 @@
 # CLI Command Reference
 
+> **Note**: This is a **skill-specific extract** containing only commands relevant to injury risk management workflows. For comprehensive CLI documentation, see `docs/coaching/cli_reference.md`.
+
 Quick reference for injury risk management commands.
 
 ---

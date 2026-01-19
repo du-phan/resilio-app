@@ -1,5 +1,7 @@
 # CLI Command Reference
 
+> **Note**: This is a **skill-specific extract** containing only commands relevant to plan adaptation workflows. For comprehensive CLI documentation, see `docs/coaching/cli_reference.md`.
+
 Quick reference for plan adaptation commands.
 
 ---

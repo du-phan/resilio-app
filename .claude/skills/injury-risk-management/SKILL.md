@@ -89,7 +89,7 @@ sce risk assess --metrics metrics.json --recent activities.json
 - **Moderate**: Adjust training within 1-2 days
 - **High**: Immediate action required (rest/downgrade/move workout)
 
-**For complete factor analysis**: See [references/RISK_PATTERNS.md](references/RISK_PATTERNS.md)
+**For complete factor analysis**: See [references/risk_patterns.md](references/risk_patterns.md)
 
 ---
 
@@ -198,7 +198,7 @@ sce risk forecast --weeks 4 --metrics metrics.json --plan plan.json
 >
 > After rest, we'll adjust your plan conservatively. Minor setback now better than major injury later."
 
-**For detailed mitigation strategies**: See [references/COMMUNICATION.md](references/COMMUNICATION.md)
+**For detailed mitigation strategies**: See [references/communication.md](references/communication.md)
 
 ---
 
@@ -269,47 +269,47 @@ sce memory add --type TRAINING_RESPONSE \
 3. Present trade-off: Reduce running OR reduce other sport
 4. Respect athlete's priority setting
 
-**For complete decision guidance**: See [references/DECISION_TREES.md](references/DECISION_TREES.md)
+**For complete decision guidance**: See [references/decision_trees.md](references/decision_trees.md)
 
 ---
 
 ## Key Reference Links
 
-**ACWR Risk Zones**: [references/ACWR_ZONES.md](references/ACWR_ZONES.md) - 7 zones from undertraining to danger with injury risk multipliers
+**ACWR Risk Zones**: [references/acwr_zones.md](references/acwr_zones.md) - 7 zones from undertraining to danger with injury risk multipliers
 
-**Readiness Interpretation**: [references/READINESS_GUIDE.md](references/READINESS_GUIDE.md) - Complete zones, use readiness as secondary safety gate beyond ACWR
+**Readiness Interpretation**: [references/readiness_guide.md](references/readiness_guide.md) - Complete zones, use readiness as secondary safety gate beyond ACWR
 
-**Common Risk Patterns**: [references/RISK_PATTERNS.md](references/RISK_PATTERNS.md) - 5 recognizable patterns:
+**Common Risk Patterns**: [references/risk_patterns.md](references/risk_patterns.md) - 5 recognizable patterns:
 1. Post-Recovery Week Spike
 2. Multi-Sport Overload
 3. Intensity Distribution Error
 4. Long Run Domination
 5. Session Density
 
-**Guardrails Integration**: [references/GUARDRAILS.md](references/GUARDRAILS.md) - 5 key guardrails:
+**Guardrails Integration**: [references/guardrails.md](references/guardrails.md) - 5 key guardrails:
 - Volume progression (10% rule)
 - Quality volume limits (Daniels' T/I/R)
 - Long run caps (150min, 30% volume)
 - Break return protocols
 - Illness recovery protocols
 
-**Risk Communication**: [references/COMMUNICATION.md](references/COMMUNICATION.md) - Techniques for explaining risk effectively through narrative mental models
+**Risk Communication**: [references/communication.md](references/communication.md) - Techniques for explaining risk effectively through narrative mental models
 
 ---
 
 ## Additional Resources
 
 **Decision support**:
-- [Decision Trees](references/DECISION_TREES.md) - Common scenario guidance
-- [Edge Cases](references/EDGE_CASES.md) - ACWR safe but injured, ACWR elevated near race, low ACWR detraining, post-recovery spike
+- [Decision Trees](references/decision_trees.md) - Common scenario guidance
+- [Edge Cases](references/edge_cases.md) - ACWR safe but injured, ACWR elevated near race, low ACWR detraining, post-recovery spike
 
 **Reference material**:
-- [ACWR Zones](references/ACWR_ZONES.md) - Detailed zone definitions
-- [Readiness Guide](references/READINESS_GUIDE.md) - Daily readiness thresholds
-- [Risk Patterns](references/RISK_PATTERNS.md) - 5 recognizable patterns
-- [Guardrails](references/GUARDRAILS.md) - Injury prevention commands
-- [Communication](references/COMMUNICATION.md) - Risk explanation techniques
-- [CLI Reference](references/CLI_REFERENCE.md) - Command quick reference
+- [ACWR Zones](references/acwr_zones.md) - Detailed zone definitions
+- [Readiness Guide](references/readiness_guide.md) - Daily readiness thresholds
+- [Risk Patterns](references/risk_patterns.md) - 5 recognizable patterns
+- [Guardrails](references/guardrails.md) - Injury prevention commands
+- [Communication](references/communication.md) - Risk explanation techniques
+- [CLI Reference](references/cli_reference.md) - Command quick reference
 
 **Templates**:
 - [Risk Analysis Template](templates/risk_analysis.md) - Structured risk report format
