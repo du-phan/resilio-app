@@ -102,23 +102,31 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
 ### Date Validation (CRITICAL)
 
-**Before modifying any week**, verify Monday-Sunday alignment:
+**See "Date Handling Rules" section in CLAUDE.md for complete guidance.**
+
+**Before modifying any week**, verify Monday-Sunday alignment using CLI commands:
 
 ```bash
 # Check plan week dates
 sce plan show | jq '.data.weeks[] | {week: .week_number, start: .start_date, end: .end_date}'
 
-# Verify Monday starts
-sce plan show | jq -r '.data.weeks[].start_date' | while read d; do
-  python3 -c "from datetime import date; day = date.fromisoformat('$d'); assert day.weekday() == 0, 'Not Monday!'"
-done
+# Verify each week start is Monday
+sce dates validate --date 2026-01-20 --must-be monday  # Returns: {"valid": true/false}
+sce dates validate --date 2026-01-27 --must-be monday
+# ... for each week
+
+# Verify each week end is Sunday
+sce dates validate --date 2026-01-26 --must-be sunday
+sce dates validate --date 2026-02-01 --must-be sunday
+# ... for each week
 ```
 
 **When creating modified week JSON**:
 - `start_date` MUST be Monday (weekday() == 0)
 - `end_date` MUST be Sunday (weekday() == 6)
 - **Current/past weeks**: Keep existing dates unchanged
-- **Future weeks**: Use `get_next_monday()` for alignment
+- **Future weeks**: Use `sce dates next-monday` or `sce dates week-boundaries` for alignment
+- **Always validate** before saving: `sce dates validate --date <date> --must-be monday`
 
 ---
 

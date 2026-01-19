@@ -210,6 +210,18 @@ sce plan generate-month \
 - Continued multi-sport integration
 - Phase-appropriate focus (if transitioning base → build)
 
+**Date verification for generated weeks**:
+```bash
+# Verify all week start dates are Monday (see "Date Handling Rules" in CLAUDE.md)
+sce dates validate --date <week_5_start> --must-be monday
+sce dates validate --date <week_6_start> --must-be monday
+sce dates validate --date <week_7_start> --must-be monday
+sce dates validate --date <week_8_start> --must-be monday
+
+# Get next month's week boundaries if needed
+sce dates week-boundaries --start <week_5_monday>
+```
+
 ---
 
 ### Step 5: Validate, Present, and Save

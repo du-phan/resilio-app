@@ -33,6 +33,32 @@ sce memory search --query "pain injury body"
 
 ---
 
+### Step 0.5: Verify Race Date
+
+**CRITICAL**: Before any race preparation, verify the race date with day of week.
+
+**See "Date Handling Rules" section in CLAUDE.md for complete guidance.**
+
+```bash
+# Verify race date and get day of week
+sce dates validate --date 2026-03-15 --must-be saturday
+# Returns: {"valid": true/false, "day_name": "Saturday"}
+
+# Get current date and days until race
+sce dates today
+# Returns: {"date": "2026-03-01", "day_name": "Sunday", ...}
+
+# If athlete says "my race is June 15", verify:
+sce dates validate --date 2026-06-15 --must-be saturday
+# If false, respond: "Your race is Monday, June 15 (not Saturday)"
+```
+
+**Present race date with day name**:
+- ✅ "Your race is Saturday, March 15 (14 days away)"
+- ❌ "Your race is March 15" (missing day verification)
+
+---
+
 ### Step 1: Verify Taper Status
 
 ```bash

@@ -20,6 +20,115 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Date Handling Rules (CRITICAL)
+
+**Training weeks ALWAYS run Monday-Sunday.** This is a core system constraint that must be respected in all planning contexts.
+
+### MANDATORY RULE: Computational Date Verification
+
+**Never manually calculate dates in your head. Always use computational tools.**
+
+LLMs frequently make date calculation errors (e.g., saying "Monday, January 20" when Jan 20 is actually Tuesday). To prevent these errors, you MUST ALWAYS verify dates using CLI commands or Python computations.
+
+### CLI Date Commands
+
+Use these commands whenever you need date information:
+
+```bash
+# Get today's date with day of week
+poetry run sce dates today
+# Returns: {"date": "2026-01-19", "day_name": "Sunday", "next_monday": "2026-01-20", ...}
+
+# Get next Monday from today (or any date)
+poetry run sce dates next-monday
+poetry run sce dates next-monday --from-date 2026-01-17  # Saturday → 2026-01-19
+
+# Get week boundaries (Monday-Sunday)
+poetry run sce dates week-boundaries --start 2026-01-19
+# Returns: {"start": "2026-01-19", "end": "2026-01-25", "formatted": "Mon Jan 19 - Sun Jan 25"}
+
+# Validate a date is a specific day of week
+poetry run sce dates validate --date 2026-01-19 --must-be monday
+# Returns: {"valid": true, "day_name": "Monday"}
+
+poetry run sce dates validate --date 2026-01-25 --must-be sunday
+# Returns: {"valid": true, "day_name": "Sunday"}
+```
+
+### When to Use Date Commands
+
+**ALWAYS use date commands when:**
+- Generating training plans (get next Monday for start date)
+- Updating plans (validate week boundaries)
+- Discussing race dates (verify day of week)
+- Analyzing weekly performance (confirm week start/end)
+- Responding to "what day is X?" questions
+- Presenting dates to the athlete (include day name)
+
+### Example Workflows
+
+**Training plan generation:**
+```bash
+# Step 1: Get current context
+sce dates today  # Returns: Today is Sunday, January 19, 2026
+
+# Step 2: Calculate plan start date
+sce dates next-monday  # Returns: Next Monday is 2026-01-20
+
+# Step 3: Use that Monday in plan JSON
+# All week.start_date = "2026-01-20", "2026-01-27", "2026-02-03", etc.
+```
+
+**Week analysis:**
+```bash
+# Step 1: Get weekly summary
+sce week  # Returns week start/end dates
+
+# Step 2: Verify alignment
+sce dates validate --date <week_start> --must-be monday  # Should be true
+sce dates validate --date <week_end> --must-be sunday    # Should be true
+```
+
+**Race date discussion:**
+```bash
+# Athlete: "My race is June 15"
+# Step 1: Verify what day that is
+sce dates validate --date 2026-06-15 --must-be saturday
+# Returns: {"valid": false, "day_name": "Monday"}
+
+# Step 2: Respond with correct day
+# "Your race is Monday, June 15 (21 weeks away)"
+```
+
+### ISO Weekday Reference
+
+Python's `date.weekday()` returns:
+- 0 = Monday
+- 1 = Tuesday
+- 2 = Wednesday
+- 3 = Thursday
+- 4 = Friday
+- 5 = Saturday
+- 6 = Sunday
+
+**In plan JSON:** `run_days: [1, 3, 5]` means Tuesday, Thursday, Saturday.
+
+### Validation Requirements
+
+**Before saving any training plan:**
+- All `week.start_date` must be Monday (weekday() == 0)
+- All `week.end_date` must be Sunday (weekday() == 6)
+- Use `sce dates validate` to verify each date
+
+**Common Mistakes to Avoid:**
+- ❌ Saying "Monday, January 20" without verifying (it might be Tuesday)
+- ❌ Calculating "3 weeks from today" mentally (use date tools)
+- ❌ Assuming a race date's day of week (always verify)
+- ❌ Starting a training week on Sunday instead of Monday
+- ✅ Always use `sce dates` commands to compute and verify dates
+
+---
+
 ## Agent Skills for Complex Workflows
 
 Claude Code automatically suggests specialized skills when relevant. These skills guide you through multi-step coaching workflows:
@@ -46,22 +155,12 @@ Comprehensive weekly training review and pattern detection
 Design periodized training plans using proven methodologies
 - **Use when**: "Design my plan", "create training program", "how should I train for [race]"
 - **Workflow**: Assess CTL → Periodization → Volume progression → Workout design → Validation → Markdown review
-- **Key commands**: `sce plan`, `sce vdot`, `sce guardrails`, `sce validation`
+- **Key commands**: `sce plan`, `sce vdot`, `sce guardrails`, `sce validation`, `sce dates`
 
-**Date Handling Requirements (CRITICAL)**:
-
-Training plans must align to Monday-Sunday weeks.
-
-**Before plan generation**:
-```bash
-# Get current date and next Monday
-python3 -c "from datetime import date, timedelta; today = date.today(); print(f'Today: {today} ({today.strftime(\"%A\")}'); next_mon = today + timedelta(days=(7-today.weekday())%7 or 7); print(f'Next Monday: {next_mon}')"
-```
-
-**In plan JSON**:
-- All `week.start_date` must be Monday (weekday() == 0)
-- All `week.end_date` must be Sunday (weekday() == 6)
-- Validate before `sce plan populate`
+**Date Handling (see "Date Handling Rules" section above)**:
+- Use `sce dates next-monday` to calculate plan start date
+- Use `sce dates validate` to verify all week boundaries before saving
+- All `week.start_date` must be Monday, `week.end_date` must be Sunday
 
 ### 5. **plan-adaptation**
 Adjust plans mid-cycle for illness, injury, or schedule changes
@@ -169,6 +268,15 @@ sce activity list --since 14d --has-notes        # Only activities with notes
 sce activity search --query "ankle"              # Find ankle mentions
 sce activity search --query "tired fatigue"      # OR match (any keyword)
 sce activity search --query "pain" --sport run   # Filter by sport
+```
+
+**Date utilities** (see "Date Handling Rules" section for full details):
+```bash
+sce dates today                                  # Current date with day name
+sce dates next-monday                            # Calculate next Monday
+sce dates next-monday --from-date 2026-01-17     # From specific date
+sce dates week-boundaries --start 2026-01-19     # Get Mon-Sun range
+sce dates validate --date 2026-01-19 --must-be monday  # Verify day of week
 ```
 
 **When to capture memories**:
@@ -284,11 +392,12 @@ echo "Your CTL is $ctl ($interpretation)"
 
 1. **Check auth**: `sce auth status` (exit code 3 = expired → guide through OAuth flow)
 2. **Sync activities**: `sce sync` (imports last 120 days)
-3. **Assess state**: `sce status` (CTL/ATL/TSB/ACWR/readiness)
-4. **Use appropriate skill or direct CLI commands**:
+3. **Verify dates**: `sce dates today` (confirms current date/day for planning context)
+4. **Assess state**: `sce status` (CTL/ATL/TSB/ACWR/readiness)
+5. **Use appropriate skill or direct CLI commands**:
    - For complex workflows → Activate relevant skill
    - For quick data checks → Use CLI directly
-5. **Reference training books for coaching judgment**: Apply Pfitzinger/Daniels/80-20 principles
+6. **Reference training books for coaching judgment**: Apply Pfitzinger/Daniels/80-20 principles
 
 **Critical - Authentication MUST be first**: Historical activity data from Strava is essential for intelligent coaching. Without it, you're coaching blind with CTL=0 and no context about the athlete's actual training patterns, multi-sport activities, or capacity.
 

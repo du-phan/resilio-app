@@ -33,22 +33,39 @@ This skill designs evidence-based training plans using **progressive disclosure*
 
 ### Step 0: Get Current Date and Calculate Start Date
 
-**CRITICAL**: Before any planning, establish correct dates.
+**CRITICAL**: Before any planning, establish correct dates using CLI commands.
+
+**See "Date Handling Rules" section in CLAUDE.md for full details.**
 
 ```bash
-# Get current date
-date +%Y-%m-%d
-date +%A  # Day of week
+# Get current date with day name
+sce dates today
+# Returns: {"date": "2026-01-19", "day_name": "Sunday", "next_monday": "2026-01-20", ...}
 
-# Calculate next Monday (if not Monday today)
-# Use Python one-liner:
-python3 -c "from datetime import date, timedelta; today = date.today(); next_monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7); print(f'Next Monday: {next_monday} ({next_monday.strftime(\"%A\")})')"
+# Calculate next Monday for plan start
+sce dates next-monday
+# Returns: {"date": "2026-01-20", "day_name": "Monday", "formatted": "Mon Jan 20, 2026", ...}
+
+# Use the returned date as plan start_date
+# Store it in a variable for plan JSON generation
 ```
 
-**Validation**:
-- Verify day of week is Monday (weekday() == 0)
-- Confirm with athlete: "Start training on [Monday, DATE]?"
-- Never assume dates - always calculate programmatically
+**Validation before saving plan**:
+```bash
+# Verify all week start dates are Monday
+sce dates validate --date 2026-01-20 --must-be monday
+sce dates validate --date 2026-01-27 --must-be monday
+# ... for each week
+
+# Verify all week end dates are Sunday
+sce dates validate --date 2026-01-26 --must-be sunday
+sce dates validate --date 2026-02-01 --must-be sunday
+# ... for each week
+```
+
+**Confirmation**:
+- Confirm with athlete: "Start training on [Monday, DATE]?" (use formatted date from CLI)
+- Never manually calculate dates - always use `sce dates` commands
 
 ---
 
