@@ -241,6 +241,10 @@ class SafeVolumeRange(BaseModel):
     recommended_peak_km: int = Field(..., description="Recommended peak weekly volume")
     recommendation: str = Field(..., description="Guidance on volume progression")
 
+    warning: Optional[str] = Field(
+        None, description="Warning if target volume conflicts with run frequency (minimum volume constraints)"
+    )
+
     class Config:
         json_schema_extra = {
             "example": {

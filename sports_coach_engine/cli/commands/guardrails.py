@@ -251,6 +251,11 @@ def safe_volume_command(
         "--recent-volume",
         help="Recent weekly running volume (km/week, last 4 weeks avg) - prevents dangerous jumps"
     ),
+    run_days_per_week: Optional[int] = typer.Option(
+        None,
+        "--run-days-per-week",
+        help="Number of run days per week - warns if target volume conflicts with minimum workout durations"
+    ),
 ) -> None:
     """Calculate safe weekly volume range based on current fitness and goals.
 
@@ -285,6 +290,7 @@ def safe_volume_command(
         goal_type=goal,
         athlete_age=age,
         recent_weekly_volume_km=recent_volume,
+        run_days_per_week=run_days_per_week,
     )
 
     # Build success message

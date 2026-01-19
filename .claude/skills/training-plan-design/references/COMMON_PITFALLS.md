@@ -305,6 +305,115 @@ Result: Plan fails structural validation
 
 ---
 
+### Pitfall 3.4: Treating Minor Volume Discrepancies as Errors
+
+**The Problem**:
+Regenerating plans repeatedly to fix small volume discrepancies (<5%) between target and actual weekly totals, wasting time on arithmetic precision that doesn't impact training quality.
+
+**Why It Happens**:
+- Perfectionism about volume targets
+- Misunderstanding what constitutes a meaningful error
+- Not knowing acceptable tolerance thresholds
+- LLM challenges with multi-step arithmetic over 64-112 workouts
+
+**What Goes Wrong**:
+```
+Week 7 target: 35 km
+Generated workouts total: 36 km
+Discrepancy: +2.9%
+
+Coach regenerates entire week to hit exactly 35 km
+Second attempt: 34 km total
+Discrepancy: -2.9%
+
+Coach regenerates again
+Third attempt: 35.5 km total
+Discrepancy: +1.4%
+
+Result: Wasted 20 minutes on iterations, plan still not "perfect"
+```
+
+**Real Example**:
+```
+Week 9 designed workouts:
+  - Monday: Rest
+  - Wednesday: 9 km easy
+  - Thursday: 11 km tempo (6 km T-pace + warmup/cooldown)
+  - Saturday: 9 km easy
+  - Sunday: 13 km long run
+  Total: 42 km
+
+Target: 41 km
+Discrepancy: +2.4% ← ACCEPTABLE!
+```
+
+**Why <5% is acceptable**:
+1. **Training physiology**: Adaptation occurs from stimulus ranges, not exact distances
+   - 41 km vs. 42 km = same training stimulus
+   - CTL/ATL calculations have ±2-3% inherent variability
+   - ACWR remains identical (both round to 1.15)
+
+2. **Real-world execution**: Athletes rarely hit exact distances
+   - GPS accuracy: ±2-3%
+   - Route variations: ±5-10%
+   - Athlete adjustments: "5 km felt good, ran 5.5 km"
+
+3. **Computational cost**: LLM arithmetic errors compound over large plans
+   - 16 weeks × 4-5 workouts = 64-80 distance calculations
+   - Small rounding errors accumulate
+   - Perfect accuracy requires multiple regeneration cycles
+   - Time cost outweighs training benefit
+
+**Acceptable tolerance guidelines**:
+- **<5% weekly volume discrepancy**: ACCEPTABLE, no action needed
+  - Example: 38 km actual vs. 40 km target (5.0%) ✓
+- **5-10% weekly volume discrepancy**: REVIEW, but often acceptable
+  - Check: Does it affect long run %, 80/20 distribution, or quality volume limits?
+  - If no violations → accept
+- **>10% weekly volume discrepancy**: REGENERATE
+  - Example: 33 km actual vs. 40 km target (17.5%) ✗
+  - Indicates systematic error in volume distribution
+
+**When to regenerate vs. accept**:
+```
+Scenario 1: 36 km actual vs. 35 km target (+2.9%)
+  - Long run: 10 km (28% of volume) ✓ <30%
+  - Quality: 5 km T-pace (14% of volume) ✓ <10% is actually 10%, acceptable
+  - 80/20: 28 km easy (78%), 8 km quality (22%) ✓ ~80/20
+  → ACCEPT: Minor discrepancy, no violations
+
+Scenario 2: 32 km actual vs. 40 km target (-20%)
+  - Missing 8 km → Likely violated minimums or removed workouts
+  - Quality volume might now be >10% (5 km T / 32 km = 15.6%) ✗
+  → REGENERATE: Significant structural issue
+
+Scenario 3: 43 km actual vs. 40 km target (+7.5%)
+  - Long run: 13 km (30% of volume) ✓
+  - Check weekly progression: Last week 38 km, this week 43 km = +13% ✗
+  → REGENERATE: Violates 10% progression rule
+```
+
+**Solution**:
+1. **Set clear threshold**: <5% discrepancy = acceptable, move on
+2. **Validate violations, not totals**: Check guardrails (long run %, quality volume, progression)
+3. **Document in plan review**: "Week 7 is 36 km (target 35 km, +2.9% acceptable)"
+4. **Athlete communication**: "Minor variations don't impact training quality"
+5. **Use validation output**: Trust `validate_week()` warnings for meaningful violations
+
+**Prevention**:
+- Accept <5% discrepancies during plan generation
+- Focus validation on guardrails (not arithmetic precision)
+- Use `distribute_weekly_volume()` helper for initial allocation
+- Don't regenerate unless >5% OR guardrail violation
+
+**Benefit**:
+- Faster plan generation (single pass instead of 2-4 iterations)
+- Reduced LLM token usage (no regeneration loops)
+- Appropriate prioritization (training quality over arithmetic precision)
+- Athlete sees plan faster, starts training sooner
+
+---
+
 ## Category 4: Multi-Sport Errors
 
 ### Pitfall 4.1: Not Accounting for Multi-Sport Load
@@ -748,7 +857,7 @@ Result:
 ## Checklist Before Presenting Any Plan
 
 - [ ] Constraints confirmed in writing (run days, times, max duration, other sports)
-- [ ] Starting volume = 80-100% of current CTL
+- [ ] Starting volume = 80-100% of current CTL (with recent volume consideration)
 - [ ] Weekly progression: 5-7% most weeks, 10% max
 - [ ] Recovery weeks: Every 4-5 weeks at 70%
 - [ ] Long run progression: +10-15 min every 2-3 weeks (not per week)
@@ -759,6 +868,8 @@ Result:
 - [ ] Conflict policy applied (if applicable)
 - [ ] Plan structure validated: phases, recovery weeks, race week taper
 - [ ] Week start dates verified: All weeks start on Monday
+- [ ] **Weekly volume discrepancies checked**: <5% acceptable, 5-10% review, >10% regenerate
+- [ ] **Guardrails validated**: No violations of long run %, quality volume limits, or progression rules
 - [ ] **Workout prescriptions populated**: All weeks have complete WorkoutPrescription objects (NOT empty arrays)
 - [ ] **Required workout fields present**: All 20+ fields populated for each workout
 - [ ] **Workout dates aligned**: day_of_week matches actual date weekday
@@ -767,3 +878,5 @@ Result:
 - [ ] **CLI tools tested**: `sce today` and `sce week` work after populating plan
 
 If any checkbox is unchecked, the plan needs fixing before presentation.
+
+**Note on volume discrepancies**: Minor variations (<5%) between target and actual weekly totals are acceptable and don't require regeneration. Focus validation on meaningful violations (guardrails, progression rules, structural issues) rather than arithmetic perfection.

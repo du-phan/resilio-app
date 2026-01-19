@@ -1098,3 +1098,382 @@ def append_weekly_training_summary(week_data: dict) -> Union[dict, PlanError]:
             error_type="unknown",
             message=f"Failed to append weekly summary: {str(e)}"
         )
+
+
+# ============================================================
+# PROGRESSIVE DISCLOSURE API (Phase 2: Monthly Planning)
+# ============================================================
+
+
+def create_macro_plan(
+    goal_type: str,
+    race_date: date,
+    target_time: Optional[str],
+    total_weeks: int,
+    start_date: date,
+    current_ctl: float,
+    starting_volume_km: float,
+    peak_volume_km: float,
+) -> Union[dict, PlanError]:
+    """
+    Generate high-level training plan structure (macro plan).
+
+    Creates the structural roadmap for full training period without
+    detailed workout prescriptions. Shows phases, volume progression,
+    CTL trajectory, recovery weeks, and key milestones.
+
+    Args:
+        goal_type: Race distance ("5k", "10k", "half_marathon", "marathon")
+        race_date: Goal race date
+        target_time: Target finish time (optional, e.g., "1:30:00")
+        total_weeks: Total weeks in plan
+        start_date: Plan start date (should be Monday)
+        current_ctl: CTL at plan creation
+        starting_volume_km: Initial weekly volume
+        peak_volume_km: Peak weekly volume
+
+    Returns:
+        dict: Macro plan structure (MacroPlan schema compatible)
+        PlanError: If generation fails
+
+    Example:
+        >>> macro = create_macro_plan(
+        ...     goal_type="half_marathon",
+        ...     race_date=date(2026, 5, 3),
+        ...     target_time="1:30:00",
+        ...     total_weeks=16,
+        ...     start_date=date(2026, 1, 20),
+        ...     current_ctl=44.0,
+        ...     starting_volume_km=25.0,
+        ...     peak_volume_km=55.0
+        ... )
+    """
+    try:
+        # Import here to avoid circular dependency
+        from sports_coach_engine.core.plan import generate_macro_structure
+        from sports_coach_engine.schemas.plan import GoalType
+
+        # Validate goal type
+        goal_type_lower = goal_type.lower().replace("-", "_").replace(" ", "_")
+        if goal_type_lower not in [g.value for g in GoalType]:
+            return PlanError(
+                error_type="validation",
+                message=f"Invalid goal type: {goal_type}. Valid: 5k, 10k, half_marathon, marathon"
+            )
+
+        # Validate dates
+        if start_date > race_date:
+            return PlanError(
+                error_type="validation",
+                message=f"Start date ({start_date}) must be before race date ({race_date})"
+            )
+
+        # Validate start date is Monday (weekday 0)
+        if start_date.weekday() != 0:
+            return PlanError(
+                error_type="validation",
+                message=f"Start date must be Monday, got {start_date.strftime('%A')}"
+            )
+
+        # Generate macro structure
+        macro = generate_macro_structure(
+            goal_type=goal_type_lower,
+            race_date=race_date,
+            target_time=target_time,
+            total_weeks=total_weeks,
+            start_date=start_date,
+            current_ctl=current_ctl,
+            starting_volume_km=starting_volume_km,
+            peak_volume_km=peak_volume_km
+        )
+
+        return macro
+
+    except ValueError as e:
+        return PlanError(
+            error_type="validation",
+            message=str(e)
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to create macro plan: {str(e)}"
+        )
+
+
+def assess_month_completion(
+    month_number: int,
+    week_numbers: list[int],
+    planned_workouts: list[dict],
+    completed_activities: list[dict],
+    starting_ctl: float,
+    ending_ctl: float,
+    target_ctl: float,
+    current_vdot: float,
+) -> Union[dict, PlanError]:
+    """
+    Assess completed month for next month planning.
+
+    Analyzes execution and response to inform adaptive planning:
+    - Adherence rates
+    - CTL progression vs. targets
+    - VDOT recalibration needs
+    - Injury/illness signals
+    - Volume tolerance
+    - Patterns detected
+
+    Args:
+        month_number: Month assessed (1-indexed)
+        week_numbers: Weeks assessed (e.g., [1, 2, 3, 4])
+        planned_workouts: Planned workouts from monthly plan
+        completed_activities: Actual activities from Strava
+        starting_ctl: CTL at month start
+        ending_ctl: CTL at month end
+        target_ctl: Target CTL for month end
+        current_vdot: VDOT used for month's paces
+
+    Returns:
+        dict: Monthly assessment (MonthlyAssessment schema compatible)
+        PlanError: If assessment fails
+
+    Example:
+        >>> assessment = assess_month_completion(
+        ...     month_number=1,
+        ...     week_numbers=[1, 2, 3, 4],
+        ...     planned_workouts=[...],
+        ...     completed_activities=[...],
+        ...     starting_ctl=44.0,
+        ...     ending_ctl=50.5,
+        ...     target_ctl=52.0,
+        ...     current_vdot=48.0
+        ... )
+    """
+    try:
+        # Import here to avoid circular dependency
+        from sports_coach_engine.core.plan import assess_monthly_completion
+
+        # Validate inputs
+        if not week_numbers:
+            return PlanError(
+                error_type="validation",
+                message="week_numbers cannot be empty"
+            )
+
+        if starting_ctl < 0 or ending_ctl < 0 or target_ctl < 0:
+            return PlanError(
+                error_type="validation",
+                message="CTL values must be non-negative"
+            )
+
+        # Assess monthly completion
+        assessment = assess_monthly_completion(
+            month_number=month_number,
+            week_numbers=week_numbers,
+            planned_workouts=planned_workouts,
+            completed_activities=completed_activities,
+            starting_ctl=starting_ctl,
+            ending_ctl=ending_ctl,
+            target_ctl=target_ctl,
+            current_vdot=current_vdot
+        )
+
+        return assessment
+
+    except ValueError as e:
+        return PlanError(
+            error_type="validation",
+            message=str(e)
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to assess month completion: {str(e)}"
+        )
+
+
+def validate_month_plan(
+    monthly_plan_weeks: list[dict],
+    macro_volume_targets: list[dict],
+) -> Union[dict, PlanError]:
+    """
+    Validate 4-week monthly plan before saving.
+
+    Checks for:
+    - Volume discrepancies vs. macro plan targets
+    - Guardrail violations
+    - Minimum workout durations
+    - Phase consistency
+
+    Args:
+        monthly_plan_weeks: 4 weeks from monthly plan
+        macro_volume_targets: Volume targets from macro plan
+
+    Returns:
+        dict: Validation result with violations and warnings
+        PlanError: If validation fails
+
+    Example:
+        >>> result = validate_month_plan(
+        ...     monthly_plan_weeks=[week1, week2, week3, week4],
+        ...     macro_volume_targets=[target1, target2, target3, target4]
+        ... )
+        >>> result["overall_ok"]
+        True
+    """
+    try:
+        # Import here to avoid circular dependency
+        from sports_coach_engine.core.plan import validate_monthly_plan
+
+        # Validate inputs
+        if len(monthly_plan_weeks) != 4:
+            return PlanError(
+                error_type="validation",
+                message=f"Monthly plan must have exactly 4 weeks, got {len(monthly_plan_weeks)}"
+            )
+
+        if len(macro_volume_targets) != 4:
+            return PlanError(
+                error_type="validation",
+                message=f"Macro volume targets must have exactly 4 entries, got {len(macro_volume_targets)}"
+            )
+
+        # Validate monthly plan
+        result = validate_monthly_plan(
+            monthly_plan_weeks=monthly_plan_weeks,
+            macro_volume_targets=macro_volume_targets
+        )
+
+        return result
+
+    except ValueError as e:
+        return PlanError(
+            error_type="validation",
+            message=str(e)
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to validate monthly plan: {str(e)}"
+        )
+
+
+def generate_month_plan(
+    month_number: int,
+    week_numbers: list[int],
+    macro_plan: dict,
+    current_vdot: float,
+    profile: dict,
+    volume_adjustment: float = 1.0,
+) -> Union[dict, PlanError]:
+    """
+    Generate detailed monthly plan (2-6 weeks) with workout prescriptions.
+
+    API wrapper that validates inputs and calls core.plan.generate_monthly_plan().
+
+    Args:
+        month_number: Month number (1-5 typically, may vary)
+        week_numbers: List of week numbers for this cycle (e.g., [1,2,3,4] or [9,10,11])
+        macro_plan: Macro plan dict with volume_trajectory, structure.phases, etc.
+        current_vdot: Current VDOT value (30.0-85.0)
+        profile: Athlete profile dict with constraints, sports, preferences
+        volume_adjustment: Multiplier for volume targets (0.5-1.5 reasonable range)
+
+    Returns:
+        Dict with monthly plan or PlanError
+
+    Example:
+        >>> result = generate_month_plan(
+        ...     month_number=1,
+        ...     week_numbers=[1, 2, 3, 4],
+        ...     macro_plan=macro_plan_dict,
+        ...     current_vdot=48.0,
+        ...     profile=profile_dict
+        ... )
+        >>> if isinstance(result, dict):
+        ...     print(f"Generated {result['num_weeks']} weeks")
+    """
+    from sports_coach_engine.core.plan import generate_monthly_plan
+
+    # Validation
+    if month_number < 1:
+        return PlanError(
+            error_type="validation",
+            message="month_number must be >= 1"
+        )
+
+    if not week_numbers:
+        return PlanError(
+            error_type="validation",
+            message="week_numbers cannot be empty"
+        )
+
+    if not (2 <= len(week_numbers) <= 6):
+        return PlanError(
+            error_type="validation",
+            message=f"Cycle must be 2-6 weeks, got {len(week_numbers)} weeks"
+        )
+
+    if not (30.0 <= current_vdot <= 85.0):
+        return PlanError(
+            error_type="validation",
+            message=f"VDOT must be 30-85, got {current_vdot}"
+        )
+
+    if not (0.5 <= volume_adjustment <= 1.5):
+        return PlanError(
+            error_type="validation",
+            message=f"volume_adjustment must be 0.5-1.5, got {volume_adjustment}"
+        )
+
+    # Validate macro plan has required fields
+    if not isinstance(macro_plan, dict):
+        return PlanError(
+            error_type="validation",
+            message="macro_plan must be a dict"
+        )
+
+    if "volume_trajectory" not in macro_plan:
+        return PlanError(
+            error_type="validation",
+            message="macro_plan missing required field: volume_trajectory"
+        )
+
+    if "structure" not in macro_plan or "phases" not in macro_plan.get("structure", {}):
+        return PlanError(
+            error_type="validation",
+            message="macro_plan missing required field: structure.phases"
+        )
+
+    # Validate profile has required fields
+    if not isinstance(profile, dict):
+        return PlanError(
+            error_type="validation",
+            message="profile must be a dict"
+        )
+
+    try:
+        monthly_plan = generate_monthly_plan(
+            month_number=month_number,
+            week_numbers=week_numbers,
+            macro_plan=macro_plan,
+            current_vdot=current_vdot,
+            profile=profile,
+            volume_adjustment=volume_adjustment
+        )
+        return monthly_plan
+
+    except ValueError as e:
+        return PlanError(
+            error_type="validation",
+            message=str(e)
+        )
+    except KeyError as e:
+        return PlanError(
+            error_type="validation",
+            message=f"Missing required field: {str(e)}"
+        )
+    except Exception as e:
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to generate monthly plan: {str(e)}"
+        )

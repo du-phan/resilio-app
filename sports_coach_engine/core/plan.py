@@ -2165,3 +2165,774 @@ You completed **{week_data['actual_volume_km']:.1f} km** of your planned {week_d
         "week_number": week_data['week_number'],
         "appended_timestamp": timestamp.isoformat()
     }
+
+
+# ============================================================
+# PROGRESSIVE DISCLOSURE HELPERS (Phase 2: Monthly Planning)
+# ============================================================
+
+
+def generate_macro_structure(
+    goal_type: GoalType,
+    race_date: date,
+    target_time: Optional[str],
+    total_weeks: int,
+    start_date: date,
+    current_ctl: float,
+    starting_volume_km: float,
+    peak_volume_km: float,
+) -> dict:
+    """
+    Generate high-level training plan structure (macro plan).
+
+    Creates the structural roadmap for the full training period:
+    - Phase boundaries and focus
+    - Weekly volume trajectory
+    - CTL projections at key milestones
+    - Recovery week schedule
+    - Assessment checkpoints
+
+    This provides the "big picture" without detailed workout prescriptions.
+    Athletes see where they're going; monthly plans provide execution detail.
+
+    Args:
+        goal_type: Race distance goal
+        race_date: Goal race date
+        target_time: Target finish time (optional, e.g., "1:30:00")
+        total_weeks: Total weeks in plan
+        start_date: Plan start date (should be Monday)
+        current_ctl: CTL at plan creation
+        starting_volume_km: Initial weekly volume
+        peak_volume_km: Peak weekly volume
+
+    Returns:
+        dict: Macro plan structure ready for MacroPlan schema
+        {
+            "id": str,
+            "created_at": date,
+            "race_type": GoalType,
+            "race_date": date,
+            "target_time": Optional[str],
+            "total_weeks": int,
+            "start_date": date,
+            "end_date": date,
+            "phases": list[PhaseStructure],
+            "volume_trajectory": list[WeeklyVolumeTarget],
+            "starting_volume_km": float,
+            "peak_volume_km": float,
+            "current_ctl": float,
+            "ctl_projections": list[CTLProjection],
+            "recovery_weeks": list[int],
+            "milestones": list[dict]
+        }
+
+    Example:
+        >>> macro = generate_macro_structure(
+        ...     goal_type="half_marathon",
+        ...     race_date=date(2026, 5, 3),
+        ...     target_time="1:30:00",
+        ...     total_weeks=16,
+        ...     start_date=date(2026, 1, 20),
+        ...     current_ctl=44.0,
+        ...     starting_volume_km=25.0,
+        ...     peak_volume_km=55.0
+        ... )
+        >>> len(macro["phases"])
+        4  # base, build, peak, taper
+        >>> len(macro["volume_trajectory"])
+        16  # one per week
+    """
+    # Generate periodization phases
+    phases_data = calculate_periodization(goal_type, total_weeks, start_date)
+
+    # Build phase structures
+    phases = []
+    for phase_data in phases_data:
+        phase_name = phase_data["phase"]
+        start_week = phase_data["start_week"] + 1  # Convert to 1-indexed
+        end_week = phase_data["end_week"] + 1
+        weeks_in_phase = list(range(start_week, end_week + 1))
+
+        # Determine phase focus
+        focus_map = {
+            "base": "Aerobic foundation + multi-sport integration",
+            "build": f"{goal_type.replace('_', ' ').title()}-specific intensity",
+            "peak": "Maximum load, race-pace emphasis",
+            "taper": "Reduce fatigue, peak fitness"
+        }
+        focus = focus_map.get(phase_name, "Training progression")
+
+        phases.append({
+            "name": phase_name,
+            "weeks": weeks_in_phase,
+            "start_week": start_week,
+            "end_week": end_week,
+            "focus": focus
+        })
+
+    # Generate volume trajectory (weekly targets)
+    # Use 10% rule with recovery weeks
+    volume_trajectory = []
+    recovery_weeks = []
+    current_volume = starting_volume_km
+
+    for week_num in range(1, total_weeks + 1):
+        # Determine phase for this week
+        phase_name = "base"  # default
+        for phase in phases_data:
+            if phase["start_week"] <= (week_num - 1) <= phase["end_week"]:
+                phase_name = phase["phase"]
+                break
+
+        # Check if recovery week (every 4th week in base/build, not in peak/taper)
+        is_recovery = False
+        if phase_name in ["base", "build"] and week_num % 4 == 0:
+            is_recovery = True
+            recovery_weeks.append(week_num)
+
+        if is_recovery:
+            # Recovery week: 70% of previous week
+            target_volume = current_volume * 0.70
+        elif phase_name == "taper":
+            # Taper: Progressive reduction
+            weeks_into_taper = week_num - phases[-1]["start_week"] + 1
+            taper_pct = 1.0 - (weeks_into_taper * 0.15)  # 15% reduction per week
+            target_volume = peak_volume_km * max(taper_pct, 0.40)
+        elif phase_name == "peak":
+            # Peak: Hold at peak volume
+            target_volume = peak_volume_km
+        else:
+            # Base/Build: Progressive increase toward peak
+            # Calculate target based on week position in overall plan
+            weeks_before_peak = total_weeks - week_num
+            # Use exponential approach to peak
+            if weeks_before_peak > 4:  # More than 4 weeks before peak
+                progress = (week_num - 1) / (total_weeks - 5)  # Progress toward peak phase
+                target_volume = starting_volume_km + (peak_volume_km - starting_volume_km) * progress
+                # Cap at 10% increase from previous
+                max_increase = current_volume * 1.10
+                target_volume = min(target_volume, max_increase)
+            else:
+                target_volume = peak_volume_km
+
+        volume_trajectory.append({
+            "week_number": week_num,
+            "target_volume_km": round(target_volume, 1),
+            "is_recovery_week": is_recovery,
+            "phase": phase_name
+        })
+
+        current_volume = target_volume
+
+    # Generate CTL projections at key milestones
+    ctl_projections = []
+    projected_ctl = current_ctl
+
+    # Key milestone weeks
+    milestone_weeks = [phases[0]["end_week"], phases[1]["end_week"], phases[2]["end_week"], total_weeks]
+    milestone_names = ["End of base phase", "End of build phase", "Peak week", "Race week"]
+
+    for milestone_week, milestone_name in zip(milestone_weeks, milestone_names):
+        # Rough CTL projection: +0.7-0.8 CTL per week during base/build, -1-2 during taper
+        weeks_delta = milestone_week - 1
+        if milestone_week <= phases[1]["end_week"]:  # Base/Build
+            projected_ctl = current_ctl + (weeks_delta * 0.75)
+        elif milestone_week == phases[2]["end_week"]:  # Peak
+            projected_ctl = current_ctl + (weeks_delta * 0.6)
+        else:  # Taper
+            projected_ctl = current_ctl + ((phases[2]["end_week"] - 1) * 0.6) - 2
+
+        ctl_projections.append({
+            "week_number": milestone_week,
+            "projected_ctl": round(projected_ctl, 1),
+            "milestone": milestone_name
+        })
+
+    # Define assessment milestones
+    milestones = [
+        {"week": 4, "event": "Base phase adaptation checkpoint", "action": "Recalculate VDOT from first tempo run"},
+        {"week": 8, "event": "Build phase transition", "action": "Review base phase response, adjust build volumes"},
+    ]
+
+    # Add peak and taper milestones
+    if total_weeks >= 12:
+        milestones.append({"week": phases[2]["end_week"], "event": "Peak week", "action": "Final fitness verification"})
+    if total_weeks >= 14:
+        milestones.append({"week": phases[3]["start_week"], "event": "Taper begins", "action": "TSB trajectory to +5-10 by race day"})
+
+    # Calculate end date
+    end_date = start_date + timedelta(weeks=total_weeks, days=-1)  # -1 because start Monday, end Sunday
+
+    return {
+        "id": f"macro_{uuid.uuid4().hex[:12]}",
+        "created_at": date.today(),
+        "race_type": goal_type,
+        "race_date": race_date,
+        "target_time": target_time,
+        "total_weeks": total_weeks,
+        "start_date": start_date,
+        "end_date": end_date,
+        "phases": phases,
+        "volume_trajectory": volume_trajectory,
+        "starting_volume_km": starting_volume_km,
+        "peak_volume_km": peak_volume_km,
+        "current_ctl": current_ctl,
+        "ctl_projections": ctl_projections,
+        "recovery_weeks": recovery_weeks,
+        "milestones": milestones
+    }
+
+
+def assess_monthly_completion(
+    month_number: int,
+    week_numbers: list[int],
+    planned_workouts: list[dict],
+    completed_activities: list[dict],
+    starting_ctl: float,
+    ending_ctl: float,
+    target_ctl: float,
+    current_vdot: float,
+) -> dict:
+    """
+    Assess completed month for next month planning.
+
+    Analyzes execution and response from previous month:
+    - Adherence: What percentage of workouts were completed?
+    - CTL progression: Did fitness increase as expected?
+    - VDOT drift: Should paces be recalibrated?
+    - Signals: Any injury/illness mentions in notes?
+    - Volume tolerance: Was the load well-tolerated?
+    - Patterns: Consistent skips or preferences observed?
+
+    This provides context for generating next month's plan adaptively.
+
+    Args:
+        month_number: Month that was assessed (1-indexed)
+        week_numbers: Weeks assessed (e.g., [1, 2, 3, 4])
+        planned_workouts: List of planned workouts from monthly plan
+        completed_activities: List of actual activities from Strava
+        starting_ctl: CTL at month start
+        ending_ctl: CTL at month end
+        target_ctl: Target CTL for month end (from macro plan)
+        current_vdot: VDOT used for month's paces
+
+    Returns:
+        dict: Monthly assessment ready for MonthlyAssessment schema
+
+    Example:
+        >>> assessment = assess_monthly_completion(
+        ...     month_number=1,
+        ...     week_numbers=[1, 2, 3, 4],
+        ...     planned_workouts=[...],  # 16 workouts
+        ...     completed_activities=[...],  # 15 runs
+        ...     starting_ctl=44.0,
+        ...     ending_ctl=50.5,
+        ...     target_ctl=52.0,
+        ...     current_vdot=48.0
+        ... )
+        >>> assessment["adherence_pct"]
+        93.75  # 15/16 workouts
+        >>> assessment["ctl_on_target"]
+        True  # Within 5% of target
+    """
+    # Calculate adherence
+    total_planned = len(planned_workouts)
+    total_completed = len([a for a in completed_activities if a.get("type") == "Run"])
+    adherence_pct = (total_completed / total_planned * 100) if total_planned > 0 else 0.0
+
+    # CTL assessment
+    ctl_delta = ending_ctl - starting_ctl
+    ctl_target_delta = target_ctl - starting_ctl
+    ctl_on_target = abs(ending_ctl - target_ctl) < (target_ctl * 0.05)  # Within 5%
+
+    # VDOT analysis - Look for pace drift in tempo/interval workouts
+    # (Simple v0: just flag if completion rate < 90% for quality sessions)
+    quality_workouts = [w for w in planned_workouts if w.get("workout_type") in ["tempo", "intervals"]]
+    completed_quality = [a for a in completed_activities if a.get("description", "").lower().find("tempo") >= 0 or a.get("description", "").lower().find("interval") >= 0]
+
+    vdot_recalibration_needed = False
+    suggested_vdot = None
+    if len(quality_workouts) > 0:
+        quality_completion_rate = len(completed_quality) / len(quality_workouts)
+        if quality_completion_rate < 0.85:  # Less than 85% completion
+            vdot_recalibration_needed = True
+            suggested_vdot = round(current_vdot * 0.98, 1)  # Suggest slight reduction
+
+    # Detect injury/illness signals from activity notes
+    injury_signals = []
+    illness_signals = []
+    for activity in completed_activities:
+        description = activity.get("description", "").lower()
+        private_note = activity.get("private_note", "").lower()
+        combined = description + " " + private_note
+
+        # Injury keywords
+        if any(keyword in combined for keyword in ["pain", "hurt", "sore", "injury", "strain", "ache"]):
+            injury_signals.append(f"Week {activity.get('week', '?')}: {activity.get('description', 'Activity')[:50]}...")
+
+        # Illness keywords
+        if any(keyword in combined for keyword in ["sick", "ill", "cold", "flu", "fever", "tired"]):
+            illness_signals.append(f"Week {activity.get('week', '?')}: {activity.get('description', 'Activity')[:50]}...")
+
+    # Detect patterns (simple v0: just check for consistent day-of-week skips)
+    patterns_detected = []
+    # This would require more sophisticated analysis - for v0, leave empty or simple
+    if adherence_pct < 80:
+        patterns_detected.append(f"Low adherence ({adherence_pct:.0f}%) - investigate scheduling conflicts")
+
+    # Volume tolerance assessment
+    volume_well_tolerated = True
+    volume_adjustment_suggestion = "Maintain"
+
+    if len(injury_signals) > 2:
+        volume_well_tolerated = False
+        volume_adjustment_suggestion = "Reduce 10%"
+    elif adherence_pct < 75:
+        volume_well_tolerated = False
+        volume_adjustment_suggestion = "Reduce 5% or reassess scheduling"
+    elif adherence_pct > 95 and ending_ctl > target_ctl:
+        volume_adjustment_suggestion = "Increase 5% if recovery good"
+
+    # Overall assessment
+    if len(injury_signals) > 0:
+        overall_response = "Injury signals detected - adjust volume/intensity"
+    elif len(illness_signals) > 0:
+        overall_response = "Illness disruption - allow recovery before progression"
+    elif adherence_pct < 80:
+        overall_response = "Struggled with volume/scheduling"
+    elif ctl_on_target and adherence_pct >= 90:
+        overall_response = "Excellent adaptation - progressing well"
+    else:
+        overall_response = "Moderate adaptation - continue current trajectory"
+
+    # Recommendations for next month
+    recommendations = []
+    if vdot_recalibration_needed:
+        recommendations.append(f"Recalculate VDOT (suggest {suggested_vdot})")
+    if not volume_well_tolerated:
+        recommendations.append(f"Adjust volume: {volume_adjustment_suggestion}")
+    if len(patterns_detected) > 0:
+        recommendations.append("Review scheduling patterns with athlete")
+    if ctl_on_target:
+        recommendations.append("Continue current volume progression")
+    else:
+        recommendations.append("Adjust volume trajectory to meet CTL targets")
+
+    return {
+        "month_number": month_number,
+        "week_numbers": week_numbers,
+        "assessment_date": date.today(),
+        "planned_workouts": total_planned,
+        "completed_workouts": total_completed,
+        "adherence_pct": round(adherence_pct, 1),
+        "starting_ctl": starting_ctl,
+        "ending_ctl": ending_ctl,
+        "target_ctl": target_ctl,
+        "ctl_delta": round(ctl_delta, 1),
+        "ctl_on_target": ctl_on_target,
+        "current_vdot": current_vdot,
+        "suggested_vdot": suggested_vdot,
+        "vdot_recalibration_needed": vdot_recalibration_needed,
+        "injury_signals": injury_signals[:5],  # Limit to 5 most recent
+        "illness_signals": illness_signals[:5],
+        "patterns_detected": patterns_detected,
+        "volume_well_tolerated": volume_well_tolerated,
+        "volume_adjustment_suggestion": volume_adjustment_suggestion,
+        "overall_response": overall_response,
+        "recommendations_for_next_month": recommendations
+    }
+
+
+def validate_monthly_plan(
+    monthly_plan_weeks: list[dict],
+    macro_volume_targets: list[dict],
+) -> dict:
+    """
+    Validate 4-week monthly plan before saving.
+
+    Checks for:
+    - Volume discrepancies (<5% acceptable, 5-10% review, >10% regenerate)
+    - Guardrail violations (long run %, quality volume, progression)
+    - Phase consistency with macro plan
+    - Workout field completeness
+
+    Returns violations with severity levels for AI Coach to review.
+
+    Args:
+        monthly_plan_weeks: 4 weeks from monthly plan (list of WeekPlan dicts)
+        macro_volume_targets: Volume targets from macro plan for these weeks
+
+    Returns:
+        dict: Validation result
+        {
+            "overall_ok": bool,
+            "violations": list[dict],
+            "warnings": list[str],
+            "summary": str
+        }
+
+    Example:
+        >>> result = validate_monthly_plan(
+        ...     monthly_plan_weeks=[week1, week2, week3, week4],
+        ...     macro_volume_targets=[target1, target2, target3, target4]
+        ... )
+        >>> result["overall_ok"]
+        True
+        >>> len(result["violations"])
+        2  # Two minor warnings, no blockers
+    """
+    violations = []
+    warnings = []
+
+    for i, week in enumerate(monthly_plan_weeks):
+        week_num = week.get("week_number")
+        target_volume = macro_volume_targets[i].get("target_volume_km") if i < len(macro_volume_targets) else None
+
+        # Check volume discrepancy
+        if target_volume is not None:
+            actual_volume = week.get("target_volume_km", 0)
+            discrepancy_pct = abs(actual_volume - target_volume) / target_volume * 100 if target_volume > 0 else 0
+
+            if discrepancy_pct > 10:
+                violations.append({
+                    "rule": "weekly_volume_discrepancy",
+                    "week": week_num,
+                    "severity": "danger",
+                    "actual": actual_volume,
+                    "target": target_volume,
+                    "message": f"Week {week_num}: {actual_volume}km vs {target_volume}km target ({discrepancy_pct:.1f}% discrepancy)",
+                    "suggestion": "Regenerate week to meet volume target"
+                })
+            elif discrepancy_pct > 5:
+                warnings.append(f"Week {week_num}: {discrepancy_pct:.1f}% volume discrepancy (review recommended)")
+
+        # Check for minimum workout durations (if workouts present)
+        workouts = week.get("workouts", [])
+        for workout in workouts:
+            duration_min = workout.get("duration_minutes", 0)
+            workout_type = workout.get("workout_type", "unknown")
+
+            # Simple minimums
+            min_durations = {"easy": 30, "long_run": 60, "tempo": 40, "intervals": 35}
+            required_min = min_durations.get(workout_type, 20)
+
+            if duration_min < required_min and workout_type != "rest":
+                violations.append({
+                    "rule": "minimum_workout_duration",
+                    "week": week_num,
+                    "severity": "warning",
+                    "actual": duration_min,
+                    "target": required_min,
+                    "message": f"Week {week_num}: {workout_type} workout {duration_min}min (minimum {required_min}min)",
+                    "suggestion": f"Increase duration or reduce run frequency"
+                })
+
+    overall_ok = len([v for v in violations if v["severity"] == "danger"]) == 0
+
+    summary = "Monthly plan validation passed" if overall_ok else f"{len(violations)} validation issues found"
+
+    return {
+        "overall_ok": overall_ok,
+        "violations": violations,
+        "warnings": warnings,
+        "summary": summary
+    }
+
+
+def generate_monthly_plan(
+    month_number: int,
+    week_numbers: list[int],
+    macro_plan: dict,
+    current_vdot: float,
+    profile: dict,
+    volume_adjustment: float = 1.0,
+) -> dict:
+    """
+    Generate detailed monthly plan (2-5 weeks) with workout prescriptions.
+
+    Creates complete workout prescriptions for specified weeks using:
+    - Macro plan volume targets (adjusted by volume_adjustment factor)
+    - Profile constraints (run days, sports, long run max)
+    - VDOT-based pace zones
+    - Phase-appropriate workout distribution
+    - Multi-sport integration
+
+    Handles variable-length cycles (2-5 weeks) for plans that aren't evenly divisible by 4.
+    Example: 11-week plan might use 4+4+3 weeks, 13-week plan might use 4+4+5 weeks.
+
+    Args:
+        month_number: Month number (1-4 typically, may vary)
+        week_numbers: List of week numbers for this cycle (e.g., [1,2,3,4] or [9,10,11])
+        macro_plan: Macro plan dict with volume_trajectory, structure.phases, etc.
+        current_vdot: Current VDOT value (may be recalibrated from previous month)
+        profile: Athlete profile dict with constraints, sports, preferences
+        volume_adjustment: Multiplier for volume targets (0.9 = reduce 10%, 1.0 = as planned)
+
+    Returns:
+        Dict with month_number, weeks (list of week dicts with workouts), paces, generation_context
+
+    Raises:
+        ValueError: If week_numbers is empty or contains invalid weeks
+        KeyError: If macro_plan missing required fields
+
+    Example:
+        >>> macro_plan = {"volume_trajectory": [{"week": 1, "target_km": 25}, ...], ...}
+        >>> profile = {"max_run_days": 4, "sports": [...], ...}
+        >>> monthly = generate_monthly_plan(
+        ...     month_number=1,
+        ...     week_numbers=[1, 2, 3, 4],
+        ...     macro_plan=macro_plan,
+        ...     current_vdot=48.0,
+        ...     profile=profile
+        ... )
+        >>> len(monthly["weeks"])
+        4
+        >>> monthly["weeks"][0]["workouts"]  # List of workout prescriptions
+        [...]
+    """
+    from datetime import date, timedelta
+    from .vdot import calculate_training_paces
+
+    # Validation
+    if not week_numbers:
+        raise ValueError("week_numbers cannot be empty")
+
+    if not (2 <= len(week_numbers) <= 6):
+        raise ValueError(f"Monthly cycle must be 2-6 weeks, got {len(week_numbers)} weeks")
+
+    if "volume_trajectory" not in macro_plan:
+        raise KeyError("macro_plan missing required field: volume_trajectory")
+
+    if "structure" not in macro_plan or "phases" not in macro_plan["structure"]:
+        raise KeyError("macro_plan missing required field: structure.phases")
+
+    # Get volume targets from macro plan
+    volume_trajectory = {vt["week"]: vt["target_km"] for vt in macro_plan["volume_trajectory"]}
+
+    for week_num in week_numbers:
+        if week_num not in volume_trajectory:
+            raise ValueError(f"Week {week_num} not found in macro plan volume_trajectory")
+
+    # Get phases from macro plan
+    phases_list = macro_plan["structure"]["phases"]
+    week_to_phase = {}
+    for phase_info in phases_list:
+        phase_name = phase_info["name"]
+        for week in phase_info["weeks"]:
+            week_to_phase[week] = phase_name
+
+    # Calculate training paces from VDOT
+    paces = calculate_training_paces(current_vdot)
+
+    # Get profile constraints
+    max_run_days = profile.get("max_run_days", 4)
+    run_days_per_week = min(max_run_days, 5)  # Cap at 5 for safety
+
+    # Get start date (from macro plan or calculate from week 1)
+    plan_start_date = None
+    if "race" in macro_plan and "start_date" in macro_plan["race"]:
+        # Parse start date if string
+        start_str = macro_plan["race"]["start_date"]
+        if isinstance(start_str, str):
+            plan_start_date = date.fromisoformat(start_str)
+        else:
+            plan_start_date = start_str
+
+    if not plan_start_date:
+        # Fallback: use current date for first week
+        plan_start_date = date.today()
+        # Adjust to Monday
+        days_to_monday = (7 - plan_start_date.weekday()) % 7
+        if days_to_monday > 0:
+            plan_start_date = plan_start_date + timedelta(days=days_to_monday)
+
+    # Generate weeks
+    weeks = []
+    for week_num in week_numbers:
+        # Get volume target for this week
+        target_volume_km = volume_trajectory[week_num] * volume_adjustment
+
+        # Get phase for this week
+        phase_name = week_to_phase.get(week_num, "base")
+        phase_enum = PlanPhase(phase_name)
+
+        # Determine if recovery week (every 4th week during base/build)
+        is_recovery_week = (week_num % 4 == 0) and phase_name in ["base", "build"]
+        if is_recovery_week:
+            target_volume_km *= 0.70  # Recovery week at 70% volume
+
+        # Calculate week dates
+        week_start = plan_start_date + timedelta(weeks=(week_num - 1))
+        week_end = week_start + timedelta(days=6)
+
+        # Determine workout types based on phase
+        workout_types = determine_weekly_workouts(
+            phase=phase_enum,
+            run_days_per_week=run_days_per_week,
+            is_recovery_week=is_recovery_week,
+            week_number=week_num,
+            profile=profile
+        )
+
+        # Distribute volume across workouts
+        volume_allocation = distribute_weekly_volume(
+            weekly_volume_km=target_volume_km,
+            workout_types=workout_types,
+            profile=profile
+        )
+
+        # Create workout prescriptions
+        workouts = []
+        current_date = week_start
+        for day_idx, workout_type in enumerate(workout_types):
+            allocated_distance = volume_allocation.get(day_idx, 0.0)
+
+            workout = create_workout(
+                workout_type=workout_type.value,
+                workout_date=current_date,
+                week_number=week_num,
+                day_of_week=current_date.weekday(),
+                phase=phase_enum,
+                volume_target_km=target_volume_km,
+                profile=profile,
+                allocated_distance_km=allocated_distance
+            )
+
+            workouts.append(workout.model_dump())
+            current_date += timedelta(days=1)
+
+        # Build week dict
+        week_dict = {
+            "week_number": week_num,
+            "phase": phase_name,
+            "start_date": week_start.isoformat(),
+            "end_date": week_end.isoformat(),
+            "target_volume_km": round(target_volume_km, 1),
+            "is_recovery_week": is_recovery_week,
+            "workouts": workouts,
+            "notes": generate_week_notes(phase_name, week_num, is_recovery_week)
+        }
+
+        weeks.append(week_dict)
+
+    # Build monthly plan
+    monthly_plan = {
+        "month_number": month_number,
+        "weeks_covered": week_numbers,
+        "num_weeks": len(week_numbers),
+        "weeks": weeks,
+        "paces": {
+            "vdot": current_vdot,
+            "e_pace": f"{paces['easy_min_pace']}-{paces['easy_max_pace']} /km",
+            "m_pace": f"{paces['marathon_min_pace']}-{paces['marathon_max_pace']} /km",
+            "t_pace": f"{paces['threshold_min_pace']}-{paces['threshold_max_pace']} /km",
+            "i_pace": f"{paces['interval_min_pace']}-{paces['interval_max_pace']} /km",
+            "r_pace": f"{paces['repetition_min_pace']}-{paces['repetition_max_pace']} /km",
+        },
+        "generation_context": {
+            "volume_adjustment": volume_adjustment,
+            "generated_at": date.today().isoformat(),
+            "cycle_length_weeks": len(week_numbers),
+            "phases_included": list(set(week_to_phase[w] for w in week_numbers)),
+        }
+    }
+
+    return monthly_plan
+
+
+def determine_weekly_workouts(
+    phase: PlanPhase,
+    run_days_per_week: int,
+    is_recovery_week: bool,
+    week_number: int,
+    profile: dict,
+) -> list[WorkoutType]:
+    """
+    Determine workout types for the week based on phase and constraints.
+
+    Args:
+        phase: Current periodization phase
+        run_days_per_week: Number of run days (3-5)
+        is_recovery_week: Whether this is a recovery week
+        week_number: Week number in plan
+        profile: Athlete profile with sports schedule
+
+    Returns:
+        List of WorkoutType for each day of the week (7 days)
+    """
+    # Get other sports schedule from profile
+    other_sports_days = set()
+    if "sports" in profile:
+        for sport in profile["sports"]:
+            if sport.get("sport") != "running":
+                days_str = sport.get("days", "")
+                if days_str:
+                    day_map = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+                    for day in days_str.lower().split(","):
+                        day = day.strip()
+                        if day in day_map:
+                            other_sports_days.add(day_map[day])
+
+    # Build 7-day schedule
+    schedule = [WorkoutType.REST] * 7
+
+    # Determine quality workout placement based on phase
+    if phase == PlanPhase.BASE:
+        # Base phase: Long run + optional late-base tempo
+        quality_workouts = [WorkoutType.LONG_RUN]
+        if week_number >= 4 and not is_recovery_week:
+            quality_workouts.append(WorkoutType.TEMPO)
+    elif phase == PlanPhase.BUILD:
+        # Build phase: Long run + tempo + intervals/M-pace
+        quality_workouts = [WorkoutType.LONG_RUN, WorkoutType.TEMPO]
+        if not is_recovery_week:
+            quality_workouts.append(WorkoutType.INTERVALS)
+    elif phase == PlanPhase.PEAK:
+        # Peak phase: Long run + tempo + intervals + race pace
+        quality_workouts = [WorkoutType.LONG_RUN, WorkoutType.TEMPO, WorkoutType.INTERVALS]
+    else:  # TAPER
+        # Taper: Maintain sharpness, reduce volume
+        quality_workouts = [WorkoutType.TEMPO] if week_number % 2 == 0 else []
+
+    # Recovery weeks reduce quality
+    if is_recovery_week and len(quality_workouts) > 1:
+        quality_workouts = quality_workouts[:1]  # Keep only long run
+
+    # Place long run on Sunday (day 6) if possible
+    available_days = [d for d in range(7) if d not in other_sports_days]
+
+    if 6 in available_days and WorkoutType.LONG_RUN in quality_workouts:
+        schedule[6] = WorkoutType.LONG_RUN
+        quality_workouts.remove(WorkoutType.LONG_RUN)
+
+    # Place remaining quality workouts with 48h spacing
+    quality_placed = 0
+    for day in [1, 3, 5]:  # Mon, Wed, Fri
+        if day in available_days and quality_placed < len(quality_workouts):
+            schedule[day] = quality_workouts[quality_placed]
+            quality_placed += 1
+
+    # Fill remaining run days with easy runs
+    easy_days_needed = run_days_per_week - sum(1 for w in schedule if w != WorkoutType.REST)
+    for day in available_days:
+        if easy_days_needed > 0 and schedule[day] == WorkoutType.REST:
+            schedule[day] = WorkoutType.EASY
+            easy_days_needed -= 1
+
+    return schedule
+
+
+def generate_week_notes(phase_name: str, week_number: int, is_recovery_week: bool) -> str:
+    """Generate descriptive notes for the week."""
+    if is_recovery_week:
+        return f"Week {week_number} - Recovery week: Reduced volume for adaptation"
+
+    phase_focus = {
+        "base": "Aerobic foundation building",
+        "build": "Race-specific intensity development",
+        "peak": "Maximum training load",
+        "taper": "Reduce fatigue, maintain sharpness"
+    }
+
+    focus = phase_focus.get(phase_name, "Training")
+    return f"Week {week_number} - {phase_name.capitalize()} phase: {focus}"

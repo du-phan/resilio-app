@@ -28,6 +28,183 @@ sce guardrails safe-volume --ctl 44 --goal-type half_marathon
 
 ---
 
+## Minimum Weekly Volume by Run Frequency
+
+**Problem**: Not all weekly volume targets are achievable with a given number of runs per week due to minimum workout duration guardrails.
+
+### Minimum Volume Formula
+
+For **N runs per week** (where at least one is a long run):
+
+```
+Minimum Weekly Volume = (N - 1) × [Easy Run Minimum] + [Long Run Minimum]
+```
+
+**Standard minimums**:
+- Easy run: 5 km (30 minutes)
+- Long run: 8 km (60 minutes)
+
+**Examples**:
+- **3 runs/week**: (3-1) × 5 + 8 = **18 km minimum**
+- **4 runs/week**: (4-1) × 5 + 8 = **23 km minimum**
+- **5 runs/week**: (5-1) × 5 + 8 = **28 km minimum**
+- **6 runs/week**: (6-1) × 5 + 8 = **33 km minimum**
+
+### Profile-Aware Adjustments
+
+If athlete's profile includes workout pattern fields (from `sce profile analyze`):
+- Use 80% of `typical_easy_distance_km` as easy run minimum
+- Use 80% of `typical_long_run_distance_km` as long run minimum
+
+**Example**:
+```
+Athlete typical patterns (from profile):
+  - typical_easy_distance_km: 7.0 km
+  - typical_long_run_distance_km: 12.0 km
+
+Adjusted minimums:
+  - Easy run: 7.0 × 0.80 = 5.6 km
+  - Long run: 12.0 × 0.80 = 9.6 km
+
+For 4 runs/week:
+  Minimum = (4-1) × 5.6 + 9.6 = 26.4 km (not the generic 23 km)
+```
+
+### Constraint Satisfaction Scenarios
+
+**Scenario 1: Target volume below minimum**
+```
+Problem: 22 km target with 4 runs/week
+Minimum: 23 km for 4 runs
+Discrepancy: -1 km (-4.3%)
+
+Options:
+  A) Reduce to 3 runs/week (18 km minimum, 22 km achievable)
+  B) Increase target to 26 km (accommodate 4 runs comfortably)
+
+Recommendation: Option A (frequency matters less than sustainable volume)
+```
+
+**Scenario 2: Target volume barely above minimum**
+```
+Problem: 24 km target with 4 runs/week
+Minimum: 23 km for 4 runs
+Margin: +1 km (+4.3%)
+
+Risk: Very tight constraint, no flexibility for workout adjustments
+Result: All runs at absolute minimums (3×5 km + 1×9 km = 24 km)
+  → No room for progression within week
+  → Unrealistic (no athlete runs exactly 5.0 km every time)
+
+Options:
+  A) Reduce to 3 runs/week (more realistic distribution: 2×6 km + 1×12 km)
+  B) Increase target to 28-30 km (comfortable 4-run distribution)
+
+Recommendation: Option A (better balance, realistic run lengths)
+```
+
+**Scenario 3: Target volume well above minimum**
+```
+Problem: 35 km target with 4 runs/week
+Minimum: 23 km for 4 runs
+Margin: +12 km (+52%)
+
+Distribution example: 3×8 km + 1×11 km = 35 km ✓
+  → All runs above minimums
+  → Realistic individual run lengths
+  → Room for adjustment if needed
+
+Result: ACCEPTABLE, proceed with plan
+```
+
+### Validation Command
+
+The `safe-volume` CLI command should warn when target volume conflicts with run frequency:
+
+```bash
+sce guardrails safe-volume \
+  --ctl 44 \
+  --goal-type half_marathon \
+  --recent-volume 22 \
+  --run-days-per-week 4
+
+# Should return warning if 22 km < 23 km minimum for 4 runs:
+{
+  "recommended_start_km": 20,
+  "recommended_peak_km": 55,
+  "warning": "Target 22 km with 4 run days is below minimum (23 km). Suggest: 3 run days OR 26 km target."
+}
+```
+
+### Common Mistakes
+
+**Mistake 1: Ignoring minimum constraints**
+```
+Bad: Week 3, 21 km target, 4 runs prescribed
+  → System cannot satisfy: (3×5 + 8) = 23 km > 21 km target
+  → Validation failure, requires regeneration
+
+Good: Week 3, 21 km target, 3 runs prescribed
+  → Distribution: 2×6 km + 1×9 km = 21 km ✓
+```
+
+**Mistake 2: Using minimums as actual run lengths**
+```
+Bad: 4 runs at minimums (3×5 km + 1×8 km = 23 km)
+  → Unrealistic (too short for most athletes)
+  → No margin for natural variation
+
+Good: 4 runs with comfortable lengths (3×7 km + 1×11 km = 32 km)
+  → Realistic individual run durations
+  → Natural distribution
+```
+
+**Mistake 3: Not accounting for athlete's typical patterns**
+```
+Bad: Using generic 5 km easy minimum for athlete who typically runs 8 km easy
+  → Unrealistic downgrade from athlete's normal patterns
+  → May cause confusion ("Why are all my runs so short?")
+
+Good: Use athlete's typical patterns as baseline
+  → Plans feel natural and achievable
+  → Respects athlete's established training rhythm
+```
+
+### Prevention
+
+1. **Calculate minimums before setting run frequency**:
+   ```bash
+   # If target is 22 km, check feasibility with N runs
+   For 3 runs: 18 km min ✓ (22 km achievable)
+   For 4 runs: 23 km min ✗ (22 km too low)
+   For 5 runs: 28 km min ✗ (22 km too low)
+   ```
+
+2. **Use profile-aware minimums when available**:
+   ```bash
+   sce profile analyze  # Compute typical patterns
+   # Then extract typical_easy_distance_km and typical_long_run_distance_km
+   ```
+
+3. **Validate before finalizing week structure**:
+   ```bash
+   python -c "
+   target_km = 22
+   num_runs = 4
+   easy_min = 5  # or from profile
+   long_min = 8  # or from profile
+   min_weekly = (num_runs - 1) * easy_min + long_min
+   if target_km < min_weekly:
+       print(f'WARNING: {target_km} km with {num_runs} runs is below minimum ({min_weekly} km)')
+   "
+   ```
+
+4. **Prefer frequency reduction over unrealistic run lengths**:
+   - Better: 3 runs with realistic lengths (6-12 km each)
+   - Worse: 4 runs with minimums (5-8 km each, too short for most athletes)
+
+---
+
 ## The 10% Rule
 
 ### Standard Progression

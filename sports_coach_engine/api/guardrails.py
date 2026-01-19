@@ -267,6 +267,7 @@ def calculate_safe_volume_range(
     goal_type: str = "fitness",
     athlete_age: Optional[int] = None,
     recent_weekly_volume_km: Optional[float] = None,
+    run_days_per_week: Optional[int] = None,
 ) -> Union[SafeVolumeRange, GuardrailsError]:
     """
     Calculate safe weekly volume range based on current fitness and goals.
@@ -333,7 +334,7 @@ def calculate_safe_volume_range(
 
         # Call core function
         result = core_calculate_safe_range(
-            current_ctl, goal_type, athlete_age, recent_weekly_volume_km
+            current_ctl, goal_type, athlete_age, recent_weekly_volume_km, run_days_per_week
         )
         return result
 

@@ -297,3 +297,244 @@ class PlanGenerationResult(BaseModel):
         use_enum_values=True,
         populate_by_name=True,
     )
+
+
+# ============================================================
+# PROGRESSIVE DISCLOSURE MODELS (Phase 2: Monthly Planning)
+# ============================================================
+
+
+class PhaseStructure(BaseModel):
+    """
+    Single phase definition in macro plan structure.
+
+    Defines the boundaries and focus of one periodization phase
+    (base, build, peak, taper) within the overall training plan.
+    """
+
+    name: PlanPhase = Field(..., description="Phase name")
+    weeks: list[int] = Field(..., description="Week numbers in this phase (1-indexed)")
+    start_week: int = Field(..., ge=1, description="First week of phase")
+    end_week: int = Field(..., ge=1, description="Last week of phase")
+    focus: str = Field(..., description="Training focus for this phase")
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class WeeklyVolumeTarget(BaseModel):
+    """
+    Weekly volume target in macro plan progression.
+
+    Simple volume target for one week, used in macro plan to show
+    the overall volume trajectory without detailed workout prescriptions.
+    """
+
+    week_number: int = Field(..., ge=1, description="Week number (1-indexed)")
+    target_volume_km: float = Field(..., ge=0, description="Target weekly volume")
+    is_recovery_week: bool = Field(False, description="Is this a recovery week?")
+    phase: PlanPhase = Field(..., description="Phase this week belongs to")
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class CTLProjection(BaseModel):
+    """
+    CTL projection at key milestones in training plan.
+
+    Shows expected CTL evolution at strategic points to verify
+    safe fitness progression and taper effectiveness.
+    """
+
+    week_number: int = Field(..., ge=1, description="Week number (1-indexed)")
+    projected_ctl: float = Field(..., ge=0, description="Projected CTL value")
+    milestone: str = Field(..., description="What this week represents (e.g., 'End of base phase')")
+
+
+class MacroPlan(BaseModel):
+    """
+    High-level training plan structure (structural roadmap).
+
+    Provides the "big picture" for the full training period without detailed
+    workout prescriptions. Shows phases, volume progression, CTL trajectory,
+    recovery weeks, and key milestones. Used for athlete confidence and
+    planning, while monthly plans provide execution detail.
+
+    Generated once at plan creation, rarely modified unless major changes
+    (injury, goal change, life events) require replanning.
+    """
+
+    # Identity
+    id: str = Field(..., description="Unique macro plan identifier")
+    created_at: date
+
+    # Goal
+    race_type: GoalType = Field(..., description="Race distance goal")
+    race_date: date
+    target_time: Optional[str] = Field(None, description="Target finish time (e.g., '1:30:00')")
+
+    # Structure
+    total_weeks: int = Field(..., ge=1, description="Total weeks in plan")
+    start_date: date
+    end_date: date
+    phases: list[PhaseStructure] = Field(..., description="Phase boundaries and focus")
+
+    # Volume progression
+    volume_trajectory: list[WeeklyVolumeTarget] = Field(
+        ...,
+        description="Weekly volume targets for entire plan"
+    )
+    starting_volume_km: float = Field(..., ge=0, description="Initial weekly volume")
+    peak_volume_km: float = Field(..., ge=0, description="Peak weekly volume")
+
+    # CTL projection
+    current_ctl: float = Field(..., ge=0, description="CTL at plan creation")
+    ctl_projections: list[CTLProjection] = Field(
+        ...,
+        description="CTL projections at key milestones"
+    )
+
+    # Recovery and milestones
+    recovery_weeks: list[int] = Field(..., description="Scheduled recovery weeks")
+    milestones: list[dict] = Field(
+        ...,
+        description="Key checkpoints (e.g., {'week': 4, 'event': 'VDOT recalibration'})"
+    )
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class MonthlyPlan(BaseModel):
+    """
+    Detailed 4-week training plan with complete workout prescriptions.
+
+    Contains detailed execution guidance for the next month (4 weeks).
+    Generated every 4 weeks based on current fitness, macro plan structure,
+    and previous month's performance. Replaces full 16-week detailed planning
+    with progressive disclosure approach.
+
+    Each monthly plan:
+    - Follows macro plan volume targets and phase boundaries
+    - Uses updated VDOT from recent workouts
+    - Accounts for previous month's response (if applicable)
+    - Contains 16-28 complete workout prescriptions
+    """
+
+    # Identity
+    id: str = Field(..., description="Unique monthly plan identifier")
+    created_at: date
+    macro_plan_id: str = Field(..., description="Parent macro plan this belongs to")
+
+    # Coverage
+    month_number: int = Field(..., ge=1, description="Month number (1-indexed)")
+    week_numbers: list[int] = Field(..., description="Week numbers covered (e.g., [1,2,3,4])")
+    start_date: date
+    end_date: date
+
+    # Context
+    phase: PlanPhase = Field(..., description="Primary phase for this month")
+    current_vdot: float = Field(..., ge=30, le=85, description="VDOT used for pace calculations")
+    current_ctl: float = Field(..., ge=0, description="CTL at generation time")
+
+    # Based on previous month (if not first month)
+    previous_month_summary: Optional[str] = Field(
+        None,
+        description="Brief summary of previous month completion and response"
+    )
+
+    # Weeks (detailed)
+    weeks: list[WeekPlan] = Field(..., description="4 weeks of detailed plans")
+
+    # Training paces for this month
+    training_paces: dict = Field(
+        ...,
+        description="VDOT-based paces (e.g., {'e_pace': '6:15-6:45', 't_pace': '4:55-5:10'})"
+    )
+
+    # Multi-sport integration
+    multi_sport_schedule: Optional[list[dict]] = Field(
+        None,
+        description="Non-running activities (e.g., [{'day': 'tue', 'sport': 'climbing', 'duration': 120}])"
+    )
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class MonthlyAssessment(BaseModel):
+    """
+    Assessment of completed month for planning next month.
+
+    Analyzes previous month's execution to inform next month's generation:
+    - Adherence and completion rates
+    - VDOT drift (pace changes suggesting fitness change)
+    - Injury/illness signals from notes
+    - Volume tolerance and adaptation response
+    - CTL progression vs. target
+
+    Used as input to generate-month for adaptive planning.
+    """
+
+    # Identity
+    month_number: int = Field(..., ge=1, description="Month that was assessed")
+    week_numbers: list[int] = Field(..., description="Weeks assessed")
+    assessment_date: date
+
+    # Adherence
+    planned_workouts: int = Field(..., ge=0, description="Total workouts planned")
+    completed_workouts: int = Field(..., ge=0, description="Workouts completed")
+    adherence_pct: float = Field(..., ge=0, le=100, description="Completion percentage")
+
+    # CTL progression
+    starting_ctl: float = Field(..., ge=0, description="CTL at month start")
+    ending_ctl: float = Field(..., ge=0, description="CTL at month end")
+    target_ctl: float = Field(..., ge=0, description="Target CTL for month end")
+    ctl_delta: float = Field(..., description="Actual CTL change (ending - starting)")
+    ctl_on_target: bool = Field(..., description="Did CTL progression meet expectations?")
+
+    # VDOT analysis
+    current_vdot: float = Field(..., ge=30, le=85, description="VDOT at month start")
+    suggested_vdot: Optional[float] = Field(
+        None,
+        ge=30,
+        le=85,
+        description="Suggested VDOT based on workout paces (if recalibration needed)"
+    )
+    vdot_recalibration_needed: bool = Field(
+        False,
+        description="Should VDOT be updated for next month?"
+    )
+
+    # Signals and patterns
+    injury_signals: list[str] = Field(
+        default_factory=list,
+        description="Injury mentions from workout notes/descriptions"
+    )
+    illness_signals: list[str] = Field(
+        default_factory=list,
+        description="Illness mentions from workout notes/descriptions"
+    )
+    patterns_detected: list[str] = Field(
+        default_factory=list,
+        description="Patterns observed (e.g., 'Consistently skips Tuesday runs')"
+    )
+
+    # Volume tolerance
+    volume_well_tolerated: bool = Field(
+        ...,
+        description="Did athlete handle monthly volume well?"
+    )
+    volume_adjustment_suggestion: Optional[str] = Field(
+        None,
+        description="Volume adjustment for next month (e.g., 'Reduce 5%', 'Maintain', 'Increase 5%')"
+    )
+
+    # Overall assessment
+    overall_response: str = Field(
+        ...,
+        description="High-level assessment (e.g., 'Excellent adaptation', 'Struggled with volume', 'Illness disruption')"
+    )
+    recommendations_for_next_month: list[str] = Field(
+        ...,
+        description="Specific recommendations for next month's planning"
+    )
+
+    model_config = ConfigDict(use_enum_values=True)

@@ -307,6 +307,7 @@ def calculate_safe_volume_range(
     goal_type: str = "fitness",
     athlete_age: Optional[int] = None,
     recent_weekly_volume_km: Optional[float] = None,
+    run_days_per_week: Optional[int] = None,
 ) -> SafeVolumeRange:
     """
     Calculate safe weekly volume range based on current fitness and goals.
@@ -423,6 +424,38 @@ def calculate_safe_volume_range(
         else:
             recommendation = f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks"
 
+    # Calculate minimum volume warning if run days are provided
+    warning = None
+    if run_days_per_week is not None and run_days_per_week > 0:
+        # Standard minimums: 5 km easy run, 8 km long run
+        # Minimum weekly volume = (N-1) × easy_min + long_min
+        easy_min_km = 5
+        long_min_km = 8
+        minimum_weekly_km = (run_days_per_week - 1) * easy_min_km + long_min_km
+
+        # Check if recommended start volume is below minimum
+        if recommended_start < minimum_weekly_km:
+            # Suggest reducing run days to make target achievable
+            suggested_run_days = 3  # Start with 3 runs
+            while suggested_run_days <= run_days_per_week:
+                suggested_minimum = (suggested_run_days - 1) * easy_min_km + long_min_km
+                if recommended_start >= suggested_minimum:
+                    break
+                suggested_run_days += 1
+
+            if suggested_run_days <= run_days_per_week:
+                warning = (
+                    f"Target {recommended_start} km with {run_days_per_week} run days is below minimum "
+                    f"({minimum_weekly_km} km). Suggest: {suggested_run_days} run days OR "
+                    f"{minimum_weekly_km + 3} km target."
+                )
+            else:
+                # Even 3 runs is too much for this volume
+                warning = (
+                    f"Target {recommended_start} km with {run_days_per_week} run days is below minimum "
+                    f"({minimum_weekly_km} km). Suggest: Increase target to {minimum_weekly_km} km OR reduce run frequency."
+                )
+
     return SafeVolumeRange(
         current_ctl=current_ctl,
         ctl_zone=ctl_zone,
@@ -434,6 +467,7 @@ def calculate_safe_volume_range(
         recommended_start_km=recommended_start,
         recommended_peak_km=recommended_peak,
         recommendation=recommendation,
+        warning=warning,
     )
 
 

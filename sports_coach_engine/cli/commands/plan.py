@@ -832,3 +832,388 @@ def plan_show_log_command(
 
     output_json(envelope)
     raise typer.Exit(code=0)
+
+
+# ============================================================
+# PROGRESSIVE DISCLOSURE COMMANDS (Phase 2: Monthly Planning)
+# ============================================================
+
+
+@app.command(name="create-macro")
+def create_macro_command(
+    ctx: typer.Context,
+    goal_type: str = typer.Option(..., "--goal-type", help="Race distance: 5k, 10k, half_marathon, marathon"),
+    race_date: str = typer.Option(..., "--race-date", help="Race date (YYYY-MM-DD)"),
+    target_time: Optional[str] = typer.Option(None, "--target-time", help="Target finish time (e.g., '1:30:00')"),
+    total_weeks: int = typer.Option(..., "--total-weeks", help="Total weeks in plan"),
+    start_date: str = typer.Option(..., "--start-date", help="Plan start date (YYYY-MM-DD, must be Monday)"),
+    current_ctl: float = typer.Option(..., "--current-ctl", help="Current CTL"),
+    starting_volume_km: float = typer.Option(..., "--starting-volume-km", help="Initial weekly volume (km)"),
+    peak_volume_km: float = typer.Option(..., "--peak-volume-km", help="Peak weekly volume (km)"),
+) -> None:
+    """
+    Generate high-level training plan structure (macro plan).
+
+    Creates the structural roadmap for the full training period without detailed
+    workout prescriptions. Shows phases, volume progression, CTL trajectory,
+    recovery weeks, and key milestones.
+
+    This provides the "big picture" for athlete confidence. Monthly plans provide
+    execution detail generated every 4 weeks.
+
+    Examples:
+        sce plan create-macro --goal-type half_marathon --race-date 2026-05-03 \\
+            --target-time "1:30:00" --total-weeks 16 --start-date 2026-01-20 \\
+            --current-ctl 44.0 --starting-volume-km 25.0 --peak-volume-km 55.0
+
+    Returns:
+        Macro plan structure with phases, volume trajectory, CTL projections,
+        recovery weeks, and assessment milestones.
+    """
+    from sports_coach_engine.api.plan import create_macro_plan
+    from datetime import date as dt_date
+
+    # Parse dates
+    try:
+        race_date_parsed = dt_date.fromisoformat(race_date)
+        start_date_parsed = dt_date.fromisoformat(start_date)
+    except ValueError as e:
+        envelope = {
+            "success": False,
+            "message": f"Invalid date format: {e}",
+            "error_type": "validation",
+            "data": None
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Call API
+    result = create_macro_plan(
+        goal_type=goal_type,
+        race_date=race_date_parsed,
+        target_time=target_time,
+        total_weeks=total_weeks,
+        start_date=start_date_parsed,
+        current_ctl=current_ctl,
+        starting_volume_km=starting_volume_km,
+        peak_volume_km=peak_volume_km
+    )
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Macro plan created: {total_weeks} weeks, {len(result.get('phases', []))} phases"
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="assess-month")
+def assess_month_command(
+    ctx: typer.Context,
+    month_number: int = typer.Option(..., "--month-number", help="Month number (1-indexed)"),
+    week_numbers: str = typer.Option(..., "--week-numbers", help="Comma-separated week numbers (e.g., '1,2,3,4')"),
+    planned_workouts_json: str = typer.Option(..., "--planned-workouts", help="Path to JSON file with planned workouts"),
+    completed_activities_json: str = typer.Option(..., "--completed-activities", help="Path to JSON file with completed activities"),
+    starting_ctl: float = typer.Option(..., "--starting-ctl", help="CTL at month start"),
+    ending_ctl: float = typer.Option(..., "--ending-ctl", help="CTL at month end"),
+    target_ctl: float = typer.Option(..., "--target-ctl", help="Target CTL for month end"),
+    current_vdot: float = typer.Option(..., "--current-vdot", help="VDOT used for month's paces"),
+) -> None:
+    """
+    Assess completed month for next month planning.
+
+    Analyzes execution and response to inform adaptive planning:
+    - Adherence rates
+    - CTL progression vs. targets
+    - VDOT recalibration needs
+    - Injury/illness signals from activity notes
+    - Volume tolerance
+    - Patterns detected
+
+    Examples:
+        sce plan assess-month --month-number 1 --week-numbers "1,2,3,4" \\
+            --planned-workouts /tmp/planned.json \\
+            --completed-activities /tmp/completed.json \\
+            --starting-ctl 44.0 --ending-ctl 50.5 --target-ctl 52.0 --current-vdot 48.0
+
+    Returns:
+        Monthly assessment with adherence, CTL analysis, VDOT recommendations,
+        signals detected, and recommendations for next month.
+    """
+    from sports_coach_engine.api.plan import assess_month_completion
+    import json
+
+    # Parse week numbers
+    try:
+        week_nums = [int(w.strip()) for w in week_numbers.split(',')]
+    except ValueError as e:
+        envelope = {
+            "success": False,
+            "message": f"Invalid week numbers format: {e}",
+            "error_type": "validation",
+            "data": None
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Load JSON files
+    try:
+        with open(planned_workouts_json, 'r') as f:
+            planned = json.load(f)
+        with open(completed_activities_json, 'r') as f:
+            completed = json.load(f)
+    except FileNotFoundError as e:
+        envelope = {
+            "success": False,
+            "message": f"File not found: {e}",
+            "error_type": "not_found",
+            "data": None
+        }
+        output_json(envelope)
+        raise typer.Exit(code=2)
+    except json.JSONDecodeError as e:
+        envelope = {
+            "success": False,
+            "message": f"Invalid JSON: {e}",
+            "error_type": "validation",
+            "data": None
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Call API
+    result = assess_month_completion(
+        month_number=month_number,
+        week_numbers=week_nums,
+        planned_workouts=planned,
+        completed_activities=completed,
+        starting_ctl=starting_ctl,
+        ending_ctl=ending_ctl,
+        target_ctl=target_ctl,
+        current_vdot=current_vdot
+    )
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Month {month_number} assessed: {result.get('adherence_pct', 0):.1f}% adherence"
+    )
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="validate-month")
+def validate_month_command(
+    ctx: typer.Context,
+    monthly_plan_json: str = typer.Option(..., "--monthly-plan", help="Path to JSON file with 4 weeks of monthly plan"),
+    macro_targets_json: str = typer.Option(..., "--macro-targets", help="Path to JSON file with 4 volume targets from macro plan"),
+) -> None:
+    """
+    Validate 4-week monthly plan before saving.
+
+    Checks for:
+    - Volume discrepancies vs. macro plan targets (<5% acceptable, >10% regenerate)
+    - Guardrail violations (minimum workout durations)
+    - Phase consistency
+    - Workout field completeness
+
+    Examples:
+        sce plan validate-month \\
+            --monthly-plan /tmp/monthly_plan.json \\
+            --macro-targets /tmp/macro_targets.json
+
+    Returns:
+        Validation result with overall_ok status, violations list, warnings,
+        and summary message.
+    """
+    from sports_coach_engine.api.plan import validate_month_plan
+    import json
+
+    # Load JSON files
+    try:
+        with open(monthly_plan_json, 'r') as f:
+            monthly_weeks = json.load(f)
+        with open(macro_targets_json, 'r') as f:
+            macro_targets = json.load(f)
+    except FileNotFoundError as e:
+        envelope = {
+            "success": False,
+            "message": f"File not found: {e}",
+            "error_type": "not_found",
+            "data": None
+        }
+        output_json(envelope)
+        raise typer.Exit(code=2)
+    except json.JSONDecodeError as e:
+        envelope = {
+            "success": False,
+            "message": f"Invalid JSON: {e}",
+            "error_type": "validation",
+            "data": None
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Call API
+    result = validate_month_plan(
+        monthly_plan_weeks=monthly_weeks,
+        macro_volume_targets=macro_targets
+    )
+
+    # Convert to envelope
+    summary = result.get("summary", "Validation complete")
+    envelope = api_result_to_envelope(result, success_message=summary)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="generate-month")
+def generate_month_command(
+    ctx: typer.Context,
+    month_number: int = typer.Option(..., "--month-number", help="Month number (1-5)"),
+    week_numbers: str = typer.Option(..., "--week-numbers", help="Comma-separated week numbers (e.g., '1,2,3,4' or '9,10,11')"),
+    from_macro: str = typer.Option(..., "--from-macro", help="Path to macro plan JSON file"),
+    current_vdot: float = typer.Option(..., "--current-vdot", help="Current VDOT (30-85)"),
+    profile_path: str = typer.Option(..., "--profile", help="Path to athlete profile file"),
+    volume_adjustment: float = typer.Option(1.0, "--volume-adjustment", help="Volume multiplier (0.5-1.5, default 1.0)"),
+) -> None:
+    """
+    Generate detailed monthly plan (2-6 weeks) with workout prescriptions.
+
+    Examples:
+        # Generate first month (4 weeks)
+        sce plan generate-month --month-number 1 --week-numbers "1,2,3,4" \\
+          --from-macro /tmp/macro.json --current-vdot 48 --profile data/athlete/profile.yaml
+
+        # Generate 3-week cycle for 11-week plan
+        sce plan generate-month --month-number 3 --week-numbers "9,10,11" \\
+          --from-macro /tmp/macro.json --current-vdot 49 --profile data/athlete/profile.yaml
+
+        # Generate with volume reduction (10% less)
+        sce plan generate-month --month-number 2 --week-numbers "5,6,7,8" \\
+          --from-macro /tmp/macro.json --current-vdot 48.5 --profile data/athlete/profile.yaml \\
+          --volume-adjustment 0.9
+    """
+    import json
+    import yaml
+    from pathlib import Path
+    from sports_coach_engine.api.plan import generate_month_plan
+    from sports_coach_engine.cli.output import output_json, api_result_to_envelope, get_exit_code_from_envelope
+
+    # Parse week numbers
+    try:
+        week_nums = [int(w.strip()) for w in week_numbers.split(",")]
+    except ValueError:
+        envelope = {
+            "ok": False,
+            "error": "validation",
+            "message": f"Invalid week-numbers format: '{week_numbers}'. Expected comma-separated integers."
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Validate week_numbers
+    if not week_nums:
+        envelope = {
+            "ok": False,
+            "error": "validation",
+            "message": "week-numbers cannot be empty"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if not (2 <= len(week_nums) <= 6):
+        envelope = {
+            "ok": False,
+            "error": "validation",
+            "message": f"Cycle must be 2-6 weeks, got {len(week_nums)} weeks: {week_nums}"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Load macro plan
+    macro_path = Path(from_macro)
+    if not macro_path.exists():
+        envelope = {
+            "ok": False,
+            "error": "file_not_found",
+            "message": f"Macro plan file not found: {from_macro}"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    try:
+        with open(macro_path) as f:
+            macro_plan = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = {
+            "ok": False,
+            "error": "invalid_json",
+            "message": f"Invalid macro plan JSON: {str(e)}"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Load profile
+    profile_file = Path(profile_path)
+    if not profile_file.exists():
+        envelope = {
+            "ok": False,
+            "error": "file_not_found",
+            "message": f"Profile file not found: {profile_path}"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    try:
+        with open(profile_file) as f:
+            if profile_path.endswith(".yaml") or profile_path.endswith(".yml"):
+                profile = yaml.safe_load(f)
+            else:
+                profile = json.load(f)
+    except (yaml.YAMLError, json.JSONDecodeError) as e:
+        envelope = {
+            "ok": False,
+            "error": "invalid_file",
+            "message": f"Invalid profile file: {str(e)}"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Call API
+    result = generate_month_plan(
+        month_number=month_number,
+        week_numbers=week_nums,
+        macro_plan=macro_plan,
+        current_vdot=current_vdot,
+        profile=profile,
+        volume_adjustment=volume_adjustment
+    )
+
+    # Convert to envelope
+    cycle_weeks = f"{len(week_nums)}-week"
+    success_message = f"Monthly plan generated for month {month_number} ({cycle_weeks} cycle): weeks {min(week_nums)}-{max(week_nums)}"
+    envelope = api_result_to_envelope(result, success_message=success_message)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
