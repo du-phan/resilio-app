@@ -19,6 +19,7 @@ from sports_coach_engine.api.guardrails import (
     calculate_masters_recovery,
     calculate_race_recovery,
     generate_illness_recovery_plan,
+    analyze_weekly_progression_context,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import output_json
@@ -150,6 +151,104 @@ def progression_command(
     output_json(envelope)
 
     # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="analyze-progression")
+def analyze_progression_command(
+    ctx: typer.Context,
+    previous: float = typer.Option(
+        ...,
+        "--previous",
+        help="Previous week's volume in km"
+    ),
+    current: float = typer.Option(
+        ...,
+        "--current",
+        help="Current week's planned volume in km"
+    ),
+    ctl: Optional[float] = typer.Option(
+        None,
+        "--ctl",
+        help="Current chronic training load (optional, enables capacity analysis)"
+    ),
+    run_days: Optional[int] = typer.Option(
+        None,
+        "--run-days",
+        help="Number of run days per week (optional, enables per-session analysis)"
+    ),
+    age: Optional[int] = typer.Option(
+        None,
+        "--age",
+        help="Athlete age (optional, flags masters considerations)"
+    ),
+    recent_injury: bool = typer.Option(
+        False,
+        "--recent-injury",
+        help="Flag if recent injury (<90 days ago)"
+    ),
+) -> None:
+    """Analyze volume progression with rich context for AI coaching decisions.
+
+    This command provides CONTEXT and INSIGHTS, not pass/fail decisions.
+    Claude Code interprets the data using training methodology knowledge.
+
+    Philosophy: CLI computes and classifies → AI coach decides.
+
+    Returns rich context including:
+    - Volume classification (low/medium/high)
+    - Traditional 10% rule analysis (for reference)
+    - Absolute load analysis (Pfitzinger per-session guideline)
+    - CTL-based capacity context (if --ctl provided)
+    - Risk factors (injury, age, large percentage increase)
+    - Protective factors (small absolute load, adequate capacity)
+    - Coaching considerations from training methodology
+
+    Examples:
+        # BG scenario: Low volume, small absolute increase
+        sce guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4 --age 32
+
+        # High volume scenario: Large absolute increase
+        sce guardrails analyze-progression --previous 60 --current 75 --ctl 55 --run-days 4
+
+        # Masters athlete with recent injury
+        sce guardrails analyze-progression --previous 40 --current 46 --age 52 --recent-injury
+
+    Output includes:
+        - volume_context: Volume level classification with injury risk factor
+        - traditional_10pct_rule: Traditional rule analysis (reference only)
+        - absolute_load_analysis: Pfitzinger per-session analysis
+        - athlete_context: CTL-based capacity analysis
+        - risk_factors: Identified risk factors with severity
+        - protective_factors: Factors that reduce injury risk
+        - coaching_considerations: Methodology-based guidance
+    """
+    # Call API
+    result = analyze_weekly_progression_context(
+        previous_volume_km=previous,
+        current_volume_km=current,
+        current_ctl=ctl,
+        run_days_per_week=run_days,
+        athlete_age=age,
+        recent_injury=recent_injury,
+    )
+
+    # Build success message
+    if hasattr(result, 'volume_context'):
+        volume_cat = result.volume_context.category
+        increase_pct = result.increase_pct
+        msg = f"Progression context analyzed: {volume_cat} volume, {increase_pct:.1f}% increase"
+    else:
+        msg = "Progression context analysis failed"
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(result, success_message=msg)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code (always 0 for context provision, not validation)
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
 

@@ -382,3 +382,159 @@ class IllnessRecoveryPlan(BaseModel):
                 "medical_consultation_triggers": ["Symptoms persist >7 days"],
             }
         }
+
+
+# ============================================================
+# PROGRESSION CONTEXT (RICH CONTEXT FOR AI COACHING)
+# ============================================================
+
+
+class VolumeCategory(BaseModel):
+    """Classification of volume level for progression analysis."""
+
+    category: str = Field(..., description="Volume category: low, medium, or high")
+    threshold_km: str = Field(..., description="Volume threshold description")
+    description: str = Field(..., description="Injury risk context for this volume level")
+    injury_risk_factor: str = Field(
+        ..., description="Primary injury risk factor: absolute_load or cumulative_load"
+    )
+
+
+class AbsoluteLoadAnalysis(BaseModel):
+    """Pfitzinger absolute load principle analysis."""
+
+    increase_km: float = Field(..., description="Absolute volume increase in km")
+    per_session_increase_km: Optional[float] = Field(
+        None, description="Per-session increase if run_days provided"
+    )
+    pfitzinger_guideline_km: float = Field(
+        default=1.6, description="Pfitzinger per-session increase guideline (1.6km)"
+    )
+    within_pfitzinger_guideline: Optional[bool] = Field(
+        None, description="Whether increase meets Pfitzinger guideline"
+    )
+    assessment: str = Field(..., description="Plain-language assessment of absolute load")
+
+
+class AthleteCapacityContext(BaseModel):
+    """CTL-based capacity analysis."""
+
+    ctl: Optional[float] = Field(None, description="Current chronic training load")
+    ctl_zone: Optional[str] = Field(
+        None, description="CTL zone: beginner, recreational, competitive, or advanced"
+    )
+    ctl_based_capacity_km: Optional[Tuple[int, int]] = Field(
+        None, description="Weekly volume range supported by current CTL"
+    )
+    target_within_capacity: Optional[bool] = Field(
+        None, description="Whether target volume is within CTL capacity range"
+    )
+
+
+class RiskFactor(BaseModel):
+    """Identified risk factor for injury."""
+
+    factor: str = Field(..., description="Risk factor description")
+    severity: str = Field(..., description="Severity: low, moderate, or high")
+    recommendation: str = Field(..., description="Recommended action to mitigate risk")
+
+
+class ProtectiveFactor(BaseModel):
+    """Factor that reduces injury risk."""
+
+    factor: str = Field(..., description="Protective factor description")
+    note: str = Field(..., description="Explanation of why this factor is protective")
+
+
+class ProgressionContext(BaseModel):
+    """
+    Rich context for volume progression coaching decisions.
+
+    This schema provides CONTEXT and INSIGHTS, not coaching decisions.
+    Claude Code interprets this data using training methodology knowledge.
+
+    Philosophy: CLI computes and classifies → AI coach decides.
+    """
+
+    # Basic metrics
+    previous_volume_km: float = Field(..., description="Previous week's volume")
+    current_volume_km: float = Field(..., description="Current week's planned volume")
+    increase_km: float = Field(..., description="Absolute increase in km")
+    increase_pct: float = Field(..., description="Percentage increase")
+
+    # Volume classification
+    volume_context: VolumeCategory = Field(..., description="Volume level classification")
+
+    # Traditional 10% rule (for reference)
+    traditional_10pct_rule: dict = Field(
+        ..., description="Traditional 10% rule analysis (safe_max_km, exceeds_by_pct, note)"
+    )
+
+    # Absolute load analysis (Pfitzinger principle)
+    absolute_load_analysis: AbsoluteLoadAnalysis = Field(
+        ..., description="Pfitzinger absolute load principle analysis"
+    )
+
+    # Athlete capacity context
+    athlete_context: AthleteCapacityContext = Field(..., description="CTL-based capacity analysis")
+
+    # Risk and protective factors
+    risk_factors: List[RiskFactor] = Field(
+        default_factory=list, description="Identified risk factors"
+    )
+    protective_factors: List[ProtectiveFactor] = Field(
+        default_factory=list, description="Factors that reduce injury risk"
+    )
+
+    # Training methodology guidance
+    coaching_considerations: List[str] = Field(
+        default_factory=list, description="Key coaching considerations from training methodology"
+    )
+    methodology_references: List[str] = Field(
+        default_factory=list, description="Links to relevant training book sections"
+    )
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "previous_volume_km": 15.0,
+                "current_volume_km": 20.0,
+                "increase_km": 5.0,
+                "increase_pct": 33.3,
+                "volume_context": {
+                    "category": "low",
+                    "threshold_km": "<25km",
+                    "description": "Low volume where absolute load per session is primary injury risk factor",
+                    "injury_risk_factor": "absolute_load",
+                },
+                "traditional_10pct_rule": {
+                    "safe_max_km": 16.5,
+                    "exceeds_by_pct": 23.3,
+                    "note": "Traditional rule doesn't account for volume level",
+                },
+                "absolute_load_analysis": {
+                    "increase_km": 5.0,
+                    "per_session_increase_km": 1.25,
+                    "pfitzinger_guideline_km": 1.6,
+                    "within_pfitzinger_guideline": True,
+                    "assessment": "Within safe absolute load guidelines",
+                },
+                "athlete_context": {
+                    "ctl": 27.0,
+                    "ctl_zone": "recreational",
+                    "ctl_based_capacity_km": (25, 40),
+                    "target_within_capacity": True,
+                },
+                "risk_factors": [],
+                "protective_factors": [
+                    {
+                        "factor": "Low volume level",
+                        "note": "Small absolute increases are physiologically manageable",
+                    }
+                ],
+                "coaching_considerations": [
+                    "Low volume allows more flexible percentage increases when absolute load is small"
+                ],
+                "methodology_references": [],
+            }
+        }

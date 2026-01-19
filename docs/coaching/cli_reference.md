@@ -33,6 +33,7 @@ Complete reference for Sports Coach Engine command-line interface.
 | **`sce vdot adjust`**                   | Adjust for conditions        | pace adjustments for altitude/heat/humidity/hills                   |
 | **`sce guardrails quality-volume`**     | Validate T/I/R pace volumes  | overall_ok, violations, pace_limits for T/I/R                       |
 | **`sce guardrails progression`**        | Validate weekly progression  | ok, increase_pct, safe_max_km, violation if any                     |
+| **`sce guardrails analyze-progression`** | Analyze progression context  | volume_context, risk/protective_factors, coaching_considerations   |
 | **`sce guardrails long-run`**           | Validate long run limits     | pct_ok, duration_ok, violations with recommendations                |
 | **`sce guardrails safe-volume`**        | Calculate safe volume range  | ctl_zone, recommended_start/peak_km, masters_adjusted_range         |
 | **`sce guardrails break-return`**       | Plan return after break      | load_phases, vdot_adjustment, return_schedule, red_flags            |
@@ -1967,6 +1968,114 @@ sce guardrails progression --previous 40.0 --current 50.0
 ```
 
 **Returns:** `ok`, `increase_pct`, `safe_max_km`, violation if exceeds 10%.
+
+---
+
+#### `sce guardrails analyze-progression --previous --current [--ctl] [--run-days] [--age] [--recent-injury]`
+
+**NEW**: Analyze volume progression with rich context for AI coaching decisions.
+
+**Philosophy**: This command provides CONTEXT and INSIGHTS, not pass/fail decisions. Claude Code interprets the data using training methodology knowledge to make intelligent, context-aware decisions.
+
+**Usage:**
+
+```bash
+# Basic analysis
+sce guardrails analyze-progression --previous 15 --current 20
+
+# Full context (recommended)
+sce guardrails analyze-progression \
+  --previous 15 \
+  --current 20 \
+  --ctl 27 \
+  --run-days 4 \
+  --age 32
+
+# With risk factors
+sce guardrails analyze-progression \
+  --previous 40 \
+  --current 46 \
+  --age 52 \
+  --recent-injury
+```
+
+**Parameters:**
+- `--previous` (required): Previous week's volume in km
+- `--current` (required): Current week's planned volume in km
+- `--ctl` (optional): Current chronic training load (enables capacity analysis)
+- `--run-days` (optional): Run days per week (enables per-session analysis)
+- `--age` (optional): Athlete age (flags masters considerations)
+- `--recent-injury` (optional): Flag if recent injury (<90 days)
+
+**Returns:**
+
+**Rich context including:**
+- `volume_context`: Volume classification (low/medium/high) with injury risk factor
+- `traditional_10pct_rule`: Traditional 10% rule analysis (reference only)
+- `absolute_load_analysis`: Pfitzinger per-session guideline analysis
+- `athlete_context`: CTL-based capacity analysis
+- `risk_factors[]`: Identified risk factors with severity and recommendations
+- `protective_factors[]`: Factors that reduce injury risk
+- `coaching_considerations[]`: Methodology-based guidance
+- `methodology_references[]`: Links to training book sections
+
+**Example Output (BG Scenario)**:
+
+```json
+{
+  "volume_context": {
+    "category": "low",
+    "description": "Low volume where absolute load per session is primary injury risk factor",
+    "injury_risk_factor": "absolute_load"
+  },
+  "absolute_load_analysis": {
+    "per_session_increase_km": 1.25,
+    "within_pfitzinger_guideline": true,
+    "assessment": "Within safe absolute load guidelines (1.25km/session ≤ 1.6km)"
+  },
+  "athlete_context": {
+    "ctl": 27.0,
+    "ctl_zone": "recreational",
+    "ctl_based_capacity_km": [25, 40],
+    "target_within_capacity": false
+  },
+  "risk_factors": [
+    {
+      "factor": "Large percentage increase (33%)",
+      "severity": "high",
+      "recommendation": "Verify absolute load is manageable"
+    }
+  ],
+  "protective_factors": [
+    {
+      "factor": "Low volume level with small absolute increase",
+      "note": "Small absolute increases are physiologically manageable despite high percentages"
+    },
+    {
+      "factor": "Within Pfitzinger per-session guideline",
+      "note": "Per-session increase (1.25km) is below recommended 1.6km limit"
+    }
+  ],
+  "coaching_considerations": [
+    "Low volume allows more flexible percentage increases when absolute load per session is small",
+    "Pfitzinger principle: '1.6km per session' often more relevant than 10% rule at low volumes"
+  ]
+}
+```
+
+**How to Interpret**:
+
+1. **Check volume classification** (low/medium/high)
+2. **Identify primary risk factor** (absolute_load vs. cumulative_load)
+3. **Count protective vs. risk factors**
+4. **Apply volume-specific decision rule**:
+   - **Low volume**: Accept if within Pfitzinger guideline, even if percentage high
+   - **Medium volume**: Balance both absolute and percentage
+   - **High volume**: Be conservative, prioritize 10% rule
+5. **Consider athlete context** (CTL capacity, injury history, age)
+6. **Make coaching decision** with clear rationale
+
+**See detailed interpretation guidance**: `.claude/skills/training-plan-design/references/volume_progression.md` - "Interpreting Progression Context with AI Coaching Judgment" section.
 
 ---
 

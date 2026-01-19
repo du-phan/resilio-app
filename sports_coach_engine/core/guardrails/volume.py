@@ -203,6 +203,280 @@ def validate_weekly_progression(
 
 
 # ============================================================
+# PROGRESSION CONTEXT ANALYSIS (RICH CONTEXT FOR AI COACHING)
+# ============================================================
+
+
+def analyze_weekly_progression_context(
+    previous_volume_km: float,
+    current_volume_km: float,
+    current_ctl: Optional[float] = None,
+    run_days_per_week: Optional[int] = None,
+    athlete_age: Optional[int] = None,
+    recent_injury: bool = False,
+    injury_history: Optional[list] = None,
+):
+    """
+    Analyze volume progression with rich context for AI coaching decisions.
+
+    This function provides CONTEXT and INSIGHTS, not coaching decisions.
+    Claude Code interprets this data using training methodology knowledge.
+
+    Philosophy: CLI computes and classifies → AI coach decides.
+
+    Args:
+        previous_volume_km: Previous week's volume
+        current_volume_km: Current week's planned volume
+        current_ctl: Current CTL for capacity analysis
+        run_days_per_week: Number of run days (for per-session analysis)
+        athlete_age: Age for masters considerations
+        recent_injury: Flag for recent injury (<90 days)
+        injury_history: List of past injuries for pattern detection
+
+    Returns:
+        ProgressionContext with rich data for intelligent coaching
+
+    Example:
+        >>> context = analyze_weekly_progression_context(
+        ...     previous_volume_km=15.0,
+        ...     current_volume_km=20.0,
+        ...     current_ctl=27.0,
+        ...     run_days_per_week=4
+        ... )
+        >>> # Claude Code interprets volume_context, protective_factors, etc.
+    """
+    from sports_coach_engine.schemas.guardrails import (
+        ProgressionContext,
+        VolumeCategory,
+        AbsoluteLoadAnalysis,
+        AthleteCapacityContext,
+        RiskFactor,
+        ProtectiveFactor,
+    )
+
+    # ============================================================
+    # 1. Calculate basic metrics
+    # ============================================================
+    increase_km = current_volume_km - previous_volume_km
+    increase_pct = (increase_km / previous_volume_km * 100) if previous_volume_km > 0 else 0
+
+    # ============================================================
+    # 2. Classify volume level (low/medium/high)
+    # ============================================================
+    if current_volume_km < 25:
+        volume_context = VolumeCategory(
+            category="low",
+            threshold_km="<25km",
+            description="Low volume where absolute load per session is primary injury risk factor",
+            injury_risk_factor="absolute_load",
+        )
+    elif current_volume_km < 50:
+        volume_context = VolumeCategory(
+            category="medium",
+            threshold_km="25-50km",
+            description="Medium volume where both absolute and cumulative load matter",
+            injury_risk_factor="both",
+        )
+    else:
+        volume_context = VolumeCategory(
+            category="high",
+            threshold_km="≥50km",
+            description="High volume where cumulative load is primary injury risk factor",
+            injury_risk_factor="cumulative_load",
+        )
+
+    # ============================================================
+    # 3. Traditional 10% rule (for reference)
+    # ============================================================
+    safe_max_km = previous_volume_km * 1.10
+    exceeds_by_pct = ((current_volume_km - safe_max_km) / safe_max_km * 100) if safe_max_km > 0 else 0
+
+    traditional_10pct_rule = {
+        "safe_max_km": round(safe_max_km, 1),
+        "exceeds_by_pct": round(exceeds_by_pct, 1) if exceeds_by_pct > 0 else 0,
+        "note": "Traditional rule applies uniformly regardless of volume level",
+    }
+
+    # ============================================================
+    # 4. Absolute load analysis (Pfitzinger principle)
+    # ============================================================
+    per_session_increase_km = None
+    within_pfitzinger_guideline = None
+    if run_days_per_week and run_days_per_week > 0:
+        per_session_increase_km = increase_km / run_days_per_week
+        within_pfitzinger_guideline = per_session_increase_km <= 1.6
+
+    # Assessment based on absolute load
+    if per_session_increase_km is not None:
+        if within_pfitzinger_guideline:
+            assessment = f"Within safe absolute load guidelines ({per_session_increase_km:.2f}km/session ≤ 1.6km)"
+        else:
+            assessment = f"Exceeds Pfitzinger guideline ({per_session_increase_km:.2f}km/session > 1.6km)"
+    else:
+        assessment = f"Absolute increase of {increase_km:.1f}km (run days not provided for per-session analysis)"
+
+    absolute_load_analysis = AbsoluteLoadAnalysis(
+        increase_km=round(increase_km, 1),
+        per_session_increase_km=round(per_session_increase_km, 2) if per_session_increase_km else None,
+        pfitzinger_guideline_km=1.6,
+        within_pfitzinger_guideline=within_pfitzinger_guideline,
+        assessment=assessment,
+    )
+
+    # ============================================================
+    # 5. Athlete capacity context (CTL-based)
+    # ============================================================
+    ctl_zone = None
+    ctl_based_capacity_km = None
+    target_within_capacity = None
+
+    if current_ctl is not None:
+        if current_ctl < 20:
+            ctl_zone = "beginner"
+            ctl_based_capacity_km = (15, 25)
+        elif current_ctl < 35:
+            ctl_zone = "recreational"
+            ctl_based_capacity_km = (25, 40)
+        elif current_ctl < 50:
+            ctl_zone = "competitive"
+            ctl_based_capacity_km = (40, 65)
+        else:
+            ctl_zone = "advanced"
+            ctl_based_capacity_km = (55, 80)
+
+        target_within_capacity = (
+            ctl_based_capacity_km[0] <= current_volume_km <= ctl_based_capacity_km[1]
+        )
+
+    athlete_context = AthleteCapacityContext(
+        ctl=current_ctl,
+        ctl_zone=ctl_zone,
+        ctl_based_capacity_km=ctl_based_capacity_km,
+        target_within_capacity=target_within_capacity,
+    )
+
+    # ============================================================
+    # 6. Identify risk factors
+    # ============================================================
+    risk_factors = []
+
+    if recent_injury:
+        risk_factors.append(
+            RiskFactor(
+                factor="Recent injury (<90 days)",
+                severity="moderate",
+                recommendation="Monitor discomfort levels and be prepared to adjust volume if symptoms return",
+            )
+        )
+
+    if athlete_age and athlete_age >= 50:
+        risk_factors.append(
+            RiskFactor(
+                factor=f"Masters athlete (age {athlete_age})",
+                severity="low" if athlete_age < 60 else "moderate",
+                recommendation="Masters athletes require longer recovery; consider conservative volume progression",
+            )
+        )
+
+    # High percentage increase is a risk factor (but not a decision)
+    if increase_pct > 20:
+        risk_factors.append(
+            RiskFactor(
+                factor=f"Large percentage increase ({increase_pct:.0f}%)",
+                severity="moderate" if increase_pct < 30 else "high",
+                recommendation="Large percentage increases elevate injury risk; verify absolute load is manageable",
+            )
+        )
+
+    # ============================================================
+    # 7. Identify protective factors
+    # ============================================================
+    protective_factors = []
+
+    if volume_context.category == "low" and increase_km < 10:
+        protective_factors.append(
+            ProtectiveFactor(
+                factor="Low volume level with small absolute increase",
+                note="At low volumes, small absolute increases are physiologically manageable despite high percentages",
+            )
+        )
+
+    if target_within_capacity:
+        protective_factors.append(
+            ProtectiveFactor(
+                factor="Target volume within CTL capacity",
+                note=f"Target {current_volume_km:.0f}km is within fitness-based capacity range ({ctl_based_capacity_km[0]}-{ctl_based_capacity_km[1]}km)",
+            )
+        )
+
+    if within_pfitzinger_guideline:
+        protective_factors.append(
+            ProtectiveFactor(
+                factor="Within Pfitzinger per-session guideline",
+                note=f"Per-session increase ({per_session_increase_km:.2f}km) is below recommended 1.6km limit",
+            )
+        )
+
+    # ============================================================
+    # 8. Coaching considerations (methodology guidance)
+    # ============================================================
+    coaching_considerations = []
+
+    if volume_context.category == "low":
+        coaching_considerations.append(
+            "Low volume allows more flexible percentage increases when absolute load per session is small"
+        )
+        coaching_considerations.append(
+            "Pfitzinger principle: '1.6km per session' often more relevant than 10% rule at low volumes"
+        )
+
+    if volume_context.category == "high":
+        coaching_considerations.append(
+            "High volume requires stricter adherence to 10% rule due to cumulative load stress"
+        )
+        coaching_considerations.append(
+            "Large absolute increases (>10km) significantly increase injury risk"
+        )
+
+    if recent_injury:
+        coaching_considerations.append(
+            "Recent injury history warrants conservative approach; monitor response carefully"
+        )
+
+    if athlete_age and athlete_age >= 50:
+        coaching_considerations.append(
+            "Masters athletes benefit from more conservative progressions (Pfitzinger: reduce volume 10% for age 50+)"
+        )
+
+    # ============================================================
+    # 9. Methodology references
+    # ============================================================
+    methodology_references = [
+        "docs/training_books/advanced_marathoning_pete_pfitzinger.md - Volume progression guidelines",
+        "docs/training_books/daniel_running_formula.md - 10% rule and volume management",
+        "docs/coaching/methodology.md - Volume progression and guardrails section",
+    ]
+
+    # ============================================================
+    # Return complete context
+    # ============================================================
+    return ProgressionContext(
+        previous_volume_km=previous_volume_km,
+        current_volume_km=current_volume_km,
+        increase_km=round(increase_km, 1),
+        increase_pct=round(increase_pct, 1),
+        volume_context=volume_context,
+        traditional_10pct_rule=traditional_10pct_rule,
+        absolute_load_analysis=absolute_load_analysis,
+        athlete_context=athlete_context,
+        risk_factors=risk_factors,
+        protective_factors=protective_factors,
+        coaching_considerations=coaching_considerations,
+        methodology_references=methodology_references,
+    )
+
+
+# ============================================================
 # LONG RUN VALIDATION
 # ============================================================
 

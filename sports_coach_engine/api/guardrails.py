@@ -29,12 +29,14 @@ from sports_coach_engine.schemas.guardrails import (
     RaceRecoveryPlan,
     IllnessRecoveryPlan,
     IllnessSeverity,
+    ProgressionContext,
 )
 from sports_coach_engine.core.guardrails.volume import (
     validate_quality_volume as core_validate_quality,
     validate_weekly_progression as core_validate_progression,
     validate_long_run_limits as core_validate_long_run,
     calculate_safe_volume_range as core_calculate_safe_range,
+    analyze_weekly_progression_context as core_analyze_progression_context,
 )
 from sports_coach_engine.core.guardrails.recovery import (
     calculate_break_return_plan as core_break_return,
@@ -170,6 +172,97 @@ def validate_weekly_progression(
     except ValueError as e:
         return GuardrailsError(
             error_type="calculation_failed", message=f"Progression validation failed: {e}"
+        )
+    except Exception as e:
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+
+
+def analyze_weekly_progression_context(
+    previous_volume_km: float,
+    current_volume_km: float,
+    current_ctl: Optional[float] = None,
+    run_days_per_week: Optional[int] = None,
+    athlete_age: Optional[int] = None,
+    recent_injury: bool = False,
+    injury_history: Optional[list] = None,
+) -> Union[ProgressionContext, GuardrailsError]:
+    """
+    Analyze volume progression with rich context for AI coaching decisions.
+
+    This function provides CONTEXT and INSIGHTS, not coaching decisions.
+    Claude Code interprets this data using training methodology knowledge.
+
+    Philosophy: CLI computes and classifies → AI coach decides.
+
+    Args:
+        previous_volume_km: Previous week's volume
+        current_volume_km: Current week's planned volume
+        current_ctl: Current CTL for capacity analysis (optional)
+        run_days_per_week: Number of run days for per-session analysis (optional)
+        athlete_age: Age for masters considerations (optional)
+        recent_injury: Flag for recent injury (<90 days)
+        injury_history: List of past injuries for pattern detection (optional)
+
+    Returns:
+        ProgressionContext on success, GuardrailsError on failure
+
+    Examples:
+        >>> analyze_weekly_progression_context(15.0, 20.0, current_ctl=27.0, run_days_per_week=4)
+        ProgressionContext(volume_context={'category': 'low'}, protective_factors=[...])
+
+        >>> analyze_weekly_progression_context(60.0, 75.0, current_ctl=55.0, run_days_per_week=4)
+        ProgressionContext(volume_context={'category': 'high'}, risk_factors=[...])
+    """
+    try:
+        # Validate inputs are non-negative
+        if previous_volume_km < 0 or current_volume_km < 0:
+            return GuardrailsError(
+                error_type="invalid_input", message="Volume values must be non-negative"
+            )
+
+        # Current volume must be positive
+        if current_volume_km == 0:
+            return GuardrailsError(
+                error_type="invalid_input", message="Current volume must be positive"
+            )
+
+        # Validate CTL if provided
+        if current_ctl is not None and current_ctl < 0:
+            return GuardrailsError(
+                error_type="invalid_input", message=f"CTL must be non-negative, got {current_ctl}"
+            )
+
+        # Validate run_days_per_week if provided
+        if run_days_per_week is not None:
+            if run_days_per_week <= 0 or run_days_per_week > 7:
+                return GuardrailsError(
+                    error_type="invalid_input",
+                    message=f"Run days per week must be between 1 and 7, got {run_days_per_week}",
+                )
+
+        # Validate athlete_age if provided
+        if athlete_age is not None:
+            if athlete_age < 18 or athlete_age > 100:
+                return GuardrailsError(
+                    error_type="out_of_range",
+                    message=f"Age must be between 18 and 100, got {athlete_age}",
+                )
+
+        # Call core function
+        result = core_analyze_progression_context(
+            previous_volume_km=previous_volume_km,
+            current_volume_km=current_volume_km,
+            current_ctl=current_ctl,
+            run_days_per_week=run_days_per_week,
+            athlete_age=athlete_age,
+            recent_injury=recent_injury,
+            injury_history=injury_history,
+        )
+        return result
+
+    except ValueError as e:
+        return GuardrailsError(
+            error_type="calculation_failed", message=f"Progression context analysis failed: {e}"
         )
     except Exception as e:
         return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")

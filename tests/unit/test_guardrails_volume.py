@@ -14,6 +14,7 @@ from sports_coach_engine.core.guardrails.volume import (
     validate_weekly_progression,
     validate_long_run_limits,
     calculate_safe_volume_range,
+    analyze_weekly_progression_context,
 )
 
 
@@ -486,3 +487,269 @@ class TestSafeVolumeRange:
         )
 
         assert result.goal_adjusted_range_km == result.base_volume_range_km
+
+
+# ============================================================
+# PROGRESSION CONTEXT ANALYSIS TESTS
+# ============================================================
+
+
+class TestProgressionContextAnalysis:
+    """
+    Tests for rich progression context analysis (AI coaching support).
+
+    These tests verify that the function provides CONTEXT, not decisions.
+    Tests focus on correct classification, analysis, and context provision.
+    """
+
+    # ============================================================
+    # 1. VOLUME CLASSIFICATION TESTS (3 tests)
+    # ============================================================
+
+    def test_low_volume_classification(self):
+        """Volume < 25km should be classified as low volume."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+        )
+
+        assert context.volume_context.category == "low"
+        assert context.volume_context.threshold_km == "<25km"
+        assert context.volume_context.injury_risk_factor == "absolute_load"
+        assert "absolute load per session" in context.volume_context.description
+
+    def test_medium_volume_classification(self):
+        """Volume 25-50km should be classified as medium volume."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=30.0,
+            current_volume_km=35.0,
+        )
+
+        assert context.volume_context.category == "medium"
+        assert context.volume_context.threshold_km == "25-50km"
+        assert context.volume_context.injury_risk_factor == "both"
+        assert "both absolute and cumulative" in context.volume_context.description
+
+    def test_high_volume_classification(self):
+        """Volume ≥50km should be classified as high volume."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=60.0,
+            current_volume_km=75.0,
+        )
+
+        assert context.volume_context.category == "high"
+        assert context.volume_context.threshold_km == "≥50km"
+        assert context.volume_context.injury_risk_factor == "cumulative_load"
+        assert "cumulative load" in context.volume_context.description
+
+    # ============================================================
+    # 2. ABSOLUTE LOAD ANALYSIS TESTS (3 tests)
+    # ============================================================
+
+    def test_absolute_load_with_run_days(self):
+        """When run_days provided, should calculate per-session increase."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+            run_days_per_week=4,
+        )
+
+        assert context.absolute_load_analysis.per_session_increase_km == 1.25  # 5km / 4 days
+        assert context.absolute_load_analysis.within_pfitzinger_guideline is True
+        assert "1.25km/session" in context.absolute_load_analysis.assessment
+
+    def test_absolute_load_without_run_days(self):
+        """When run_days not provided, should skip per-session analysis."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+        )
+
+        assert context.absolute_load_analysis.per_session_increase_km is None
+        assert context.absolute_load_analysis.within_pfitzinger_guideline is None
+        assert "run days not provided" in context.absolute_load_analysis.assessment
+
+    def test_absolute_load_exceeds_pfitzinger(self):
+        """Per-session increase >1.6km should be flagged."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=60.0,
+            current_volume_km=75.0,
+            run_days_per_week=4,
+        )
+
+        assert context.absolute_load_analysis.per_session_increase_km == 3.75  # 15km / 4 days
+        assert context.absolute_load_analysis.within_pfitzinger_guideline is False
+        assert "Exceeds Pfitzinger guideline" in context.absolute_load_analysis.assessment
+
+    # ============================================================
+    # 3. CTL CAPACITY CONTEXT TESTS (3 tests)
+    # ============================================================
+
+    def test_ctl_capacity_within_range(self):
+        """Target volume within CTL capacity should be flagged."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=25.0,
+            current_volume_km=30.0,  # Within recreational range (25-40km)
+            current_ctl=27.0,  # Recreational zone (25-40km capacity)
+        )
+
+        assert context.athlete_context.ctl == 27.0
+        assert context.athlete_context.ctl_zone == "recreational"
+        assert context.athlete_context.ctl_based_capacity_km == (25, 40)
+        assert context.athlete_context.target_within_capacity is True
+
+    def test_ctl_capacity_outside_range(self):
+        """Target volume outside CTL capacity should be flagged."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=50.0,  # Above recreational capacity
+            current_ctl=27.0,  # Recreational zone (25-40km capacity)
+        )
+
+        assert context.athlete_context.ctl_zone == "recreational"
+        assert context.athlete_context.target_within_capacity is False
+
+    def test_no_ctl_provided(self):
+        """When CTL not provided, capacity analysis should be skipped."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+        )
+
+        assert context.athlete_context.ctl is None
+        assert context.athlete_context.ctl_zone is None
+        assert context.athlete_context.ctl_based_capacity_km is None
+        assert context.athlete_context.target_within_capacity is None
+
+    # ============================================================
+    # 4. RISK FACTOR DETECTION TESTS (3 tests)
+    # ============================================================
+
+    def test_recent_injury_risk_factor(self):
+        """Recent injury should be flagged as risk factor."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+            recent_injury=True,
+        )
+
+        risk_factors = [rf.factor for rf in context.risk_factors]
+        assert any("Recent injury" in rf for rf in risk_factors)
+
+        injury_risk = next(rf for rf in context.risk_factors if "Recent injury" in rf.factor)
+        assert injury_risk.severity == "moderate"
+        assert "Monitor discomfort" in injury_risk.recommendation
+
+    def test_masters_athlete_risk_factor(self):
+        """Masters athlete should be flagged as risk factor."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=40.0,
+            current_volume_km=46.0,
+            athlete_age=52,
+        )
+
+        risk_factors = [rf.factor for rf in context.risk_factors]
+        assert any("Masters athlete" in rf for rf in risk_factors)
+
+        masters_risk = next(rf for rf in context.risk_factors if "Masters athlete" in rf.factor)
+        assert masters_risk.severity == "low"  # Age 52 is < 60
+        assert "longer recovery" in masters_risk.recommendation
+
+    def test_large_percentage_increase_risk_factor(self):
+        """Large percentage increase (>20%) should be flagged."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,  # 33% increase
+        )
+
+        risk_factors = [rf.factor for rf in context.risk_factors]
+        assert any("Large percentage increase" in rf for rf in risk_factors)
+
+        pct_risk = next(rf for rf in context.risk_factors if "Large percentage" in rf.factor)
+        assert pct_risk.severity in ["moderate", "high"]
+
+    # ============================================================
+    # 5. PROTECTIVE FACTOR DETECTION TESTS (2 tests)
+    # ============================================================
+
+    def test_low_volume_small_increase_protective(self):
+        """Low volume + small absolute increase should be protective factor."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,  # 5km increase, < 10km threshold
+        )
+
+        protective_factors = [pf.factor for pf in context.protective_factors]
+        assert any("Low volume level with small absolute increase" in pf for pf in protective_factors)
+
+    def test_adequate_ctl_capacity_protective(self):
+        """Target within CTL capacity should be protective factor."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=25.0,
+            current_volume_km=30.0,  # Within recreational range (25-40km)
+            current_ctl=27.0,  # Recreational (25-40km capacity)
+        )
+
+        protective_factors = [pf.factor for pf in context.protective_factors]
+        assert any("Target volume within CTL capacity" in pf for pf in protective_factors)
+
+        ctl_protective = next(
+            pf for pf in context.protective_factors if "CTL capacity" in pf.factor
+        )
+        assert "25-40km" in ctl_protective.note
+
+    # ============================================================
+    # 6. COACHING CONSIDERATIONS TESTS (2 tests)
+    # ============================================================
+
+    def test_low_volume_coaching_considerations(self):
+        """Low volume should include Pfitzinger absolute load guidance."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+        )
+
+        considerations = context.coaching_considerations
+        assert any("flexible percentage increases" in c for c in considerations)
+        assert any("1.6km per session" in c for c in considerations)
+
+    def test_high_volume_coaching_considerations(self):
+        """High volume should emphasize 10% rule and cumulative load."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=60.0,
+            current_volume_km=75.0,
+        )
+
+        considerations = context.coaching_considerations
+        assert any("10% rule" in c for c in considerations)
+        assert any("cumulative load" in c for c in considerations)
+
+    # ============================================================
+    # 7. TRADITIONAL 10% RULE REFERENCE TEST
+    # ============================================================
+
+    def test_traditional_10_pct_rule_reference(self):
+        """Traditional 10% rule should be provided for reference."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+        )
+
+        assert context.traditional_10pct_rule["safe_max_km"] == 16.5  # 15 * 1.10
+        assert context.traditional_10pct_rule["exceeds_by_pct"] > 0
+        assert "Traditional rule" in context.traditional_10pct_rule["note"]
+
+    # ============================================================
+    # 8. METHODOLOGY REFERENCES TEST
+    # ============================================================
+
+    def test_methodology_references_provided(self):
+        """Should provide links to training methodology resources."""
+        context = analyze_weekly_progression_context(
+            previous_volume_km=15.0,
+            current_volume_km=20.0,
+        )
+
+        assert len(context.methodology_references) > 0
+        assert any("pfitzinger" in ref.lower() for ref in context.methodology_references)
+        assert any("methodology.md" in ref for ref in context.methodology_references)

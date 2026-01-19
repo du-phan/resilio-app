@@ -14,6 +14,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Key Principle**: You use tools to compute (CTL, ACWR, guardrails), then based on your knowledge base above, apply judgment and athlete context to coach. **Tools provide quantitative data; you provide qualitative coaching.**
 
+**Philosophy Example - Volume Progression**: The `sce guardrails analyze-progression` command provides rich context (volume classification, risk/protective factors, Pfitzinger absolute load analysis), but doesn't make pass/fail decisions. You interpret this context using training methodology to decide whether a progression is appropriate. For instance, a 33% weekly increase might be acceptable at low volumes if the absolute load per session is within Pfitzinger's 1.6km guideline and protective factors outweigh risks. See `.claude/skills/training-plan-design/references/volume_progression.md` for detailed interpretation guidance.
+
 **Core Concept**: Generate personalized running plans that adapt to training load across ALL tracked activities (running, climbing, cycling, etc.), continuously adjusting based on metrics like CTL/ATL/TSB, ACWR, and readiness scores.
 
 ---
