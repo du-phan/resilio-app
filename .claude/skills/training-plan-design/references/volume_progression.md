@@ -205,6 +205,312 @@ Good: Use athlete's typical patterns as baseline
 
 ---
 
+## Interpreting Progression Context with AI Coaching Judgment
+
+### Philosophy: CLI Provides Context, AI Coach Decides
+
+The `analyze-progression` command provides **rich context and insights**, not pass/fail decisions. As the AI coach, you interpret this data using training methodology knowledge to make intelligent, context-aware decisions.
+
+**Key Principle**: The CLI computes metrics and classifies context → You (Claude Code) apply coaching judgment.
+
+### Using the analyze-progression Command
+
+```bash
+sce guardrails analyze-progression \
+  --previous 15 \
+  --current 20 \
+  --ctl 27 \
+  --run-days 4 \
+  --age 32
+```
+
+**Returns rich context including**:
+- Volume classification (low/medium/high)
+- Traditional 10% rule analysis (reference only)
+- Absolute load analysis (Pfitzinger per-session guideline)
+- CTL-based capacity context
+- Risk factors (injury, age, large percentage increase)
+- Protective factors (small absolute load, adequate capacity)
+- Coaching considerations from training methodology
+
+### Interpretation Framework
+
+#### 1. Volume Context Classification
+
+**Low Volume (<25km)**:
+- **Primary risk**: Absolute load per session
+- **Flexibility**: Higher percentage increases acceptable if absolute load is manageable
+- **Key metric**: Per-session increase (<1.6km per Pfitzinger)
+
+**Example - BG Scenario**:
+```json
+{
+  "volume_context": {
+    "category": "low",
+    "injury_risk_factor": "absolute_load"
+  },
+  "absolute_load_analysis": {
+    "per_session_increase_km": 1.25,
+    "within_pfitzinger_guideline": true
+  }
+}
+```
+
+**Interpretation**: Despite 33% increase, accept this progression because:
+- Low volume (20km) means small absolute increase (5km)
+- Per-session increase (1.25km) well within Pfitzinger guideline (1.6km)
+- Small absolute loads are physiologically manageable at low volumes
+
+**Medium Volume (25-50km)**:
+- **Primary risk**: Both absolute and cumulative load
+- **Flexibility**: Moderate - balance percentage and absolute increases
+- **Decision factors**: Consider both Pfitzinger guideline AND 10% rule
+
+**High Volume (≥50km)**:
+- **Primary risk**: Cumulative load
+- **Flexibility**: Limited - adhere closely to 10% rule
+- **Key concern**: Large absolute increases (>10km) significantly increase injury risk
+
+**Example - High Volume Scenario**:
+```bash
+sce guardrails analyze-progression --previous 60 --current 75 --ctl 55 --run-days 4
+```
+```json
+{
+  "volume_context": {
+    "category": "high",
+    "injury_risk_factor": "cumulative_load"
+  },
+  "absolute_load_analysis": {
+    "per_session_increase_km": 3.75,
+    "within_pfitzinger_guideline": false
+  },
+  "traditional_10pct_rule": {
+    "exceeds_by_pct": 15.0
+  }
+}
+```
+
+**Interpretation**: Be conservative - reject or modify this progression because:
+- High volume (75km) means cumulative load stress
+- Per-session increase (3.75km) exceeds Pfitzinger guideline (1.6km)
+- Large absolute increase (15km) significantly elevates injury risk
+- Recommend: Reduce to 66km (10% increase) or 68km (max acceptable with strong justification)
+
+#### 2. Risk vs. Protective Factors
+
+**Weighing Factors**:
+- **Risk factors**: Recent injury, masters age, large percentage increase
+- **Protective factors**: Low volume, small absolute load, adequate CTL capacity, within Pfitzinger guideline
+
+**Decision Rule**: Accept progression when protective factors outweigh risk factors.
+
+**Example - Low Risk Despite High Percentage**:
+```json
+{
+  "increase_pct": 33.3,
+  "risk_factors": [
+    {
+      "factor": "Large percentage increase (33%)",
+      "severity": "high"
+    }
+  ],
+  "protective_factors": [
+    {
+      "factor": "Low volume level with small absolute increase",
+      "note": "Small absolute increases are physiologically manageable"
+    },
+    {
+      "factor": "Within Pfitzinger per-session guideline",
+      "note": "1.25km per session is below 1.6km limit"
+    },
+    {
+      "factor": "Target volume within CTL capacity",
+      "note": "20km within 25-40km capacity range"
+    }
+  ]
+}
+```
+
+**Interpretation**: Accept - 3 strong protective factors outweigh 1 risk factor (high percentage).
+
+**Example - High Risk Despite Acceptable Percentage**:
+```json
+{
+  "increase_pct": 15.0,
+  "risk_factors": [
+    {
+      "factor": "Recent injury (<90 days)",
+      "severity": "moderate"
+    },
+    {
+      "factor": "Masters athlete (age 55)",
+      "severity": "moderate"
+    }
+  ],
+  "protective_factors": []
+}
+```
+
+**Interpretation**: Be conservative - 2 moderate risk factors with no protective factors warrant caution. Consider reducing progression or monitoring closely.
+
+#### 3. CTL Capacity Analysis
+
+**Within Capacity** (`target_within_capacity: true`):
+- Strong protective factor
+- Athlete's fitness supports target volume
+- Example: CTL 27 (recreational) → 25-40km capacity range
+
+**Outside Capacity** (`target_within_capacity: false`):
+- Warning flag (not automatic rejection)
+- Two scenarios:
+  - **Below capacity**: May indicate detraining or conservative start (acceptable)
+  - **Above capacity**: Requires strong justification (protective factors must clearly outweigh)
+
+**Example - Below Capacity (Acceptable)**:
+```json
+{
+  "current_volume_km": 20.0,
+  "athlete_context": {
+    "ctl": 27.0,
+    "ctl_zone": "recreational",
+    "ctl_based_capacity_km": [25, 40],
+    "target_within_capacity": false
+  }
+}
+```
+
+**Interpretation**: 20km is below 25-40km range (acceptable - athlete is building conservatively).
+
+**Example - Above Capacity (Requires Justification)**:
+```json
+{
+  "current_volume_km": 50.0,
+  "athlete_context": {
+    "ctl": 27.0,
+    "ctl_zone": "recreational",
+    "ctl_based_capacity_km": [25, 40],
+    "target_within_capacity": false
+  }
+}
+```
+
+**Interpretation**: 50km exceeds 40km capacity limit (needs strong protective factors or plan adjustment).
+
+#### 4. Coaching Considerations
+
+The `coaching_considerations` field provides methodology-based guidance:
+
+**Low Volume Considerations**:
+- "Low volume allows more flexible percentage increases when absolute load per session is small"
+- "Pfitzinger principle: '1.6km per session' often more relevant than 10% rule at low volumes"
+
+**Apply**: Prioritize Pfitzinger absolute load guideline over 10% rule.
+
+**High Volume Considerations**:
+- "High volume requires stricter adherence to 10% rule due to cumulative load stress"
+- "Large absolute increases (>10km) significantly increase injury risk"
+
+**Apply**: Be conservative with percentage increases, emphasize injury prevention.
+
+**Injury/Masters Considerations**:
+- "Recent injury history warrants conservative approach; monitor response carefully"
+- "Masters athletes benefit from more conservative progressions (Pfitzinger: reduce volume 10% for age 50+)"
+
+**Apply**: Reduce target progression or add monitoring guidance to plan.
+
+#### 5. Traditional 10% Rule (Reference Only)
+
+The `traditional_10pct_rule` field is provided **for reference**, not as a decision criterion.
+
+**Use it to**:
+- Explain context to athlete ("Traditional rule suggests 16.5km, but...")
+- Provide perspective on progression magnitude
+- Reference in coaching rationale
+
+**Don't use it to**:
+- Make pass/fail decisions
+- Override context-aware analysis
+- Ignore volume classification or protective factors
+
+### Decision Examples
+
+#### Example 1: Accept High Percentage (Low Volume)
+
+**Scenario**: 15→20km, CTL 27, 4 run days, age 32
+
+**Command**:
+```bash
+sce guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4 --age 32
+```
+
+**Key Context**:
+- Volume: Low (<25km)
+- Per-session increase: 1.25km (within Pfitzinger guideline)
+- Protective factors: Low volume + small absolute load + within guideline
+- Risk factors: Large percentage (33%)
+
+**Decision**: **ACCEPT**
+
+**Rationale**:
+"Your 15→20km progression represents a 33% increase, which exceeds the traditional 10% rule. However, at low volumes, absolute load per session is more important than percentage. Your per-session increase is 1.25km (well within Pfitzinger's 1.6km guideline), and your CTL of 27 supports this volume. The small absolute increase (5km total) is physiologically manageable despite the high percentage. I'm comfortable accepting this progression."
+
+#### Example 2: Reject/Modify High Volume
+
+**Scenario**: 60→75km, CTL 55, 4 run days
+
+**Command**:
+```bash
+sce guardrails analyze-progression --previous 60 --current 75 --ctl 55 --run-days 4
+```
+
+**Key Context**:
+- Volume: High (≥50km)
+- Per-session increase: 3.75km (exceeds Pfitzinger guideline)
+- Risk factors: Large absolute increase (15km) + exceeds guideline
+- Protective factors: None identified
+
+**Decision**: **MODIFY** to 66km (10% increase)
+
+**Rationale**:
+"Your planned 60→75km progression is too aggressive for high-volume training. The 15km absolute increase and 3.75km per-session increase both exceed safe guidelines. At 60km weekly volume, cumulative load stress is the primary injury risk. I recommend reducing to 66km (10% increase) to maintain safe progression. This still builds fitness while minimizing injury risk."
+
+#### Example 3: Conservative Approach (Risk Factors Present)
+
+**Scenario**: 40→46km, age 52, recent injury
+
+**Command**:
+```bash
+sce guardrails analyze-progression --previous 40 --current 46 --age 52 --recent-injury
+```
+
+**Key Context**:
+- Volume: Medium
+- Percentage: 15% (exceeds 10%)
+- Risk factors: Recent injury + masters athlete
+- Protective factors: Moderate absolute increase
+
+**Decision**: **MODIFY** with monitoring
+
+**Rationale**:
+"Your 15% increase would normally be acceptable in the medium-volume range, but your recent injury and masters status (age 52) warrant a more conservative approach. I recommend limiting to 44km (10% increase) and closely monitoring your ankle response during this week. If symptoms return, we'll adjust immediately."
+
+### Summary: Context-Aware Decision Framework
+
+1. **Check volume classification** (low/medium/high)
+2. **Identify primary risk factor** (absolute load vs. cumulative load)
+3. **Count protective factors vs. risk factors**
+4. **Apply volume-specific decision rule**:
+   - **Low volume**: Accept if within Pfitzinger guideline, even if percentage high
+   - **Medium volume**: Balance both absolute and percentage
+   - **High volume**: Be conservative, prioritize 10% rule
+5. **Consider athlete context** (CTL capacity, injury history, age)
+6. **Provide clear rationale** citing specific context from analysis
+
+**Remember**: You are the coach. The CLI provides data - you make the intelligent, context-aware decision.
+
+---
+
 ## The 10% Rule
 
 ### Standard Progression

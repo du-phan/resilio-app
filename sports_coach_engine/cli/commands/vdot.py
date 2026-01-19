@@ -15,6 +15,7 @@ from sports_coach_engine.api.vdot import (
     predict_race_times,
     apply_six_second_rule_paces,
     adjust_pace_for_environment,
+    estimate_current_vdot,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import output_json
@@ -279,6 +280,64 @@ def vdot_adjust_command(
         msg = f"Adjusted pace for {condition} ({severity})"
     else:
         msg = "Pace adjustment failed"
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(result, success_message=msg)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="estimate-current")
+def vdot_estimate_current_command(
+    ctx: typer.Context,
+    lookback_days: int = typer.Option(
+        28,
+        "--lookback-days",
+        help="Number of days to look back for quality workouts"
+    ),
+) -> None:
+    """Estimate current VDOT from recent workout paces.
+
+    Analyzes tempo and interval workouts from recent training to estimate
+    current fitness level. Useful for comparing against historical PBs
+    to track progression/regression.
+
+    Detection logic:
+        - Searches for tempo/interval keywords in workout titles
+        - Extracts average pace from quality workouts
+        - Calculates implied VDOT from workout paces
+        - Returns median VDOT with confidence level
+
+    Examples:
+        sce vdot estimate-current
+        sce vdot estimate-current --lookback-days 14
+
+    Confidence levels:
+        - HIGH: 3+ quality workouts found
+        - MEDIUM: 2 quality workouts found
+        - LOW: Only 1 quality workout found
+
+    Use this to compare current fitness against race history:
+        1. sce race list  # View historical PBs
+        2. sce vdot estimate-current  # Estimate current VDOT
+        3. Compare current VDOT to peak VDOT from race history
+
+    Note: Requires quality workouts with tempo/interval keywords in titles.
+    If no quality workouts found, run a tempo workout first.
+    """
+    # Call API
+    result = estimate_current_vdot(lookback_days=lookback_days)
+
+    # Build success message
+    if hasattr(result, 'estimated_vdot'):
+        msg = f"Estimated current VDOT: {result.estimated_vdot} (confidence: {result.confidence})"
+    else:
+        msg = "VDOT estimation failed"
 
     # Convert to envelope
     envelope = api_result_to_envelope(result, success_message=msg)

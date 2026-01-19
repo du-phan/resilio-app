@@ -24,6 +24,8 @@ from sports_coach_engine.schemas.vdot import (
     ConditionType,
     PaceUnit,
     ConfidenceLevel,
+    VDOTEstimate,
+    WorkoutPaceData,
 )
 from sports_coach_engine.core.vdot import (
     calculate_vdot as core_calculate_vdot,
@@ -303,3 +305,174 @@ def adjust_pace_for_environment(
         return VDOTError(error_type="calculation_failed", message=f"Pace adjustment failed: {e}")
     except Exception as e:
         return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+
+
+def estimate_current_vdot(
+    lookback_days: int = 28,
+) -> Union[VDOTEstimate, VDOTError]:
+    """
+    Estimate current VDOT from recent workout paces.
+
+    Analyzes tempo and interval workouts from the last N days to estimate
+    current fitness level. This provides a way to compare current fitness
+    against historical PBs for progression/regression analysis.
+
+    Detection logic:
+    - Tempo workouts: Average pace significantly faster than easy pace
+    - Interval workouts: workout_type or keywords in title/description
+
+    Args:
+        lookback_days: Number of days to look back (default: 28)
+
+    Returns:
+        VDOTEstimate with current VDOT estimate and supporting data
+
+        VDOTError on failure
+
+    Example:
+        >>> estimate = estimate_current_vdot(lookback_days=28)
+        >>> if isinstance(estimate, VDOTError):
+        ...     print(f"Error: {estimate.message}")
+        ... else:
+        ...     print(f"Current VDOT estimate: {estimate.estimated_vdot} ({estimate.confidence})")
+    """
+    from datetime import date as dt_date, timedelta
+    from pathlib import Path
+    from statistics import median
+
+    from sports_coach_engine.core.paths import get_activities_dir
+    from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+    from sports_coach_engine.schemas.activity import NormalizedActivity
+    from sports_coach_engine.core.vdot.tables import VDOT_TABLE
+
+    try:
+        # Load activities
+        repo = RepositoryIO()
+        activities_dir = get_activities_dir()
+        activity_files = list(Path(activities_dir).glob("*.json"))
+
+        if not activity_files:
+            return VDOTError(
+                error_type="not_found",
+                message="No activities found. Run 'sce sync' to import activities from Strava.",
+            )
+
+        # Calculate cutoff date
+        cutoff_date = dt_date.today() - timedelta(days=lookback_days)
+
+        # Load and filter activities
+        activities: list[NormalizedActivity] = []
+        for activity_file in activity_files:
+            result = repo.read_json(str(activity_file), NormalizedActivity, ReadOptions())
+            if isinstance(result, NormalizedActivity):
+                # Filter by date and sport type
+                activity_date = dt_date.fromisoformat(result.start_date.split("T")[0])
+                if activity_date >= cutoff_date and result.sport_type.lower() == "run":
+                    activities.append(result)
+
+        if not activities:
+            return VDOTError(
+                error_type="not_found",
+                message=f"No running activities found in the last {lookback_days} days.",
+            )
+
+        # Detect quality workouts (tempo, interval)
+        quality_keywords = ["tempo", "threshold", "interval", "track", "speed", "workout"]
+        quality_workouts: list[WorkoutPaceData] = []
+
+        for activity in activities:
+            # Check for workout keywords
+            title = (activity.title or "").lower()
+            description = (activity.description or "").lower()
+            has_quality_keyword = any(keyword in title or keyword in description for keyword in quality_keywords)
+
+            # Calculate average pace (sec per km)
+            if activity.distance_km > 0 and activity.moving_time_seconds > 0:
+                avg_pace_sec_per_km = int(activity.moving_time_seconds / activity.distance_km)
+
+                # Only consider paces faster than 6:00/km (360 sec/km) as quality efforts
+                if has_quality_keyword and avg_pace_sec_per_km < 360:
+                    # Find implied VDOT from pace
+                    implied_vdot = _find_vdot_from_pace(avg_pace_sec_per_km, "threshold")
+
+                    if implied_vdot:
+                        workout_data = WorkoutPaceData(
+                            date=activity.start_date.split("T")[0],
+                            workout_type="tempo" if "tempo" in title or "threshold" in title else "interval",
+                            pace_sec_per_km=avg_pace_sec_per_km,
+                            implied_vdot=implied_vdot,
+                        )
+                        quality_workouts.append(workout_data)
+
+        if not quality_workouts:
+            return VDOTError(
+                error_type="not_found",
+                message=f"No quality workouts (tempo/interval) found in the last {lookback_days} days. "
+                "Try running a tempo or interval workout first.",
+            )
+
+        # Calculate median VDOT
+        vdots = [w.implied_vdot for w in quality_workouts]
+        estimated_vdot = int(median(vdots))
+
+        # Determine confidence based on number of data points
+        if len(quality_workouts) >= 3:
+            confidence = ConfidenceLevel.HIGH
+        elif len(quality_workouts) >= 2:
+            confidence = ConfidenceLevel.MEDIUM
+        else:
+            confidence = ConfidenceLevel.LOW
+
+        # Determine source description
+        workout_types = [w.workout_type for w in quality_workouts]
+        if "tempo" in workout_types:
+            source = "tempo_workouts"
+        else:
+            source = "interval_workouts"
+
+        return VDOTEstimate(
+            estimated_vdot=estimated_vdot,
+            confidence=confidence,
+            source=source,
+            supporting_data=quality_workouts,
+        )
+
+    except Exception as e:
+        return VDOTError(error_type="calculation_failed", message=f"VDOT estimation failed: {e}")
+
+
+def _find_vdot_from_pace(pace_sec_per_km: int, pace_type: str = "threshold") -> Optional[int]:
+    """
+    Find VDOT that corresponds to a given pace.
+
+    Args:
+        pace_sec_per_km: Pace in seconds per km
+        pace_type: Type of pace ("threshold", "interval", "easy")
+
+    Returns:
+        VDOT value, or None if pace is out of range
+    """
+    from sports_coach_engine.core.vdot.tables import VDOT_TABLE
+
+    # Map pace type to table fields
+    pace_field_map = {
+        "threshold": ("threshold_min_sec_per_km", "threshold_max_sec_per_km"),
+        "interval": ("interval_min_sec_per_km", "interval_max_sec_per_km"),
+        "easy": ("easy_min_sec_per_km", "easy_max_sec_per_km"),
+    }
+
+    if pace_type not in pace_field_map:
+        return None
+
+    min_field, max_field = pace_field_map[pace_type]
+
+    # Find VDOT where pace falls within the range
+    for entry in VDOT_TABLE:
+        min_pace = getattr(entry, min_field)
+        max_pace = getattr(entry, max_field)
+
+        # Check if pace falls within this VDOT's range (with some tolerance)
+        if min_pace - 5 <= pace_sec_per_km <= max_pace + 5:
+            return entry.vdot
+
+    return None

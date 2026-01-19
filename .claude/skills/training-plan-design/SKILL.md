@@ -171,20 +171,104 @@ See [volume_progression.md](references/volume_progression.md) for detailed progr
 
 ### Step 5: Calculate VDOT & Training Paces
 
-**Get VDOT** from recent race or estimate:
+**CRITICAL: Use race history + current fitness to determine baseline VDOT.**
+
+Claude Code applies coaching judgment (not rigid algorithm) using training methodology:
+
+#### Step 5a: Review Race History
+
 ```bash
-sce vdot calculate --race-type 10k --time 42:30  # From race result
-sce vdot six-second --mile-time 7:00              # From mile test
-# Or: Conservative estimate VDOT 45-50, adjust after first tempo
+# Get complete race history with VDOTs
+sce race list
+
+# Extract peak VDOT and date
+# Check profile for peak_vdot and peak_vdot_date fields
+sce profile get | jq -r '.data.peak_vdot, .data.peak_vdot_date'
 ```
 
-**Get training paces**:
+**What to observe**:
+- Most recent race and its VDOT
+- Peak PB VDOT and when achieved
+- Distance-specific PBs (5K VDOT vs marathon VDOT)
+- Time since last race
+
+#### Step 5b: Estimate Current VDOT (From Workouts)
+
+```bash
+# Analyze recent tempo/interval workouts (last 28 days)
+sce vdot estimate-current --lookback-days 28
+```
+
+**Returns**:
+- `estimated_vdot`: Median VDOT from quality workouts
+- `confidence`: HIGH (3+ workouts), MEDIUM (2), LOW (1)
+- `supporting_data`: Workout paces used for estimation
+
+#### Step 5c: Apply Coaching Judgment (VDOT Selection)
+
+**Use training methodology** to determine baseline VDOT:
+
+**Scenario 1: Recent race (<2 weeks)**
+```
+Coach: "Your 10K race from Jan 5th (VDOT 48) is recent. We'll use VDOT 48 directly."
+```
+→ Use race VDOT
+
+**Scenario 2: Race 2-6 weeks ago**
+```
+Coach: "Your 10K from Dec 1st (VDOT 48) is 6 weeks old. Still relevant but slight decay expected."
+```
+→ Use race VDOT, acknowledge slight decay may occur
+
+**Scenario 3: Old PB (>6 weeks), estimate available**
+```
+Coach: "Peak 10K was 42:30 (VDOT 48) from June 2023. Recent tempo runs suggest VDOT 45 currently."
+Analysis: 48 → 45 is 3-point regression (normal after 18 months without racing)
+Coach: "You've regressed 3 VDOT points since your PB. We'll use VDOT 45 as baseline and gradually rebuild to 48."
+```
+→ Use current estimated VDOT, reference peak for progression goal
+
+**Scenario 4: Multiple recent races (consistency check)**
+```
+Coach: "10K at VDOT 48 (Nov), 5K at VDOT 47 (Dec). Consistent fitness around VDOT 47-48."
+```
+→ Use most recent or average if close
+
+**Scenario 5: No race history, no quality workouts**
+```
+Coach: "No recent races or tempo runs. We'll start with conservative VDOT 45-47 estimate and calibrate after first tempo workout in Week 2."
+```
+→ Use conservative estimate (CTL-based: CTL 30-40 → VDOT 45, CTL 40-50 → VDOT 48)
+
+**Scenario 6: Goal time provided, conflicts with race history**
+```
+Athlete goal: 1:20:00 half marathon (requires VDOT 52)
+Recent PB: 10K 42:30 (VDOT 48) predicts 1:25:00 half
+
+Coach: "Your 10K PB predicts 1:25 half. Your 1:20 goal requires VDOT 52 (4-point improvement).
+With 20 weeks, that's ambitious but achievable with consistent T-pace and I-pace work.
+We'll design the plan for VDOT 52 progression but start training paces at current VDOT 48."
+```
+→ Start with current VDOT, design progression toward goal VDOT
+
+#### Step 5d: Calculate Training Paces
+
 ```bash
 sce vdot paces --vdot 48
 # Returns: E-pace, M-pace, T-pace, I-pace, R-pace
 ```
 
-See [pace_zones.md](references/pace_zones.md) for workout type guidance.
+**Document decision**:
+```
+Coach: "Using VDOT 48 from your June 2023 10K PB (42:30). Training paces:
+- Easy: 5:30-6:00/km
+- Tempo: 4:40-4:50/km
+- Intervals: 4:20-4:30/km
+
+We'll reassess after first tempo in Week 2. If you nail 4:45/km tempo, VDOT 48 confirmed."
+```
+
+**For goal pace validation**: See [pace_zones.md](references/pace_zones.md) for race predictions and goal feasibility checks.
 
 ---
 

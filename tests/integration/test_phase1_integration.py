@@ -20,7 +20,6 @@ from sports_coach_engine.schemas.profile import (
     RunningPriority,
     ConflictPolicy,
     StravaConnection,
-    RecentRace,
 )
 
 
@@ -71,7 +70,6 @@ class TestPhase1Integration:
             age=32,
             strava=StravaConnection(athlete_id="12345678"),
             running_experience_years=5,
-            recent_race=RecentRace(distance="10k", time="47:00", date="2025-04-20"),
             running_priority=RunningPriority.SECONDARY,
             primary_sport="bouldering",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,

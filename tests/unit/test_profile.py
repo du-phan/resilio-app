@@ -230,7 +230,6 @@ class TestProfileService:
 
         from sports_coach_engine.schemas.profile import (
             StravaConnection,
-            RecentRace,
             OtherSport,
         )
 
@@ -241,7 +240,6 @@ class TestProfileService:
             age=32,
             strava=StravaConnection(athlete_id="12345678"),
             running_experience_years=5,
-            recent_race=RecentRace(distance="10k", time="47:00", date="2025-04-20"),
             current_weekly_run_km=28.0,
             current_run_days_per_week=3,
             running_priority=RunningPriority.SECONDARY,

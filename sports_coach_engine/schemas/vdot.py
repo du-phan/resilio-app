@@ -42,10 +42,17 @@ class ConditionType(str, Enum):
 
 
 class ConfidenceLevel(str, Enum):
-    """Confidence level for VDOT calculations."""
+    """Confidence level for VDOT calculations (time-based)."""
     HIGH = "high"        # Recent race (<2 weeks)
     MEDIUM = "medium"    # Race 2-6 weeks old
     LOW = "low"          # Race >6 weeks or estimated
+
+
+class RaceSource(str, Enum):
+    """Source/quality of race timing measurement."""
+    OFFICIAL_RACE = "official_race"    # Chip-timed race (highest accuracy)
+    GPS_WATCH = "gps_watch"            # GPS-verified effort (good accuracy)
+    ESTIMATED = "estimated"            # Calculated/estimated (lower accuracy)
 
 
 # ============================================================
@@ -203,6 +210,31 @@ class VDOTTableEntry(BaseModel):
     interval_max_sec_per_km: int = Field(..., description="I-pace max")
     repetition_min_sec_per_km: int = Field(..., description="R-pace min")
     repetition_max_sec_per_km: int = Field(..., description="R-pace max")
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        populate_by_name=True,
+    )
+
+
+class WorkoutPaceData(BaseModel):
+    """Single workout pace data point for VDOT estimation."""
+
+    date: str = Field(..., description="Workout date (ISO format)")
+    workout_type: str = Field(..., description="Workout type (tempo, interval, etc.)")
+    pace_sec_per_km: int = Field(..., description="Average pace in seconds per km")
+    implied_vdot: int = Field(..., description="VDOT implied by this pace")
+
+
+class VDOTEstimate(BaseModel):
+    """Current VDOT estimate from recent workout paces."""
+
+    estimated_vdot: int = Field(..., ge=30, le=85, description="Estimated current VDOT")
+    confidence: ConfidenceLevel = Field(..., description="Confidence in estimate")
+    source: str = Field(..., description="Data source (e.g., 'tempo_workouts', 'interval_workouts')")
+    supporting_data: list[WorkoutPaceData] = Field(
+        default_factory=list, description="Workout paces used for estimation"
+    )
 
     model_config = ConfigDict(
         use_enum_values=True,

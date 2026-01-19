@@ -8,6 +8,7 @@ from datetime import date
 from enum import Enum
 
 from sports_coach_engine.schemas.adaptation import AdaptationThresholds
+from sports_coach_engine.schemas.vdot import RaceSource
 
 
 # ============================================================
@@ -146,12 +147,17 @@ class StravaConnection(BaseModel):
     athlete_id: str
 
 
-class RecentRace(BaseModel):
-    """Recent race result for fitness estimation."""
+class RacePerformance(BaseModel):
+    """Single race performance with full metadata for PB tracking."""
 
-    distance: str  # 5k, 10k, half_marathon, marathon
+    distance: str  # "5k", "10k", "half_marathon", "marathon"
     time: str  # HH:MM:SS format
-    date: str  # ISO date string
+    date: str  # ISO date string (YYYY-MM-DD)
+    location: Optional[str] = None  # Race name or location
+    source: RaceSource  # official_race, gps_watch, estimated
+    vdot: float = Field(ge=30.0, le=85.0, description="Pre-calculated VDOT for this performance")
+    notes: Optional[str] = None  # Conditions, how it felt, etc.
+    is_pb: bool = False  # Marked as PB for this distance
 
 
 class AthleteProfile(BaseModel):
@@ -173,7 +179,6 @@ class AthleteProfile(BaseModel):
     running_experience_years: Optional[float] = Field(default=None, ge=0)
 
     # Recent Fitness Snapshot
-    recent_race: Optional[RecentRace] = None
     current_weekly_run_km: Optional[float] = Field(default=None, ge=0)
     current_run_days_per_week: Optional[int] = Field(default=None, ge=0, le=7)
     vdot: Optional[float] = Field(
@@ -181,6 +186,22 @@ class AthleteProfile(BaseModel):
         ge=30.0,
         le=85.0,
         description="Jack Daniels VDOT (calculated from recent_race or estimated)"
+    )
+
+    # Race History & Peak Performance Tracking
+    race_history: List[RacePerformance] = Field(
+        default_factory=list,
+        description="Complete race performance history with PB tracking"
+    )
+    peak_vdot: Optional[float] = Field(
+        default=None,
+        ge=30.0,
+        le=85.0,
+        description="Highest VDOT achieved (from race_history)"
+    )
+    peak_vdot_date: Optional[str] = Field(
+        default=None,
+        description="ISO date when peak VDOT was achieved"
     )
 
     # Workout Pattern Fields (computed from activity history)

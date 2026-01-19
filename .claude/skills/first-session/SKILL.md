@@ -175,6 +175,102 @@ sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_t
 
 ---
 
+### Step 4.5: Personal Bests (PBs) - Race History Capture
+
+**Why this matters**: PBs provide accurate fitness baseline + motivational context. Even old PBs reveal progression/regression.
+
+**CRITICAL**: Strava sync only captures last 120 days. PBs older than 4 months won't be auto-detected. **Manual entry is PRIMARY workflow.**
+
+#### Workflow: Manual Entry FIRST, Then Auto-Import
+
+**Step 1: Ask directly for PBs** (natural conversation):
+```
+Coach: "What are your personal bests for 5K, 10K, half marathon, and marathon?"
+Coach: "When did you run these? Were they official races or GPS efforts?"
+```
+
+**Step 2: Manual entry for each PB mentioned**:
+```bash
+sce race add --distance 10k --time 42:30 --date 2023-06-15 \
+  --source official_race --location "City 10K Championship"
+
+sce race add --distance 5k --time 18:45 --date 2022-05-10 \
+  --source gps_watch --notes "Parkrun effort"
+```
+
+**Race sources**:
+- `official_race`: Chip-timed race (highest accuracy)
+- `gps_watch`: GPS-verified effort (good accuracy)
+- `estimated`: Calculated/estimated (lower accuracy)
+
+**Step 3: Auto-import recent races** (after manual entry):
+```bash
+sce race import-from-strava --since 120d
+```
+
+**What this detects**:
+- Strava activities with `workout_type == 1` (race flag)
+- Keywords in title/description: "race", "5K", "10K", "HM", "PB", "PR"
+- Distance matching standard race distances (±5%)
+
+**Present detected races for confirmation**:
+```
+Coach: "Found 2 potential races in last 120 days:
+- Half Marathon 1:32:00 (Nov 2025) - not yet in race_history
+- 10K 43:00 (Dec 2025) - not yet in race_history
+
+Should I add these to your race history?"
+```
+
+**If athlete confirms**, add each race:
+```bash
+sce race add --distance half_marathon --time 1:32:00 --date 2025-11-15 \
+  --source gps_watch --location "State Half Marathon"
+```
+
+**Step 4: Verify race history**:
+```bash
+sce race list
+```
+
+**Review with athlete**:
+```
+Coach: "I have your 10K PB at 42:30 (Jun 2023, VDOT 48), 5K at 18:45 (May 2022, VDOT 51). Anything missing?"
+```
+
+**Step 5: Store key PBs in memory system** (for long-term context):
+```bash
+sce memory add --type RACE_HISTORY \
+  --content "10K PB: 42:30 (Jun 2023, City 10K, VDOT 48)" \
+  --tags "distance:10k,vdot:48,year:2023,pb:true" \
+  --confidence high
+```
+
+**Why memory + profile**: Profile stores structured race data, memory enables natural language search and long-term pattern detection.
+
+#### Benefits of Race History
+
+1. **Accurate VDOT baseline**: Use historical PBs (even if >120 days old) for training pace calculation
+2. **Goal validation**: "Your 10K PB (VDOT 48) predicts 1:25 half, is 1:20 realistic?"
+3. **Motivational context**: "Let's rebuild to your 42:30 fitness"
+4. **Progression tracking**: Compare current VDOT estimate to peak PB VDOT over time
+
+#### Common Scenarios
+
+**Q: Athlete says "I don't remember exact times"**
+- **Response**: "No problem - we can estimate. What's your rough 5K or 10K time?"
+- Use `--source estimated` and add note: `--notes "Athlete estimate, not official"`
+
+**Q: Athlete has no race history**
+- **Response**: "No PBs yet? We'll establish baseline from tempo workouts. First quality run will give us VDOT estimate."
+- Skip race entry, use `sce vdot estimate-current` after first tempo workout
+
+**Q: Old PBs from years ago**
+- **Response**: "That 42:30 10K from 2018 is still useful! Gives baseline even if fitness has changed."
+- Enter with accurate date, system tracks progression/regression from peak
+
+---
+
 ### Step 5: Goal Setting
 
 **Questions** (natural conversation):
@@ -279,6 +375,12 @@ Would you like me to create a personalized plan now?"
 
 **Use activity gaps as conversation starters**
 
+### 6. Only relying on Strava auto-import for PBs
+❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
+✅ **Good**: Ask directly for PBs first, then auto-import as supplement
+
+**Manual entry is primary** - Strava only has 120 days
+
 ---
 
 ## Success Criteria
@@ -288,9 +390,10 @@ Would you like me to create a personalized plan now?"
 2. ✅ Activities synced (120 days)
 3. ✅ Profile created (name, age, max HR, conflict policy)
 4. ✅ Injury history recorded in memory system (if applicable)
-5. ✅ Goal set (race type, date)
-6. ✅ Constraints discussed (run days, duration, other sports)
-7. ✅ Ready for plan generation
+5. ✅ Race history captured (PBs added via `sce race add`, auto-import run)
+6. ✅ Goal set (race type, date)
+7. ✅ Constraints discussed (run days, duration, other sports)
+8. ✅ Ready for plan generation
 
 **Quality checks**:
 - All data referenced from `sce profile analyze`
