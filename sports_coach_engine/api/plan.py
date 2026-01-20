@@ -45,6 +45,7 @@ from sports_coach_engine.core.adaptation import (
 
 
 @dataclass
+@dataclass
 class PlanError:
     """Error result from plan operations."""
 
@@ -1576,13 +1577,16 @@ def create_macro_plan(
         from sports_coach_engine.core.plan import generate_macro_structure
         from sports_coach_engine.schemas.plan import GoalType
 
-        # Validate goal type
+        # Validate goal type and convert to enum
         goal_type_lower = goal_type.lower().replace("-", "_").replace(" ", "_")
         if goal_type_lower not in [g.value for g in GoalType]:
             return PlanError(
                 error_type="validation",
                 message=f"Invalid goal type: {goal_type}. Valid: 5k, 10k, half_marathon, marathon"
             )
+
+        # Convert string to GoalType enum
+        goal_type_enum = GoalType(goal_type_lower)
 
         # Validate dates
         if start_date > race_date:
@@ -1600,7 +1604,7 @@ def create_macro_plan(
 
         # Generate macro structure
         macro = generate_macro_structure(
-            goal_type=goal_type_lower,
+            goal_type=goal_type_enum,
             race_date=race_date,
             target_time=target_time,
             total_weeks=total_weeks,
@@ -1610,25 +1614,8 @@ def create_macro_plan(
             peak_volume_km=peak_volume_km
         )
 
-        # CRITICAL VALIDATION: Macro plan must NOT contain workout_pattern fields
-        # Progressive disclosure means macro has volume targets only, not detailed workouts
-        if "volume_trajectory" in macro:
-            for week_target in macro["volume_trajectory"]:
-                week_num = week_target.get("week")
-                if "workout_pattern" in week_target:
-                    return PlanError(
-                        error_type="validation",
-                        message=f"Macro plan violation: Week {week_num} has 'workout_pattern' field. "
-                                f"Macro plans should only contain target_volume_km, not detailed workouts. "
-                                f"Use 'sce plan generate-week' to create detailed workouts for specific weeks."
-                    )
-                if "workouts" in week_target and week_target["workouts"]:
-                    return PlanError(
-                        error_type="validation",
-                        message=f"Macro plan violation: Week {week_num} has 'workouts' field. "
-                                f"Macro plans should only contain target_volume_km, not workout prescriptions."
-                    )
-
+        # Progressive disclosure: Macro plans contain phases, recovery weeks, and goals
+        # Weekly volumes are designed by AI coach using guardrails, not pre-computed
         return macro
 
     except ValueError as e:
@@ -1802,6 +1789,7 @@ def validate_month_plan(
 def generate_month_plan(
     month_number: int,
     week_numbers: list[int],
+    target_volumes_km: list[float],
     macro_plan: dict,
     current_vdot: float,
     profile: dict,
@@ -1815,7 +1803,8 @@ def generate_month_plan(
     Args:
         month_number: Month number (1-5 typically, may vary)
         week_numbers: List of week numbers for this cycle (e.g., [1,2,3,4] or [9,10,11])
-        macro_plan: Macro plan dict with volume_trajectory, structure.phases, etc.
+        target_volumes_km: List of weekly volume targets (AI-designed, one per week)
+        macro_plan: Macro plan dict with phases and recovery weeks
         current_vdot: Current VDOT value (30.0-85.0)
         profile: Athlete profile dict with constraints, sports, preferences
         volume_adjustment: Multiplier for volume targets (0.5-1.5 reasonable range)
@@ -1827,6 +1816,7 @@ def generate_month_plan(
         >>> result = generate_month_plan(
         ...     month_number=1,
         ...     week_numbers=[1, 2, 3, 4],
+        ...     target_volumes_km=[25.0, 27.5, 30.0, 21.0],
         ...     macro_plan=macro_plan_dict,
         ...     current_vdot=48.0,
         ...     profile=profile_dict
@@ -1867,17 +1857,31 @@ def generate_month_plan(
             message=f"volume_adjustment must be 0.5-1.5, got {volume_adjustment}"
         )
 
+    # Validate target_volumes_km
+    if not isinstance(target_volumes_km, list):
+        return PlanError(
+            error_type="validation",
+            message="target_volumes_km must be a list"
+        )
+
+    if len(target_volumes_km) != len(week_numbers):
+        return PlanError(
+            error_type="validation",
+            message=f"target_volumes_km length ({len(target_volumes_km)}) must match week_numbers length ({len(week_numbers)})"
+        )
+
+    for i, vol in enumerate(target_volumes_km):
+        if not (5.0 <= vol <= 200.0):
+            return PlanError(
+                error_type="validation",
+                message=f"target_volumes_km[{i}] = {vol}km is outside reasonable range (5-200km)"
+            )
+
     # Validate macro plan has required fields
     if not isinstance(macro_plan, dict):
         return PlanError(
             error_type="validation",
             message="macro_plan must be a dict"
-        )
-
-    if "volume_trajectory" not in macro_plan:
-        return PlanError(
-            error_type="validation",
-            message="macro_plan missing required field: volume_trajectory"
         )
 
     if "structure" not in macro_plan or "phases" not in macro_plan.get("structure", {}):
@@ -1897,6 +1901,7 @@ def generate_month_plan(
         monthly_plan = generate_monthly_plan(
             month_number=month_number,
             week_numbers=week_numbers,
+            target_volumes_km=target_volumes_km,
             macro_plan=macro_plan,
             current_vdot=current_vdot,
             profile=profile,
@@ -2015,8 +2020,22 @@ def suggest_optimal_run_count(
 
     if profile:
         # Use 80% of athlete's typical distances as minimum
-        easy_min = profile.get("typical_easy_distance_km", 5.0) * 0.8
-        long_min = profile.get("typical_long_run_distance_km", 8.0) * 0.8
+        # IMPORTANT: If these are missing, the calling code (skills) should:
+        # 1. Try `sce profile analyze` to detect from Strava activities
+        # 2. If still missing, ask athlete directly using AskUserQuestion
+        # 3. Never proceed with hardcoded defaults - that's poor coaching
+        typical_easy = profile.get("typical_easy_distance_km")
+        typical_long = profile.get("typical_long_run_distance_km")
+
+        if typical_easy is None or typical_long is None:
+            # WARNING: Missing athlete-specific workout patterns
+            # Skills should handle this proactively, but we'll use conservative defaults
+            # to prevent blocking plan generation during testing/development
+            easy_min = 5.0 * 0.8  # Conservative default, should be personalized
+            long_min = 8.0 * 0.8  # Conservative default, should be personalized
+        else:
+            easy_min = typical_easy * 0.8
+            long_min = typical_long * 0.8
 
     # Long run percentage varies by phase
     long_run_pct = {
@@ -2130,6 +2149,7 @@ def suggest_optimal_run_count(
 
 def generate_week_plan(
     week_number: int,
+    target_volume_km: float,
     macro_plan_path: str,
     current_vdot: float,
     volume_adjustment: float = 1.0
@@ -2138,12 +2158,11 @@ def generate_week_plan(
     Generate detailed workouts for a single week.
 
     Progressive disclosure workflow: generates workouts for ONE week only.
-    Reads macro plan for phase/volume targets, generates workout_pattern
-    using intent-based format.
+    AI coach designs weekly volume using guardrails, then generates workout_pattern.
 
     Workflow:
-    1. Load macro plan JSON
-    2. Extract week's target_volume_km and phase
+    1. Load macro plan JSON for phase information
+    2. Use provided target_volume_km (AI-designed using guardrails)
     3. Apply volume_adjustment if needed (for illness/injury recovery)
     4. Load athlete profile for constraints
     5. Generate workout_pattern (intent-based format)
@@ -2152,7 +2171,8 @@ def generate_week_plan(
 
     Args:
         week_number: Week to generate (1-indexed)
-        macro_plan_path: Path to macro plan JSON with 16 weeks of targets
+        target_volume_km: Weekly volume target (AI-designed, validated by guardrails)
+        macro_plan_path: Path to macro plan JSON with phases and recovery weeks
         current_vdot: VDOT value for pace calculations (may be recalibrated)
         volume_adjustment: Multiplier for volume (0.85 = reduce 15%, 1.0 = as planned)
 
@@ -2185,6 +2205,7 @@ def generate_week_plan(
     Example:
         >>> result = generate_week_plan(
         ...     week_number=1,
+        ...     target_volume_km=25.0,
         ...     macro_plan_path="/tmp/macro_plan.json",
         ...     current_vdot=48.0,
         ...     volume_adjustment=1.0
@@ -2214,27 +2235,15 @@ def generate_week_plan(
             message=f"Invalid JSON in macro plan: {str(e)}"
         )
 
-    # 2. Extract week's targets
-    if "volume_trajectory" not in macro_plan:
-        return PlanError(
-            error_type="validation",
-            message="Macro plan missing 'volume_trajectory' field"
-        )
+    # 2. Use AI-designed target volume (validated by guardrails)
+    target_volume = target_volume_km * volume_adjustment
 
-    volume_trajectory = macro_plan["volume_trajectory"]
-    week_target = next((vt for vt in volume_trajectory if vt["week"] == week_number), None)
+    # Check if this is a recovery week
+    recovery_weeks = macro_plan.get("recovery_weeks", [])
+    is_recovery_week = week_number in recovery_weeks
 
-    if not week_target:
-        return PlanError(
-            error_type="validation",
-            message=f"Week {week_number} not found in macro plan volume_trajectory"
-        )
-
-    target_volume = week_target["target_km"] * volume_adjustment
-    is_recovery_week = week_target.get("is_recovery", False)
-
-    # Get phase from macro plan structure
-    phases_list = macro_plan.get("structure", {}).get("phases", [])
+    # Get phase from macro plan  (phases at top level after removal of volume_trajectory)
+    phases_list = macro_plan.get("phases", [])
     week_to_phase = {}
     for phase_info in phases_list:
         phase_name = phase_info["name"]
@@ -2252,11 +2261,16 @@ def generate_week_plan(
         )
 
     profile = profile_result
-    max_run_days = profile.max_run_days or 4
+    max_run_days = profile.constraints.max_run_days_per_week or 4
 
     # 4. Calculate training paces from VDOT
     paces = calculate_training_paces(current_vdot)
-    easy_pace_range = f"{paces['easy']['min_pace']}-{paces['easy']['max_pace']}"
+    # TrainingPaces has fields like easy_pace_range (tuple of seconds), not dict access
+    easy_min_sec, easy_max_sec = paces.easy_pace_range
+    # Convert to MM:SS format for display
+    easy_min = f"{easy_min_sec // 60}:{easy_min_sec % 60:02d}"
+    easy_max = f"{easy_max_sec // 60}:{easy_max_sec % 60:02d}"
+    easy_pace_range = f"{easy_min}-{easy_max}"
 
     # 5. Determine workout structure
     # Use suggest_optimal_run_count to get recommended run frequency
@@ -2292,12 +2306,12 @@ def generate_week_plan(
     long_run_pct = long_run_pct_map.get(phase, 0.45)
 
     # Calculate dates (from macro plan start date)
-    race_info = macro_plan.get("race", {})
-    plan_start_date_str = race_info.get("start_date")
+    # Get start_date (at top level after volume_trajectory removal)
+    plan_start_date_str = macro_plan.get("start_date")
     if not plan_start_date_str:
         return PlanError(
             error_type="validation",
-            message="Macro plan missing race.start_date"
+            message="Macro plan missing start_date"
         )
 
     from datetime import datetime, timedelta

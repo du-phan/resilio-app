@@ -24,6 +24,7 @@ from sports_coach_engine.api.plan import (
     generate_week_plan,
     validate_week_plan,
     revert_week_plan,
+    PlanError,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json
@@ -979,10 +980,16 @@ def create_macro_command(
         peak_volume_km=peak_volume_km
     )
 
+    # Construct success message only if result is successful
+    if isinstance(result, dict):
+        success_message = f"Macro plan created: {total_weeks} weeks, {len(result.get('phases', []))} phases"
+    else:
+        success_message = "Macro plan creation failed"
+
     # Convert to envelope
     envelope = api_result_to_envelope(
         result,
-        success_message=f"Macro plan created: {total_weeks} weeks, {len(result.get('phases', []))} phases"
+        success_message=success_message
     )
 
     # Output JSON
@@ -1168,6 +1175,7 @@ def generate_month_command(
     ctx: typer.Context,
     month_number: int = typer.Option(..., "--month-number", help="Month number (1-5)"),
     week_numbers: str = typer.Option(..., "--week-numbers", help="Comma-separated week numbers (e.g., '1,2,3,4' or '9,10,11')"),
+    target_volumes_km: str = typer.Option(..., "--target-volumes-km", help="Comma-separated volume targets in km (e.g., '25,27.5,30,21')"),
     from_macro: str = typer.Option(..., "--from-macro", help="Path to macro plan JSON file"),
     current_vdot: float = typer.Option(..., "--current-vdot", help="Current VDOT (30-85)"),
     profile_path: str = typer.Option(..., "--profile", help="Path to athlete profile file"),
@@ -1176,17 +1184,22 @@ def generate_month_command(
     """
     Generate detailed monthly plan (2-6 weeks) with workout prescriptions.
 
+    AI coach designs weekly volumes using guardrails, then generates detailed workouts.
+
     Examples:
-        # Generate first month (4 weeks)
+        # Generate first month (4 weeks) with AI-designed volumes
         sce plan generate-month --month-number 1 --week-numbers "1,2,3,4" \\
+          --target-volumes-km "25,27.5,30,21" \\
           --from-macro /tmp/macro.json --current-vdot 48 --profile data/athlete/profile.yaml
 
         # Generate 3-week cycle for 11-week plan
         sce plan generate-month --month-number 3 --week-numbers "9,10,11" \\
+          --target-volumes-km "48,50,35" \\
           --from-macro /tmp/macro.json --current-vdot 49 --profile data/athlete/profile.yaml
 
         # Generate with volume reduction (10% less)
         sce plan generate-month --month-number 2 --week-numbers "5,6,7,8" \\
+          --target-volumes-km "32,35,38,28" \\
           --from-macro /tmp/macro.json --current-vdot 48.5 --profile data/athlete/profile.yaml \\
           --volume-adjustment 0.9
     """
@@ -1208,6 +1221,18 @@ def generate_month_command(
         output_json(envelope)
         raise typer.Exit(code=5)
 
+    # Parse target volumes
+    try:
+        target_vols = [float(v.strip()) for v in target_volumes_km.split(",")]
+    except ValueError:
+        envelope = {
+            "ok": False,
+            "error": "validation",
+            "message": f"Invalid target-volumes-km format: '{target_volumes_km}'. Expected comma-separated numbers."
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
     # Validate week_numbers
     if not week_nums:
         envelope = {
@@ -1223,6 +1248,16 @@ def generate_month_command(
             "ok": False,
             "error": "validation",
             "message": f"Cycle must be 2-6 weeks, got {len(week_nums)} weeks: {week_nums}"
+        }
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Validate target_volumes_km
+    if len(target_vols) != len(week_nums):
+        envelope = {
+            "ok": False,
+            "error": "validation",
+            "message": f"target-volumes-km length ({len(target_vols)}) must match week-numbers length ({len(week_nums)})"
         }
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1280,6 +1315,7 @@ def generate_month_command(
     result = generate_month_plan(
         month_number=month_number,
         week_numbers=week_nums,
+        target_volumes_km=target_vols,
         macro_plan=macro_plan,
         current_vdot=current_vdot,
         profile=profile,
@@ -1303,6 +1339,7 @@ def generate_month_command(
 def plan_generate_week_command(
     ctx: typer.Context,
     week_number: int = typer.Option(..., "--week-number", help="Week number to generate (1-indexed)"),
+    target_volume_km: float = typer.Option(..., "--target-volume-km", help="Weekly volume target (AI-designed, km)"),
     from_macro: str = typer.Option(..., "--from-macro", help="Path to macro plan JSON file"),
     current_vdot: float = typer.Option(..., "--current-vdot", help="Current VDOT for pace calculations"),
     volume_adjustment: float = typer.Option(1.0, "--volume-adjustment", help="Volume multiplier (e.g., 0.85 = 85%)"),
@@ -1310,12 +1347,13 @@ def plan_generate_week_command(
 ) -> None:
     """Generate detailed workouts for a single week.
 
-    Progressive disclosure workflow: generates workouts for ONE week only based on
-    macro plan targets. Future weeks remain as mileage targets until generated.
+    Progressive disclosure workflow: generates workouts for ONE week only.
+    AI coach designs weekly volume using guardrails, then generates detailed workouts.
 
     Args:
         week_number: Week to generate (e.g., 1, 2, 3)
-        from_macro: Path to macro plan with phase/volume targets for all 16 weeks
+        target_volume_km: Weekly volume target (AI-designed using guardrails)
+        from_macro: Path to macro plan with phases and recovery weeks
         current_vdot: VDOT value for training pace calculations
         volume_adjustment: Optional multiplier to reduce/increase volume (default 1.0)
 
@@ -1324,8 +1362,8 @@ def plan_generate_week_command(
         System will calculate exact distances/paces/durations.
 
     Examples:
-        sce plan generate-week --week-number 1 --from-macro /tmp/macro_plan.json --current-vdot 48
-        sce plan generate-week --week-number 2 --from-macro macro.json --current-vdot 48 --volume-adjustment 0.85
+        sce plan generate-week --week-number 1 --target-volume-km 25.0 --from-macro /tmp/macro_plan.json --current-vdot 48
+        sce plan generate-week --week-number 2 --target-volume-km 27.5 --from-macro macro.json --current-vdot 48 --volume-adjustment 0.85
     """
     from sports_coach_engine.api.plan import generate_week_plan
 
@@ -1343,6 +1381,7 @@ def plan_generate_week_command(
     # Call API
     result = generate_week_plan(
         week_number=week_number,
+        target_volume_km=target_volume_km,
         macro_plan_path=from_macro,
         current_vdot=current_vdot,
         volume_adjustment=volume_adjustment

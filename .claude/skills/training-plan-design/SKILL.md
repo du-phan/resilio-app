@@ -11,13 +11,13 @@ agent: general-purpose
 ## Overview
 
 This skill designs evidence-based training plans using **progressive disclosure**:
-- **Macro plan** (16-week structure): Phase boundaries, volume trajectory, CTL projections
-- **Weekly plan** (1-week detail): Detailed workouts for NEXT WEEK ONLY
+- **Macro plan** (16-week structure): Phase boundaries, recovery weeks, starting/peak volume targets
+- **Weekly plan** (1-week detail): AI-designed volume + detailed workouts for NEXT WEEK ONLY
 - **Adaptive planning**: Regenerate weekly based on actual response (via weekly-analysis skill)
 
-Training methodology: Pfitzinger periodization, Daniels VDOT paces, 80/20 intensity, CTL-based volume progression, multi-sport integration, guardrails validation.
+Training methodology: Pfitzinger periodization, Daniels VDOT paces, 80/20 intensity, AI-driven volume progression with guardrails validation, multi-sport integration.
 
-**IMPORTANT**: All distances in kilometers (km), all paces in min/km. System is fully metric. Use CLI for ALL calculations (dates, volumes, paces).
+**IMPORTANT**: All distances in kilometers (km), all paces in min/km. System is fully metric. Use CLI for ALL calculations (dates, volumes, paces). AI coach designs weekly volumes using guardrails - NO algorithmic interpolation.
 
 ---
 
@@ -42,8 +42,11 @@ sce plan suggest-run-count --volume $KM --max-runs $MAX --phase $PHASE
 sce plan create-macro --goal-type $GOAL --race-date $DATE --start-date $START \
   --starting-volume $START_KM --peak-volume $PEAK_KM > /tmp/macro_plan.json
 
-sce plan generate-week --week-number 1 --from-macro /tmp/macro_plan.json \
-  --current-vdot $VDOT > /tmp/weekly_plan_w1.json
+# Week 1 volume design (AI decision, usually = starting_volume)
+WEEK1_VOLUME=$STARTING_VOLUME
+
+sce plan generate-week --week-number 1 --target-volume-km $WEEK1_VOLUME \
+  --from-macro /tmp/macro_plan.json --current-vdot $VDOT > /tmp/weekly_plan_w1.json
 
 # Validation & Save (AFTER approval)
 sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
@@ -56,7 +59,7 @@ sce plan populate --from-json /tmp/weekly_plan_w1.json
 
 ```
 Task Progress:
-- [ ] Step 1: Context (dates, profile, status, memories)
+- [ ] Step 1: Context (dates, profile, status, memories, WORKOUT PATTERNS)
 - [ ] Step 2: Safe volumes (guardrails, pre-flight checks)
 - [ ] Step 3: Generate macro (16 weeks, NO WORKOUTS)
 - [ ] Step 4: Determine VDOT (calculate/estimate/conservative)
@@ -64,6 +67,11 @@ Task Progress:
 - [ ] Step 6: Validate (guardrails check)
 - [ ] Step 7: Create review markdown (macro summary + week 1 detail)
 - [ ] Step 8: Present & save (ONLY after approval)
+
+CRITICAL: Step 1 must detect/ask for typical_easy_distance_km and typical_long_run_distance_km
+          - Try `sce profile analyze` first (auto-detect from Strava)
+          - If missing, ask athlete directly (AskUserQuestion)
+          - NEVER proceed with hardcoded defaults - that's poor coaching
 ```
 
 ---
@@ -85,7 +93,30 @@ sce memory list --type PREFERENCE
 
 **Extract**: Current CTL, goal (race type/date/time), constraints (max_run_days, max_session_minutes, multi-sport commitments), injury history, training preferences.
 
-**Success**: You have all context for planning. Proceed to Step 2.
+**CRITICAL: Check for workout patterns**:
+```bash
+TYPICAL_EASY=$(sce profile get | jq -r '.data.typical_easy_distance_km')
+TYPICAL_LONG=$(sce profile get | jq -r '.data.typical_long_run_distance_km')
+
+if [ "$TYPICAL_EASY" == "null" ] || [ "$TYPICAL_LONG" == "null" ]; then
+    # Missing athlete-specific workout patterns - try to detect from Strava
+    echo "Detecting your typical workout distances from Strava history..."
+    sce profile analyze
+
+    # Recheck
+    TYPICAL_EASY=$(sce profile get | jq -r '.data.typical_easy_distance_km')
+    TYPICAL_LONG=$(sce profile get | jq -r '.data.typical_long_run_distance_km')
+
+    if [ "$TYPICAL_EASY" == "null" ] || [ "$TYPICAL_LONG" == "null" ]; then
+        # Still missing - ask athlete directly (use AskUserQuestion)
+        echo "⚠️ Not enough activity history to detect typical workout distances"
+        # Ask athlete: "What's your typical easy run distance?" and "typical long run?"
+        # Store answers in profile before proceeding
+    fi
+fi
+```
+
+**Success**: You have all context for planning, including athlete-specific workout patterns. Proceed to Step 2.
 
 ---
 
@@ -111,7 +142,7 @@ sce plan suggest-run-count --volume $STARTING_VOLUME --max-runs $MAX_RUNS --phas
 
 ---
 
-### Step 3: Generate Macro Plan (16 Weeks, NO WORKOUTS)
+### Step 3: Generate Macro Plan (16 Weeks, NO WORKOUTS OR VOLUMES)
 
 **Run**:
 ```bash
@@ -127,12 +158,12 @@ sce plan create-macro \
 **Verify**:
 ```bash
 test -f /tmp/macro_plan.json && echo "✓ Macro plan created"
-jq -r '.phase_boundaries, .volume_trajectory' /tmp/macro_plan.json
+jq -r '.phases, .recovery_weeks, .starting_volume_km, .peak_volume_km' /tmp/macro_plan.json
 ```
 
-⚠️ **CRITICAL**: Macro plan has `target_volume_km` for all 16 weeks, but NO `workout_pattern` or `workouts` fields. These will be generated weekly.
+⚠️ **CRITICAL**: Macro plan contains phase boundaries, recovery weeks, and starting/peak volume TARGETS only. Weekly volumes will be designed by AI using guardrails. NO `volume_trajectory` field, NO `workout_pattern` fields.
 
-**Success**: File exists with phase_boundaries and volume_trajectory only. Proceed to Step 4.
+**Success**: File exists with phases, recovery_weeks, starting_volume_km, peak_volume_km. Proceed to Step 4.
 
 **See [periodization.md](references/periodization.md) for phase allocation.**
 
@@ -168,22 +199,35 @@ sce vdot paces --vdot $BASELINE_VDOT
 
 ---
 
-### Step 5: Generate Week 1 ONLY
+### Step 5: Design Week 1 Volume & Generate Workouts
 
 **FORMAT REQUIREMENT**: Use **intent-based format** (see [json_workflow.md](references/json_workflow.md)).
 
-**Run**:
+**Design Week 1 Volume** (AI decision):
+```bash
+# Usually Week 1 = starting_volume (safe ramp-up)
+WEEK1_VOLUME=$STARTING_VOLUME
+
+# Optional: Adjust if athlete context requires it
+# (e.g., coming off injury: WEEK1_VOLUME=$(echo "$STARTING_VOLUME * 0.85" | bc))
+
+# Optional: Validate progression (usually not needed for Week 1)
+sce guardrails safe-volume --ctl $CTL --goal-type $GOAL
+```
+
+**Generate Week 1**:
 ```bash
 sce plan generate-week \
   --week-number 1 \
+  --target-volume-km $WEEK1_VOLUME \
   --from-macro /tmp/macro_plan.json \
   --current-vdot $BASELINE_VDOT \
   > /tmp/weekly_plan_w1.json
 ```
 
-⚠️ **CRITICAL BOUNDARY**: Generate week 1 ONLY. Weeks 2-16 remain as mileage targets in macro plan. They will be generated after week 1 completes (via weekly-analysis skill).
+⚠️ **CRITICAL BOUNDARY**: Generate week 1 ONLY. Weeks 2-16 will be designed weekly based on actual training response (via weekly-planning skill). Each week's volume is an AI decision using guardrails, not pre-computed.
 
-**Success**: Week 1 JSON created with complete `workout_pattern` using intent-based format. Proceed to Step 6.
+**Success**: Week 1 JSON created with AI-designed volume and complete `workout_pattern` using intent-based format. Proceed to Step 6.
 
 **See [workout_generation.md](references/workout_generation.md) for details.**
 
@@ -216,10 +260,10 @@ cp templates/plan_presentation.md /tmp/training_plan_review_$(date +%Y_%m_%d).md
 ```
 
 **Template structure**:
-- **Macro Plan Overview**: 16 weeks, phases, volume trajectory (mileage targets ONLY)
+- **Macro Plan Overview**: 16 weeks, phases, recovery weeks, volume targets (starting → peak)
 - **Week 1 Plan (Detailed)**: Daily workouts with paces, distances, durations
-- **Upcoming Weeks Preview**: Weeks 2-4 mileage targets from macro (NO workout detail)
-- **Note**: "Weeks 2-16 will be generated weekly based on your actual training response"
+- **Upcoming Weeks Preview**: Phase progression overview (base → build → peak → taper)
+- **Note**: "Weeks 2-16 volumes will be designed weekly by AI coach based on your actual training response, validated by guardrails"
 
 **Verify dates**:
 ```bash

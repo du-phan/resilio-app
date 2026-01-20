@@ -305,13 +305,8 @@ sce plan create-macro \
         }
       ]
     },
-    "volume_trajectory": [
-      {"week": 1, "target_km": 25.0},
-      {"week": 4, "target_km": 32.5},
-      {"week": 7, "target_km": 42.0},
-      {"week": 12, "target_km": 55.0},
-      {"week": 16, "target_km": 18.0}
-    ],
+    "starting_volume_km": 25.0,
+    "peak_volume_km": 55.0,
     "ctl_projections": [
       {"week": 0, "ctl": 44.0},
       {"week": 7, "ctl": 52.0},
@@ -326,17 +321,19 @@ sce plan create-macro \
 **What it generates:**
 
 - **Periodization phases** - Divides plan into base/build/peak/taper with appropriate durations
-- **Volume trajectory** - Weekly volume targets using 10% rule, with recovery weeks at 70%
+- **Starting/peak volume targets** - Reference values for AI coach to design weekly volumes
 - **CTL projections** - Expected CTL at key milestones (+0.75/week in base/build)
 - **Recovery week schedule** - Every 4th week for adaptation
 - **Phase focus** - Training emphasis for each phase
 
+**Note**: Weekly volumes are NOT pre-computed. AI coach designs each week's volume using guardrails based on athlete's actual training response.
+
 **When to use:**
 
-- First step of progressive disclosure planning (generate big picture before monthly details)
+- First step of progressive disclosure planning (generate big picture before weekly details)
 - Creating structural roadmap that athlete can see and approve
-- Setting volume targets that guide subsequent monthly plan generation
-- Establishing CTL progression goals for the training cycle
+- Providing starting/peak volume goals as reference for AI coach
+- Establishing CTL progression goals and phase boundaries for the training cycle
 
 ---
 
@@ -349,10 +346,11 @@ Generate detailed monthly plan (2-6 weeks) with workout prescriptions using macr
 **Usage:**
 
 ```bash
-# Generate first month (4 weeks)
+# Generate first month (4 weeks) with AI-designed volumes
 sce plan generate-month \
   --month-number 1 \
   --week-numbers "1,2,3,4" \
+  --target-volumes-km "25,27.5,30,21" \
   --from-macro /tmp/macro_plan.json \
   --current-vdot 48.0 \
   --profile data/athlete/profile.yaml
@@ -361,28 +359,31 @@ sce plan generate-month \
 sce plan generate-month \
   --month-number 3 \
   --week-numbers "9,10,11" \
+  --target-volumes-km "48,50,35" \
   --from-macro /tmp/macro_plan.json \
   --current-vdot 49.0 \
   --profile data/athlete/profile.yaml
 
-# Generate with volume reduction (10% less due to injury signals)
+# Generate with AI-designed volumes + additional adjustment (illness recovery)
 sce plan generate-month \
   --month-number 2 \
   --week-numbers "5,6,7,8" \
+  --target-volumes-km "32,35,38,28" \
   --from-macro /tmp/macro_plan.json \
   --current-vdot 48.5 \
   --profile data/athlete/profile.yaml \
-  --volume-adjustment 0.9
+  --volume-adjustment 0.85
 ```
 
 **Parameters:**
 
 - `--month-number` (required) - Month number (1-5 typically, may vary)
 - `--week-numbers` (required) - Comma-separated week numbers (e.g., "1,2,3,4" or "9,10,11")
+- `--target-volumes-km` (required) - Comma-separated volume targets in km (AI-designed, one per week)
 - `--from-macro` (required) - Path to macro plan JSON file
 - `--current-vdot` (required) - Current VDOT (30-85, may be recalibrated from previous month)
 - `--profile` (required) - Path to athlete profile file (YAML or JSON)
-- `--volume-adjustment` (optional) - Volume multiplier (0.5-1.5, default 1.0)
+- `--volume-adjustment` (optional) - Additional volume multiplier for fine-tuning (0.5-1.5, default 1.0)
 
 **Returns:**
 
@@ -740,42 +741,46 @@ sce plan validate-month \
 
 ## sce plan generate-week
 
-Generate detailed workouts for a single week using macro plan targets and progressive disclosure workflow.
+Generate detailed workouts for a single week using AI-designed volume and progressive disclosure workflow.
 
-> **Primary Workflow**: This is the **recommended command** for weekly planning. Use this after weekly-analysis to generate the next week's workouts based on actual training response.
+> **Primary Workflow**: This is the **recommended command** for weekly planning. Use this after weekly-analysis to generate the next week's workouts based on actual training response. AI coach designs weekly volume using guardrails, not pre-computed trajectory.
 
 **Usage:**
 
 ```bash
-# Generate week 1 (initial plan creation)
+# Generate week 1 (initial plan creation, usually = starting_volume)
 sce plan generate-week \
   --week-number 1 \
+  --target-volume-km 25.0 \
   --from-macro /tmp/macro_plan.json \
   --current-vdot 48.0 \
   > /tmp/weekly_plan_w1.json
 
-# Generate week 2 (after completing week 1)
+# Generate week 2 (AI-designed volume based on week 1 response)
 sce plan generate-week \
   --week-number 2 \
+  --target-volume-km 27.5 \
   --from-macro data/plans/current_plan_macro.json \
   --current-vdot 48.5 \
   > /tmp/weekly_plan_w2.json
 
-# Generate with volume reduction (10% less due to fatigue)
+# Generate with AI-designed volume + additional adjustment (illness recovery)
 sce plan generate-week \
   --week-number 3 \
+  --target-volume-km 30.0 \
   --from-macro data/plans/current_plan_macro.json \
   --current-vdot 48.5 \
-  --volume-adjustment 0.9 \
+  --volume-adjustment 0.85 \
   > /tmp/weekly_plan_w3.json
 ```
 
 **Parameters:**
 
 - `--week-number` (required) - Week number (1-16 typically)
+- `--target-volume-km` (required) - Weekly volume target (AI-designed using guardrails)
 - `--from-macro` (required) - Path to macro plan JSON file
 - `--current-vdot` (required) - Current VDOT (30-85, may be recalibrated based on performance)
-- `--volume-adjustment` (optional) - Volume multiplier (0.5-1.5, default 1.0)
+- `--volume-adjustment` (optional) - Additional volume multiplier for fine-tuning (0.5-1.5, default 1.0)
 - `--output` (optional) - Output file path (default: stdout)
 
 **Returns:**

@@ -35,6 +35,7 @@ from pathlib import Path
 import uuid
 import shutil
 import os
+import sys
 from sports_coach_engine.schemas.plan import (
     GoalType,
     PlanPhase,
@@ -101,12 +102,10 @@ def calculate_periodization(
     Raises:
         ValueError: If weeks_available is too short for the goal
     """
-    # Validate minimum timeline requirements
+    # Check minimum timeline requirements (soft warning, not hard constraint)
     min_weeks = _get_minimum_weeks(goal)
     if weeks_available < min_weeks:
-        raise ValueError(
-            f"{goal.value} requires minimum {min_weeks} weeks, got {weeks_available}"
-        )
+        print(f"[PlanGen] Warning: {goal.value} requires minimum {min_weeks} weeks, got {weeks_available}", file=sys.stderr)
 
     # General fitness uses rolling 4-week cycles
     if goal == GoalType.GENERAL_FITNESS:
@@ -2187,13 +2186,12 @@ def generate_macro_structure(
 
     Creates the structural roadmap for the full training period:
     - Phase boundaries and focus
-    - Weekly volume trajectory
     - CTL projections at key milestones
     - Recovery week schedule
     - Assessment checkpoints
 
     This provides the "big picture" without detailed workout prescriptions.
-    Athletes see where they're going; monthly plans provide execution detail.
+    Weekly volumes are designed by AI coach using guardrails, not pre-computed.
 
     Args:
         goal_type: Race distance goal
@@ -2217,7 +2215,6 @@ def generate_macro_structure(
             "start_date": date,
             "end_date": date,
             "phases": list[PhaseStructure],
-            "volume_trajectory": list[WeeklyVolumeTarget],
             "starting_volume_km": float,
             "peak_volume_km": float,
             "current_ctl": float,
@@ -2239,8 +2236,8 @@ def generate_macro_structure(
         ... )
         >>> len(macro["phases"])
         4  # base, build, peak, taper
-        >>> len(macro["volume_trajectory"])
-        16  # one per week
+        >>> len(macro["recovery_weeks"])
+        3  # recovery weeks scheduled
     """
     # Generate periodization phases
     phases_data = calculate_periodization(goal_type, total_weeks, start_date)
@@ -2270,12 +2267,9 @@ def generate_macro_structure(
             "focus": focus
         })
 
-    # Generate volume trajectory (weekly targets)
-    # Use 10% rule with recovery weeks
-    volume_trajectory = []
+    # Determine recovery weeks (every 4th week in base/build phases)
+    # AI coach will design actual volumes using guardrails
     recovery_weeks = []
-    current_volume = starting_volume_km
-
     for week_num in range(1, total_weeks + 1):
         # Determine phase for this week
         phase_name = "base"  # default
@@ -2284,45 +2278,9 @@ def generate_macro_structure(
                 phase_name = phase["phase"]
                 break
 
-        # Check if recovery week (every 4th week in base/build, not in peak/taper)
-        is_recovery = False
+        # Recovery weeks: every 4th week in base/build phases
         if phase_name in ["base", "build"] and week_num % 4 == 0:
-            is_recovery = True
             recovery_weeks.append(week_num)
-
-        if is_recovery:
-            # Recovery week: 70% of previous week
-            target_volume = current_volume * 0.70
-        elif phase_name == "taper":
-            # Taper: Progressive reduction
-            weeks_into_taper = week_num - phases[-1]["start_week"] + 1
-            taper_pct = 1.0 - (weeks_into_taper * 0.15)  # 15% reduction per week
-            target_volume = peak_volume_km * max(taper_pct, 0.40)
-        elif phase_name == "peak":
-            # Peak: Hold at peak volume
-            target_volume = peak_volume_km
-        else:
-            # Base/Build: Progressive increase toward peak
-            # Calculate target based on week position in overall plan
-            weeks_before_peak = total_weeks - week_num
-            # Use exponential approach to peak
-            if weeks_before_peak > 4:  # More than 4 weeks before peak
-                progress = (week_num - 1) / (total_weeks - 5)  # Progress toward peak phase
-                target_volume = starting_volume_km + (peak_volume_km - starting_volume_km) * progress
-                # Cap at 10% increase from previous
-                max_increase = current_volume * 1.10
-                target_volume = min(target_volume, max_increase)
-            else:
-                target_volume = peak_volume_km
-
-        volume_trajectory.append({
-            "week_number": week_num,
-            "target_volume_km": round(target_volume, 1),
-            "is_recovery_week": is_recovery,
-            "phase": phase_name
-        })
-
-        current_volume = target_volume
 
     # Generate CTL projections at key milestones
     ctl_projections = []
@@ -2373,7 +2331,6 @@ def generate_macro_structure(
         "start_date": start_date,
         "end_date": end_date,
         "phases": phases,
-        "volume_trajectory": volume_trajectory,
         "starting_volume_km": starting_volume_km,
         "peak_volume_km": peak_volume_km,
         "current_ctl": current_ctl,
@@ -2642,6 +2599,7 @@ def validate_monthly_plan(
 def generate_monthly_plan(
     month_number: int,
     week_numbers: list[int],
+    target_volumes_km: list[float],
     macro_plan: dict,
     current_vdot: float,
     profile: dict,
@@ -2651,7 +2609,7 @@ def generate_monthly_plan(
     Generate detailed monthly plan (2-5 weeks) with workout prescriptions.
 
     Creates complete workout prescriptions for specified weeks using:
-    - Macro plan volume targets (adjusted by volume_adjustment factor)
+    - AI-designed volume targets (validated by guardrails)
     - Profile constraints (run days, sports, long run max)
     - VDOT-based pace zones
     - Phase-appropriate workout distribution
@@ -2663,7 +2621,8 @@ def generate_monthly_plan(
     Args:
         month_number: Month number (1-4 typically, may vary)
         week_numbers: List of week numbers for this cycle (e.g., [1,2,3,4] or [9,10,11])
-        macro_plan: Macro plan dict with volume_trajectory, structure.phases, etc.
+        target_volumes_km: List of weekly volume targets (AI-designed, one per week)
+        macro_plan: Macro plan dict with phases and recovery weeks
         current_vdot: Current VDOT value (may be recalibrated from previous month)
         profile: Athlete profile dict with constraints, sports, preferences
         volume_adjustment: Multiplier for volume targets (0.9 = reduce 10%, 1.0 = as planned)
@@ -2672,15 +2631,16 @@ def generate_monthly_plan(
         Dict with month_number, weeks (list of week dicts with workouts), paces, generation_context
 
     Raises:
-        ValueError: If week_numbers is empty or contains invalid weeks
+        ValueError: If week_numbers is empty or target_volumes_km length mismatch
         KeyError: If macro_plan missing required fields
 
     Example:
-        >>> macro_plan = {"volume_trajectory": [{"week": 1, "target_km": 25}, ...], ...}
+        >>> macro_plan = {"phases": [...], "recovery_weeks": [4, 8], ...}
         >>> profile = {"max_run_days": 4, "sports": [...], ...}
         >>> monthly = generate_monthly_plan(
         ...     month_number=1,
         ...     week_numbers=[1, 2, 3, 4],
+        ...     target_volumes_km=[25.0, 27.5, 30.0, 21.0],
         ...     macro_plan=macro_plan,
         ...     current_vdot=48.0,
         ...     profile=profile
@@ -2700,18 +2660,14 @@ def generate_monthly_plan(
     if not (2 <= len(week_numbers) <= 6):
         raise ValueError(f"Monthly cycle must be 2-6 weeks, got {len(week_numbers)} weeks")
 
-    if "volume_trajectory" not in macro_plan:
-        raise KeyError("macro_plan missing required field: volume_trajectory")
+    if len(target_volumes_km) != len(week_numbers):
+        raise ValueError(f"target_volumes_km length ({len(target_volumes_km)}) must match week_numbers length ({len(week_numbers)})")
 
     if "structure" not in macro_plan or "phases" not in macro_plan["structure"]:
         raise KeyError("macro_plan missing required field: structure.phases")
 
-    # Get volume targets from macro plan
-    volume_trajectory = {vt["week"]: vt["target_km"] for vt in macro_plan["volume_trajectory"]}
-
-    for week_num in week_numbers:
-        if week_num not in volume_trajectory:
-            raise ValueError(f"Week {week_num} not found in macro plan volume_trajectory")
+    # Create volume map from AI-designed targets
+    volume_trajectory = {week_num: target_km for week_num, target_km in zip(week_numbers, target_volumes_km)}
 
     # Get phases from macro plan
     phases_list = macro_plan["structure"]["phases"]

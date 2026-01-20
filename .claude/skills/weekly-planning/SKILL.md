@@ -4,11 +4,12 @@
 
 Generate detailed workouts for the next week of training using **progressive disclosure** workflow. Each week is tailored based on actual training response, enabling true adaptive planning.
 
-**Core Philosophy**: Plan 1 week at a time (not 4 weeks in advance) to maximize adaptability and minimize LLM errors.
+**Core Philosophy**: Plan 1 week at a time (not 4 weeks in advance) to maximize adaptability and minimize LLM errors. AI coach designs weekly volumes using guardrails - NO algorithmic interpolation.
 
 **This skill handles**:
-- Checking macro plan for next week's targets
-- Assessing volume adjustments (illness, fatigue, ACWR)
+- Loading macro plan context (phases, recovery weeks, volume goals)
+- Analyzing previous week's training response
+- **Designing next week's volume** (AI decision using guardrails)
 - VDOT recalibration (race results, breakthrough workouts)
 - Generating detailed workouts (intent-based format)
 - Validation (volume, minimum durations, guardrails)
@@ -34,60 +35,153 @@ Generate detailed workouts for the next week of training using **progressive dis
 ## Prerequisites
 
 Before activating this skill, ensure:
-- ✅ **Macro plan exists** - 16-week structure with phase/volume targets (`data/plans/current_plan_macro.json`)
+- ✅ **Macro plan exists** - 16-week structure with phases, recovery weeks, volume goals (`data/plans/current_plan_macro.json`)
 - ✅ **Current week completed** (if generating week N+1) - Athlete has finished week N
-- ✅ **Weekly analysis done** (optional but recommended) - Informs volume adjustment decisions
+- ✅ **Weekly analysis done** (optional but recommended) - Informs volume design decisions
 - ✅ **Profile constraints current** - Run days, available days, max session duration
 
 ---
 
 ## Workflow
 
-### Step 1: Check Macro Plan for Next Week
+### Step 1: Load Context from Macro Plan
 
 ```bash
-# Get next week's macro plan targets
-sce plan show --format json | jq '.weeks[] | select(.week_number == [NEXT_WEEK])'
+# Load macro plan structure
+MACRO_PLAN=$(cat data/plans/current_plan_macro.json)
+NEXT_WEEK_NUMBER=$((COMPLETED_WEEK + 1))
+
+# Extract context
+PHASE=$(echo "$MACRO_PLAN" | jq -r '.phases[] | select(.weeks[] == '$NEXT_WEEK_NUMBER') | .name')
+RECOVERY_WEEKS=$(echo "$MACRO_PLAN" | jq -r '.recovery_weeks')
+IS_RECOVERY_WEEK=$(echo "$RECOVERY_WEEKS" | jq 'contains(['$NEXT_WEEK_NUMBER'])')
+PEAK_TARGET=$(echo "$MACRO_PLAN" | jq -r '.peak_volume_km')
 ```
 
-**Extract**:
-- `target_volume_km`: Next week's mileage target
+**Context loaded**:
 - `phase`: Current training phase (base/build/peak/taper)
 - `is_recovery_week`: Whether next week is a recovery week
+- `peak_target`: Peak volume goal (reference only)
 
-**Context to consider**:
-- Previous week's adherence, adaptation, patterns (from weekly-analysis if available)
-- Current CTL/ACWR trajectory
-- Any concerning triggers (fatigue, injury signals, illness)
+**Note**: NO `volume_trajectory` field - volumes are designed by AI, not pre-computed.
 
-### Step 2: Assess Volume Adjustment Needs
+### Step 2: Analyze Previous Week
+
+**Gather training response data**:
+```bash
+# Get previous week's actual volume and metrics
+PREV_ACTUAL=$(sce week | jq -r '.data.total_distance_km')
+PREV_ADHERENCE=$(sce analysis adherence | jq -r '.data.adherence_rate')
+CURRENT_ACWR=$(sce status | jq -r '.data.acwr.value')
+CURRENT_TSB=$(sce status | jq -r '.data.tsb.value')
+READINESS=$(sce status | jq -r '.data.readiness_score')
+```
+
+**Check for signals**:
+- Illness/injury mentions in activity notes?
+- Poor adherence (<70%)?
+- Elevated ACWR (>1.3)?
+- Negative TSB (<-20)?
+
+**Output**: Understanding of athlete's current state and capacity
+
+### Step 3: Propose Next Week Volume (AI Decision)
+
+**Base calculation using phase progression**:
+```bash
+BASE_VOLUME=$PREV_ACTUAL
+
+# Phase-based progression factors
+if [ "$PHASE" == "base" ]; then
+    PROGRESSION_FACTOR=1.10  # 10% increase (typical base phase)
+elif [ "$PHASE" == "build" ]; then
+    PROGRESSION_FACTOR=1.07  # 7% increase (build phase)
+elif [ "$PHASE" == "peak" ]; then
+    PROGRESSION_FACTOR=1.02  # 2% increase (hold volume)
+elif [ "$PHASE" == "taper" ]; then
+    PROGRESSION_FACTOR=0.80  # 20% reduction (taper)
+fi
+
+# Apply recovery week reduction
+if [ "$IS_RECOVERY_WEEK" == "true" ]; then
+    PROGRESSION_FACTOR=0.70  # 30% reduction
+fi
+
+# Calculate proposed volume
+PROPOSED_VOLUME=$(echo "$BASE_VOLUME * $PROGRESSION_FACTOR" | bc -l)
+```
+
+**Apply context adjustments**:
+```bash
+# Illness/injury adjustment
+if [ILLNESS_DETECTED]; then
+    PROPOSED_VOLUME=$(echo "$PROPOSED_VOLUME * 0.75" | bc -l)  # 25% reduction
+fi
+
+# ACWR adjustment
+if (( $(echo "$CURRENT_ACWR > 1.3" | bc -l) )); then
+    PROPOSED_VOLUME=$(echo "$PROPOSED_VOLUME * 0.85" | bc -l)  # 15% reduction
+fi
+
+# Poor adherence adjustment
+if (( $(echo "$PREV_ADHERENCE < 0.70" | bc -l) )); then
+    PROPOSED_VOLUME=$(echo "$PROPOSED_VOLUME * 0.90" | bc -l)  # 10% reduction
+fi
+
+# Round to 1 decimal
+PROPOSED_VOLUME=$(printf "%.1f" $PROPOSED_VOLUME)
+```
+
+**Output**: `PROPOSED_VOLUME` for next week (AI-designed based on response)
+
+### Step 4: Validate Proposed Volume with Guardrails
+
+**Run validation**:
+```bash
+MAX_RUN_DAYS=$(sce profile get | jq -r '.data.max_run_days')
+AGE=$(sce profile get | jq -r '.data.age')
+
+sce guardrails analyze-progression \
+  --previous $PREV_ACTUAL \
+  --current $PROPOSED_VOLUME \
+  --ctl $CURRENT_CTL \
+  --run-days $MAX_RUN_DAYS \
+  --age $AGE
+```
+
+**Guardrails output provides**:
+- `risk_factors`: List of concerns (e.g., "Weekly increase exceeds 15%")
+- `protective_factors`: List of mitigations (e.g., "Low volume classification")
+- `volume_classification`: low/medium/high volume context
+- `pfitzinger_guideline`: Per-session analysis (1.6km rule)
+- `coaching_considerations`: Methodology-based guidance
+
+**Output**: Rich context for coaching decision (not a pass/fail)
+
+### Step 5: Interpret Guardrails & Finalize Volume (AI Coaching Decision)
 
 **Decision tree**:
 
-1. **If previous week had illness or injury**:
-   ```bash
-   sce guardrails illness-recovery --severity [mild/moderate/severe] --days-since 7
-   # Returns: recommended_volume_pct (e.g., 0.7 = 70% of planned)
-   ```
-   Apply adjustment: `ADJUSTED_VOLUME = target_volume_km * recommended_volume_pct`
+1. **If risk_factors dominate** (e.g., "Weekly increase >15%", "ACWR spike"):
+   - **MODIFY**: Reduce PROPOSED_VOLUME by 10-20%
+   - Example: `FINAL_VOLUME=$(echo "$PROPOSED_VOLUME * 0.85" | bc -l)`
 
-2. **If ACWR >1.3 (elevated injury risk)**:
-   - Recommend maintaining current volume (no increase)
-   - Or reduce by 10-15% if ACWR >1.4
-   - Use: `sce guardrails progression --previous [PREV_VOL] --current [NEXT_VOL]`
+2. **If protective_factors dominate** (e.g., "Low volume", "Per-session within guideline"):
+   - **ACCEPT**: Use PROPOSED_VOLUME as-is
+   - Example: `FINAL_VOLUME=$PROPOSED_VOLUME`
 
-3. **If previous week adherence <70% (missed workouts)**:
-   - Consider reducing next week's volume by 10-20%
-   - OR maintain volume but reduce run frequency (e.g., 4 runs → 3 runs)
-   - Rationale: Athlete needs more recovery or has schedule constraints
+3. **If mixed signals**:
+   - Apply training methodology judgment
+   - Prefer safety over progression
+   - Example: Accept if athlete has good training history, modify if injury-prone
 
-4. **If all green lights** (good adherence, ACWR <1.2, no issues):
-   - Proceed with macro plan target as-is
-   - No adjustment needed (volume_adjustment = 1.0)
+4. **If Pfitzinger per-session guideline violated** (e.g., 3.7km easy runs):
+   - Reduce run frequency (4 runs → 3 runs)
+   - Increase per-run distance to maintain minimum
 
-**Output**: `FINAL_VOLUME` for next week (may differ from macro plan if adjustments needed)
+**Output**: `FINAL_VOLUME` for next week (AI decision informed by guardrails)
 
-### Step 3: Check for VDOT Recalibration
+### Step 6: Check for VDOT Recalibration
 
 **Signals for VDOT adjustment**:
 
@@ -116,25 +210,23 @@ sce plan show --format json | jq '.weeks[] | select(.week_number == [NEXT_WEEK])
 
 **Output**: `CURRENT_VDOT` for next week's plan
 
-### Step 4: Generate Next Week's Workouts
+### Step 7: Generate Next Week's Workouts
 
 **Run**:
 ```bash
-NEXT_WEEK_NUMBER=$((COMPLETED_WEEK + 1))
-
 sce plan generate-week \
   --week-number $NEXT_WEEK_NUMBER \
+  --target-volume-km $FINAL_VOLUME \
   --from-macro data/plans/current_plan_macro.json \
   --current-vdot $CURRENT_VDOT \
-  --volume-adjustment $VOLUME_ADJUSTMENT_PCT \
   > /tmp/weekly_plan_w${NEXT_WEEK_NUMBER}.json
 ```
 
 **Parameters**:
 - `--week-number`: Next week to generate (e.g., 2, 3, 4)
-- `--from-macro`: Path to macro plan with phase/volume targets
-- `--current-vdot`: VDOT for pace calculations (potentially updated in Step 3)
-- `--volume-adjustment`: Optional multiplier if reducing volume (e.g., 0.85 = 85%)
+- `--target-volume-km`: AI-designed volume (from Step 5)
+- `--from-macro`: Path to macro plan with phases and recovery weeks
+- `--current-vdot`: VDOT for pace calculations (potentially updated in Step 6)
 
 **System generates**:
 - Intent-based JSON with `workout_pattern`
@@ -142,7 +234,7 @@ sce plan generate-week \
 - Paces from `CURRENT_VDOT`
 - Workout structure appropriate for phase (base: easy runs, build: + tempo/intervals)
 
-### Step 5: Validate Next Week's Plan
+### Step 8: Validate Next Week's Plan
 
 ```bash
 sce plan validate-week --weekly-plan /tmp/weekly_plan_w${NEXT_WEEK_NUMBER}.json
@@ -162,7 +254,7 @@ sce plan validate-week --weekly-plan /tmp/weekly_plan_w${NEXT_WEEK_NUMBER}.json
 
 **Critical**: Never present an unvalidated plan to the athlete.
 
-### Step 6: Present Next Week's Plan to Athlete
+### Step 9: Present Next Week's Plan to Athlete
 
 **Format**:
 ```markdown
@@ -194,7 +286,7 @@ Based on [previous week's performance / macro plan], here's your Week [N] plan:
 - Concrete numbers (distances, paces, volume change)
 - Explicit approval request (never save without consent)
 
-### Step 7: Save Next Week's Plan (ONLY After Approval)
+### Step 10: Save Next Week's Plan (ONLY After Approval)
 
 **After athlete explicitly approves**:
 
@@ -222,6 +314,73 @@ View anytime with:
 - "Question Y" → Answer → Re-confirm → Save when approved
 
 **Critical**: NEVER save without explicit athlete approval.
+
+---
+
+## Volume Design Guidelines
+
+Use these factors to propose next week volume in Step 3:
+
+### Base Phase Progression
+- **Standard**: +8-12% per week
+- **Recovery week** (every 4th): 70% of previous week
+- **Max single-week increase**: 15% (requires strong justification)
+
+### Build Phase Progression
+- **Standard**: +5-10% per week
+- **Focus**: Quality over volume increases
+- **Recovery week**: 75% of previous week
+
+### Peak Phase
+- **Standard**: Hold volume steady or minor increases (+0-5%)
+- **Goal**: Maintain fitness without accumulating fatigue
+
+### Taper Phase
+- **Week 1 of taper**: -15-20%
+- **Week 2 of taper**: -30-40%
+- **Race week**: -50-60%
+
+### Adjustment Factors
+- **ACWR > 1.3**: Reduce by 15% (multiply by 0.85)
+- **Illness recovery**: 70-85% depending on severity
+- **Poor adherence**: Hold or reduce volume
+- **Excellent adherence + low TSB**: Consider +5-10% bonus
+
+### Example: Base Phase Week 3 → Week 4
+
+**Context**: Week 3 actual = 28km, adherence = 92%, ACWR = 1.15, no illness
+
+**Calculation**:
+```bash
+BASE_VOLUME=28
+PROGRESSION_FACTOR=1.10  # Base phase standard
+PROPOSED_VOLUME=$(echo "$BASE_VOLUME * $PROGRESSION_FACTOR" | bc)  # 30.8km
+
+# No ACWR adjustment needed (1.15 < 1.3)
+# No illness adjustment
+# Strong adherence → no reduction
+
+FINAL_VOLUME=30.8  # Round to 31km
+```
+
+**Rationale**: "Increasing 11% based on excellent adherence (92%) and safe ACWR (1.15). Base phase progression on track."
+
+### Example: Build Phase Recovery Week
+
+**Context**: Week 7 actual = 42km, adherence = 78%, ACWR = 1.28, Week 8 is recovery
+
+**Calculation**:
+```bash
+BASE_VOLUME=42
+PROGRESSION_FACTOR=0.75  # Recovery week (build phase)
+PROPOSED_VOLUME=$(echo "$BASE_VOLUME * $PROGRESSION_FACTOR" | bc)  # 31.5km
+
+# No additional adjustments needed (recovery already accounts for load)
+
+FINAL_VOLUME=31.5  # Round to 32km
+```
+
+**Rationale**: "Recovery week reduces volume 25% to 32km. ACWR will drop from 1.28 → ~1.10."
 
 ---
 
@@ -274,10 +433,13 @@ View anytime with:
 
 Before presenting next week's plan:
 
-- [ ] **Checked macro plan** - Extracted `target_volume_km`, `phase`, `is_recovery_week`
-- [ ] **Assessed volume adjustment** - Considered adherence, ACWR, illness/injury signals
+- [ ] **Loaded macro plan context** - Extracted `phase`, `is_recovery_week`, `peak_target` (NO volume_trajectory)
+- [ ] **Analyzed previous week** - Gathered actual volume, adherence, ACWR, TSB, readiness
+- [ ] **Proposed next week volume** - Used phase progression factors + context adjustments (AI decision)
+- [ ] **Validated with guardrails** - Ran `analyze-progression`, interpreted risk vs protective factors
+- [ ] **Finalized volume** - Applied coaching judgment to guardrails output
 - [ ] **Checked VDOT recalibration** - Updated if race result or breakthrough workout
-- [ ] **Generated workouts** - Used `sce plan generate-week` with correct parameters
+- [ ] **Generated workouts** - Used `sce plan generate-week --target-volume-km $FINAL_VOLUME`
 - [ ] **Validated plan** - Ran `sce plan validate-week`, resolved all critical violations
 - [ ] **Presented clearly** - Included rationale, concrete numbers, approval request
 - [ ] **Waited for approval** - Did NOT save until athlete explicitly approved
@@ -286,6 +448,7 @@ Critical boundaries:
 - ⛔ **DO NOT save plan without athlete approval** - Always wait for explicit consent
 - ⛔ **DO NOT skip validation** - Catches errors before presenting to athlete
 - ⛔ **DO NOT ignore athlete feedback** - If they say "too much", believe them and adjust
+- ⛔ **DO NOT use volume_trajectory** - Weekly volumes are AI-designed, not pre-computed
 
 ---
 
