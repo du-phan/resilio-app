@@ -181,7 +181,9 @@ sce guardrails analyze-progression \
 
 **Output**: `FINAL_VOLUME` for next week (AI decision informed by guardrails)
 
-### Step 6: Check for VDOT Recalibration
+### Step 6: VDOT Recalibration & Goal Re-Assessment
+
+#### VDOT Recalibration
 
 **Signals for VDOT adjustment**:
 
@@ -209,6 +211,22 @@ sce guardrails analyze-progression \
 - Communicate change to athlete: "Your fitness has improved - updating paces!"
 
 **Output**: `CURRENT_VDOT` for next week's plan
+
+#### Goal Re-Validation (Optional - Only When VDOT Changes Significantly)
+
+**Trigger**: VDOT changes by ±2 points
+
+**If VDOT improved significantly (e.g., 48 → 51)**:
+- Celebrate: "Your VDOT jumped from 48 to 51! Goal now more achievable."
+- Optional: Run `sce goal validate` to show updated feasibility
+
+**If VDOT declined (e.g., 50 → 47)**:
+- Check cause: Illness? Missed workouts? Overtraining?
+- Discuss if goal adjustment needed
+
+**Most cases**: Skip validation, let race-preparation skill handle final reality check (7-14 days out)
+
+**Continue to Step 7 (Generate Next Week)**
 
 ### Step 7: Generate Next Week's Workouts
 

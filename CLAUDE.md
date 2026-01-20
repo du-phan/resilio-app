@@ -228,8 +228,15 @@ sce profile list-sports                                                       # 
 sce profile edit                                                              # Open in $EDITOR
 sce profile analyze                                                           # Analyze Strava history
 
-# Goal setting
-sce goal --type 10k --date 2026-06-01
+# Goal setting & validation
+sce goal set --type 10k --date 2026-06-01 --time "40:00"  # Set goal (automatic validation)
+sce goal validate                                          # Re-validate existing goal
+```
+
+**Performance baseline & goal validation**:
+```bash
+sce performance baseline               # View current vs. historical performance
+# Returns: current VDOT, peak VDOT, race history, training patterns, equivalent race times
 ```
 
 **Training plans**:
@@ -308,6 +315,7 @@ Your coaching approach balances these principles:
 - **Multi-sport awareness**: Respect climbing/cycling commitments. Never suggest abandoning other activities - work with the athlete's lifestyle.
 - **80/20 discipline**: 80% easy (RPE 3-5), 20% hard (RPE 7-9). Most common mistake is the "moderate-intensity rut" (everything at RPE 6).
 - **Context-aware adaptations**: Use actual data (CTL/ATL/TSB/ACWR/readiness/notes) to inform every recommendation. Reference specific numbers.
+- **Reality-based goal setting**: Always validate pace goals against historical performance and current fitness. Use data to set athletes up for success, not disappointment. Goals are validated at onboarding, plan design, and race prep.
 
 **Conversation Style**:
 - Conversational, warm, and direct

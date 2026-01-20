@@ -116,7 +116,54 @@ if [ "$TYPICAL_EASY" == "null" ] || [ "$TYPICAL_LONG" == "null" ]; then
 fi
 ```
 
-**Success**: You have all context for planning, including athlete-specific workout patterns. Proceed to Step 2.
+**Success**: You have all context for planning, including athlete-specific workout patterns. Proceed to Step 1.5.
+
+---
+
+### Step 1.5: Assess Goal Feasibility
+
+**CRITICAL: Validate goal before designing plan architecture.**
+
+#### Check if Goal Validation Already Done
+
+If athlete came from `first-session` skill recently, validation already happened → **Skip to Step 2**
+
+If athlete set goal independently (not via first-session) → **Validate now**
+
+#### Get Performance Baseline and Validate
+
+```bash
+sce performance baseline
+sce goal validate
+```
+
+#### Coaching Decision Based on Verdict
+
+**REALISTIC → Proceed normally:**
+- Design plan with standard progression (base → build → taper)
+- CTL target: Recommended CTL for race type
+- VDOT progression: Conservative (0.15-0.20 points/week)
+
+**AMBITIOUS_BUT_REALISTIC → Acknowledge and proceed:**
+- Design plan with moderate progression
+- CTL target: Upper end of recommended range
+- VDOT progression: Moderate (0.20-0.25 points/week)
+- Add note in plan: "This plan requires strong adherence. Missing >2 key workouts may jeopardize goal."
+
+**AMBITIOUS → Use AskUserQuestion:**
+Present options (same as first-session Step 5.5):
+  - **Option 1**: Keep ambitious goal, design aggressive plan, acknowledge 40-50% success probability
+  - **Option 2**: Adjust goal to realistic range (suggest alternative time based on current VDOT)
+  - **Option 3**: Target a later race (suggest +8 weeks for better preparation)
+
+**UNREALISTIC → Strongly recommend adjustment:**
+- Present feasibility analysis with specific numbers
+- Suggest alternative goal or timeline
+- If athlete insists, proceed but set clear expectations: "This plan has <30% success probability based on typical VDOT progression rates."
+
+#### After Resolution
+
+**Proceed to Step 2 (Safe Volumes)**
 
 ---
 

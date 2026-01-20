@@ -56,8 +56,7 @@ def main(
 
 
 # Import and register commands
-from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, validation, memory, activity, race, dates
-from sports_coach_engine.cli.commands.goal import goal_set_command
+from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, validation, memory, activity, race, dates, performance, goal
 from sports_coach_engine.cli.commands.init_cmd import init_command
 from sports_coach_engine.cli.commands.status import status_command
 from sports_coach_engine.cli.commands.sync import sync_command
@@ -70,13 +69,13 @@ app.command(name="sync", help="Import activities from Strava")(sync_command)
 app.command(name="status", help="Get current training metrics")(status_command)
 app.command(name="today", help="Get today's workout recommendation")(today_command)
 app.command(name="week", help="Get weekly training summary")(week_command)
-app.command(name="goal", help="Set a race goal")(goal_set_command)
 
 # Register subcommands
 app.add_typer(auth.app, name="auth", help="Manage Strava authentication")
 app.add_typer(metrics.app, name="metrics", help="Manage training metrics")
 app.add_typer(plan.app, name="plan", help="Manage training plans")
 app.add_typer(profile.app, name="profile", help="Manage athlete profile")
+app.add_typer(goal.app, name="goal", help="Manage race goals")
 app.add_typer(vdot.app, name="vdot", help="VDOT calculations and training paces")
 app.add_typer(guardrails.app, name="guardrails", help="Volume validation and recovery planning")
 app.add_typer(analysis.app, name="analysis", help="Weekly analysis and risk assessment")
@@ -86,3 +85,4 @@ app.add_typer(memory.app, name="memory", help="Manage athlete memories and insig
 app.add_typer(activity.app, name="activity", help="List and search activities")
 app.add_typer(race.app, name="race", help="Race performance tracking and PB management")
 app.add_typer(dates.app, name="dates", help="Date utilities for training plan generation")
+app.add_typer(performance.app, name="performance", help="Performance baseline and fitness tracking")

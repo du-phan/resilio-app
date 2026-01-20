@@ -137,6 +137,29 @@ sce risk taper-status --race-date 2026-03-15 --metrics metrics.json --recent-wee
 
 ---
 
+### Step 3.5: Final Goal Reality Check
+
+**Run once during race prep (7-14 days out):**
+
+```bash
+sce goal validate
+```
+
+**Coaching response based on feasibility:**
+
+**Goal still realistic (VDOT matches or exceeds goal)**:
+- Build confidence: "Your training hit the mark. Current VDOT aligns with your goal pace. You're ready!"
+
+**VDOT below goal requirement**:
+- Present Plan B race strategy using AskUserQuestion:
+  - **Option 1**: Adjust goal pace to match current fitness (conservative, high success rate)
+  - **Option 2**: Attempt goal pace, adjust mid-race if struggling (moderate risk)
+  - **Option 3**: Execute original plan (aggressive, acknowledge higher risk)
+
+**Skip if**: Athlete already discussed goal expectations in recent weeks
+
+---
+
 ### Step 4: Race Week Schedule
 
 **Generate schedule based on distance**:
