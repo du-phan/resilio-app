@@ -880,3 +880,271 @@ Result:
 If any checkbox is unchecked, the plan needs fixing before presentation.
 
 **Note on volume discrepancies**: Minor variations (<5%) between target and actual weekly totals are acceptable and don't require regeneration. Focus validation on meaningful violations (guardrails, progression rules, structural issues) rather than arithmetic perfection.
+
+---
+
+## Decision Trees
+
+### Q: Athlete wants higher volume than CTL suggests
+
+**Challenge**: Starting above CTL → immediate ACWR spike → injury risk
+
+**Options**:
+1. Start at 80-100% of CTL, reach desired volume by week 3-4 (safer)
+2. Start higher but extend base phase +2 weeks (more adaptation time)
+
+**Recommendation**: Option 1 - gradual buildup reduces injury risk without delaying fitness
+
+**Explanation**:
+- CTL represents current fitness capacity
+- Starting above CTL creates acute load spike (ACWR >1.3 = elevated injury risk)
+- Example: CTL 35 suggests 35-40km starting volume, athlete wants 50km
+  - Option 1: Week 1: 35km → Week 2: 38km → Week 3: 42km → Week 4: 46km → Week 5: 50km (safe progression)
+  - Option 2: Week 1: 50km immediately → ACWR spikes to 1.4+ (danger zone)
+
+**When to compromise**: If athlete has recently reduced training temporarily (e.g., 2-week taper, travel break) but CTL hasn't caught up to true capacity, use recent 4-week average volume as baseline instead of CTL-derived volume.
+
+---
+
+### Q: Insufficient weeks to goal
+
+**Scenario**: Half marathon in 8 weeks (minimum 12 weeks recommended)
+
+**Options**:
+1. Extend goal date (+4 weeks) → proper periodization, lower risk
+2. Compressed plan (8 weeks) → skip/shorten base, higher risk
+3. Adjust expectations (participation vs. time goal)
+
+**Recommendation**: Extend goal date if possible
+
+**Explanation**:
+- Minimum weeks by distance: 5K (6), 10K (8), half (12), marathon (16)
+- These minimums allow proper periodization: base → build → peak → taper
+- Compressed plans skip base phase, which builds aerobic foundation and injury resilience
+- Example: 8-week half marathon plan
+  - Week 1-2: Build (no base)
+  - Week 3-6: Peak (4 weeks peak = high injury risk)
+  - Week 7-8: Taper
+  - Missing: 4-6 weeks of base for adaptation
+
+**When to compromise**: If athlete has recent race-specific fitness (e.g., ran a 10K race 2 weeks ago at race pace, CTL >40), can skip/shorten base and start in build phase. Otherwise, strongly recommend extending race date.
+
+---
+
+### Q: Multi-sport conflict during key workout
+
+**If conflict_policy = ask_each_time**, present options:
+
+**Scenario**: Long run scheduled Sunday, but athlete has climbing competition Saturday.
+
+**Options**:
+1. **Prioritize running key workout**: Long run Sunday as planned (quality/long runs most important for race goal)
+2. **Shift run 24 hours**: Long run Monday (easy runs ok with delay, long run needs 24h recovery after climbing)
+3. **Shift other sport**: Climbing Friday instead of Saturday (less frequent commitments easier to move)
+4. **Downgrade run**: Convert long run to easy run Sunday, shift long run to next week
+
+**Recommendation**: Option 3 if climbing is flexible, Option 2 if climbing is fixed
+
+**Factors to consider**:
+- Long runs are highest priority for endurance development (can't be skipped often)
+- Hard climbing = high systemic load but low lower-body load → allows easy running 24h later
+- Long run requires full recovery (48h after hard lower-body work)
+- Consistent long run schedule builds routine and adaptation
+
+**Store preference**: After resolving, ask: "For future conflicts between [sport] and key runs, which should take priority?" → update profile conflict_policy
+
+---
+
+### Q: Athlete has injury history
+
+**Example**: "Left knee sensitive after 18km+ long runs"
+
+**Adjustments**:
+1. **Cap long run distance**: Set max at 16 km (below sensitivity threshold)
+2. **Increase frequency**: 5 runs instead of 4 to spread volume and reduce per-session load
+3. **More cross-training**: Add cycling/swimming for aerobic volume without impact
+4. **Monitor closely**: Add weekly check-ins, adjust immediately if signals appear
+5. **Slower long run progression**: +10 min every 3 weeks instead of 2 weeks
+
+**Implementation**:
+- Add to profile: `max_long_run_km: 16`, `injury_history: "Left knee pain >18km"`
+- Add to memory: `sce memory add --type INJURY_HISTORY --content "Left knee pain after long runs >18km" --tags "body:knee,trigger:long-run,threshold:18km"`
+- Set alert trigger: If any long run >16km appears in plan, flag for review
+- Document in plan notes: "Long run capped at 16km due to knee sensitivity history"
+
+**Progression strategy**:
+- If athlete completes 16km long runs pain-free for 4+ weeks, can cautiously test 17km
+- If pain returns, immediately revert to 16km cap
+- Focus on increasing weekly volume through frequency, not long run distance
+
+---
+
+### Q: No recent race time (unknown VDOT)
+
+**Options**:
+1. **Mile test at max effort**: `sce vdot six-second --mile-time 7:00` (provides current VDOT)
+2. **Estimate from "comfortably hard" 20-30 min pace**: Run tempo-effort for 20-30 min, use average pace to estimate T-pace VDOT
+3. **Conservative default (VDOT 45)**, adjust after first tempo workout in Week 2
+
+**Recommendation**: Option 3 (conservative default) for safety, then recalibrate after first quality workout
+
+**Implementation**:
+```bash
+# Use conservative VDOT
+BASELINE_VDOT=45  # CTL 30-40 → VDOT 45, CTL 40-50 → VDOT 48
+
+# Get training paces
+sce vdot paces --vdot 45
+
+# Document in plan
+Coach: "Using conservative VDOT 45 as baseline (no recent race data).
+We'll recalibrate after your first tempo workout in Week 2.
+If 4:45/km tempo feels easy, we'll bump to VDOT 48.
+If it feels too hard, we'll drop to VDOT 42."
+```
+
+**Recalibration after first tempo**:
+- Tempo felt easy (RPE 6 instead of 7-8): Increase VDOT by 2-3 points
+- Tempo felt right (RPE 7-8, "comfortably hard"): Keep current VDOT
+- Tempo felt too hard (RPE 9, couldn't sustain): Decrease VDOT by 2-3 points
+
+**Update paces** for remaining weeks after recalibration:
+```bash
+sce vdot paces --vdot $ADJUSTED_VDOT
+# Update plan weeks 3-16 with new paces
+```
+
+---
+
+## Plan Update Strategies
+
+### Mid-Week Adjustment
+
+**Use**: `sce plan update-week --week N --from-json week.json`
+
+**Scenario**: Athlete got sick Week 5, need to downgrade workouts for that week only
+
+**Example**:
+```bash
+# Athlete reports illness Wednesday of Week 5
+# Original Week 5: 3 easy (5km, 6km, 5km) + 1 long (12km) = 28km
+
+# Create adjusted week JSON (single week object, NOT array)
+cat > /tmp/week_5_adjusted.json <<EOF
+{
+  "week_number": 5,
+  "start_date": "2026-02-17",
+  "end_date": "2026-02-23",
+  "phase": "build",
+  "target_volume_km": 18.0,
+  "is_recovery_week": false,
+  "notes": "Reduced volume due to illness Wed-Fri",
+  "workouts": [
+    // Monday-Tuesday: Completed before illness
+    // Wednesday-Friday: Rest (sick)
+    // Saturday: Easy 5km (if feeling better)
+    // Sunday: Easy 8km (if fully recovered, otherwise skip)
+  ]
+}
+EOF
+
+# Update Week 5 only
+sce plan update-week --week 5 --from-json /tmp/week_5_adjusted.json
+
+# Weeks 1-4 and 6-16 remain unchanged
+```
+
+**When to use**: Single-week issues (illness, injury, travel, missed workouts) that don't affect future weeks
+
+---
+
+### Partial Replan
+
+**Use**: `sce plan update-from --week N --from-json weeks.json`
+
+**Scenario**: After completing Week 4, athlete reports persistent fatigue. Need to replan Weeks 5-16 with reduced volume.
+
+**Example**:
+```bash
+# Original plan: Peak volume 55km in Week 12
+# Athlete showing signs of overreaching after Week 4
+# Decision: Reduce peak to 45km, extend base phase by 2 weeks
+
+# Create new plan for Weeks 5-16 (array of weeks)
+cat > /tmp/weeks_5_16_revised.json <<EOF
+{
+  "weeks": [
+    {
+      "week_number": 5,
+      "target_volume_km": 32.0,
+      "phase": "base",  ← Extended base phase
+      ...
+    },
+    {
+      "week_number": 6,
+      "target_volume_km": 34.0,
+      "phase": "base",
+      ...
+    },
+    // ... Weeks 7-16 with adjusted volumes ...
+    {
+      "week_number": 12,
+      "target_volume_km": 45.0,  ← Reduced peak from 55km
+      "phase": "peak",
+      ...
+    }
+  ]
+}
+EOF
+
+# Update from Week 5 onward
+sce plan update-from --week 5 --from-json /tmp/weeks_5_16_revised.json
+
+# Weeks 1-4 remain unchanged (already completed)
+# Weeks 5-16 replaced with revised plan
+```
+
+**When to use**: Major adjustments needed (injury setback, fitness plateau, goal change, persistent fatigue) that affect multiple future weeks
+
+---
+
+### Full Regeneration
+
+**Use**: `sce plan regen` or `sce plan populate --from-json`
+
+**Scenario**: Goal changed from 10K to half marathon. Complete redesign needed.
+
+**Example**:
+```bash
+# Original goal: 10K race in 12 weeks (starting Week 1)
+# New goal: Half marathon in 16 weeks (starting Week 1)
+
+# Option A: Use regen command (interactive)
+sce plan regen
+# Prompts for new goal, race date, constraints
+# Generates fresh 16-week plan
+
+# Option B: Create new plan JSON from scratch
+# Use training-plan-design skill to design new plan
+# ... (full workflow Steps 0-10) ...
+
+# Save new plan (replaces entire current plan)
+sce plan populate --from-json /tmp/new_plan.json
+```
+
+**When to use**: Complete plan replacement (goal change, race distance change, starting over after long break)
+
+---
+
+## Summary: When to Use Each Update Strategy
+
+| Strategy | Scope | Use When | Preserves |
+|----------|-------|----------|-----------|
+| **Mid-Week Adjustment** | Single week | Illness, injury, missed workouts, travel (1 week only) | Weeks 1 to N-1, Weeks N+1 to end |
+| **Partial Replan** | Multiple weeks forward | Injury setback, fitness plateau, persistent fatigue, volume adjustment needed | Weeks 1 to N-1 (completed weeks) |
+| **Full Regeneration** | Entire plan | Goal change, race distance change, starting over, major life change | Nothing (complete replacement) |
+
+**Decision flow**:
+1. Is the issue isolated to this week only? → **Mid-Week Adjustment**
+2. Does the issue affect multiple future weeks? → **Partial Replan**
+3. Is the fundamental goal/plan structure wrong? → **Full Regeneration**
