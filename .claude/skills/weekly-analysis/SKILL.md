@@ -187,6 +187,72 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 
 ---
 
+### Step 8: Plan Next Week (Activate weekly-planning Skill)
+
+**After completing weekly analysis**, transition to planning next week's workouts for adaptive training.
+
+**Ask athlete**:
+```
+"Your weekly review is complete. Ready to plan next week's workouts?"
+```
+
+**If athlete says yes**:
+
+Activate the **`weekly-planning`** skill, which will:
+1. Check macro plan for next week's targets
+2. Assess volume adjustment needs (based on this week's analysis)
+3. Check for VDOT recalibration signals
+4. Generate next week's detailed workouts
+5. Validate plan (volume, minimum durations, guardrails)
+6. Present plan to athlete
+7. Save after approval
+
+**Context to pass to weekly-planning skill**:
+- Current week's adherence rate
+- ACWR and readiness scores
+- Any illness/injury signals detected
+- 80/20 intensity distribution compliance
+- Notable patterns or concerns
+
+**If athlete says no** (wants to wait):
+```
+"No problem! When you're ready to plan next week, just let me know or use the weekly-planning skill."
+```
+
+**Alternative**: If athlete only wants weekly analysis (not planning), you're done after Step 7.
+
+---
+
+## Integrated Workflow Example
+
+**Natural coaching conversation**:
+
+```
+Athlete: "How was my week?"
+
+Coach: [Runs Steps 1-7: Weekly Analysis]
+  → 7/8 workouts completed (88% adherence)
+  → 82% easy, 18% hard (80/20 compliant ✓)
+  → CTL increased 42 → 44 (healthy progression)
+  → No concerning patterns
+
+Coach: "Great week! You completed all runs except Saturday's easy run,
+maintained excellent 80/20 intensity, and your CTL increased safely."
+
+Coach: [Step 8] "Ready to plan next week's workouts?"
+
+Athlete: "Yes"
+
+Coach: [Activates weekly-planning skill]
+  → Skill generates Week 2 plan (26km, 4 runs)
+  → Presents plan with rationale based on this week's analysis
+  → Saves after athlete approval
+
+Coach: "Week 2 plan saved! You'll see workouts starting Monday."
+```
+
+---
+
 ## Quick Decision Trees
 
 ### Q: Adherence <50%

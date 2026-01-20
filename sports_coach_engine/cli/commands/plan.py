@@ -21,6 +21,9 @@ from sports_coach_engine.api.plan import (
     initialize_plan_training_log,
     append_weekly_training_summary,
     validate_plan_json_structure,
+    generate_week_plan,
+    validate_week_plan,
+    revert_week_plan,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json
@@ -1287,6 +1290,200 @@ def generate_month_command(
     cycle_weeks = f"{len(week_nums)}-week"
     success_message = f"Monthly plan generated for month {month_number} ({cycle_weeks} cycle): weeks {min(week_nums)}-{max(week_nums)}"
     envelope = api_result_to_envelope(result, success_message=success_message)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="generate-week")
+def plan_generate_week_command(
+    ctx: typer.Context,
+    week_number: int = typer.Option(..., "--week-number", help="Week number to generate (1-indexed)"),
+    from_macro: str = typer.Option(..., "--from-macro", help="Path to macro plan JSON file"),
+    current_vdot: float = typer.Option(..., "--current-vdot", help="Current VDOT for pace calculations"),
+    volume_adjustment: float = typer.Option(1.0, "--volume-adjustment", help="Volume multiplier (e.g., 0.85 = 85%)"),
+    output_file: Optional[str] = typer.Option(None, "--output", help="Output file path (default: stdout)")
+) -> None:
+    """Generate detailed workouts for a single week.
+
+    Progressive disclosure workflow: generates workouts for ONE week only based on
+    macro plan targets. Future weeks remain as mileage targets until generated.
+
+    Args:
+        week_number: Week to generate (e.g., 1, 2, 3)
+        from_macro: Path to macro plan with phase/volume targets for all 16 weeks
+        current_vdot: VDOT value for training pace calculations
+        volume_adjustment: Optional multiplier to reduce/increase volume (default 1.0)
+
+    Returns:
+        JSON with single week containing workout_pattern (intent-based format).
+        System will calculate exact distances/paces/durations.
+
+    Examples:
+        sce plan generate-week --week-number 1 --from-macro /tmp/macro_plan.json --current-vdot 48
+        sce plan generate-week --week-number 2 --from-macro macro.json --current-vdot 48 --volume-adjustment 0.85
+    """
+    from sports_coach_engine.api.plan import generate_week_plan
+
+    # Validate file exists
+    macro_path = Path(from_macro)
+    if not macro_path.exists():
+        envelope = create_error_envelope(
+            error_type="not_found",
+            message=f"Macro plan file not found: {from_macro}",
+            data={"path": str(macro_path.absolute())}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=2)
+
+    # Call API
+    result = generate_week_plan(
+        week_number=week_number,
+        macro_plan_path=from_macro,
+        current_vdot=current_vdot,
+        volume_adjustment=volume_adjustment
+    )
+
+    # Convert to envelope
+    if isinstance(result, PlanError):
+        envelope = api_result_to_envelope(result, success_message="")
+    else:
+        envelope = api_result_to_envelope(
+            result,
+            success_message=f"Week {week_number} generated with {result.get('num_runs', 'N/A')} runs"
+        )
+
+    # Output to file or stdout
+    if output_file:
+        output_path = Path(output_file)
+        try:
+            with open(output_path, 'w') as f:
+                json.dump(envelope, f, indent=2, default=str)
+        except Exception as e:
+            envelope = create_error_envelope(
+                error_type="unknown",
+                message=f"Failed to write output file: {str(e)}",
+                data={"file": output_file}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=1)
+    else:
+        output_json(envelope)
+
+    # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="validate-week")
+def plan_validate_week_command(
+    ctx: typer.Context,
+    weekly_plan: str = typer.Option(..., "--weekly-plan", help="Path to weekly plan JSON file"),
+    verbose: bool = typer.Option(False, "--verbose", help="Show detailed validation output")
+) -> None:
+    """Validate a single week's workout plan before saving.
+
+    Checks for:
+    - Volume discrepancy (<5% acceptable, 5-10% review, >10% regenerate)
+    - Minimum duration violations (easy ≥5km, long ≥8km)
+    - Quality volume limits (T≤10%, I≤8%, R≤5%)
+    - Week-over-week progression (<10% increase)
+    - Date alignment (start=Monday, end=Sunday)
+
+    Returns exit code 0 if valid, 1 if errors found.
+
+    Examples:
+        sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
+        sce plan validate-week --weekly-plan week2.json --verbose
+    """
+    from sports_coach_engine.api.plan import validate_week_plan
+
+    # Validate file exists
+    plan_path = Path(weekly_plan)
+    if not plan_path.exists():
+        envelope = create_error_envelope(
+            error_type="not_found",
+            message=f"Weekly plan file not found: {weekly_plan}",
+            data={"path": str(plan_path.absolute())}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=2)
+
+    # Call API validation
+    result = validate_week_plan(weekly_plan_path=weekly_plan, verbose=verbose)
+
+    # Check result type
+    if isinstance(result, PlanError):
+        envelope = api_result_to_envelope(result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=1)
+
+    # Build result based on validation
+    is_valid = result.get("is_valid", False)
+    errors = result.get("errors", [])
+    warnings = result.get("warnings", [])
+
+    if is_valid:
+        envelope = {
+            "success": True,
+            "message": "Weekly plan is valid and ready to populate!",
+            "data": {
+                "file": weekly_plan,
+                "warnings": warnings,
+                "warnings_count": len(warnings)
+            }
+        }
+        output_json(envelope)
+        raise typer.Exit(code=0)
+    else:
+        envelope = {
+            "success": False,
+            "message": f"Found {len(errors)} error(s) in weekly plan",
+            "error_type": "validation",
+            "data": {
+                "file": weekly_plan,
+                "errors": errors,
+                "warnings": warnings,
+                "errors_count": len(errors),
+                "warnings_count": len(warnings)
+            }
+        }
+        output_json(envelope)
+        raise typer.Exit(code=1)
+
+
+@app.command(name="revert-week")
+def plan_revert_week_command(
+    ctx: typer.Context,
+    week_number: int = typer.Option(..., "--week-number", help="Week number to revert (1-indexed)"),
+) -> None:
+    """Revert a week's plan to macro plan targets (remove detailed workouts).
+
+    Useful for:
+    - Rolling back a week if athlete disagrees with generated workouts
+    - Allowing regeneration with different parameters
+    - Resetting to mileage target only
+
+    After reverting, week will have target_volume_km but NO workout_pattern.
+    Can regenerate with different VDOT, volume adjustment, or other parameters.
+
+    Examples:
+        sce plan revert-week --week-number 3
+    """
+    from sports_coach_engine.api.plan import revert_week_plan
+
+    # Call API
+    result = revert_week_plan(week_number=week_number)
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Week {week_number} reverted to macro plan targets (workouts removed)"
+    )
 
     # Output JSON
     output_json(envelope)

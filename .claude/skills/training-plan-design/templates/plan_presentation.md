@@ -79,98 +79,105 @@ Based on your current fitness level:
 
 ---
 
-## Weekly Breakdown
+## Week 1 Plan (Detailed)
 
 ### Week 1: Base Phase (Starting Week)
 **Volume**: [X] km
 **Phase**: Base
-**Focus**: [Description]
+**Start Date**: [YYYY-MM-DD] (Monday)
+**End Date**: [YYYY-MM-DD] (Sunday)
+**Focus**: [Description, e.g., "Establish consistent running routine, build aerobic base"]
 
 **Workouts**:
-- **Tuesday**: Easy run ([X] km, [Y] min, E-pace) - [Purpose]
-- **Thursday**: Easy run ([X] km, [Y] min, E-pace) - [Purpose]
-- **Saturday**: Long run ([X] km, [Y] min, E-pace) - [Purpose]
-- **Sunday**: [Rest or Easy run]
+- **Monday**: Rest
+- **Tuesday**: Easy run ([X] km, [Y] min, [E-pace range]) - [Purpose]
+- **Wednesday**: Rest
+- **Thursday**: Easy run ([X] km, [Y] min, [E-pace range]) - [Purpose]
+- **Friday**: Rest
+- **Saturday**: Easy run ([X] km, [Y] min, [E-pace range]) - [Purpose]
+- **Sunday**: Long run ([X] km, [Y] min, [E-pace range]) - [Purpose]
 
-**Notes**: [Any special instructions for first week]
+**Notes**: [Any special instructions for first week, e.g., "Focus on consistency, all runs at truly easy conversational pace"]
 
 ---
+
+## Upcoming Weeks Preview (Mileage Targets)
+
+⚠️ **Important**: The following weeks show **volume targets only**. Detailed workouts will be generated weekly based on your actual training response, adaptation, and progress.
 
 ### Week 2: Base Phase
 **Volume**: [X] km (+[Y]% from Week 1)
 **Phase**: Base
-
-**Workouts**:
-- [Similar structure]
-
----
+**Structure**: [e.g., "3 easy runs + 1 long run"]
+**Focus**: [e.g., "Continue aerobic base development"]
 
 ### Week 3: Base Phase
-[Similar structure]
-
----
+**Volume**: [X] km (+[Y]% from Week 2)
+**Phase**: Base
+**Structure**: [e.g., "3 easy runs + 1 long run"]
+**Focus**: [e.g., "Progressive volume buildup"]
 
 ### Week 4: Recovery Week
-**Volume**: [X] km (70% of Week 3)
+**Volume**: [X] km (~70% of Week 3)
 **Phase**: Base - Recovery
-
-**Purpose**: Consolidate adaptations from Weeks 1-3
-
-**Workouts**:
-- [Reduced volume versions of standard workouts]
+**Structure**: [e.g., "2-3 easy runs + 1 long run"]
+**Focus**: [e.g., "Consolidate adaptations from Weeks 1-3"]
 
 ---
 
-### Weeks 5-8: Base Phase (Continued)
-[Summary format for remaining base weeks]
+## Future Weeks (Macro Plan Summary)
 
-**Key milestones**:
+### Weeks 5-8: Base Phase (Continued)
+**Volume Range**: [X]-[Y] km/week
+**Key Milestones**:
 - Week [X]: Long run reaches [Y] km
 - Week [X]: Total volume reaches [Y] km
 - Week [X]: Recovery week
 
----
-
 ### Weeks 9-12: Build Phase
-[Summary format]
-
-**Key changes**:
-- **Tempo runs introduced**: Week [X] ([Y] km T-pace)
-- **Intervals introduced**: Week [X] ([Description])
-- **Long run with quality**: Week [X] ([E-pace + M-pace segments])
-
-**Key milestones**:
-- Week [X]: First tempo run
-- Week [X]: Recovery week
-- Week [X]: Long run with M-pace segments
-
----
+**Volume Range**: [X]-[Y] km/week
+**Key Changes**:
+- **Tempo runs introduced**: Week [X]
+- **Intervals introduced**: Week [X]
+- **Long run with quality**: Week [X]
 
 ### Weeks 13-14: Peak Phase
-[Summary format]
+**Volume Range**: [X]-[Y] km/week
+**Maximum Training Load**:
+- Week 13: [X] km (peak volume)
+- Week 14: [X] km (maintain)
+**Focus**: Final fitness sharpening before taper
 
-**Maximum training load**:
-- Week 13: [X] km (peak volume), Tempo + Long run with quality
-- Week 14: [X] km (maintain), Race-pace work + Tempo
-
-**Purpose**: Final fitness sharpening before taper
+### Weeks 15-16: Taper Phase
+**Volume Range**: [X]-[Y] km/week
+**Taper Structure**:
+- Week 15: [X] km (~70% of peak) - Reduced volume, maintain intensity
+- Week 16 (Race week): [X] km (~40% of peak) - Easy runs + race-pace strides
 
 ---
 
-### Weeks 15-16: Taper Phase
-[Summary format]
+## Progressive Disclosure & Adaptation
 
-**Taper structure**:
-- Week 15: [X] km (70% of peak) - Reduced volume, maintain intensity
-- Week 16 (Race week): [X] km (40% of peak) - Easy runs + race-pace strides
+**Why only Week 1 has detailed workouts**:
+- Training plans must adapt to YOUR actual response, not a rigid schedule designed weeks in advance
+- Each week, we'll analyze your training (adherence, fatigue, adaptation) and generate next week's workouts accordingly
+- This approach allows us to respond to illness, injury, schedule changes, or faster/slower than expected progress
 
-**Race week schedule**:
-- Mon/Tue: Easy runs (30 min)
-- Wed: Rest
-- Thu: Easy run (20 min) + 4 × 200m race-pace strides
-- Fri: Rest
-- Sat: [RACE DAY]
-- Sun: Easy recovery jog (optional)
+**Weekly workflow**:
+1. **Complete the week** (e.g., finish Week 1)
+2. **Weekly check-in** (analyze adherence, metrics, triggers)
+3. **Generate next week** (Week 2 workouts informed by Week 1 results)
+4. **Repeat** (each week adapts based on actual training response)
+
+**Macro plan provides structure**:
+- Phase boundaries (when to introduce tempo/intervals)
+- Volume trajectory (where we're headed)
+- Key milestones (peak volume, taper timing)
+
+**Weekly plans provide execution**:
+- Specific workout paces, distances, durations
+- Informed by current fitness, fatigue, readiness
+- Adjusted for real-world constraints
 
 ---
 

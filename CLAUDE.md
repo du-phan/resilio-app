@@ -146,35 +146,44 @@ Provide daily workout recommendations with adaptation logic
 - **Key commands**: `sce today`, `sce status`, `sce risk assess`
 
 ### 3. **weekly-analysis**
-Comprehensive weekly training review and pattern detection
-- **Use when**: "How was my week?", "weekly review", "analyze training"
-- **Workflow**: Adherence → Intensity distribution → Load balance → Next week prep
+Comprehensive weekly training review including adherence, intensity distribution, and pattern detection
+- **Use when**: "How was my week?", "weekly review", "analyze training", "did I follow the plan?"
+- **Workflow**: Adherence → Intensity distribution → Load balance → Pattern detection → Log summary → Activate weekly-planning skill
 - **Key commands**: `sce week`, `sce analysis adherence`, `sce analysis intensity`
+- **Integration**: After analysis completion, asks athlete if ready to plan next week (activates weekly-planning skill)
 
-### 4. **training-plan-design**
-Design periodized training plans using proven methodologies
+### 4. **weekly-planning**
+Generate next week's detailed workouts using progressive disclosure workflow
+- **Use when**: After weekly-analysis completion, or when athlete asks "plan next week", "generate next week"
+- **Workflow**: Check macro plan → Assess volume adjustment → VDOT recalibration → Generate workouts → Validate → Present → Save after approval
+- **Key commands**: `sce plan generate-week`, `sce plan validate-week`, `sce guardrails progression`, `sce vdot estimate-current`
+- **Adaptive planning**: Each week tailored based on previous week's adherence, ACWR, readiness, and detected patterns
+
+### 5. **training-plan-design**
+Design periodized training plans using progressive disclosure (macro + weekly detail)
 - **Use when**: "Design my plan", "create training program", "how should I train for [race]"
-- **Workflow**: Assess CTL → Periodization → Volume progression → Workout design → Validation → Markdown review
-- **Key commands**: `sce plan`, `sce vdot`, `sce guardrails`, `sce validation`, `sce dates`
+- **Workflow**: Assess CTL → Generate macro (16 weeks, mileage targets) → Generate week 1 (detailed workouts) → Validation → Markdown review
+- **Key commands**: `sce plan create-macro`, `sce plan generate-week`, `sce vdot`, `sce guardrails`, `sce dates`
+- **Progressive disclosure**: Macro plan provides structure (phases, volume trajectory), week 1 has detailed workouts, weeks 2-16 remain as mileage targets until generated weekly (via weekly-analysis skill)
 
 **Date Handling (see "Date Handling Rules" section above)**:
 - Use `sce dates next-monday` to calculate plan start date
 - Use `sce dates validate` to verify all week boundaries before saving
 - All `week.start_date` must be Monday, `week.end_date` must be Sunday
 
-### 5. **plan-adaptation**
+### 6. **plan-adaptation**
 Adjust plans mid-cycle for illness, injury, or schedule changes
 - **Use when**: "I got sick", "adjust my plan", "missed workouts", "schedule changed"
 - **Workflow**: Assess impact → Replan strategy → Update affected weeks → Validate
 - **Key commands**: `sce plan update-week`, `sce plan update-from`, `sce guardrails illness-recovery`
 
-### 6. **injury-risk-management**
+### 7. **injury-risk-management**
 Assess injury risk and provide mitigation strategies
 - **Use when**: "Am I at risk?", "injury probability", "too much training?"
 - **Workflow**: Current risk → Contributing factors → Forecast → Mitigation recommendations
 - **Key commands**: `sce risk assess`, `sce risk forecast`, `sce guardrails progression`
 
-### 7. **race-preparation**
+### 8. **race-preparation**
 Verify taper status and race readiness
 - **Use when**: "Race week", "taper check", "am I ready to race?"
 - **Workflow**: Taper status → TSB trajectory → Final adjustments → Race day readiness

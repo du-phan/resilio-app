@@ -1,6 +1,6 @@
 ---
 name: training-plan-design
-description: Design personalized training plans for 5K-Marathon races using Pfitzinger periodization, Daniels pace zones, and 80/20 principles. Uses progressive disclosure (macro plan + monthly 4-week cycles) to reduce errors and enable adaptive planning. Accounts for multi-sport constraints, CTL-based volume progression, and injury history. Use when athlete requests "design my plan", "create training program", "how should I train for [race]", or after first-session onboarding.
+description: Design personalized training plans for 5K-Marathon races using Pfitzinger periodization, Daniels pace zones, and 80/20 principles. Uses progressive disclosure (macro plan + weekly detail) to reduce errors and enable adaptive planning. Accounts for multi-sport constraints, CTL-based volume progression, and injury history. Use when athlete requests "design my plan", "create training program", "how should I train for [race]", or after first-session onboarding.
 allowed-tools: Bash, Read, Write, AskUserQuestion
 context: fork
 agent: general-purpose
@@ -12,189 +12,106 @@ agent: general-purpose
 
 This skill designs evidence-based training plans using **progressive disclosure**:
 - **Macro plan** (16-week structure): Phase boundaries, volume trajectory, CTL projections
-- **Monthly plan** (4-week detail): Detailed workouts for next month only
-- **Adaptive planning**: Reassess and regenerate each month based on actual response
+- **Weekly plan** (1-week detail): Detailed workouts for NEXT WEEK ONLY
+- **Adaptive planning**: Regenerate weekly based on actual response (via weekly-analysis skill)
 
-**Training methodology**:
-- Pfitzinger periodization (base → build → peak → taper)
-- Daniels VDOT pace system (E/M/T/I/R zones)
-- 80/20 intensity distribution
-- CTL-based volume progression
-- Multi-sport integration
-- Guardrails validation (injury prevention)
+Training methodology: Pfitzinger periodization, Daniels VDOT paces, 80/20 intensity, CTL-based volume progression, multi-sport integration, guardrails validation.
 
-**IMPORTANT: All distances in kilometers (km), all paces in min/km. System is fully metric.**
+**IMPORTANT**: All distances in kilometers (km), all paces in min/km. System is fully metric. Use CLI for ALL calculations (dates, volumes, paces).
 
 ---
 
-## CRITICAL PRINCIPLE: CLI-Only Computation
+## Quick Reference
 
-❌ **DO NOT manually calculate**:
-- Dates (use `sce dates` commands)
-- Volumes (use `sce guardrails` commands)
-- Distances (use intent-based JSON format)
-- HR zones (system calculates from max HR)
-- Pace zones (use `sce vdot paces` command)
-- Run counts (use `sce plan suggest-run-count`)
-
-✅ **DO use CLI tools for ALL computations**
-
-**Why**: Manual calculations introduce errors. The CLI guarantees correctness.
-
----
-
-## Handling Interruptions
-
-If interrupted, determine state by checking which files exist:
-- `/tmp/macro_plan.json` exists? → Resume from Step 5
-- `/tmp/monthly_plan_m1.json` exists? → Resume from Step 7
-- `/tmp/training_plan_review_*.md` exists? → Resume from Step 9
-
-Re-run context gathering if needed: `sce profile get`, `sce status`, `sce dates today`
-
----
-
-## Copyable Workflow Checklist
-
-```
-Task Progress:
-- [ ] Step 0: Get current date (sce dates today, next-monday)
-- [ ] Step 1: Retrieve memories (injury history, preferences)
-- [ ] Step 2: Gather context (sce profile get, sce status)
-- [ ] Step 3: Calculate safe volumes (sce guardrails safe-volume)
-- [ ] Step 3.5: PRE-FLIGHT CHECKS (run suggest-run-count for each week) ← CRITICAL
-- [ ] Step 4: Generate macro plan (sce plan create-macro)
-- [ ] Step 5: Determine VDOT (sce vdot calculate/estimate-current)
-- [ ] Step 6: Generate first month (sce plan generate-month, use intent-based JSON)
-- [ ] Step 7: Validate plan (sce plan validate-month)
-- [ ] Step 8: Create markdown review (/tmp/training_plan_review_*.md)
-- [ ] Step 9: Get athlete approval (present markdown, wait for OK)
-- [ ] Step 10: Save plan (sce plan populate --from-json)
-```
-
----
-
-## Essential Commands
-
-### Dates (ISO Weekdays: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun)
 ```bash
-TODAY=$(sce dates today | jq -r '.data.date')
-START_DATE=$(sce dates next-monday | jq -r '.data.date')
-sce dates validate --date $START_DATE --must-be monday
-```
-**DO NOT use 0-6 notation (Python weekday). Use 1-7 (ISO weekday) in plan JSON.**
+# Dates (ALWAYS verify)
+sce dates today                                    # Current date
+sce dates next-monday                              # Plan start date
+sce dates validate --date $DATE --must-be monday   # Verify Monday
 
-### Pre-Flight Validation (MANDATORY)
-```bash
+# Context & Safety
+sce status                                         # CTL/ATL/TSB/ACWR
+sce profile get                                    # Constraints, goals
+sce memory list --type INJURY_HISTORY              # Past injuries
+sce guardrails safe-volume --ctl $CTL --goal-type $GOAL --recent-volume $VOL
+
+# Pre-flight validation (MANDATORY)
 sce plan suggest-run-count --volume $KM --max-runs $MAX --phase $PHASE
-sce guardrails safe-volume --ctl $CTL --goal-type $GOAL --recent-volume $RECENT
-sce guardrails analyze-progression --previous $PREV --current $CURR
-```
 
-### Plan Generation
-```bash
+# Plan generation
 sce plan create-macro --goal-type $GOAL --race-date $DATE --start-date $START \
   --starting-volume $START_KM --peak-volume $PEAK_KM > /tmp/macro_plan.json
 
-sce plan generate-month --month 1 --weeks "1,2,3,4" \
-  --from-macro /tmp/macro_plan.json --current-vdot $VDOT > /tmp/monthly_plan_m1.json
+sce plan generate-week --week-number 1 --from-macro /tmp/macro_plan.json \
+  --current-vdot $VDOT > /tmp/weekly_plan_w1.json
 
-sce plan validate-month --monthly-plan /tmp/monthly_plan_m1.json
-sce plan populate --from-json /tmp/monthly_plan_m1.json  # After approval only
+# Validation & Save (AFTER approval)
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
+sce plan populate --from-json /tmp/weekly_plan_w1.json
+```
+
+---
+
+## Workflow Checklist
+
+```
+Task Progress:
+- [ ] Step 1: Context (dates, profile, status, memories)
+- [ ] Step 2: Safe volumes (guardrails, pre-flight checks)
+- [ ] Step 3: Generate macro (16 weeks, NO WORKOUTS)
+- [ ] Step 4: Determine VDOT (calculate/estimate/conservative)
+- [ ] Step 5: Generate week 1 ONLY (intent-based JSON)
+- [ ] Step 6: Validate (guardrails check)
+- [ ] Step 7: Create review markdown (macro summary + week 1 detail)
+- [ ] Step 8: Present & save (ONLY after approval)
 ```
 
 ---
 
 ## Workflow Steps
 
-### Step 0: Get Current Date
+### Step 1: Gather Context
 
 **Run**:
 ```bash
 TODAY=$(sce dates today | jq -r '.data.date')
 START_DATE=$(sce dates next-monday | jq -r '.data.date')
 sce dates validate --date $START_DATE --must-be monday
-```
-
-**Success**: You have $START_DATE (verified Monday). Proceed to Step 1.
-
----
-
-### Step 1: Retrieve Memories
-
-**Run**:
-```bash
+sce profile get
+sce status
 sce memory list --type INJURY_HISTORY
-sce memory list --type TRAINING_RESPONSE
 sce memory list --type PREFERENCE
 ```
 
-**Success**: Noted injury triggers, training preferences, constraints. Proceed to Step 2.
+**Extract**: Current CTL, goal (race type/date/time), constraints (max_run_days, max_session_minutes, multi-sport commitments), injury history, training preferences.
+
+**Success**: You have all context for planning. Proceed to Step 2.
 
 ---
 
-### Step 2: Gather Context
+### Step 2: Calculate Safe Volumes & Pre-Flight Validation
 
-**Run**:
-```bash
-sce profile get
-sce status
-```
-
-**Extract**:
-- Current CTL: _____
-- Goal: race type _____, date _____, time goal _____
-- Constraints: max_run_days _____, max_session_minutes _____
-- Running priority: PRIMARY / EQUAL / SECONDARY
-
-**Verify constraints** via conversation:
-- "How many days per week can you realistically run?"
-- "What's your long run max duration?"
-- "Are other sports fixed or flexible?"
-
-**Success**: You have CTL, confirmed constraints, noted multi-sport commitments. Proceed to Step 3.
-
----
-
-### Step 3: Calculate Safe Volumes
-
-**Run**:
+**Calculate starting/peak volumes**:
 ```bash
 RECENT_VOLUME=$(sce profile get | jq -r '.data.running_volume.recent_4wk // 0')
-sce guardrails safe-volume --ctl $CTL --goal-type $GOAL --recent-volume $RECENT_VOLUME
+result=$(sce guardrails safe-volume --ctl $CTL --goal-type $GOAL --recent-volume $RECENT_VOLUME)
 STARTING_VOLUME=$(echo "$result" | jq -r '.data.recommended_start_km')
 PEAK_VOLUME=$(echo "$result" | jq -r '.data.recommended_peak_km')
 ```
 
-**Success**: You have $STARTING_VOLUME and $PEAK_VOLUME. Starting ≤ 110% of recent volume (10% rule). Proceed to Step 3.5.
+**Pre-flight check for week 1** (MANDATORY):
+```bash
+sce plan suggest-run-count --volume $STARTING_VOLUME --max-runs $MAX_RUNS --phase base
+# If recommended_runs < max_runs, adjust plan to use fewer runs
+```
 
-**See [volume_progression.md](references/volume_progression.md) for detailed rules.**
+**Success**: Safe volumes calculated, week 1 run count validated (no 5km easy / 8km long violations). Proceed to Step 3.
+
+**See [volume_progression.md](references/volume_progression.md) and [choosing_run_count.md](references/choosing_run_count.md) for details.**
 
 ---
 
-### Step 3.5: Pre-Flight Validation (CRITICAL - DO NOT SKIP)
-
-**For EACH week in your planned macro, run**:
-```bash
-sce plan suggest-run-count --volume $WEEK_KM --max-runs $MAX_RUNS --phase $PHASE
-```
-
-**Example**:
-```bash
-# Week 1: 23km base
-sce plan suggest-run-count --volume 23 --max-runs 4 --phase base
-# Returns: {"recommended_runs": 3, "rationale": "23km/4 runs → 4.3km easy (below 5km min)"}
-```
-
-**Action**: If `recommended_runs < max_runs`, adjust plan to use fewer runs. DO NOT create weeks violating 5km easy / 8km long minimums.
-
-**Success**: All weeks validated, no violations. Proceed to Step 4.
-
-**See [choosing_run_count.md](references/choosing_run_count.md) for guidance.**
-
----
-
-### Step 4: Generate Macro Plan
+### Step 3: Generate Macro Plan (16 Weeks, NO WORKOUTS)
 
 **Run**:
 ```bash
@@ -213,13 +130,15 @@ test -f /tmp/macro_plan.json && echo "✓ Macro plan created"
 jq -r '.phase_boundaries, .volume_trajectory' /tmp/macro_plan.json
 ```
 
-**Success**: File exists with phase_boundaries and volume_trajectory. Proceed to Step 5.
+⚠️ **CRITICAL**: Macro plan has `target_volume_km` for all 16 weeks, but NO `workout_pattern` or `workouts` fields. These will be generated weekly.
+
+**Success**: File exists with phase_boundaries and volume_trajectory only. Proceed to Step 4.
 
 **See [periodization.md](references/periodization.md) for phase allocation.**
 
 ---
 
-### Step 5: Determine VDOT & Training Paces
+### Step 4: Determine VDOT & Training Paces
 
 **Option A - Recent race (<6 weeks)**:
 ```bash
@@ -233,9 +152,9 @@ sce vdot estimate-current --lookback-days 28
 BASELINE_VDOT=$ESTIMATED_VDOT
 ```
 
-**Option C - No data**:
+**Option C - No data** (conservative default):
 ```bash
-BASELINE_VDOT=45  # Conservative estimate (CTL 30-40 → VDOT 45, CTL 40-50 → VDOT 48)
+BASELINE_VDOT=45  # CTL 30-40 → VDOT 45, CTL 40-50 → VDOT 48
 ```
 
 **Calculate paces**:
@@ -243,78 +162,78 @@ BASELINE_VDOT=45  # Conservative estimate (CTL 30-40 → VDOT 45, CTL 40-50 → 
 sce vdot paces --vdot $BASELINE_VDOT
 ```
 
-**Success**: You have $BASELINE_VDOT and training pace zones (E/M/T/I/R). Proceed to Step 6.
+**Success**: You have $BASELINE_VDOT and training pace zones (E/M/T/I/R). Proceed to Step 5.
 
 **See [pace_zones.md](references/pace_zones.md) for detailed scenarios.**
 
 ---
 
-### Step 6: Generate First Monthly Plan (Weeks 1-4)
+### Step 5: Generate Week 1 ONLY
 
 **FORMAT REQUIREMENT**: Use **intent-based format** (see [json_workflow.md](references/json_workflow.md)).
 
-**Why**: You specify `target_volume_km` and `workout_pattern`, system calculates exact distances (guaranteed correct). DO NOT manually calculate distances.
-
 **Run**:
 ```bash
-sce plan generate-month \
-  --month 1 \
-  --weeks "1,2,3,4" \
+sce plan generate-week \
+  --week-number 1 \
   --from-macro /tmp/macro_plan.json \
   --current-vdot $BASELINE_VDOT \
-  > /tmp/monthly_plan_m1.json
+  > /tmp/weekly_plan_w1.json
 ```
 
-**Validate**:
-```bash
-sce plan validate-month --monthly-plan /tmp/monthly_plan_m1.json
-```
+⚠️ **CRITICAL BOUNDARY**: Generate week 1 ONLY. Weeks 2-16 remain as mileage targets in macro plan. They will be generated after week 1 completes (via weekly-analysis skill).
 
-**Success**: Validation passes (<5% volume discrepancy), no minimum duration violations (easy ≥5km, long ≥8km), recovery week at ~70%. Proceed to Step 7.
-
-**If fails (>10% discrepancy)**: Regenerate with adjusted parameters.
+**Success**: Week 1 JSON created with complete `workout_pattern` using intent-based format. Proceed to Step 6.
 
 **See [workout_generation.md](references/workout_generation.md) for details.**
 
 ---
 
-### Step 7: Validate Against Guardrails
+### Step 6: Validate Week 1
 
-**Validation already done in Step 6.** Spot-check if needed:
-
+**Run**:
 ```bash
-sce guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --weekly-volume 50.0
-sce guardrails long-run --duration 120 --weekly-volume 55 --pct-limit 30
-sce guardrails analyze-progression --previous 44 --current 48
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
 ```
 
-**Success**: <5% volume discrepancy, no violations, quality limits respected (T≤10%, I≤8%, R≤5%), long run ≤30%, no week >10% increase. Proceed to Step 8.
+**Check**:
+- Volume discrepancy <5% (acceptable), 5-10% (review), >10% (regenerate)
+- No minimum duration violations (easy ≥5km, long ≥8km)
+- Quality volume limits respected (T≤10%, I≤8%, R≤5%)
 
-**Volume tolerance**: <5% acceptable, 5-10% review, >10% regenerate.
+**Success**: Validation passes, no violations. Proceed to Step 7.
 
 **See [guardrails.md](references/guardrails.md) for complete rules.**
 
 ---
 
-### Step 8: Create Markdown Review
+### Step 7: Create Markdown Review
 
-**Create**:
+**Create review file**:
 ```bash
 cp templates/plan_presentation.md /tmp/training_plan_review_$(date +%Y_%m_%d).md
-# Edit with: macro plan summary, first month workouts, training paces, guardrails check
+# Edit with: macro plan summary (16 weeks), week 1 detailed workouts, training paces
 ```
+
+**Template structure**:
+- **Macro Plan Overview**: 16 weeks, phases, volume trajectory (mileage targets ONLY)
+- **Week 1 Plan (Detailed)**: Daily workouts with paces, distances, durations
+- **Upcoming Weeks Preview**: Weeks 2-4 mileage targets from macro (NO workout detail)
+- **Note**: "Weeks 2-16 will be generated weekly based on your actual training response"
 
 **Verify dates**:
 ```bash
-start_date=$(jq -r '.weeks[0].start_date' /tmp/monthly_plan_m1.json)
+start_date=$(jq -r '.weeks[0].start_date' /tmp/weekly_plan_w1.json)
 sce dates validate --date $start_date --must-be monday
 ```
 
-**Success**: File exists with macro summary and first month details, all week start dates are Monday. Proceed to Step 9.
+**Success**: Review file exists with macro summary and week 1 details, start date verified Monday. Proceed to Step 8.
+
+**See [plan_presentation.md](templates/plan_presentation.md) for template.**
 
 ---
 
-### Step 9: Present for Approval (CRITICAL)
+### Step 8: Present for Approval & Save
 
 **NEVER save directly. Always present markdown for approval first.**
 
@@ -325,27 +244,21 @@ I've designed your [race] plan using progressive disclosure:
 📋 Review: /tmp/training_plan_review_YYYY_MM_DD.md
 
 **Macro plan** (16 weeks): [X] phases, [Start]→[Peak] km/week, respects constraints
-**First month** (weeks 1-4): Detailed daily workouts with paces
-**Next months**: Generated every 4 weeks based on actual response
+**Week 1** (detailed): [N] runs, [X] km, with daily paces and distances
+**Future weeks**: Generated weekly based on actual training response
 
 Approve, request changes, or ask questions?
 ```
 
 **Handle response**:
-- "Approve" → Proceed to Step 10
-- "Change X" → Clarify → Regenerate → Return to Step 9
-- "Question Y" → Answer → Re-confirm → Proceed when approved
+- "Approve" → Save to system
+- "Change X" → Clarify → Regenerate affected parts → Re-present
+- "Question Y" → Answer → Re-confirm → Save when approved
 
-**Success**: Athlete explicitly approved. Proceed to Step 10 ONLY after approval.
-
----
-
-### Step 10: Save Plan to System
-
-**Save**:
+**Save (ONLY after approval)**:
 ```bash
 cp /tmp/macro_plan.json data/plans/current_plan_macro.json
-sce plan populate --from-json /tmp/monthly_plan_m1.json
+sce plan populate --from-json /tmp/weekly_plan_w1.json
 sce plan save-review --from-file /tmp/training_plan_review_$(date +%Y_%m_%d).md --approved
 sce plan init-log
 ```
@@ -353,34 +266,71 @@ sce plan init-log
 **Verify**:
 ```bash
 sce plan show
-sce plan week --next
 ```
 
-**Success**: Macro saved to `data/plans/current_plan_macro.json`, first month saved to `data/plans/current_plan.yaml`, review saved, log initialized. `sce plan show` displays correctly.
+**Success**: Macro saved, week 1 saved, review saved, log initialized. Plan displays correctly.
 
-**For future monthly cycles**: Use `monthly-transition` skill after completing weeks 1-4 to generate month 2 (weeks 5-8).
+**For week 2**: After completing week 1, use `weekly-analysis` skill which will generate next week's workouts.
+
+---
+
+## Critical Boundaries
+
+⛔ **DO NOT generate workouts for weeks 2-16** - Progressive disclosure means planning only the immediate week. Future weeks remain as mileage targets until they arrive.
+
+⛔ **DO NOT manually calculate** - Dates, volumes, distances, paces must ALL use CLI commands. Manual calculations introduce errors.
+
+⛔ **DO NOT save without athlete approval** - Always present markdown review first, wait for explicit "approve" or "OK".
+
+⛔ **DO NOT skip pre-flight validation** - Step 2 suggest-run-count check prevents creating weeks with runs below minimum durations.
+
+⛔ **DO NOT violate guardrails** - Quality volume limits (T≤10%, I≤8%, R≤5%), long run ≤30%, weekly progression ≤10%.
+
+---
+
+## When Things Go Wrong
+
+**Volume too high** (athlete wants more than CTL suggests):
+- See [volume_progression.md](references/volume_progression.md) for 10% rule interpretation
+- Use guardrails to explain injury risk (ACWR >1.3 = elevated risk)
+- Offer modified plan within safe limits
+
+**Multi-sport conflict** (climbing/cycling competes with key runs):
+- See [multi_sport.md](references/multi_sport.md) for conflict resolution
+- Check athlete's conflict policy (primary_sport_wins / running_goal_wins / ask_each_time)
+- Present trade-offs, let athlete decide
+
+**Unknown VDOT** (no recent race or workout data):
+- See [pace_zones.md](references/pace_zones.md) for conservative defaults
+- Use CTL-based estimate: CTL 30-40 → VDOT 45, CTL 40-50 → VDOT 48, CTL 50+ → VDOT 50
+- Plan will adapt after first few weeks of data
+
+**Validation fails** (volume discrepancy >10%, duration violations):
+- See [common_pitfalls.md](references/common_pitfalls.md) for troubleshooting
+- Check intent-based format syntax (workout_pattern structure)
+- Verify run_days use ISO weekdays (1=Mon, 7=Sun, NOT 0-6)
+- Re-run suggest-run-count with adjusted parameters
+
+**Plan interrupted** (skill stops mid-workflow):
+- Check which files exist: /tmp/macro_plan.json, /tmp/weekly_plan_w1.json, /tmp/training_plan_review_*.md
+- Resume from last completed step
+- Re-run context gathering if needed (sce profile get, sce status, sce dates today)
 
 ---
 
 ## Reference Documentation
 
 **REQUIRED reading for specific steps**:
-- **[json_workflow.md](references/json_workflow.md)** - Intent-based format (Step 6)
-- **[choosing_run_count.md](references/choosing_run_count.md)** - suggest-run-count usage (Step 3.5)
+- **[json_workflow.md](references/json_workflow.md)** - Intent-based format (Step 5)
+- **[choosing_run_count.md](references/choosing_run_count.md)** - Pre-flight validation (Step 2)
 - **[common_pitfalls.md](references/common_pitfalls.md)** - What NOT to do (read before any plan)
 
-**Supporting references**:
-- **[volume_progression.md](references/volume_progression.md)** - 10% rule interpretation
-- **[periodization.md](references/periodization.md)** - Phase allocation
-- **[pace_zones.md](references/pace_zones.md)** - VDOT scenarios and workout prescriptions
+**Supporting references** (for edge cases and athlete education):
+- **[volume_progression.md](references/volume_progression.md)** - 10% rule interpretation, load classification
+- **[periodization.md](references/periodization.md)** - Phase allocation (base/build/peak/taper)
+- **[pace_zones.md](references/pace_zones.md)** - VDOT scenarios, workout prescriptions
 - **[workout_generation.md](references/workout_generation.md)** - Workout prescription details
-- **[guardrails.md](references/guardrails.md)** - Safety rules
-- **[multi_sport.md](references/multi_sport.md)** - Multi-sport integration
+- **[guardrails.md](references/guardrails.md)** - Safety rules (quality volume, long run, progression)
+- **[multi_sport.md](references/multi_sport.md)** - Multi-sport integration, conflict resolution
 
-**Decision trees and update strategies**: See [common_pitfalls.md](references/common_pitfalls.md) for:
-- Volume conflicts (athlete wants more than CTL suggests)
-- Insufficient weeks to goal
-- Multi-sport conflicts during key workouts
-- Injury history adjustments
-- Unknown VDOT scenarios
-- Plan update strategies (mid-week, partial replan, full regeneration)
+**Note**: These references are for depth and edge cases. The primary workflow (Steps 1-8) is complete without them.

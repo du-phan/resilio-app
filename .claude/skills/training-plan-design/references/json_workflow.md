@@ -89,6 +89,109 @@ System handles all mechanical tasks:
 
 ---
 
+## Macro Plan vs Weekly Plan
+
+**Critical distinction**: Training plans use progressive disclosure with TWO formats:
+
+### Macro Plan Format (16 Weeks, NO WORKOUTS)
+
+Macro plans provide structure ONLY - phase boundaries, volume trajectory, no detailed workouts.
+
+```json
+{
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "base",
+      "start_date": "2026-01-20",
+      "end_date": "2026-01-26",
+      "target_volume_km": 23.0,
+      "is_recovery_week": false,
+      "notes": "Base Phase Week 1"
+      // NO workout_pattern field - this will be generated when week arrives
+    },
+    {
+      "week_number": 2,
+      "phase": "base",
+      "start_date": "2026-01-27",
+      "end_date": "2026-02-02",
+      "target_volume_km": 26.0,
+      "is_recovery_week": false,
+      "notes": "Base Phase Week 2"
+      // NO workout_pattern field - future weeks remain as mileage targets
+    }
+  ]
+}
+```
+
+**When to use**: `sce plan create-macro` generates this for the entire 16-week plan.
+
+**Purpose**: Provides big-picture structure (phases, volume trajectory) without committing to specific workouts.
+
+### Weekly Plan Format (1 Week, WITH WORKOUTS)
+
+Weekly plans provide execution detail for the NEXT WEEK ONLY.
+
+```json
+{
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "base",
+      "start_date": "2026-01-20",
+      "end_date": "2026-01-26",
+      "target_volume_km": 23.0,
+      "is_recovery_week": false,
+      "notes": "Base Phase Week 1",
+      "workout_pattern": {
+        "structure": "3 easy + 1 long",
+        "run_days": [1, 3, 5, 6],
+        "long_run_day": 6,
+        "long_run_pct": 0.45,
+        "easy_run_paces": "6:30-6:50",
+        "long_run_pace": "6:30-6:50"
+      }
+    }
+  ]
+}
+```
+
+**When to use**: `sce plan generate-week` generates this for the immediate week.
+
+**Purpose**: Provides detailed workouts with paces, ready to execute.
+
+### Key Differences
+
+| Aspect | Macro Plan | Weekly Plan |
+|--------|------------|-------------|
+| **Weeks included** | All 16 weeks | 1 week only |
+| **Detail level** | Mileage targets only | Complete workout prescriptions |
+| **Has workout_pattern** | ❌ NO | ✅ YES |
+| **Purpose** | Big-picture structure | Execution detail |
+| **CLI command** | `sce plan create-macro` | `sce plan generate-week` |
+| **When generated** | Once at plan start | Weekly, after completing previous week |
+
+### Progressive Disclosure Workflow
+
+1. **Initial plan design** (training-plan-design skill):
+   - Generate macro plan (16 weeks, NO workouts)
+   - Generate week 1 (WITH workouts)
+   - Save both: macro remains constant, week 1 ready to execute
+
+2. **After week 1 completes** (weekly-analysis skill):
+   - Analyze week 1 adherence, adaptation
+   - Generate week 2 (WITH workouts)
+   - Weeks 3-16 remain as mileage targets
+
+3. **Each week**:
+   - Complete current week → analyze → generate next week
+   - Macro plan provides context (phase, volume trajectory)
+   - Weekly plan provides execution (paces, distances)
+
+⚠️ **CRITICAL**: NEVER generate `workout_pattern` for weeks beyond the immediate week. This violates progressive disclosure and creates rigid plans that can't adapt.
+
+---
+
 ## Explicit Format (OLD - Still Supported)
 
 If you prefer to specify exact distances (not recommended due to arithmetic errors):
@@ -187,7 +290,9 @@ poetry run sce plan validate-json --file /tmp/plan.json
 
 ---
 
-## Example: 4-Week Training Plan
+## Example: 4-Week Training Plan (Batch Generation)
+
+⚠️ **Note**: This example shows batch generation for multiple weeks. The **recommended workflow** is 1-week-at-a-time planning (via training-plan-design and weekly-analysis skills). Use batch generation only for catch-up scenarios (e.g., returning from vacation, backfilling multiple weeks).
 
 **Scenario**: 4-week base phase plan
 - Week 1: 23km, 4 runs (3 easy + 1 long)

@@ -2,15 +2,18 @@
 
 > **Quick Links**: [Back to Index](index.md) | [Core Concepts](core_concepts.md)
 
-Commands for setting race goals and managing training plans, including macro planning, monthly plan generation, and plan validation.
+Commands for setting race goals and managing training plans, including macro planning, weekly plan generation (primary workflow), and plan validation.
 
 **Commands in this category:**
 - `sce goal` - Set a race goal (automatically regenerates plan)
 - `sce plan show` - Get current training plan with all weeks and workouts
 - `sce plan regen` - Regenerate plan based on current goal
 - `sce plan week` - Get specific week(s) from the training plan
-- `sce plan create-macro` - Generate high-level training plan structure
-- `sce plan generate-month` - Generate detailed monthly plan (2-6 weeks)
+- `sce plan create-macro` - Generate high-level training plan structure (16-week macro, mileage targets only)
+- `sce plan generate-week` - **Generate detailed workouts for one week (primary workflow)**
+- `sce plan validate-week` - **Validate single week's workout plan before saving**
+- `sce plan revert-week` - **Revert week to macro plan targets (remove detailed workouts)**
+- `sce plan generate-month` - Generate detailed monthly plan (batch scenarios, 2-6 weeks)
 - `sce plan assess-month` - Assess completed month for adaptive planning
 - `sce plan validate-month` - Validate monthly plan before saving
 
@@ -340,6 +343,8 @@ sce plan create-macro \
 ## sce plan generate-month
 
 Generate detailed monthly plan (2-6 weeks) with workout prescriptions using macro plan targets and profile constraints.
+
+> **Note**: This command is for **batch scenarios** (catching up multiple weeks, onboarding catch-up). For **primary workflow**, use `sce plan generate-week` (1 week at a time) integrated into the weekly-analysis skill for maximum adaptability.
 
 **Usage:**
 
@@ -730,6 +735,410 @@ sce plan validate-month \
 - Catches LLM arithmetic errors (volume distribution mistakes)
 - Ensures minimum viable workout durations
 - Prevents unsafe training loads (quality volume limits, long run caps)
+
+---
+
+## sce plan generate-week
+
+Generate detailed workouts for a single week using macro plan targets and progressive disclosure workflow.
+
+> **Primary Workflow**: This is the **recommended command** for weekly planning. Use this after weekly-analysis to generate the next week's workouts based on actual training response.
+
+**Usage:**
+
+```bash
+# Generate week 1 (initial plan creation)
+sce plan generate-week \
+  --week-number 1 \
+  --from-macro /tmp/macro_plan.json \
+  --current-vdot 48.0 \
+  > /tmp/weekly_plan_w1.json
+
+# Generate week 2 (after completing week 1)
+sce plan generate-week \
+  --week-number 2 \
+  --from-macro data/plans/current_plan_macro.json \
+  --current-vdot 48.5 \
+  > /tmp/weekly_plan_w2.json
+
+# Generate with volume reduction (10% less due to fatigue)
+sce plan generate-week \
+  --week-number 3 \
+  --from-macro data/plans/current_plan_macro.json \
+  --current-vdot 48.5 \
+  --volume-adjustment 0.9 \
+  > /tmp/weekly_plan_w3.json
+```
+
+**Parameters:**
+
+- `--week-number` (required) - Week number (1-16 typically)
+- `--from-macro` (required) - Path to macro plan JSON file
+- `--current-vdot` (required) - Current VDOT (30-85, may be recalibrated based on performance)
+- `--volume-adjustment` (optional) - Volume multiplier (0.5-1.5, default 1.0)
+- `--output` (optional) - Output file path (default: stdout)
+
+**Returns:**
+
+```json
+{
+  "ok": true,
+  "message": "Week 2 plan generated: 26.0 km across 4 runs",
+  "data": {
+    "weeks": [
+      {
+        "week_number": 2,
+        "phase": "base",
+        "start_date": "2026-01-27",
+        "end_date": "2026-02-02",
+        "target_volume_km": 26.0,
+        "is_recovery_week": false,
+        "notes": "Week 2 - Base phase: Aerobic foundation",
+        "workout_pattern": {
+          "structure": "3 easy + 1 long",
+          "run_days": [1, 3, 5, 6],
+          "long_run_day": 6,
+          "long_run_duration_min": 72,
+          "long_run_pct": 46.0,
+          "easy_runs": [
+            {"run_number": 1, "distance_km": 4.5, "duration_min": 31, "day": 1},
+            {"run_number": 2, "distance_km": 5.0, "duration_min": 34, "day": 3},
+            {"run_number": 3, "distance_km": 4.5, "duration_min": 31, "day": 5}
+          ],
+          "long_run": {
+            "distance_km": 12.0,
+            "duration_min": 72,
+            "pace_intention": "E-pace"
+          },
+          "paces": {
+            "e_pace_min_km": "06:15",
+            "e_pace_max_km": "06:45"
+          }
+        }
+      }
+    ]
+  }
+}
+```
+
+**What it generates:**
+
+- **Intent-based format** - Coach specifies structure (3 easy + 1 long), system calculates exact distances
+- **Single week only** - Progressive disclosure: plan 1 week at a time based on actual response
+- **Phase-appropriate workouts** - Base (easy runs), Build (+ tempo/intervals), Peak (max load), Taper (reduced volume)
+- **Multi-sport integration** - Workouts scheduled around other sports from profile
+- **VDOT-based paces** - E/M/T/I/R pace zones for quality workouts
+- **Volume allocation** - Uses `distribute_weekly_volume()` to ensure target is met
+- **Minimum duration compliance** - Easy 30min/5km, long 60min/8km
+
+**Progressive disclosure workflow:**
+
+1. **Generate macro plan** - 16 weeks with mileage targets only (NO detailed workouts)
+2. **Generate week 1** - Detailed workouts for first week
+3. **Complete week 1** - Athlete trains, tracks activities
+4. **Weekly analysis** - Analyze adherence, CTL, triggers, readiness
+5. **Generate week 2** - Based on week 1 response (VDOT recalibration, volume adjustment)
+6. **Repeat** - Each week adapts to actual training response
+
+**Benefits over monthly planning:**
+
+- **Maximum adaptability** - Respond immediately to illness, injury, schedule changes
+- **Reduced LLM errors** - Smaller scope (7 days vs 28 days) = fewer date/calculation mistakes
+- **Natural coaching rhythm** - Aligns with weekly-analysis skill (weekly check-ins)
+- **Authentic coaching** - Real coaches plan week-by-week based on athlete response
+
+**Volume adjustment scenarios:**
+
+- `1.0` (default) - Use macro plan target as-is
+- `0.9` - Reduce 10% if injury signals detected or elevated ACWR
+- `0.95` - Reduce 5% if athlete struggling with fatigue
+- `1.05` - Increase 5% if athlete handling load exceptionally well (use cautiously)
+
+**When to use:**
+
+- **Initial plan creation** - Generate week 1 after macro plan approved
+- **Weekly transitions** - Generate next week after weekly-analysis completion (integrated workflow)
+- **Plan adaptation** - Regenerate current week with adjusted volumes if needed
+
+**Integration with weekly-analysis:**
+
+The `weekly-analysis` skill automatically integrates weekly planning:
+
+```bash
+# After analyzing completed week:
+# 1. Check macro plan for next week's target
+# 2. Assess if volume adjustment needed
+# 3. Recalibrate VDOT if significant performance change
+# 4. Generate next week's workouts
+sce plan generate-week --week-number $NEXT_WEEK ...
+# 5. Validate plan
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w$NEXT_WEEK.json
+# 6. Present to athlete
+# 7. Save after approval
+sce plan populate --from-json /tmp/weekly_plan_w$NEXT_WEEK.json
+```
+
+---
+
+## sce plan validate-week
+
+Validate a single week's workout plan before saving - checks JSON structure, volume discrepancy, minimum durations, and date alignment.
+
+**Usage:**
+
+```bash
+# Validate week 1 plan
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
+
+# Validate with verbose output (shows all checks)
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json --verbose
+```
+
+**Parameters:**
+
+- `--weekly-plan` (required) - Path to JSON file with single week's plan
+- `--verbose` (optional) - Show detailed validation checks (default: false)
+
+**Input file format:**
+
+```json
+{
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "base",
+      "start_date": "2026-01-20",
+      "end_date": "2026-01-26",
+      "target_volume_km": 23.0,
+      "workout_pattern": {
+        "structure": "3 easy + 1 long",
+        "run_days": [1, 3, 5, 6],
+        "easy_runs": [
+          {"distance_km": 4.0, "duration_min": 28},
+          {"distance_km": 4.5, "duration_min": 31},
+          {"distance_km": 4.0, "duration_min": 28}
+        ],
+        "long_run": {"distance_km": 10.5, "duration_min": 72}
+      }
+    }
+  ]
+}
+```
+
+**Returns (success):**
+
+```json
+{
+  "ok": true,
+  "message": "Weekly plan validated: 0 errors, 1 warning",
+  "data": {
+    "overall_ok": true,
+    "violations": [],
+    "warnings": [
+      {
+        "severity": "warning",
+        "week": 1,
+        "issue": "Volume discrepancy: 23.0 km actual vs 23.0 km target (0.0%)",
+        "recommendation": "Perfect match - no action needed"
+      }
+    ],
+    "summary": {
+      "weeks_checked": 1,
+      "critical_issues": 0,
+      "warnings": 0,
+      "volume_accuracy": "100.0%",
+      "minimum_duration_compliance": "100%"
+    }
+  }
+}
+```
+
+**Returns (errors detected):**
+
+```json
+{
+  "ok": false,
+  "message": "Weekly plan validation failed: 2 errors, 1 warning",
+  "data": {
+    "overall_ok": false,
+    "violations": [
+      {
+        "severity": "critical",
+        "week": 2,
+        "issue": "Easy run on 2026-01-28 is 3.5 km (below 5 km minimum)",
+        "recommendation": "Increase to at least 5 km or merge with another easy run"
+      },
+      {
+        "severity": "critical",
+        "week": 2,
+        "issue": "Start date 2026-01-28 is Tuesday, not Monday",
+        "recommendation": "Training weeks must start on Monday"
+      }
+    ],
+    "warnings": [
+      {
+        "severity": "warning",
+        "week": 2,
+        "issue": "Long run is 55% of weekly volume (recommended <50%)",
+        "recommendation": "Consider adding another easy run to balance load"
+      }
+    ],
+    "summary": {
+      "weeks_checked": 1,
+      "critical_issues": 2,
+      "warnings": 1,
+      "volume_accuracy": "98.5%",
+      "minimum_duration_compliance": "75% (1 violation)"
+    }
+  }
+}
+```
+
+**What it validates:**
+
+- **JSON structure** - Required fields present (`week_number`, `phase`, `start_date`, `target_volume_km`, `workout_pattern`)
+- **workout_pattern presence** - Intent-based format required (not empty workouts array)
+- **Date alignment** - `start_date` must be Monday (weekday 0), `end_date` must be Sunday (weekday 6)
+- **Volume accuracy** - Actual volume within 5% of target (<5% acceptable, >10% critical)
+- **Minimum workout durations**:
+  - Easy runs: 30 min / 5 km
+  - Long runs: 60 min / 8 km
+  - Tempo runs: 40 min total
+  - Intervals: 35 min total
+- **Long run percentage** - Should be <50% of weekly volume (warning if >50%)
+- **ISO weekday validation** - `run_days` must be 1-7 (Monday=1, Sunday=7)
+
+**Violation severities:**
+
+- **`critical`** - Must fix before saving (date errors, volume >10% off, safety violations)
+- **`warning`** - Review but may be acceptable (volume <5% off, minor duration issues)
+- **`info`** - FYI only, no action needed
+
+**When to use:**
+
+- **After generating weekly plan** - Validate before presenting to athlete
+- **Before saving plan** - Catches errors before committing to system
+- **Catches LLM errors** - Date calculation mistakes, volume distribution errors
+- **Ensures safety** - Minimum durations, reasonable long run percentages
+
+**Integration with workflow:**
+
+```bash
+# Standard workflow:
+# 1. Generate week
+sce plan generate-week --week-number 2 ... > /tmp/weekly_plan_w2.json
+
+# 2. Validate BEFORE presenting
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w2.json
+
+# 3. If validation fails, regenerate with corrections
+# 4. Once validated, present to athlete
+# 5. After approval, save
+sce plan populate --from-json /tmp/weekly_plan_w2.json
+```
+
+---
+
+## sce plan revert-week
+
+Revert a week's plan to macro plan targets (remove detailed workouts) - useful for rolling back if athlete disagrees with generated workouts.
+
+**Usage:**
+
+```bash
+# Revert week 3 to macro plan targets only
+sce plan revert-week --week-number 3
+
+# After reverting, can regenerate with different parameters
+sce plan generate-week --week-number 3 --volume-adjustment 0.9 ...
+```
+
+**Parameters:**
+
+- `--week-number` (required) - Week number to revert (1-16 typically)
+
+**Returns (success):**
+
+```json
+{
+  "ok": true,
+  "message": "Week 3 reverted to macro plan targets (detailed workouts removed)",
+  "data": {
+    "week_number": 3,
+    "previous_state": {
+      "had_workouts": true,
+      "workout_count": 4,
+      "total_volume_km": 30.0
+    },
+    "current_state": {
+      "has_workouts": false,
+      "target_volume_km": 30.0,
+      "phase": "base",
+      "notes": "Week 3 - Base phase (reverted to macro targets)"
+    }
+  }
+}
+```
+
+**Returns (error - week not found):**
+
+```json
+{
+  "ok": false,
+  "error_type": "not_found",
+  "message": "Week 5 not found in current plan"
+}
+```
+
+**What it does:**
+
+1. **Loads current plan** - Reads `data/plans/current_plan.yaml`
+2. **Finds specified week** - Locates week by `week_number`
+3. **Removes workout details** - Deletes `workout_pattern` and `workouts` fields
+4. **Keeps macro data** - Preserves `target_volume_km`, `phase`, `start_date`, `end_date`, `notes`
+5. **Saves updated plan** - Writes back to `current_plan.yaml`
+
+**Use cases:**
+
+- **Athlete disagrees with volume** - "That's too much for me this week"
+- **Schedule changed** - "I can only run 3 days next week, not 4"
+- **Volume adjustment needed** - Revert and regenerate with `--volume-adjustment 0.9`
+- **Testing/experimentation** - Try different workout structures for the same week
+- **Rollback after mistake** - Undo if wrong week was generated
+
+**Workflow example:**
+
+```bash
+# Scenario: Week 4 generated with 4 runs, athlete wants 3 runs instead
+
+# 1. Revert week 4 to macro targets
+sce plan revert-week --week-number 4
+
+# 2. Update profile constraint (if needed)
+sce profile set --max-run-days 3
+
+# 3. Regenerate week 4 with new constraint
+sce plan generate-week --week-number 4 --from-macro data/plans/current_plan_macro.json ...
+
+# 4. Validate new plan
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w4.json
+
+# 5. Present and save after approval
+sce plan populate --from-json /tmp/weekly_plan_w4.json
+```
+
+**Important notes:**
+
+- **Does not affect future weeks** - Only reverts specified week
+- **Does not delete macro plan** - Macro plan (`current_plan_macro.json`) remains intact
+- **Safe operation** - Can always regenerate after reverting
+- **No historical data loss** - Past weeks (already completed) remain unchanged
+
+**When NOT to use:**
+
+- **To skip a week** - Use plan adaptation workflow instead
+- **To delete entire plan** - Use `sce plan regen` to regenerate from goal
+- **To modify workouts** - Edit plan directly or regenerate with adjusted parameters
 
 ---
 

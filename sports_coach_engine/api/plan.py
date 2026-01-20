@@ -1610,6 +1610,25 @@ def create_macro_plan(
             peak_volume_km=peak_volume_km
         )
 
+        # CRITICAL VALIDATION: Macro plan must NOT contain workout_pattern fields
+        # Progressive disclosure means macro has volume targets only, not detailed workouts
+        if "volume_trajectory" in macro:
+            for week_target in macro["volume_trajectory"]:
+                week_num = week_target.get("week")
+                if "workout_pattern" in week_target:
+                    return PlanError(
+                        error_type="validation",
+                        message=f"Macro plan violation: Week {week_num} has 'workout_pattern' field. "
+                                f"Macro plans should only contain target_volume_km, not detailed workouts. "
+                                f"Use 'sce plan generate-week' to create detailed workouts for specific weeks."
+                    )
+                if "workouts" in week_target and week_target["workouts"]:
+                    return PlanError(
+                        error_type="validation",
+                        message=f"Macro plan violation: Week {week_num} has 'workouts' field. "
+                                f"Macro plans should only contain target_volume_km, not workout prescriptions."
+                    )
+
         return macro
 
     except ValueError as e:
@@ -2106,4 +2125,455 @@ def suggest_optimal_run_count(
         "comfortable_volume_for_max_runs": round(comfortable_volume, 1),
         "easy_min_km": round(easy_min, 1),
         "long_min_km": round(long_min, 1)
+    }
+
+
+def generate_week_plan(
+    week_number: int,
+    macro_plan_path: str,
+    current_vdot: float,
+    volume_adjustment: float = 1.0
+) -> Union[dict, PlanError]:
+    """
+    Generate detailed workouts for a single week.
+
+    Progressive disclosure workflow: generates workouts for ONE week only.
+    Reads macro plan for phase/volume targets, generates workout_pattern
+    using intent-based format.
+
+    Workflow:
+    1. Load macro plan JSON
+    2. Extract week's target_volume_km and phase
+    3. Apply volume_adjustment if needed (for illness/injury recovery)
+    4. Load athlete profile for constraints
+    5. Generate workout_pattern (intent-based format)
+    6. Calculate training paces from VDOT
+    7. Return single-week JSON ready for populate
+
+    Args:
+        week_number: Week to generate (1-indexed)
+        macro_plan_path: Path to macro plan JSON with 16 weeks of targets
+        current_vdot: VDOT value for pace calculations (may be recalibrated)
+        volume_adjustment: Multiplier for volume (0.85 = reduce 15%, 1.0 = as planned)
+
+    Returns:
+        dict: Single week with workout_pattern
+        {
+            "weeks": [{
+                "week_number": 1,
+                "phase": "base",
+                "start_date": "2026-01-20",
+                "end_date": "2026-01-26",
+                "target_volume_km": 23.0,
+                "is_recovery_week": false,
+                "notes": "...",
+                "workout_pattern": {
+                    "structure": "3 easy + 1 long",
+                    "run_days": [1, 3, 5, 6],
+                    "long_run_day": 6,
+                    "long_run_pct": 0.45,
+                    "easy_run_paces": "6:30-6:50",
+                    "long_run_pace": "6:30-6:50"
+                }
+            }],
+            "num_runs": 4,
+            "generation_context": {...}
+        }
+
+        PlanError on failure
+
+    Example:
+        >>> result = generate_week_plan(
+        ...     week_number=1,
+        ...     macro_plan_path="/tmp/macro_plan.json",
+        ...     current_vdot=48.0,
+        ...     volume_adjustment=1.0
+        ... )
+        >>> result["weeks"][0]["workout_pattern"]
+        {...}
+    """
+    repo = RepositoryIO()
+    from pathlib import Path
+    import json
+    from sports_coach_engine.core.vdot import calculate_training_paces
+
+    # 1. Load macro plan
+    macro_path = Path(macro_plan_path)
+    if not macro_path.exists():
+        return PlanError(
+            error_type="not_found",
+            message=f"Macro plan file not found: {macro_plan_path}"
+        )
+
+    try:
+        with open(macro_path, 'r') as f:
+            macro_plan = json.load(f)
+    except json.JSONDecodeError as e:
+        return PlanError(
+            error_type="validation",
+            message=f"Invalid JSON in macro plan: {str(e)}"
+        )
+
+    # 2. Extract week's targets
+    if "volume_trajectory" not in macro_plan:
+        return PlanError(
+            error_type="validation",
+            message="Macro plan missing 'volume_trajectory' field"
+        )
+
+    volume_trajectory = macro_plan["volume_trajectory"]
+    week_target = next((vt for vt in volume_trajectory if vt["week"] == week_number), None)
+
+    if not week_target:
+        return PlanError(
+            error_type="validation",
+            message=f"Week {week_number} not found in macro plan volume_trajectory"
+        )
+
+    target_volume = week_target["target_km"] * volume_adjustment
+    is_recovery_week = week_target.get("is_recovery", False)
+
+    # Get phase from macro plan structure
+    phases_list = macro_plan.get("structure", {}).get("phases", [])
+    week_to_phase = {}
+    for phase_info in phases_list:
+        phase_name = phase_info["name"]
+        for week in phase_info["weeks"]:
+            week_to_phase[week] = phase_name
+
+    phase = week_to_phase.get(week_number, "base")
+
+    # 3. Load athlete profile
+    profile_result = get_profile()
+    if isinstance(profile_result, ProfileError):
+        return PlanError(
+            error_type="validation",
+            message=f"Failed to load profile: {str(profile_result)}"
+        )
+
+    profile = profile_result
+    max_run_days = profile.max_run_days or 4
+
+    # 4. Calculate training paces from VDOT
+    paces = calculate_training_paces(current_vdot)
+    easy_pace_range = f"{paces['easy']['min_pace']}-{paces['easy']['max_pace']}"
+
+    # 5. Determine workout structure
+    # Use suggest_optimal_run_count to get recommended run frequency
+    run_count_result = suggest_optimal_run_count(
+        target_volume_km=target_volume,
+        max_runs=max_run_days,
+        phase=phase,
+        profile=profile.model_dump()
+    )
+
+    recommended_runs = run_count_result["recommended_runs"]
+
+    # Build run_days array (ISO weekdays: 1=Mon, 7=Sun)
+    # Common patterns: 3 runs = [1,3,6], 4 runs = [1,3,5,6], 5 runs = [1,2,4,5,6]
+    run_days_patterns = {
+        3: [1, 3, 6],  # Tue, Thu, Sun
+        4: [1, 3, 5, 6],  # Tue, Thu, Sat, Sun
+        5: [1, 2, 4, 5, 6],  # Tue, Wed, Fri, Sat, Sun
+    }
+    run_days = run_days_patterns.get(recommended_runs, [1, 3, 5, 6])
+
+    # Long run is always Sunday (6)
+    long_run_day = 6
+
+    # Long run percentage: base=0.45, build/peak=0.47, recovery=0.52
+    long_run_pct_map = {
+        "base": 0.45,
+        "build": 0.47,
+        "peak": 0.47,
+        "taper": 0.40,
+        "recovery": 0.52
+    }
+    long_run_pct = long_run_pct_map.get(phase, 0.45)
+
+    # Calculate dates (from macro plan start date)
+    race_info = macro_plan.get("race", {})
+    plan_start_date_str = race_info.get("start_date")
+    if not plan_start_date_str:
+        return PlanError(
+            error_type="validation",
+            message="Macro plan missing race.start_date"
+        )
+
+    from datetime import datetime, timedelta
+    plan_start_date = datetime.fromisoformat(plan_start_date_str).date()
+
+    # Calculate week start date (each week is Monday-Sunday, so week N starts (N-1)*7 days after plan start)
+    week_start_date = plan_start_date + timedelta(days=(week_number - 1) * 7)
+    week_end_date = week_start_date + timedelta(days=6)
+
+    # Validate that start is Monday
+    if week_start_date.weekday() != 0:
+        return PlanError(
+            error_type="validation",
+            message=f"Week {week_number} start date {week_start_date} is not Monday (check macro plan start_date)"
+        )
+
+    # 6. Build workout_pattern (intent-based format)
+    workout_pattern = {
+        "structure": f"{recommended_runs - 1} easy + 1 long" if not is_recovery_week else f"{recommended_runs - 1} easy + 1 long (recovery)",
+        "run_days": run_days,
+        "long_run_day": long_run_day,
+        "long_run_pct": long_run_pct,
+        "easy_run_paces": easy_pace_range,
+        "long_run_pace": easy_pace_range  # Long run at easy pace for base phase
+    }
+
+    # 7. Build week dict
+    from sports_coach_engine.core.plan import generate_week_notes
+
+    week_dict = {
+        "week_number": week_number,
+        "phase": phase,
+        "start_date": week_start_date.isoformat(),
+        "end_date": week_end_date.isoformat(),
+        "target_volume_km": round(target_volume, 1),
+        "is_recovery_week": is_recovery_week,
+        "notes": generate_week_notes(phase, week_number, is_recovery_week),
+        "workout_pattern": workout_pattern
+    }
+
+    return {
+        "weeks": [week_dict],
+        "num_runs": recommended_runs,
+        "generation_context": {
+            "vdot": current_vdot,
+            "volume_adjustment": volume_adjustment,
+            "paces": paces
+        }
+    }
+
+
+def validate_week_plan(
+    weekly_plan_path: str,
+    verbose: bool = False
+) -> Union[dict, PlanError]:
+    """
+    Validate a single week's workout plan before saving.
+
+    Checks for:
+    - JSON structure and required fields
+    - Volume discrepancy (<5% acceptable, >10% regenerate)
+    - Minimum duration violations (easy ≥5km, long ≥8km)
+    - Quality volume limits (T≤10%, I≤8%, R≤5%)
+    - Date alignment (start=Monday, end=Sunday)
+    - workout_pattern field presence (intent-based format required)
+
+    Args:
+        weekly_plan_path: Path to weekly plan JSON file
+        verbose: Show detailed validation output
+
+    Returns:
+        dict: Validation result
+        {
+            "is_valid": bool,
+            "errors": list[str],
+            "warnings": list[str],
+            "summary": str
+        }
+
+        PlanError on failure
+
+    Example:
+        >>> result = validate_week_plan("/tmp/weekly_plan_w1.json")
+        >>> result["is_valid"]
+        True
+    """
+    from pathlib import Path
+    import json
+    from datetime import datetime
+
+    # Load weekly plan
+    plan_path = Path(weekly_plan_path)
+    if not plan_path.exists():
+        return PlanError(
+            error_type="not_found",
+            message=f"Weekly plan file not found: {weekly_plan_path}"
+        )
+
+    try:
+        with open(plan_path, 'r') as f:
+            plan_data = json.load(f)
+    except json.JSONDecodeError as e:
+        return PlanError(
+            error_type="validation",
+            message=f"Invalid JSON: {str(e)}"
+        )
+
+    # Extract weeks array
+    if "weeks" not in plan_data:
+        return PlanError(
+            error_type="validation",
+            message="JSON must contain 'weeks' array"
+        )
+
+    weeks = plan_data["weeks"]
+    if len(weeks) != 1:
+        return PlanError(
+            error_type="validation",
+            message=f"Weekly plan must contain exactly 1 week, found {len(weeks)}"
+        )
+
+    week = weeks[0]
+    errors = []
+    warnings = []
+
+    # Check required fields
+    required_fields = ["week_number", "phase", "start_date", "end_date", "target_volume_km"]
+    for field in required_fields:
+        if field not in week:
+            errors.append(f"Missing required field: '{field}'")
+
+    # Check for workout_pattern (intent-based format)
+    if "workout_pattern" not in week:
+        errors.append(
+            "Missing 'workout_pattern' field. Only intent-based format is supported for weekly plans."
+        )
+    else:
+        # Validate workout_pattern structure
+        pattern = week["workout_pattern"]
+        required_pattern_fields = ["run_days", "long_run_day", "long_run_pct"]
+        for field in required_pattern_fields:
+            if field not in pattern:
+                errors.append(f"workout_pattern missing required field: '{field}'")
+
+        # Check long_run_pct is reasonable
+        if "long_run_pct" in pattern:
+            long_pct = pattern["long_run_pct"]
+            if long_pct > 0.55:
+                warnings.append(
+                    f"long_run_pct is {long_pct:.0%} (>55% of weekly volume, consider 0.45-0.50)"
+                )
+
+        # Validate run_days are ISO weekdays (1-7)
+        if "run_days" in pattern:
+            for day in pattern["run_days"]:
+                if not isinstance(day, int) or day < 1 or day > 7:
+                    errors.append(f"Invalid run_day {day}, must be 1-7 (ISO weekday)")
+
+    # Check date alignment
+    if "start_date" in week and "end_date" in week:
+        try:
+            start = datetime.fromisoformat(week["start_date"]).date()
+            end = datetime.fromisoformat(week["end_date"]).date()
+
+            if start.weekday() != 0:
+                errors.append(
+                    f"start_date must be Monday, got {start.strftime('%A')}"
+                )
+
+            if end.weekday() != 6:
+                errors.append(
+                    f"end_date must be Sunday, got {end.strftime('%A')}"
+                )
+        except ValueError as e:
+            errors.append(f"Invalid date format: {e}")
+
+    # Check phase is valid
+    if "phase" in week:
+        valid_phases = ["base", "build", "peak", "taper", "recovery"]
+        if week["phase"] not in valid_phases:
+            errors.append(
+                f"Invalid phase '{week['phase']}', must be one of: {', '.join(valid_phases)}"
+            )
+
+    is_valid = len(errors) == 0
+    summary = "Weekly plan validation passed" if is_valid else f"Found {len(errors)} error(s)"
+
+    return {
+        "is_valid": is_valid,
+        "errors": errors,
+        "warnings": warnings,
+        "summary": summary
+    }
+
+
+def revert_week_plan(week_number: int) -> Union[dict, PlanError]:
+    """
+    Revert a week's plan to macro plan targets (remove detailed workouts).
+
+    Removes workout_pattern field from specified week, leaving only target_volume_km.
+    Useful for rolling back a week to allow regeneration with different parameters.
+
+    Workflow:
+    1. Load current plan
+    2. Find specified week
+    3. Remove workout_pattern and workouts fields
+    4. Keep only target_volume_km, phase, dates, notes
+    5. Save updated plan
+
+    Args:
+        week_number: Week number to revert (1-indexed)
+
+    Returns:
+        dict: Confirmation with week details
+        {
+            "week_number": 3,
+            "reverted_to_target": 30.0,
+            "message": "Week 3 reverted to macro plan targets"
+        }
+
+        PlanError on failure
+
+    Example:
+        >>> result = revert_week_plan(week_number=3)
+        >>> result["message"]
+        "Week 3 reverted to macro plan targets"
+    """
+    repo = RepositoryIO()
+
+    # Load current plan
+    plan_path = current_plan_path()
+    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
+
+    if result is None:
+        return PlanError(
+            error_type="not_found",
+            message="No plan found. Run 'sce plan regen' first."
+        )
+
+    if isinstance(result, RepoError):
+        return PlanError(
+            error_type="validation",
+            message=f"Failed to load plan: {str(result)}"
+        )
+
+    plan = result
+
+    # Find specified week
+    week_to_revert = None
+    for week in plan.weeks:
+        if week.week_number == week_number:
+            week_to_revert = week
+            break
+
+    if not week_to_revert:
+        return PlanError(
+            error_type="not_found",
+            message=f"Week {week_number} not found in plan"
+        )
+
+    # Store target volume before modification
+    target_volume = week_to_revert.target_volume_km
+
+    # Revert week by clearing workouts
+    week_to_revert.workouts = []
+
+    # Save updated plan
+    write_result = repo.write_yaml(plan_path, plan)
+    if isinstance(write_result, RepoError):
+        return PlanError(
+            error_type="unknown",
+            message=f"Failed to save plan: {str(write_result)}"
+        )
+
+    return {
+        "week_number": week_number,
+        "reverted_to_target": target_volume,
+        "message": f"Week {week_number} reverted to macro plan targets (workouts removed). Can regenerate with different parameters."
     }

@@ -644,11 +644,13 @@ python3 -c "from datetime import date; d = date.fromisoformat('$start_date'); as
 **The Problem**:
 Saving training plan with empty `workouts: []` arrays, focusing only on markdown presentation and week metadata.
 
+⚠️ **Clarification**: This applies ONLY to the **weekly plan** being populated (e.g., week 1). The **macro plan** (weeks 2-16) SHOULD have empty workout arrays until those weeks are generated. See Pitfall 6.2 below.
+
 **Why It Happens**:
 - Focusing on human-readable markdown (plan review file)
 - Forgetting YAML is the source of truth for CLI tools
 - Misunderstanding relationship between markdown (presentation) and YAML (data)
-- Skipping Step 5b in skill workflow
+- Skipping Step 5 in skill workflow (generate-week)
 
 **What Goes Wrong**:
 ```
@@ -743,13 +745,144 @@ workouts:
 
 **Prevention**:
 - Add to checklist: "Workouts array populated with complete WorkoutPrescription objects"
-- Use generate_workouts.py script (enforces complete structure)
+- Use intent-based format with `sce plan generate-week` (enforces complete structure)
 - Validate plan JSON before presenting to athlete
 - Test `sce today` immediately after populating plan
 
 ---
 
-### Pitfall 6.2: Missing Required Workout Fields
+### Pitfall 6.2: Generating Workouts for All Weeks (Violates Progressive Disclosure)
+
+**The Problem**:
+Creating detailed `workout_pattern` or `workouts` for weeks 2-16 during initial plan generation, violating the progressive disclosure principle.
+
+**Why It Happens**:
+- Misunderstanding "complete plan" to mean "all weeks have detailed workouts"
+- Template shows all 16 weeks, prompting AI to fill in content
+- Ambiguous checklist items (e.g., "all weeks have complete WorkoutPrescription objects" could be misread as applying to ALL weeks, not just the week being populated)
+- Not explicitly seeing "STOP: Generate only week 1" boundary
+
+**What Goes Wrong**:
+```json
+// WRONG: Macro plan with workout_pattern for future weeks
+{
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "base",
+      "target_volume_km": 23.0,
+      "workout_pattern": { /* detailed workouts */ }  ← OK for week 1
+    },
+    {
+      "week_number": 2,
+      "phase": "base",
+      "target_volume_km": 26.0,
+      "workout_pattern": { /* detailed workouts */ }  ← WRONG! Week 2 should only have target_volume_km
+    },
+    {
+      "week_number": 3,
+      "phase": "base",
+      "target_volume_km": 30.0,
+      "workout_pattern": { /* detailed workouts */ }  ← WRONG! Week 3 should only have target_volume_km
+    }
+    // ... weeks 4-16 all with detailed workouts ← WRONG!
+  ]
+}
+```
+
+**Why It's Wrong**:
+- **Defeats adaptability**: Future weeks can't be adjusted based on actual training response (illness, injury, faster/slower adaptation)
+- **Increases errors**: More dates to calculate, more workouts to generate = more opportunities for mistakes
+- **Violates system design**: Progressive disclosure means planning only the immediate week
+- **Creates rigid plans**: Athlete locked into workouts designed weeks/months in advance without considering actual progress
+
+**Correct Pattern**:
+
+**Macro plan** (all 16 weeks, NO workouts):
+```json
+{
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "base",
+      "start_date": "2026-01-20",
+      "end_date": "2026-01-26",
+      "target_volume_km": 23.0,
+      "is_recovery_week": false,
+      "notes": "Base Phase Week 1"
+      // NO workout_pattern field
+    },
+    {
+      "week_number": 2,
+      "phase": "base",
+      "start_date": "2026-01-27",
+      "end_date": "2026-02-02",
+      "target_volume_km": 26.0,
+      "is_recovery_week": false,
+      "notes": "Base Phase Week 2"
+      // NO workout_pattern field
+    }
+    // ... weeks 3-16 with only target_volume_km
+  ]
+}
+```
+
+**Weekly plan** (week 1 ONLY, WITH workouts):
+```json
+{
+  "weeks": [
+    {
+      "week_number": 1,
+      "phase": "base",
+      "start_date": "2026-01-20",
+      "end_date": "2026-01-26",
+      "target_volume_km": 23.0,
+      "is_recovery_week": false,
+      "notes": "Base Phase Week 1",
+      "workout_pattern": {
+        "structure": "3 easy + 1 long",
+        "run_days": [1, 3, 5, 6],
+        "long_run_day": 6,
+        "long_run_pct": 0.45,
+        "easy_run_paces": "6:30-6:50",
+        "long_run_pace": "6:30-6:50"
+      }
+    }
+  ]
+}
+```
+
+**Solution**:
+1. **Generate macro plan** (`sce plan create-macro`):
+   - All 16 weeks with `target_volume_km` only
+   - NO `workout_pattern` or `workouts` fields
+   - Provides structure (phases, volume trajectory), not execution detail
+
+2. **Generate week 1** (`sce plan generate-week`):
+   - ONLY week 1 with complete `workout_pattern`
+   - System calculates exact distances, paces, durations
+
+3. **After week 1 completes** (via `weekly-analysis` skill):
+   - Analyze week 1 adherence, adaptation
+   - Generate week 2 with workouts
+   - Weeks 3-16 remain as mileage targets
+
+4. **Repeat weekly**:
+   - Complete week → analyze → generate next week
+   - Each week informed by actual training response
+
+**Detection**:
+- If `/tmp/macro_plan.json` contains `workout_pattern` for week 5+, you've violated progressive disclosure
+- SKILL.md explicitly states: "⛔ DO NOT generate workouts for weeks 2-16"
+
+**Prevention**:
+- Read "Critical Boundaries" section in SKILL.md before starting
+- Verify macro plan has NO `workout_pattern` fields: `jq '.weeks[] | select(.workout_pattern != null) | .week_number' /tmp/macro_plan.json` → should return NOTHING
+- Generate weeks one at a time, not in batches (except for catch-up scenarios)
+
+---
+
+### Pitfall 6.3: Missing Required Workout Fields
 
 **The Problem**:
 Creating workout objects but omitting required fields like `pace_range_min_km`, `purpose`, or `intensity_zone`.

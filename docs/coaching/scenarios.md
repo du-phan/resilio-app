@@ -468,6 +468,372 @@ Example:
 
 ---
 
+## Scenario 12: Weekly Planning Transition Workflow
+
+**Context**: Athlete has completed Week 1 of their training plan. Time to analyze the week and generate Week 2 workouts using the progressive disclosure workflow.
+
+**Why This Matters**:
+- **Adaptive planning**: Each week is tailored based on actual training response, not rigid advance planning
+- **Reduced errors**: Smaller scope (1 week vs 4 weeks) = fewer date/calculation mistakes
+- **Natural coaching rhythm**: Weekly check-ins + weekly planning = seamless coaching experience
+- **Authentic coaching**: Real coaches plan week-by-week based on athlete response
+
+**Progressive Disclosure Principle**:
+- Macro plan (16 weeks) provides structure: phases, volume targets, CTL projections
+- Weekly plan (1 week) provides execution: detailed workouts with exact distances, paces, purposes
+- Each week generated AFTER previous week completes → informed by actual adherence, fatigue, adaptation
+
+### Workflow: Weekly Analysis → Weekly Planning
+
+```bash
+# ========================================
+# PART 1: Analyze Completed Week (Week 1)
+# ========================================
+
+# Check what week we just completed
+sce dates today
+# Returns: {"date": "2026-01-26", "day_name": "Sunday", "week_boundary": "end"}
+
+# Get weekly summary
+sce week
+# Shows: Week 1 (Jan 20-26), 4 workouts, 23 km total
+
+# Analyze adherence
+sce analysis adherence --start 2026-01-20 --end 2026-01-26
+# Returns: 100% completion (4/4 runs completed)
+
+# Analyze intensity distribution
+sce analysis intensity --start 2026-01-20 --end 2026-01-26
+# Returns: 82% easy, 18% hard (good 80/20 compliance)
+
+# Check current metrics (post-week-1)
+sce status
+# Returns: CTL 46.2 (+2.2 from 44.0), ACWR 1.05 (safe), readiness 72 (good)
+
+# ========================================
+# PART 2: Weekly Analysis Interpretation
+# ========================================
+
+# Coach analyzes results:
+# ✓ Adherence: 4/4 runs completed - excellent
+# ✓ Intensity: 82% easy, 18% hard - good 80/20 discipline
+# ✓ CTL progression: +2.2 points (target was +2.0) - on track
+# ✓ ACWR: 1.05 (safe zone) - no injury risk spike
+# ✓ Readiness: 72 (good) - ready for next week's progression
+# ✓ Activity notes: No pain/injury keywords detected
+
+# Conclusion: Athlete handled Week 1 well → proceed with Week 2 as planned
+
+# ========================================
+# PART 3: Check Macro Plan for Week 2
+# ========================================
+
+# Load macro plan to see Week 2 target
+sce plan show --format json | jq '.weeks[] | select(.week_number == 2)'
+# Returns:
+# {
+#   "week_number": 2,
+#   "phase": "base",
+#   "start_date": "2026-01-27",
+#   "end_date": "2026-02-02",
+#   "target_volume_km": 26.0,
+#   "is_recovery_week": false
+#   // NO workout_pattern - this is macro plan (structure only)
+# }
+
+# ========================================
+# PART 4: Assess if Volume Adjustment Needed
+# ========================================
+
+# Decision logic:
+# - Adherence 100% → no downgrade needed
+# - ACWR 1.05 (safe) → no injury risk
+# - Readiness 72 (good) → can handle progression
+# - No illness/injury signals → proceed as planned
+# → Use volume_adjustment = 1.0 (no change from macro target)
+
+# If athlete had struggled:
+# - Adherence <80% → consider 0.95 adjustment
+# - ACWR >1.3 → consider 0.9 adjustment
+# - Readiness <50 → consider skipping week or 0.85 adjustment
+
+# ========================================
+# PART 5: Recalibrate VDOT if Needed
+# ========================================
+
+# Check if VDOT recalibration needed:
+# - Recent race result? No
+# - Breakthrough workout? No (Week 1 was all easy runs)
+# - Consistent pace improvements? Too early (only 1 week)
+# → Keep VDOT at 48.0 (no recalibration)
+
+# If there WAS a signal:
+# sce vdot calculate --race-type 10k --time 42:00
+# sce vdot paces --vdot 49
+
+# ========================================
+# PART 6: Generate Week 2 Workouts
+# ========================================
+
+# Generate detailed workouts for Week 2
+sce plan generate-week \
+  --week-number 2 \
+  --from-macro data/plans/current_plan_macro.json \
+  --current-vdot 48.0 \
+  --volume-adjustment 1.0 \
+  > /tmp/weekly_plan_w2.json
+
+# Returns:
+# {
+#   "ok": true,
+#   "message": "Week 2 plan generated: 26.0 km across 4 runs",
+#   "data": {
+#     "weeks": [{
+#       "week_number": 2,
+#       "phase": "base",
+#       "start_date": "2026-01-27",
+#       "end_date": "2026-02-02",
+#       "target_volume_km": 26.0,
+#       "workout_pattern": {
+#         "structure": "3 easy + 1 long",
+#         "run_days": [1, 3, 5, 6],  // Mon, Wed, Fri, Sat
+#         "easy_runs": [
+#           {"distance_km": 4.5, "duration_min": 31, "day": 1},
+#           {"distance_km": 5.0, "duration_min": 34, "day": 3},
+#           {"distance_km": 4.5, "duration_min": 31, "day": 5}
+#         ],
+#         "long_run": {
+#           "distance_km": 12.0,
+#           "duration_min": 72,
+#           "pace_intention": "E-pace"
+#         },
+#         "paces": {
+#           "e_pace_min_km": "06:15",
+#           "e_pace_max_km": "06:45"
+#         }
+#       }
+#     }]
+#   }
+# }
+
+# ========================================
+# PART 7: Validate Week 2 Plan
+# ========================================
+
+# Validate BEFORE presenting to athlete
+sce plan validate-week --weekly-plan /tmp/weekly_plan_w2.json
+
+# Returns:
+# {
+#   "ok": true,
+#   "message": "Weekly plan validated: 0 errors, 0 warnings",
+#   "data": {
+#     "overall_ok": true,
+#     "violations": [],
+#     "warnings": [],
+#     "summary": {
+#       "weeks_checked": 1,
+#       "critical_issues": 0,
+#       "warnings": 0,
+#       "volume_accuracy": "100.0%",
+#       "minimum_duration_compliance": "100%"
+#     }
+#   }
+# }
+
+# ✓ Validation passed - safe to present
+
+# ========================================
+# PART 8: Present Week 2 to Athlete
+# ========================================
+```
+
+**Coach presents to athlete**:
+
+```
+"Great week! You completed all 4 runs and maintained excellent 80/20 intensity
+distribution. Your CTL increased by 2.2 points to 46.2 - right on target.
+ACWR is 1.05 (safe zone) and your readiness score is 72 (good), so you're
+ready for Week 2's progression.
+
+Here's your Week 2 plan (Jan 27 - Feb 2):
+
+**Volume**: 26 km (+13% from Week 1)
+**Structure**: 3 easy runs + 1 long run
+**Phase**: Base (aerobic foundation)
+
+**Workouts**:
+- Monday: Easy run (4.5 km, 31 min, 6:15-6:45 pace) - Recovery from long run
+- Wednesday: Easy run (5.0 km, 34 min, 6:15-6:45 pace) - Midweek maintenance
+- Friday: Easy run (4.5 km, 31 min, 6:15-6:45 pace) - Pre-long run freshness
+- Saturday: Long run (12.0 km, 72 min, 6:15-6:45 pace) - Build endurance
+
+**Key Points**:
+- Volume increases 13% (within safe 10-15% range)
+- All runs at E-pace (conversational) - continue building aerobic base
+- Long run increases from 10.5 km → 12.0 km (progressive overload)
+- Rest days: Tuesday, Thursday, Sunday (recovery + climbing schedule)
+
+Does this look good to you? Any adjustments needed?"
+```
+
+**Athlete**: "Looks perfect! Let's do it."
+
+```bash
+# ========================================
+# PART 9: Save Week 2 Plan
+# ========================================
+
+# After athlete approval, save to system
+sce plan populate --from-json /tmp/weekly_plan_w2.json
+
+# Returns:
+# {
+#   "ok": true,
+#   "message": "Training plan populated with 1 week",
+#   "data": {
+#     "weeks_added": 1,
+#     "workouts_added": 4,
+#     "date_range": "2026-01-27 to 2026-02-02"
+#   }
+# }
+
+# Week 2 now available for daily coaching
+sce today  # Will show Monday's workout (4.5 km easy run)
+
+# ========================================
+# PART 10: Repeat Next Week
+# ========================================
+
+# After Week 2 completes (Feb 2), repeat this workflow:
+# 1. Analyze Week 2 adherence, intensity, CTL progression
+# 2. Check macro plan for Week 3 target
+# 3. Assess volume adjustment (did athlete struggle? Need downgrade?)
+# 4. Recalibrate VDOT if performance breakthrough
+# 5. Generate Week 3 workouts
+# 6. Validate
+# 7. Present
+# 8. Save after approval
+```
+
+### Alternative Scenarios Within Workflow
+
+#### Scenario A: Volume Adjustment Needed (Athlete Struggled)
+
+```bash
+# After Week 2 analysis:
+# - Adherence: 75% (3/4 runs completed)
+# - ACWR: 1.42 (elevated risk)
+# - Readiness: 48 (low)
+# - Activity notes: "felt tired all week"
+
+# Decision: Reduce Week 3 volume by 10%
+sce plan generate-week \
+  --week-number 3 \
+  --from-macro data/plans/current_plan_macro.json \
+  --current-vdot 48.0 \
+  --volume-adjustment 0.9  # 10% reduction
+
+# Macro target: 30 km → Adjusted target: 27 km
+```
+
+**Coach explains**:
+```
+"I noticed Week 2 was tough - you missed one run and noted feeling tired.
+Your ACWR jumped to 1.42 (elevated injury risk) and readiness is 48 (low).
+
+Let's reduce Week 3 volume by 10% to let your body catch up. Instead of
+30 km, we'll do 27 km - still progressing, but more conservatively.
+
+This is exactly what adaptive planning is for!"
+```
+
+#### Scenario B: VDOT Recalibration (Breakthrough Performance)
+
+```bash
+# During Week 4, athlete runs a 10K race: 42:00 (previous estimate was 45:00)
+
+# Recalibrate VDOT
+sce vdot calculate --race-type 10k --time 42:00
+# Returns: VDOT 49.0 (was 48.0)
+
+sce vdot paces --vdot 49
+# Get new training paces (all ~5 sec/km faster)
+
+# Generate Week 5 with updated VDOT
+sce plan generate-week \
+  --week-number 5 \
+  --from-macro data/plans/current_plan_macro.json \
+  --current-vdot 49.0  # Updated!
+```
+
+**Coach explains**:
+```
+"Congratulations on that 10K! 42:00 is a significant breakthrough - your
+VDOT is now 49 (up from 48). This means your training paces will be about
+5 seconds per km faster going forward.
+
+New E-pace: 6:10-6:40 (was 6:15-6:45)
+New T-pace: 4:50-5:05 (was 4:55-5:10)
+
+Week 5 workouts will reflect these updated paces. Your fitness is improving!"
+```
+
+#### Scenario C: Schedule Conflict (Need to Adjust Run Days)
+
+```bash
+# Athlete: "I have a work trip Thursday-Friday next week, can we shift workouts?"
+
+# Option 1: Revert week 5 and regenerate with profile update
+sce plan revert-week --week-number 5
+
+sce profile set --available-days "monday,tuesday,saturday,sunday"  # Remove Thu/Fri
+
+sce plan generate-week \
+  --week-number 5 \
+  --from-macro data/plans/current_plan_macro.json \
+  --current-vdot 49.0
+
+# System generates workouts only on Mon, Tue, Sat, Sun
+
+# Option 2: Manually move workouts (for one-time change)
+# Coach: "Let's move Thursday's easy run to Wednesday instead"
+```
+
+### Key Benefits of Weekly Planning
+
+1. **Maximum adaptability**: Respond immediately to illness, injury, schedule changes
+2. **Reduced errors**: 7 days vs 28 days = 75% fewer dates to calculate
+3. **Natural coaching rhythm**: Weekly check-ins already happen → seamless integration
+4. **Authentic coaching**: Real coaches don't plan 4 weeks in advance rigidly
+5. **Data-informed decisions**: Each week uses most recent CTL, ACWR, readiness, adherence
+
+### Macro Plan Still Provides Structure
+
+The 16-week macro plan remains critical:
+- **Phase boundaries**: When to introduce tempo runs, intervals, peak volume, taper
+- **Volume trajectory**: Where we're headed (23 km → 55 km → 18 km)
+- **CTL projections**: Expected fitness at key milestones
+- **Recovery week schedule**: Every 4th week at 70% volume
+
+**Weekly planning executes the macro structure with real-time adaptation.**
+
+### Integration with weekly-analysis Skill
+
+The `weekly-analysis` skill includes Steps 8-14 for seamless weekly planning:
+- Step 8: Check macro plan for next week
+- Step 9: Assess volume adjustment
+- Step 10: Recalibrate VDOT if needed
+- Step 11: Generate next week's workouts
+- Step 12: Validate plan
+- Step 13: Present to athlete
+- Step 14: Save after approval
+
+**Result**: Athlete experiences weekly check-ins as a single continuous conversation,
+not separate "analysis" and "planning" sessions.
+
+---
+
 ## Tips for Effective Scenario-Based Coaching
 
 1. **Always start with data**: Run `sce status` or `sce today` before giving advice
