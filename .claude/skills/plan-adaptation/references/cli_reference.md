@@ -27,8 +27,8 @@ sce guardrails progression --previous [X] --current [Y]
 ## Plan Updates
 
 ```bash
-# Single week update (JSON: single week object)
-sce plan update-week --week [N] --from-json [file.json]
+# Add/update weeks (JSON: weeks array - safely merges)
+sce plan populate --from-json [file.json]
 
 # Partial replan from week N onward (JSON: weeks array)
 sce plan update-from --week [N] --from-json [file.json]

@@ -59,11 +59,11 @@ sce plan show     # Current plan structure
 | Disruption | Duration | Strategy | CLI Command |
 |-----------|----------|----------|-------------|
 | **Single missed workout** | 1 day | No plan change, advise only | None |
-| **Illness (mild)** | 2-4 days | Update current week | `sce plan update-week` |
+| **Illness (mild)** | 2-4 days | Update current week | `sce plan populate` |
 | **Illness (severe)** | 5-14 days | Replan from current week | `sce plan update-from` |
 | **Injury (acute)** | 1-3 weeks | Replan with reduced load | `sce plan update-from` |
 | **Training break** | >14 days | Return protocol + replan | `sce guardrails break-return` + `update-from` |
-| **Schedule change** | Ongoing | Update affected weeks | `sce plan update-week` (multiple) |
+| **Schedule change** | Ongoing | Update affected weeks | `sce plan populate` (multiple calls) |
 
 ---
 
@@ -132,7 +132,7 @@ sce dates validate --date 2026-02-01 --must-be sunday
 
 ### Step 4: Choose Update Strategy
 
-#### Strategy A: Single Week Update (`sce plan update-week`)
+#### Strategy A: Single Week Update (`sce plan populate`)
 
 **Use when**: Disruption affects 1-2 weeks only
 
@@ -140,10 +140,19 @@ sce dates validate --date 2026-02-01 --must-be sunday
 1. Read plan: `sce plan show > /tmp/current_plan.json`
 2. Extract week: `jq '.weeks[] | select(.week_number == 5)' /tmp/current_plan.json`
 3. Modify workouts (reduce volume, reschedule, etc.)
-4. Save: `/tmp/week_5_updated.json` (single week object, NOT array)
-5. Update: `sce plan update-week --week 5 --from-json /tmp/week_5_updated.json`
+4. Wrap in weeks array: Save as `/tmp/week_5_updated.json`:
+   ```json
+   {
+     "weeks": [{
+       "week_number": 5,
+       "phase": "build",
+       ...
+     }]
+   }
+   ```
+5. Update: `sce plan populate --from-json /tmp/week_5_updated.json`
 
-**JSON must be single week object**, not array.
+**Note**: `populate` safely merges - existing weeks are preserved, week 5 is replaced.
 
 #### Strategy B: Partial Replan (`sce plan update-from`)
 
@@ -184,7 +193,7 @@ sce validation validate-plan --plan-file /tmp/adapted_plan.json
 
 **Structure**:
 1. **Disruption Summary**: What happened, duration, impact
-2. **Adaptation Strategy**: Which approach (update-week vs update-from)
+2. **Adaptation Strategy**: Which approach (populate for 1-2 weeks vs update-from for 3+)
 3. **Modified Weeks**: Table showing old vs new structure
 4. **Rationale**: Why these changes (guardrails, recovery protocol)
 5. **Next Steps**: Monitoring, warnings, adjustment triggers

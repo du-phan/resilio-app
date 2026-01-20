@@ -20,7 +20,7 @@ sce guardrails illness-recovery --severity minor --days-missed 3
 - Replace Saturday long run with moderate easy run (70% duration)
 - Next week: Resume normal plan with volume -10%
 
-**JSON**: Single week update (`sce plan update-week`)
+**JSON**: Single week update (`sce plan populate`)
 
 ---
 

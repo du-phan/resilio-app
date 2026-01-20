@@ -1153,7 +1153,7 @@ sce vdot paces --vdot $ADJUSTED_VDOT
 
 ### Mid-Week Adjustment
 
-**Use**: `sce plan update-week --week N --from-json week.json`
+**Use**: `sce plan populate --from-json week.json`
 
 **Scenario**: Athlete got sick Week 5, need to downgrade workouts for that week only
 
@@ -1181,8 +1181,8 @@ cat > /tmp/week_5_adjusted.json <<EOF
 }
 EOF
 
-# Update Week 5 only
-sce plan update-week --week 5 --from-json /tmp/week_5_adjusted.json
+# Update Week 5 only (safely merges - other weeks preserved)
+sce plan populate --from-json /tmp/week_5_adjusted.json
 
 # Weeks 1-4 and 6-16 remain unchanged
 ```

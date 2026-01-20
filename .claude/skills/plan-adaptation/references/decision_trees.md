@@ -82,7 +82,7 @@ If readiness < 50 after return, delay quality workouts.
 1. Identify affected workouts (quality sessions, long runs)
 2. Map to new available days
 3. Validate with multi-sport constraints (see training-plan-design/references/MULTI_SPORT.md)
-4. Update affected weeks using `sce plan update-week` (multiple calls)
+4. Update affected weeks using `sce plan populate` (one call per week)
 
 **Considerations**:
 - Quality sessions need 48 hours separation

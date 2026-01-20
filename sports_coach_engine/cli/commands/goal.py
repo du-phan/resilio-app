@@ -14,7 +14,7 @@ from sports_coach_engine.api.metrics import get_current_metrics, MetricsError
 from sports_coach_engine.api.vdot import estimate_current_vdot, calculate_vdot_from_race, VDOTError
 from sports_coach_engine.api.validation import api_assess_goal_feasibility, ValidationError
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, output_json
+from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
 
 # Create subcommand app
 app = typer.Typer(help="Manage race goals")
@@ -372,10 +372,9 @@ def goal_validate_command(
     verdict = validation_data['feasibility_verdict']
     base_msg = f"Goal validation: {race_type} {target_time} on {target_date_str} - {verdict}"
 
-    envelope = {
-        "status": "success",
-        "message": base_msg,
-        "data": {
+    envelope = create_success_envelope(
+        message=base_msg,
+        data={
             "goal": {
                 "race_type": race_type,
                 "target_date": target_date_str,
@@ -383,7 +382,7 @@ def goal_validate_command(
             },
             "validation": validation_data,
         },
-    }
+    )
 
     # Output JSON
     output_json(envelope)

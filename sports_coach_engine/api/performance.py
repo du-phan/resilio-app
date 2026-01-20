@@ -141,7 +141,7 @@ def api_get_performance_baseline(
         if profile_result.race_history:
             for race in profile_result.race_history:
                 race_vdot_result = calculate_vdot_from_race(
-                    race_distance=race.distance.value,
+                    race_distance=race.distance,
                     race_time=race.time,
                     race_date=race.date,
                 )
@@ -151,7 +151,7 @@ def api_get_performance_baseline(
                     race_vdot = race_vdot_result.vdot
 
                 race_history_data.append({
-                    "distance": race.distance.value,
+                    "distance": race.distance,
                     "time": race.time,
                     "vdot": race_vdot,
                     "date": race.date,

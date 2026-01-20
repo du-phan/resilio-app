@@ -228,29 +228,151 @@ sce guardrails analyze-progression \
 
 **Continue to Step 7 (Generate Next Week)**
 
-### Step 7: Generate Next Week's Workouts
+### Step 7: Create Next Week's Workout Pattern (Manual JSON)
 
-**Run**:
-```bash
-sce plan generate-week \
-  --week-number $NEXT_WEEK_NUMBER \
-  --target-volume-km $FINAL_VOLUME \
-  --from-macro data/plans/current_plan_macro.json \
-  --current-vdot $CURRENT_VDOT \
-  > /tmp/weekly_plan_w${NEXT_WEEK_NUMBER}.json
+**IMPORTANT**: AI coach creates `workout_pattern` JSON manually (same workflow as Week 1). This is NOT an algorithmic generation - the AI coach applies training methodology and athlete context to design each week.
+
+**Tools the AI coach uses**:
+
+1. **Read macro plan context** (phase, recovery status):
+   ```bash
+   PHASE=$(jq -r '.phases[] | select(.weeks[] == '$NEXT_WEEK_NUMBER') | .name' data/plans/current_plan_macro.json)
+   IS_RECOVERY=$(jq -r '.recovery_weeks | contains(['$NEXT_WEEK_NUMBER'])' data/plans/current_plan_macro.json)
+   START_DATE=$(jq -r '.start_date' data/plans/current_plan_macro.json)
+   # Calculate next week's start_date (add (NEXT_WEEK_NUMBER - 1) * 7 days to START_DATE)
+   ```
+
+2. **Get training paces** (using current or recalibrated VDOT):
+   ```bash
+   sce vdot paces --vdot $CURRENT_VDOT
+   # Copy: easy_pace_range, tempo_pace_range, interval_pace_range, race_pace_range
+   ```
+
+3. **Pre-flight validation** (ensures run count won't violate minimum durations):
+   ```bash
+   sce plan suggest-run-count --volume $FINAL_VOLUME --max-runs $MAX_RUNS --phase $PHASE
+   # Use: recommended_runs (e.g., 3, 4, or 5)
+   ```
+
+4. **Read composition guidance** (if macro plan has it - see plan document for details):
+   ```bash
+   SUGGESTED_QUALITY=$(jq -r '.weeks[] | select(.week_number == '$NEXT_WEEK_NUMBER') | .suggested_quality_count // 0' data/plans/current_plan_macro.json)
+   SUGGESTED_TYPES=$(jq -r '.weeks[] | select(.week_number == '$NEXT_WEEK_NUMBER') | .suggested_quality_types // []' data/plans/current_plan_macro.json)
+   # This guidance is REFERENCE ONLY - AI coach can override based on athlete state
+   ```
+
+**AI coach creates workout_pattern JSON manually**:
+
+The AI coach applies training methodology to decide:
+- **Workout composition**: How many easy, tempo, interval, race pace runs?
+- **Run days**: Which days of the week (based on athlete constraints and recovery)?
+- **Long run percentage**: 40-55% depending on phase and recovery status
+- **Paces**: From VDOT calculation
+- **Structure description**: Human-readable summary (e.g., "2 easy + 1 tempo + 1 long")
+
+**Example - Base Phase Week 5 (First Tempo Introduction)**:
+```json
+{
+  "weeks": [{
+    "week_number": 5,
+    "phase": "base",
+    "start_date": "2026-02-17",
+    "end_date": "2026-02-23",
+    "target_volume_km": 31.0,
+    "is_recovery_week": false,
+    "notes": "Base Phase Week 5 - First tempo introduction",
+    "workout_pattern": {
+      "structure": "2 easy + 1 tempo + 1 long",
+      "run_days": [1, 3, 5, 6],
+      "long_run_day": 6,
+      "long_run_pct": 0.45,
+      "quality_sessions": [
+        {
+          "day": 3,
+          "type": "tempo",
+          "warmup_km": 2.0,
+          "main_km": 4.0,
+          "main_pace": "5:45-5:55",
+          "cooldown_km": 2.0
+        }
+      ],
+      "easy_run_paces": "6:30-6:50",
+      "long_run_pace": "6:30-6:50"
+    }
+  }]
+}
 ```
 
-**Parameters**:
-- `--week-number`: Next week to generate (e.g., 2, 3, 4)
-- `--target-volume-km`: AI-designed volume (from Step 5)
-- `--from-macro`: Path to macro plan with phases and recovery weeks
-- `--current-vdot`: VDOT for pace calculations (potentially updated in Step 6)
+**Example - Build Phase Week 9 (Tempo + Intervals)**:
+```json
+{
+  "weeks": [{
+    "week_number": 9,
+    "phase": "build",
+    "start_date": "2026-03-31",
+    "end_date": "2026-04-06",
+    "target_volume_km": 45.0,
+    "is_recovery_week": false,
+    "notes": "Build Phase Week 9 - Progressive intensity",
+    "workout_pattern": {
+      "structure": "1 easy + 1 tempo + 1 intervals + 1 long",
+      "run_days": [1, 3, 5, 6],
+      "long_run_day": 6,
+      "long_run_pct": 0.47,
+      "quality_sessions": [
+        {
+          "day": 1,
+          "type": "tempo",
+          "warmup_km": 2.0,
+          "main_km": 6.0,
+          "main_pace": "5:45-5:55",
+          "cooldown_km": 2.0
+        },
+        {
+          "day": 5,
+          "type": "intervals",
+          "warmup_km": 2.0,
+          "intervals": "6 x 1000m @ 5:15-5:25",
+          "recovery": "400m jog",
+          "cooldown_km": 2.0
+        }
+      ],
+      "easy_run_paces": "6:30-6:50",
+      "long_run_pace": "6:30-6:50"
+    }
+  }]
+}
+```
 
-**System generates**:
-- Intent-based JSON with `workout_pattern`
-- Exact distances calculated to match `FINAL_VOLUME`
-- Paces from `CURRENT_VDOT`
-- Workout structure appropriate for phase (base: easy runs, build: + tempo/intervals)
+**Key decisions the AI coach makes**:
+- **Quality work progression**: When to introduce tempo (week 5-6), intervals (week 8+), race pace (peak)
+- **Override guidance when needed**: Remove quality if ACWR > 1.3, illness, or poor adherence
+- **Run days optimization**: Balance recovery, athlete constraints, quality work placement
+- **Long run percentage**: Base = 40-45%, Build/Peak = 45-50%, Recovery = 50-55%, Taper = 35-40%
+- **Workout structure**: Appropriate for phase (base: easy+long, build: add tempo/intervals, peak: race pace emphasis)
+
+**Decision Process**:
+1. Read composition guidance from macro plan (reference, not constraint)
+2. Check current athlete state (ACWR, TSB, readiness, recent notes)
+3. **Decide**: Follow guidance, modify, or override completely
+4. Apply training methodology (Pfitzinger periodization, 80/20 distribution)
+5. Create complete `workout_pattern` structure manually
+
+**Example Override - ACWR > 1.3**:
+```
+Macro guidance: 2 quality sessions (tempo + intervals)
+AI coach checks: ACWR = 1.35, athlete noted "feeling fatigued"
+AI coach decides: Override to 0 quality (all easy runs)
+Rationale: "Reducing intensity this week - ACWR elevated (1.35) and fatigue noted"
+```
+
+**Save to file**:
+```bash
+# AI coach saves the manually created JSON to:
+echo '<JSON_CONTENT>' > /tmp/weekly_plan_w${NEXT_WEEK_NUMBER}.json
+```
+
+**Success**: Next week's workout_pattern JSON created manually by AI coach, applying training methodology and athlete context.
 
 ### Step 8: Validate Next Week's Plan
 

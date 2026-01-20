@@ -405,10 +405,76 @@ def estimate_current_vdot(
                         quality_workouts.append(workout_data)
 
         if not quality_workouts:
+            # Fallback to race history when no recent quality workouts
+            from sports_coach_engine.api.profile import get_profile, ProfileError
+
+            profile_result = get_profile()
+            if isinstance(profile_result, ProfileError):
+                return VDOTError(
+                    error_type="not_found",
+                    message=f"No quality workouts (tempo/interval) found in the last {lookback_days} days. "
+                    "Try running a tempo or interval workout first.",
+                )
+
+            profile = profile_result
+            if profile.race_history:
+                # Find most recent race with VDOT and date
+                races_with_dates = [
+                    (race, race.date)
+                    for race in profile.race_history
+                    if race.vdot and race.date
+                ]
+
+                if races_with_dates:
+                    # Sort by date descending (most recent first)
+                    races_with_dates.sort(key=lambda x: x[1], reverse=True)
+                    most_recent_race, race_date_str = races_with_dates[0]
+
+                    # Calculate age of race
+                    race_date = dt_date.fromisoformat(race_date_str)
+                    days_since_race = (dt_date.today() - race_date).days
+                    months_since_race = days_since_race / 30.44
+
+                    # Apply decay based on age
+                    base_vdot = most_recent_race.vdot
+                    if months_since_race < 3:
+                        decay_factor = 1.0
+                        confidence = ConfidenceLevel.HIGH
+                    elif months_since_race < 6:
+                        decay_factor = 0.97  # 3% decay
+                        confidence = ConfidenceLevel.MEDIUM
+                    else:
+                        # For races 6+ months old, apply progressive decay
+                        # 7% at 6 months, up to 15% at 24+ months
+                        decay_pct = min(7 + (months_since_race - 6) * 0.5, 15)
+                        decay_factor = 1.0 - (decay_pct / 100)
+                        confidence = ConfidenceLevel.LOW
+
+                    estimated_vdot = int(round(base_vdot * decay_factor))
+
+                    # Clamp to valid VDOT range
+                    estimated_vdot = max(30, min(85, estimated_vdot))
+
+                    return VDOTEstimate(
+                        estimated_vdot=estimated_vdot,
+                        confidence=confidence,
+                        source=f"race_history ({most_recent_race.distance} @ {most_recent_race.time}, {int(months_since_race)} months ago)",
+                        supporting_data=[
+                            WorkoutPaceData(
+                                date=race_date_str,
+                                workout_type="race",
+                                pace_sec_per_km=0,  # Not applicable for race history
+                                implied_vdot=estimated_vdot,
+                            )
+                        ],
+                    )
+
+            # No quality workouts and no race history
             return VDOTError(
                 error_type="not_found",
-                message=f"No quality workouts (tempo/interval) found in the last {lookback_days} days. "
-                "Try running a tempo or interval workout first.",
+                message=f"No quality workouts (tempo/interval) found in the last {lookback_days} days "
+                "and no race history available. Try running a tempo or interval workout first, "
+                "or add race results to your profile.",
             )
 
         # Calculate median VDOT

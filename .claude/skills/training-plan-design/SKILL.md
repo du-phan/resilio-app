@@ -42,15 +42,15 @@ sce plan suggest-run-count --volume $KM --max-runs $MAX --phase $PHASE
 sce plan create-macro --goal-type $GOAL --race-date $DATE --start-date $START \
   --starting-volume $START_KM --peak-volume $PEAK_KM > /tmp/macro_plan.json
 
-# Week 1 volume design (AI decision, usually = starting_volume)
+# Week 1: AI coach creates workout_pattern JSON manually
 WEEK1_VOLUME=$STARTING_VOLUME
-
-sce plan generate-week --week-number 1 --target-volume-km $WEEK1_VOLUME \
-  --from-macro /tmp/macro_plan.json --current-vdot $VDOT > /tmp/weekly_plan_w1.json
+sce vdot paces --vdot $VDOT                    # Get training paces
+sce plan suggest-run-count --volume $WEEK1_VOLUME --max-runs $MAX --phase base
+# AI coach manually creates /tmp/weekly_plan_w1.json with workout_pattern
 
 # Validation & Save (AFTER approval)
 sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
-sce plan populate --from-json /tmp/weekly_plan_w1.json
+sce plan populate --from-json /tmp/weekly_plan_w1.json  # Safe: merges weeks, preserves existing
 ```
 
 ---
@@ -246,7 +246,9 @@ sce vdot paces --vdot $BASELINE_VDOT
 
 ---
 
-### Step 5: Design Week 1 Volume & Generate Workouts
+### Step 5: Create Week 1 Workout Pattern (Manual JSON)
+
+**IMPORTANT**: AI coach creates `workout_pattern` JSON manually (NOT via function). This is the same workflow used for Weeks 2-16.
 
 **FORMAT REQUIREMENT**: Use **intent-based format** (see [json_workflow.md](references/json_workflow.md)).
 
@@ -257,26 +259,71 @@ WEEK1_VOLUME=$STARTING_VOLUME
 
 # Optional: Adjust if athlete context requires it
 # (e.g., coming off injury: WEEK1_VOLUME=$(echo "$STARTING_VOLUME * 0.85" | bc))
-
-# Optional: Validate progression (usually not needed for Week 1)
-sce guardrails safe-volume --ctl $CTL --goal-type $GOAL
 ```
 
-**Generate Week 1**:
+**Tools the AI coach uses to create workout_pattern JSON**:
+
+1. **Get training paces**:
+   ```bash
+   sce vdot paces --vdot $BASELINE_VDOT
+   # Copy: easy_pace_range, tempo_pace_range (for later use)
+   ```
+
+2. **Pre-flight validation** (ensures run count won't violate minimum durations):
+   ```bash
+   sce plan suggest-run-count --volume $WEEK1_VOLUME --max-runs $MAX_RUNS --phase base
+   # Use: recommended_runs (e.g., 3, 4, or 5)
+   ```
+
+3. **Read macro plan context** (to get phase, recovery weeks, start_date):
+   ```bash
+   PHASE=$(jq -r '.phases[] | select(.weeks[] == 1) | .name' /tmp/macro_plan.json)
+   IS_RECOVERY=$(jq -r '.recovery_weeks | contains([1])' /tmp/macro_plan.json)
+   START_DATE=$(jq -r '.start_date' /tmp/macro_plan.json)
+   # Calculate end_date (add 6 days to start_date)
+   ```
+
+**AI coach creates workout_pattern JSON manually**:
+
+```json
+{
+  "weeks": [{
+    "week_number": 1,
+    "phase": "base",
+    "start_date": "2026-01-20",
+    "end_date": "2026-01-26",
+    "target_volume_km": 23.0,
+    "is_recovery_week": false,
+    "notes": "Base Phase Week 1 - Establishing routine",
+    "workout_pattern": {
+      "structure": "3 easy + 1 long",
+      "run_days": [1, 3, 5, 6],
+      "long_run_day": 6,
+      "long_run_pct": 0.45,
+      "easy_run_paces": "6:30-6:50",
+      "long_run_pace": "6:30-6:50"
+    }
+  }]
+}
+```
+
+**Key decisions the AI coach makes**:
+- `run_days`: Based on `suggest-run-count` result and athlete constraints (e.g., 4 runs = [1,3,5,6] = Tue, Thu, Sat, Sun)
+- `long_run_pct`: Base phase = 0.45, Build/Peak = 0.47, Recovery = 0.52, Taper = 0.40
+- `structure`: Base phase = all easy runs, Build phase = add tempo/intervals
+- `paces`: From `sce vdot paces` output
+
+**Save to file**:
 ```bash
-sce plan generate-week \
-  --week-number 1 \
-  --target-volume-km $WEEK1_VOLUME \
-  --from-macro /tmp/macro_plan.json \
-  --current-vdot $BASELINE_VDOT \
-  > /tmp/weekly_plan_w1.json
+# AI coach saves the manually created JSON to:
+echo '<JSON_CONTENT>' > /tmp/weekly_plan_w1.json
 ```
 
-⚠️ **CRITICAL BOUNDARY**: Generate week 1 ONLY. Weeks 2-16 will be designed weekly based on actual training response (via weekly-planning skill). Each week's volume is an AI decision using guardrails, not pre-computed.
+⚠️ **CRITICAL BOUNDARY**: Create Week 1 ONLY. Weeks 2-16 will be created weekly using the EXACT SAME WORKFLOW (via weekly-planning skill). Each week is an AI decision, not pre-computed.
 
-**Success**: Week 1 JSON created with AI-designed volume and complete `workout_pattern` using intent-based format. Proceed to Step 6.
+**Success**: Week 1 JSON created manually by AI coach with complete `workout_pattern` using intent-based format. Proceed to Step 6.
 
-**See [workout_generation.md](references/workout_generation.md) for details.**
+**See [json_workflow.md](references/json_workflow.md) for complete format specification.**
 
 ---
 

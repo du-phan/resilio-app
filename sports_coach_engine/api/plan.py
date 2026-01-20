@@ -882,38 +882,32 @@ def validate_plan_json_structure(
 
 def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanError]:
     """
-    Populate weekly workouts in the current training plan.
+    Add or update weekly workouts in the current training plan.
 
-    This replaces the empty weeks array with actual weekly workout prescriptions.
-    The plan skeleton must exist (created by regenerate_plan).
+    Merges weeks into the plan: updates existing weeks (same week_number) or
+    adds new weeks. Safe to call multiple times - existing weeks are preserved.
 
     Workflow:
-    1. Load current plan skeleton
+    1. Load current plan
     2. Validate weeks_data structure against WeekPlan schema
-    3. Merge new weeks into plan.weeks array
+    3. Merge weeks: update existing, append new
     4. Validate complete MasterPlan
     5. Save to YAML with atomic write
-    6. Log operation via M14
 
     Args:
         weeks_data: List of week dictionaries matching WeekPlan schema
 
     Returns:
-        Updated MasterPlan with populated weeks
+        Updated MasterPlan with merged weeks
         PlanError on failure
 
-    Example:
-        >>> weeks = [
-        ...     {
-        ...         "week_number": 1,
-        ...         "phase": "base",
-        ...         "start_date": "2026-01-15",
-        ...         "end_date": "2026-01-21",
-        ...         "target_volume_km": 22.0,
-        ...         "workouts": [...]
-        ...     }
-        ... ]
-        >>> plan = populate_plan_workouts(weeks)
+    Example (progressive addition):
+        >>> # Week 1
+        >>> populate_plan_workouts([{"week_number": 1, ...}])
+        >>> # Week 2 (week 1 preserved)
+        >>> populate_plan_workouts([{"week_number": 2, ...}])
+        >>> # Weeks 3-5 (bulk add)
+        >>> populate_plan_workouts([{"week_number": 3, ...}, {"week_number": 4, ...}, {"week_number": 5, ...}])
     """
     repo = RepositoryIO()
     # 1. Load current plan
@@ -1025,8 +1019,15 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
         for v in warning_violations:
             logger.warning(f"Week {v.week}: {v.message}")
 
-    # 3. Merge into plan (replace weeks array)
-    plan.weeks = validated_weeks
+    # 3. Merge weeks (upsert: update existing, add new)
+    for new_week in validated_weeks:
+        existing_idx = next((i for i, w in enumerate(plan.weeks) if w.week_number == new_week.week_number), None)
+        if existing_idx is not None:
+            plan.weeks[existing_idx] = new_week
+        else:
+            plan.weeks.append(new_week)
+
+    plan.weeks.sort(key=lambda w: w.week_number)
 
     # 4. Validate complete plan
     try:
@@ -1050,111 +1051,6 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     return complete_plan
 
-
-def update_plan_week(week_number: int, week_data: dict) -> Union[MasterPlan, PlanError]:
-    """
-    Update a single week in the current training plan.
-
-    This replaces or adds a specific week while preserving other weeks.
-    Useful for mid-week adjustments or updating a single week's workouts.
-
-    Workflow:
-    1. Load current plan
-    2. Validate week_data structure against WeekPlan schema
-    3. Find and replace week with matching week_number (or append if new)
-    4. Validate complete MasterPlan
-    5. Save to YAML with atomic write
-    6. Log operation via M14
-
-    Args:
-        week_number: Week number to update (1-indexed)
-        week_data: Week dictionary matching WeekPlan schema
-
-    Returns:
-        Updated MasterPlan with modified week
-        PlanError on failure
-
-    Example:
-        >>> week5 = {
-        ...     "week_number": 5,
-        ...     "phase": "build",
-        ...     "start_date": "2026-02-12",
-        ...     "end_date": "2026-02-18",
-        ...     "target_volume_km": 36.0,
-        ...     "workouts": [...]
-        ... }
-        >>> plan = update_plan_week(5, week5)
-    """
-    repo = RepositoryIO()
-    # 1. Load current plan
-    plan_path = current_plan_path()
-    result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
-
-    if result is None:
-        return PlanError(
-            error_type="not_found",
-            message="No plan found. Run 'sce plan regen' first to create skeleton.",
-        )
-
-    if isinstance(result, RepoError):
-        return PlanError(
-            error_type="validation",
-            message=f"Failed to load plan: {str(result)}",
-        )
-
-    plan = result
-
-    # 2. Validate week_data structure
-    try:
-        from sports_coach_engine.schemas.plan import WeekPlan
-        validated_week = WeekPlan.model_validate(week_data)
-    except Exception as e:
-        return PlanError(
-            error_type="validation",
-            message=f"Invalid week data: {str(e)}",
-        )
-
-    # Verify week_number matches
-    if validated_week.week_number != week_number:
-        return PlanError(
-            error_type="validation",
-            message=f"Week number mismatch: expected {week_number}, got {validated_week.week_number}",
-        )
-
-    # 3. Find and replace week (or append if new)
-    week_found = False
-    for i, existing_week in enumerate(plan.weeks):
-        if existing_week.week_number == week_number:
-            plan.weeks[i] = validated_week
-            week_found = True
-            break
-
-    if not week_found:
-        # Append new week and sort
-        plan.weeks.append(validated_week)
-        plan.weeks.sort(key=lambda w: w.week_number)
-
-    # 4. Validate complete plan
-    try:
-        complete_plan = MasterPlan.model_validate(plan.model_dump())
-    except Exception as e:
-        return PlanError(
-            error_type="validation",
-            message=f"Complete plan validation failed: {str(e)}",
-        )
-
-    # 5. Save to YAML
-    write_result = repo.write_yaml(plan_path, complete_plan)
-    if isinstance(write_result, RepoError):
-        return PlanError(
-            error_type="unknown",
-            message=f"Failed to save plan: {str(write_result)}",
-        )
-
-    # 6. Log success
-    action = "Updated" if week_found else "Added"
-    total_workouts = len(validated_week.workouts)
-    return complete_plan
 
 
 def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[MasterPlan, PlanError]:
@@ -2144,222 +2040,6 @@ def suggest_optimal_run_count(
         "comfortable_volume_for_max_runs": round(comfortable_volume, 1),
         "easy_min_km": round(easy_min, 1),
         "long_min_km": round(long_min, 1)
-    }
-
-
-def generate_week_plan(
-    week_number: int,
-    target_volume_km: float,
-    macro_plan_path: str,
-    current_vdot: float,
-    volume_adjustment: float = 1.0
-) -> Union[dict, PlanError]:
-    """
-    Generate detailed workouts for a single week.
-
-    Progressive disclosure workflow: generates workouts for ONE week only.
-    AI coach designs weekly volume using guardrails, then generates workout_pattern.
-
-    Workflow:
-    1. Load macro plan JSON for phase information
-    2. Use provided target_volume_km (AI-designed using guardrails)
-    3. Apply volume_adjustment if needed (for illness/injury recovery)
-    4. Load athlete profile for constraints
-    5. Generate workout_pattern (intent-based format)
-    6. Calculate training paces from VDOT
-    7. Return single-week JSON ready for populate
-
-    Args:
-        week_number: Week to generate (1-indexed)
-        target_volume_km: Weekly volume target (AI-designed, validated by guardrails)
-        macro_plan_path: Path to macro plan JSON with phases and recovery weeks
-        current_vdot: VDOT value for pace calculations (may be recalibrated)
-        volume_adjustment: Multiplier for volume (0.85 = reduce 15%, 1.0 = as planned)
-
-    Returns:
-        dict: Single week with workout_pattern
-        {
-            "weeks": [{
-                "week_number": 1,
-                "phase": "base",
-                "start_date": "2026-01-20",
-                "end_date": "2026-01-26",
-                "target_volume_km": 23.0,
-                "is_recovery_week": false,
-                "notes": "...",
-                "workout_pattern": {
-                    "structure": "3 easy + 1 long",
-                    "run_days": [1, 3, 5, 6],
-                    "long_run_day": 6,
-                    "long_run_pct": 0.45,
-                    "easy_run_paces": "6:30-6:50",
-                    "long_run_pace": "6:30-6:50"
-                }
-            }],
-            "num_runs": 4,
-            "generation_context": {...}
-        }
-
-        PlanError on failure
-
-    Example:
-        >>> result = generate_week_plan(
-        ...     week_number=1,
-        ...     target_volume_km=25.0,
-        ...     macro_plan_path="/tmp/macro_plan.json",
-        ...     current_vdot=48.0,
-        ...     volume_adjustment=1.0
-        ... )
-        >>> result["weeks"][0]["workout_pattern"]
-        {...}
-    """
-    repo = RepositoryIO()
-    from pathlib import Path
-    import json
-    from sports_coach_engine.core.vdot import calculate_training_paces
-
-    # 1. Load macro plan
-    macro_path = Path(macro_plan_path)
-    if not macro_path.exists():
-        return PlanError(
-            error_type="not_found",
-            message=f"Macro plan file not found: {macro_plan_path}"
-        )
-
-    try:
-        with open(macro_path, 'r') as f:
-            macro_plan = json.load(f)
-    except json.JSONDecodeError as e:
-        return PlanError(
-            error_type="validation",
-            message=f"Invalid JSON in macro plan: {str(e)}"
-        )
-
-    # 2. Use AI-designed target volume (validated by guardrails)
-    target_volume = target_volume_km * volume_adjustment
-
-    # Check if this is a recovery week
-    recovery_weeks = macro_plan.get("recovery_weeks", [])
-    is_recovery_week = week_number in recovery_weeks
-
-    # Get phase from macro plan  (phases at top level after removal of volume_trajectory)
-    phases_list = macro_plan.get("phases", [])
-    week_to_phase = {}
-    for phase_info in phases_list:
-        phase_name = phase_info["name"]
-        for week in phase_info["weeks"]:
-            week_to_phase[week] = phase_name
-
-    phase = week_to_phase.get(week_number, "base")
-
-    # 3. Load athlete profile
-    profile_result = get_profile()
-    if isinstance(profile_result, ProfileError):
-        return PlanError(
-            error_type="validation",
-            message=f"Failed to load profile: {str(profile_result)}"
-        )
-
-    profile = profile_result
-    max_run_days = profile.constraints.max_run_days_per_week or 4
-
-    # 4. Calculate training paces from VDOT
-    paces = calculate_training_paces(current_vdot)
-    # TrainingPaces has fields like easy_pace_range (tuple of seconds), not dict access
-    easy_min_sec, easy_max_sec = paces.easy_pace_range
-    # Convert to MM:SS format for display
-    easy_min = f"{easy_min_sec // 60}:{easy_min_sec % 60:02d}"
-    easy_max = f"{easy_max_sec // 60}:{easy_max_sec % 60:02d}"
-    easy_pace_range = f"{easy_min}-{easy_max}"
-
-    # 5. Determine workout structure
-    # Use suggest_optimal_run_count to get recommended run frequency
-    run_count_result = suggest_optimal_run_count(
-        target_volume_km=target_volume,
-        max_runs=max_run_days,
-        phase=phase,
-        profile=profile.model_dump()
-    )
-
-    recommended_runs = run_count_result["recommended_runs"]
-
-    # Build run_days array (ISO weekdays: 1=Mon, 7=Sun)
-    # Common patterns: 3 runs = [1,3,6], 4 runs = [1,3,5,6], 5 runs = [1,2,4,5,6]
-    run_days_patterns = {
-        3: [1, 3, 6],  # Tue, Thu, Sun
-        4: [1, 3, 5, 6],  # Tue, Thu, Sat, Sun
-        5: [1, 2, 4, 5, 6],  # Tue, Wed, Fri, Sat, Sun
-    }
-    run_days = run_days_patterns.get(recommended_runs, [1, 3, 5, 6])
-
-    # Long run is always Sunday (6)
-    long_run_day = 6
-
-    # Long run percentage: base=0.45, build/peak=0.47, recovery=0.52
-    long_run_pct_map = {
-        "base": 0.45,
-        "build": 0.47,
-        "peak": 0.47,
-        "taper": 0.40,
-        "recovery": 0.52
-    }
-    long_run_pct = long_run_pct_map.get(phase, 0.45)
-
-    # Calculate dates (from macro plan start date)
-    # Get start_date (at top level after volume_trajectory removal)
-    plan_start_date_str = macro_plan.get("start_date")
-    if not plan_start_date_str:
-        return PlanError(
-            error_type="validation",
-            message="Macro plan missing start_date"
-        )
-
-    from datetime import datetime, timedelta
-    plan_start_date = datetime.fromisoformat(plan_start_date_str).date()
-
-    # Calculate week start date (each week is Monday-Sunday, so week N starts (N-1)*7 days after plan start)
-    week_start_date = plan_start_date + timedelta(days=(week_number - 1) * 7)
-    week_end_date = week_start_date + timedelta(days=6)
-
-    # Validate that start is Monday
-    if week_start_date.weekday() != 0:
-        return PlanError(
-            error_type="validation",
-            message=f"Week {week_number} start date {week_start_date} is not Monday (check macro plan start_date)"
-        )
-
-    # 6. Build workout_pattern (intent-based format)
-    workout_pattern = {
-        "structure": f"{recommended_runs - 1} easy + 1 long" if not is_recovery_week else f"{recommended_runs - 1} easy + 1 long (recovery)",
-        "run_days": run_days,
-        "long_run_day": long_run_day,
-        "long_run_pct": long_run_pct,
-        "easy_run_paces": easy_pace_range,
-        "long_run_pace": easy_pace_range  # Long run at easy pace for base phase
-    }
-
-    # 7. Build week dict
-    from sports_coach_engine.core.plan import generate_week_notes
-
-    week_dict = {
-        "week_number": week_number,
-        "phase": phase,
-        "start_date": week_start_date.isoformat(),
-        "end_date": week_end_date.isoformat(),
-        "target_volume_km": round(target_volume, 1),
-        "is_recovery_week": is_recovery_week,
-        "notes": generate_week_notes(phase, week_number, is_recovery_week),
-        "workout_pattern": workout_pattern
-    }
-
-    return {
-        "weeks": [week_dict],
-        "num_runs": recommended_runs,
-        "generation_context": {
-            "vdot": current_vdot,
-            "volume_adjustment": volume_adjustment,
-            "paces": paces
-        }
     }
 
 

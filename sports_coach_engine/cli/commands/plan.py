@@ -14,14 +14,12 @@ from sports_coach_engine.api import get_current_plan, regenerate_plan
 from sports_coach_engine.api.plan import (
     get_plan_weeks,
     populate_plan_workouts,
-    update_plan_week,
     update_plan_from_week,
     save_training_plan_review,
     append_training_plan_adaptation,
     initialize_plan_training_log,
     append_weekly_training_summary,
     validate_plan_json_structure,
-    generate_week_plan,
     validate_week_plan,
     revert_week_plan,
     PlanError,
@@ -177,11 +175,18 @@ def plan_populate_command(
         help="Path to JSON file with weekly workout data"
     ),
 ) -> None:
-    """Populate weekly workouts in the training plan.
+    """Add or update weekly workouts in the training plan.
 
-    Loads weekly workout prescriptions from a JSON file and adds them
-    to the current plan skeleton. The plan must already exist (created
-    via 'sce plan regen').
+    Merges weeks into the plan: updates existing weeks (same week_number) or
+    adds new weeks. Safe to call multiple times - existing weeks are preserved.
+
+    Progressive workflow:
+        sce plan populate --from-json /tmp/week1.json   # Add week 1
+        sce plan populate --from-json /tmp/week2.json   # Add week 2 (week 1 preserved)
+        sce plan populate --from-json /tmp/week3.json   # Add week 3 (weeks 1-2 preserved)
+
+    Bulk addition also works:
+        sce plan populate --from-json /tmp/weeks_1_to_5.json
 
     JSON Format:
         {
@@ -192,15 +197,10 @@ def plan_populate_command(
               "start_date": "2026-01-15",
               "end_date": "2026-01-21",
               "target_volume_km": 22.0,
-              "target_systemic_load_au": 150.0,
               "workouts": [...]
             }
           ]
         }
-
-    Examples:
-        sce plan populate --from-json /tmp/marathon_plan.json
-        sce plan populate --from-json workouts.json
     """
     # Validate file exists
     json_path = Path(from_json)
@@ -329,83 +329,6 @@ def plan_validate_json_command(
         }
         print(json_module.dumps(result, indent=2))
         raise typer.Exit(code=1)
-
-
-@app.command(name="update-week")
-def plan_update_week_command(
-    ctx: typer.Context,
-    week: int = typer.Option(..., "--week", help="Week number to update (1-indexed)"),
-    from_json: str = typer.Option(..., "--from-json", help="Path to JSON file with week data"),
-) -> None:
-    """Update a single week in the training plan.
-
-    Replaces or adds a specific week while preserving other weeks.
-    Useful for mid-week adjustments or updating a single week's workouts.
-
-    JSON Format (single week object):
-        {
-          "week_number": 5,
-          "phase": "build",
-          "start_date": "2026-02-12",
-          "end_date": "2026-02-18",
-          "target_volume_km": 36.0,
-          "target_systemic_load_au": 200.0,
-          "workouts": [...]
-        }
-
-    Examples:
-        sce plan update-week --week 5 --from-json week5.json
-        sce plan update-week --week 1 --from-json /tmp/updated_week1.json
-    """
-    # Validate file exists
-    json_path = Path(from_json)
-    if not json_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message=f"JSON file not found: {from_json}",
-            data={"path": str(json_path.absolute())}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    # Load JSON
-    try:
-        with open(json_path, 'r') as f:
-            week_data = json.load(f)
-    except json.JSONDecodeError as e:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Invalid JSON: {str(e)}",
-            data={"file": from_json}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Validate week_data is a dict (not array)
-    if not isinstance(week_data, dict):
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="JSON must contain a single week object (not an array)",
-            data={"type": type(week_data).__name__}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Call API
-    result = update_plan_week(week, week_data)
-
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message=f"Updated week {week}",
-    )
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
 
 
 @app.command(name="update-from")
@@ -1329,89 +1252,6 @@ def generate_month_command(
 
     # Output JSON
     output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-@app.command(name="generate-week")
-def plan_generate_week_command(
-    ctx: typer.Context,
-    week_number: int = typer.Option(..., "--week-number", help="Week number to generate (1-indexed)"),
-    target_volume_km: float = typer.Option(..., "--target-volume-km", help="Weekly volume target (AI-designed, km)"),
-    from_macro: str = typer.Option(..., "--from-macro", help="Path to macro plan JSON file"),
-    current_vdot: float = typer.Option(..., "--current-vdot", help="Current VDOT for pace calculations"),
-    volume_adjustment: float = typer.Option(1.0, "--volume-adjustment", help="Volume multiplier (e.g., 0.85 = 85%)"),
-    output_file: Optional[str] = typer.Option(None, "--output", help="Output file path (default: stdout)")
-) -> None:
-    """Generate detailed workouts for a single week.
-
-    Progressive disclosure workflow: generates workouts for ONE week only.
-    AI coach designs weekly volume using guardrails, then generates detailed workouts.
-
-    Args:
-        week_number: Week to generate (e.g., 1, 2, 3)
-        target_volume_km: Weekly volume target (AI-designed using guardrails)
-        from_macro: Path to macro plan with phases and recovery weeks
-        current_vdot: VDOT value for training pace calculations
-        volume_adjustment: Optional multiplier to reduce/increase volume (default 1.0)
-
-    Returns:
-        JSON with single week containing workout_pattern (intent-based format).
-        System will calculate exact distances/paces/durations.
-
-    Examples:
-        sce plan generate-week --week-number 1 --target-volume-km 25.0 --from-macro /tmp/macro_plan.json --current-vdot 48
-        sce plan generate-week --week-number 2 --target-volume-km 27.5 --from-macro macro.json --current-vdot 48 --volume-adjustment 0.85
-    """
-    from sports_coach_engine.api.plan import generate_week_plan
-
-    # Validate file exists
-    macro_path = Path(from_macro)
-    if not macro_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message=f"Macro plan file not found: {from_macro}",
-            data={"path": str(macro_path.absolute())}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    # Call API
-    result = generate_week_plan(
-        week_number=week_number,
-        target_volume_km=target_volume_km,
-        macro_plan_path=from_macro,
-        current_vdot=current_vdot,
-        volume_adjustment=volume_adjustment
-    )
-
-    # Convert to envelope
-    if isinstance(result, PlanError):
-        envelope = api_result_to_envelope(result, success_message="")
-    else:
-        envelope = api_result_to_envelope(
-            result,
-            success_message=f"Week {week_number} generated with {result.get('num_runs', 'N/A')} runs"
-        )
-
-    # Output to file or stdout
-    if output_file:
-        output_path = Path(output_file)
-        try:
-            with open(output_path, 'w') as f:
-                json.dump(envelope, f, indent=2, default=str)
-        except Exception as e:
-            envelope = create_error_envelope(
-                error_type="unknown",
-                message=f"Failed to write output file: {str(e)}",
-                data={"file": output_file}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=1)
-    else:
-        output_json(envelope)
 
     # Exit with appropriate code
     exit_code = get_exit_code_from_envelope(envelope)

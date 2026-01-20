@@ -175,7 +175,7 @@ Design periodized training plans using progressive disclosure (macro + weekly de
 Adjust plans mid-cycle for illness, injury, or schedule changes
 - **Use when**: "I got sick", "adjust my plan", "missed workouts", "schedule changed"
 - **Workflow**: Assess impact → Replan strategy → Update affected weeks → Validate
-- **Key commands**: `sce plan update-week`, `sce plan update-from`, `sce guardrails illness-recovery`
+- **Key commands**: `sce plan populate`, `sce plan update-from`, `sce guardrails illness-recovery`
 
 ### 7. **injury-risk-management**
 Assess injury risk and provide mitigation strategies
