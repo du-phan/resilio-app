@@ -915,31 +915,13 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        # AUTO-CREATE skeleton from goal (replaces manual 'regen' step)
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info("No plan skeleton found - creating automatically from goal")
-
-        profile = get_profile()
-        if isinstance(profile, ProfileError) or not profile.goal:
-            return PlanError(
-                error_type="no_goal",
-                message="No goal found. Set a goal first with: sce goal set --type <race_type> --date <date> --time <target_time>"
-            )
-
-        # Create skeleton automatically (same logic as regenerate_plan)
-        skeleton_result = regenerate_plan()
-        if isinstance(skeleton_result, PlanError):
-            return skeleton_result
-
-        # Re-load the newly created skeleton
-        result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
-
-        if result is None:
-            return PlanError(
-                error_type="unknown",
-                message="Failed to create plan skeleton automatically"
-            )
+        return PlanError(
+            error_type="no_plan",
+            message="No training plan found. Create a macro plan first with:\n"
+                    "sce plan create-macro --goal-type <type> --race-date <date> "
+                    "--total-weeks <N> --start-date <YYYY-MM-DD> "
+                    "--current-ctl <X> --starting-volume-km <Y> --peak-volume-km <Z>"
+        )
 
     if isinstance(result, RepoError):
         return PlanError(
@@ -1112,31 +1094,13 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        # AUTO-CREATE skeleton from goal (replaces manual 'regen' step)
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info("No plan skeleton found - creating automatically from goal")
-
-        profile = get_profile()
-        if isinstance(profile, ProfileError) or not profile.goal:
-            return PlanError(
-                error_type="no_goal",
-                message="No goal found. Set a goal first with: sce goal set --type <race_type> --date <date> --time <target_time>"
-            )
-
-        # Create skeleton automatically (same logic as regenerate_plan)
-        skeleton_result = regenerate_plan()
-        if isinstance(skeleton_result, PlanError):
-            return skeleton_result
-
-        # Re-load the newly created skeleton
-        result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
-
-        if result is None:
-            return PlanError(
-                error_type="unknown",
-                message="Failed to create plan skeleton automatically"
-            )
+        return PlanError(
+            error_type="no_plan",
+            message="No training plan found. Create a macro plan first with:\n"
+                    "sce plan create-macro --goal-type <type> --race-date <date> "
+                    "--total-weeks <N> --start-date <YYYY-MM-DD> "
+                    "--current-ctl <X> --starting-volume-km <Y> --peak-volume-km <Z>"
+        )
 
     if isinstance(result, RepoError):
         return PlanError(
@@ -1543,13 +1507,20 @@ def create_macro_plan(
     current_ctl: float,
     starting_volume_km: float,
     peak_volume_km: float,
-) -> Union[dict, PlanError]:
+) -> Union["MasterPlan", PlanError]:
     """
-    Generate high-level training plan structure (macro plan).
+    Create training plan skeleton with stub weeks.
 
-    Creates the structural roadmap for full training period without
-    detailed workout prescriptions. Shows phases, volume progression,
-    CTL trajectory, recovery weeks, and key milestones.
+    Stub weeks contain ONLY structural data:
+    - Week number, phase, start/end dates
+    - Target volume (linear progression from starting to peak)
+    - Recovery week flag (every 4th week in base/build)
+    - Empty workouts list (filled progressively via populate)
+
+    IMPORTANT: This function does NOT generate workout structure hints.
+    The AI Coach (Claude Code) generates workout structure for each week
+    progressively using guardrails, VDOT paces, and training methodology.
+    This preserves the core philosophy: package provides tools, AI provides intelligence.
 
     Args:
         goal_type: Race distance ("5k", "10k", "half_marathon", "marathon")
@@ -1562,11 +1533,11 @@ def create_macro_plan(
         peak_volume_km: Peak weekly volume
 
     Returns:
-        dict: Macro plan structure (MacroPlan schema compatible)
+        MasterPlan: Plan skeleton with stub weeks (0 weeks populated)
         PlanError: If generation fails
 
     Example:
-        >>> macro = create_macro_plan(
+        >>> plan = create_macro_plan(
         ...     goal_type="half_marathon",
         ...     race_date=date(2026, 5, 3),
         ...     target_time="1:30:00",
@@ -1576,11 +1547,18 @@ def create_macro_plan(
         ...     starting_volume_km=25.0,
         ...     peak_volume_km=55.0
         ... )
+        >>> len(plan.weeks)
+        16  # All stub weeks with volume targets
+        >>> len(plan.weeks[0].workouts)
+        0  # No workouts yet - filled via populate
     """
     try:
         # Import here to avoid circular dependency
-        from sports_coach_engine.core.plan import generate_macro_structure
-        from sports_coach_engine.schemas.plan import GoalType
+        from sports_coach_engine.core.repository import RepositoryIO
+        from sports_coach_engine.core.plan import persist_plan
+        from sports_coach_engine.schemas.plan import GoalType, MasterPlan, WeekPlan
+        from datetime import timedelta
+        import uuid
 
         # Validate goal type and convert to enum
         goal_type_lower = goal_type.lower().replace("-", "_").replace(" ", "_")
@@ -1607,21 +1585,75 @@ def create_macro_plan(
                 message=f"Start date must be Monday, got {start_date.strftime('%A')}"
             )
 
-        # Generate macro structure
-        macro = generate_macro_structure(
-            goal_type=goal_type_enum,
-            race_date=race_date,
-            target_time=target_time,
-            total_weeks=total_weeks,
+        # Create phase structure
+        phases = _create_phase_structure(total_weeks)
+
+        # Create week-to-phase mapping
+        week_to_phase = {}
+        for phase_dict in phases:
+            for week_num in range(phase_dict["start_week"], phase_dict["end_week"] + 1):
+                week_to_phase[week_num] = phase_dict["phase"]
+
+        # Calculate volume trajectory (linear progression)
+        volume_delta = (peak_volume_km - starting_volume_km) / (total_weeks - 1)
+
+        # Create stub weeks with volume targets
+        stub_weeks = []
+        for week_num in range(1, total_weeks + 1):
+            week_start = start_date + timedelta(weeks=week_num - 1)
+            week_end = week_start + timedelta(days=6)
+
+            # Calculate target volume for this week
+            target_volume = starting_volume_km + (volume_delta * (week_num - 1))
+
+            # Determine phase
+            phase = week_to_phase.get(week_num, "base")
+
+            # Determine recovery week (every 4th week in base/build)
+            is_recovery = (week_num % 4 == 0) and phase in ["base", "build"]
+            if is_recovery:
+                target_volume *= 0.75  # 25% reduction
+
+            # Create stub week with ONLY structural data
+            # AI Coach will generate workout structure progressively via training-plan-design skill
+            stub_week = WeekPlan(
+                week_number=week_num,
+                phase=phase,
+                start_date=week_start,
+                end_date=week_end,
+                target_volume_km=target_volume,
+                target_systemic_load_au=0.0,  # Calculated when workouts added
+                workouts=[],  # Empty - filled via populate
+                is_recovery_week=is_recovery,
+                notes=f"{phase.capitalize()} phase"  # Simple phase label
+            )
+            stub_weeks.append(stub_week)
+
+        # Create MasterPlan with stub weeks
+        plan = MasterPlan(
+            id=f"plan_{uuid.uuid4().hex[:12]}",
+            created_at=date.today(),
+            goal={
+                "type": goal_type_enum.value,
+                "target_date": str(race_date),
+                "target_time": target_time
+            },
             start_date=start_date,
-            current_ctl=current_ctl,
+            end_date=race_date,
+            total_weeks=total_weeks,
+            phases=phases,
+            weeks=stub_weeks,  # Stub weeks with volume targets
             starting_volume_km=starting_volume_km,
-            peak_volume_km=peak_volume_km
+            peak_volume_km=peak_volume_km,
+            constraints_applied=[],
+            conflict_policy="running_goal_wins"
         )
 
-        # Progressive disclosure: Macro plans contain phases, recovery weeks, and goals
-        # Weekly volumes are designed by AI coach using guardrails, not pre-computed
-        return macro
+        # Persist to disk
+        repo = RepositoryIO()
+        persist_plan(plan, repo)
+
+        return plan
 
     except ValueError as e:
         return PlanError(
@@ -1633,6 +1665,31 @@ def create_macro_plan(
             error_type="unknown",
             message=f"Failed to create macro plan: {str(e)}"
         )
+
+
+def _create_phase_structure(total_weeks: int) -> list[dict]:
+    """Create phase boundaries based on total weeks."""
+    if total_weeks <= 4:
+        return [
+            {"phase": "base", "start_week": 1, "end_week": total_weeks - 1},
+            {"phase": "taper", "start_week": total_weeks, "end_week": total_weeks}
+        ]
+    elif total_weeks <= 8:
+        mid = total_weeks // 2
+        return [
+            {"phase": "base", "start_week": 1, "end_week": mid},
+            {"phase": "build", "start_week": mid + 1, "end_week": total_weeks - 1},
+            {"phase": "taper", "start_week": total_weeks, "end_week": total_weeks}
+        ]
+    else:
+        base_end = total_weeks // 3
+        build_end = 2 * total_weeks // 3
+        return [
+            {"phase": "base", "start_week": 1, "end_week": base_end},
+            {"phase": "build", "start_week": base_end + 1, "end_week": build_end},
+            {"phase": "peak", "start_week": build_end + 1, "end_week": total_weeks - 2},
+            {"phase": "taper", "start_week": total_weeks - 1, "end_week": total_weeks}
+        ]
 
 
 def assess_month_completion(

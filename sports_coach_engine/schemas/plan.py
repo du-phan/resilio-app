@@ -66,56 +66,6 @@ class IntensityZone(str, Enum):
 # ============================================================
 
 
-class PhaseAllocation(BaseModel):
-    """
-    Suggested phase allocation for periodization.
-
-    Returned by calculate_periodization() toolkit function. Provides
-    reference phase split based on goal type and available weeks.
-    Claude Code uses this as a reference when designing training plans.
-    """
-
-    base_weeks: int = Field(..., ge=0, description="Weeks in base phase")
-    build_weeks: int = Field(..., ge=0, description="Weeks in build phase")
-    peak_weeks: int = Field(..., ge=0, description="Weeks in peak phase")
-    taper_weeks: int = Field(..., ge=0, description="Weeks in taper phase")
-    total_weeks: int = Field(..., ge=1, description="Total weeks")
-    reasoning: str = Field(..., description="Explanation of phase split rationale")
-
-
-class VolumeRecommendation(BaseModel):
-    """
-    Safe volume range recommendation based on current fitness.
-
-    Returned by suggest_volume_adjustment() toolkit function. Provides
-    conservative starting and peak volume ranges based on CTL, goal distance,
-    and available timeline. Claude Code uses this to set realistic targets.
-    """
-
-    start_range_km: tuple[float, float] = Field(..., description="Safe starting volume range (min, max)")
-    peak_range_km: tuple[float, float] = Field(..., description="Safe peak volume range (min, max)")
-    rationale: str = Field(..., description="Explanation of volume recommendations")
-    current_ctl: float = Field(..., ge=0, description="Current CTL used for recommendation")
-    goal_distance_km: float = Field(..., gt=0, description="Goal race distance")
-    weeks_available: int = Field(..., ge=1, description="Weeks available to train")
-
-
-class WeeklyVolume(BaseModel):
-    """
-    Single week's volume recommendation in progression curve.
-
-    Returned by calculate_volume_progression() toolkit function. Represents
-    one week's target volume in a linear progression with recovery weeks.
-    Claude Code uses these as baseline targets and adjusts based on readiness.
-    """
-
-    week_number: int = Field(..., ge=1, description="Week number (1-indexed)")
-    volume_km: float = Field(..., ge=0, description="Target volume for this week")
-    is_recovery_week: bool = Field(False, description="Is this a scheduled recovery week?")
-    phase: PlanPhase = Field(..., description="Periodization phase")
-    reasoning: str = Field(..., description="Why this volume (e.g., 'Recovery week -20%')")
-
-
 class GuardrailViolation(BaseModel):
     """
     Training science guardrail violation (detection only, not enforcement).
@@ -333,72 +283,6 @@ class WeeklyVolumeTarget(BaseModel):
     target_volume_km: float = Field(..., ge=0, description="Target weekly volume")
     is_recovery_week: bool = Field(False, description="Is this a recovery week?")
     phase: PlanPhase = Field(..., description="Phase this week belongs to")
-
-    model_config = ConfigDict(use_enum_values=True)
-
-
-class CTLProjection(BaseModel):
-    """
-    CTL projection at key milestones in training plan.
-
-    Shows expected CTL evolution at strategic points to verify
-    safe fitness progression and taper effectiveness.
-    """
-
-    week_number: int = Field(..., ge=1, description="Week number (1-indexed)")
-    projected_ctl: float = Field(..., ge=0, description="Projected CTL value")
-    milestone: str = Field(..., description="What this week represents (e.g., 'End of base phase')")
-
-
-class MacroPlan(BaseModel):
-    """
-    High-level training plan structure (structural roadmap).
-
-    Provides the "big picture" for the full training period without detailed
-    workout prescriptions. Shows phases, volume progression, CTL trajectory,
-    recovery weeks, and key milestones. Used for athlete confidence and
-    planning, while monthly plans provide execution detail.
-
-    Generated once at plan creation, rarely modified unless major changes
-    (injury, goal change, life events) require replanning.
-    """
-
-    # Identity
-    id: str = Field(..., description="Unique macro plan identifier")
-    created_at: date
-
-    # Goal
-    race_type: GoalType = Field(..., description="Race distance goal")
-    race_date: date
-    target_time: Optional[str] = Field(None, description="Target finish time (e.g., '1:30:00')")
-
-    # Structure
-    total_weeks: int = Field(..., ge=1, description="Total weeks in plan")
-    start_date: date
-    end_date: date
-    phases: list[PhaseStructure] = Field(..., description="Phase boundaries and focus")
-
-    # Volume progression
-    volume_trajectory: list[WeeklyVolumeTarget] = Field(
-        ...,
-        description="Weekly volume targets for entire plan"
-    )
-    starting_volume_km: float = Field(..., ge=0, description="Initial weekly volume")
-    peak_volume_km: float = Field(..., ge=0, description="Peak weekly volume")
-
-    # CTL projection
-    current_ctl: float = Field(..., ge=0, description="CTL at plan creation")
-    ctl_projections: list[CTLProjection] = Field(
-        ...,
-        description="CTL projections at key milestones"
-    )
-
-    # Recovery and milestones
-    recovery_weeks: list[int] = Field(..., description="Scheduled recovery weeks")
-    milestones: list[dict] = Field(
-        ...,
-        description="Key checkpoints (e.g., {'week': 4, 'event': 'VDOT recalibration'})"
-    )
 
     model_config = ConfigDict(use_enum_values=True)
 

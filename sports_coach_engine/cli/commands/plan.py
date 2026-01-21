@@ -813,8 +813,12 @@ def create_macro_command(
     )
 
     # Construct success message only if result is successful
-    if isinstance(result, dict):
-        success_message = f"Macro plan created: {total_weeks} weeks, {len(result.get('phases', []))} phases"
+    if not isinstance(result, PlanError):
+        success_message = (
+            f"Training plan skeleton created: {total_weeks} weeks, {len(result.phases)} phases\n"
+            f"Saved to: data/plans/current_plan.yaml (0 weeks populated)\n"
+            f"Next: Generate week 1 workouts and use 'sce plan populate'"
+        )
     else:
         success_message = "Macro plan creation failed"
 
