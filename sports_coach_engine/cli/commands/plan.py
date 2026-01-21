@@ -817,7 +817,7 @@ def create_macro_command(
         success_message = (
             f"Training plan skeleton created: {total_weeks} weeks, {len(result.phases)} phases\n"
             f"Saved to: data/plans/current_plan.yaml (0 weeks populated)\n"
-            f"Next: Generate week 1 workouts and use 'sce plan populate'"
+            f"Next: Present macro plan to athlete for approval, then use weekly-planning skill for Week 1"
         )
     else:
         success_message = "Macro plan creation failed"

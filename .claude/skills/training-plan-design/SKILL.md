@@ -24,7 +24,7 @@ Creates strategic 16-week training plan with volume trajectory, phase boundaries
 ## Workflow
 
 ```
-MACRO PLANNING WORKFLOW (6 STEPS)
+MACRO PLANNING WORKFLOW (6 STEPS - COMPLETE ALL BEFORE RETURNING)
 
 Step 1: Context Gathering
         → sce dates, sce profile get, sce status, sce memory list
@@ -34,26 +34,32 @@ Step 2: Determine Volume Trajectory
         → sce guardrails safe-volume (CTL-based starting point)
         → AI decides: starting volume, peak volume, progression strategy
 
-Step 2.5: Determine Baseline VDOT
+Step 3: Determine & Validate Baseline VDOT (MUST GET ATHLETE APPROVAL)
         → Check recent races OR estimate from fitness OR use conservative default
-        → sce vdot paces --vdot X (get pace ranges for macro presentation)
-        → Baseline VDOT = intensity baseline for entire 16-week plan
+        → sce vdot paces --vdot X (get pace ranges)
+        → Present paces to athlete and ask for validation:
+          - "Do these paces match your current fitness?"
+          - "Is easy pace X:XX-X:XX comfortable for you?"
+          - Show recent workout paces as reference
+        → Use AskUserQuestion or return to main agent for validation
+        ⛔ BLOCKER: MUST validate VDOT with athlete before Step 4
+        → Adjust VDOT if athlete feedback indicates mismatch
 
-Step 3: Create Macro Skeleton
-        → sce plan create-macro (16-week structure, volume targets + baseline VDOT)
+Step 4: Create Macro Skeleton
+        → sce plan create-macro (structure, volume targets + VALIDATED baseline VDOT)
         → Auto-persists to data/plans/current_plan.yaml
         ⛔ BLOCKER: Must verify skeleton with sce plan show
 
-Step 4: Present Macro Plan
-        → Create /tmp/macro_plan_review_YYYY_MM_DD.md
-        → Show: Phase breakdown, volume progression, recovery weeks, pace context
-        → Include: "Based on VDOT X, easy pace ~Y:YY/km"
-        → Explicitly: "Workouts will be designed week-by-week starting with Week 1"
+Step 5: Create Macro Plan Review Document (MANDATORY - DO NOT SKIP)
+        → MUST create /tmp/macro_plan_review_YYYY_MM_DD.md
+        → MUST include: Phase breakdown, volume table, VALIDATED pace zones, approval prompt
+        → Use Write tool to create the markdown file
+        ⛔ BLOCKER: This step is REQUIRED before returning to main agent
 
-Step 5: Save & Transition
-        → Athlete approves macro structure (volume + intensity)
-        → Ask: "Ready to design Week 1 workouts?" → Activate weekly-planning skill
-        ⛔ BLOCKER: NEVER proceed without approval
+Step 6: Return Summary to Main Agent
+        → Provide: Path to review markdown, plan summary, next steps
+        → Do NOT suggest generating Week 1 workouts
+        → Main agent will present to athlete and await final macro plan approval
 ```
 
 ## Step Details
@@ -109,11 +115,13 @@ poetry run sce guardrails safe-volume --ctl $CTL --goal-type $GOAL --recent-volu
 
 ---
 
-### Step 2.5: Determine Baseline VDOT
+### Step 3: Determine & Validate Baseline VDOT
 
 **See [pace_zones.md](../weekly-planning/references/pace_zones.md) for VDOT scenarios.**
 
-**Purpose**: Establish intensity baseline for the entire 16-week plan. Athletes need complete picture (volume + paces) for informed consent.
+**Purpose**: Establish AND VALIDATE intensity baseline with athlete BEFORE creating macro plan. Athletes must approve paces before committing to a training structure.
+
+**Phase A: Calculate Initial VDOT Estimate**
 
 **Three approaches** (in order of preference):
 
@@ -132,6 +140,9 @@ poetry run sce vdot calculate --race-type [TYPE] --time [TIME]
 ```bash
 # Estimate based on recent training performance
 poetry run sce vdot estimate-current --lookback-days 28
+
+# Also check recent workout paces for reference
+poetry run sce activity list --since 30d --sport run
 ```
 
 **Use if**: No recent race, but consistent quality workouts last 4 weeks.
@@ -145,28 +156,61 @@ poetry run sce vdot estimate-current --lookback-days 28
 
 **Use if**: No race, inconsistent training, or uncertainty. Better to start conservative.
 
-**Get pace ranges for presentation**:
+**Phase B: Get Pace Ranges**
 ```bash
-poetry run sce vdot paces --vdot $BASELINE_VDOT
+poetry run sce vdot paces --vdot $INITIAL_VDOT
 ```
 
-**Store for create-macro**: `BASELINE_VDOT` (e.g., 45)
+**Phase C: VALIDATE WITH ATHLETE (MANDATORY)**
 
-**Why this belongs in macro planning**:
-- VDOT is **strategic** (intensity baseline for 16 weeks), not tactical (daily adjustments)
-- Athletes need **complete informed consent** (volume + paces) before approving macro
-- Volume without intensity context = incomplete framework
+**Present paces to athlete and ask for validation:**
+
+```
+I've calculated your baseline VDOT as [X] based on [source].
+
+Your training paces would be:
+- Easy runs: X:XX-X:XX/km (comfortable, conversational)
+- Marathon pace: X:XX-X:XX/km (race pace)
+- Tempo runs: X:XX-X:XX/km (comfortably hard, 10K-half marathon effort)
+- Long runs: X:XX-X:XX/km (same as easy pace)
+
+Looking at your recent workouts:
+- [Date]: [Pace]/km ([workout type])
+- [Date]: [Pace]/km ([workout type])
+
+Do these paces match your current fitness?
+- If easy pace feels too fast/slow, we should adjust your VDOT
+- Your recent easy runs were around X:XX/km - does that align?
+```
+
+**Use AskUserQuestion or return to main agent for validation.**
+
+**If athlete says paces are incorrect:**
+1. Ask what their actual easy/tempo paces feel like
+2. Recalculate VDOT based on their reported paces
+3. Re-validate until athlete confirms
+
+**Phase D: Store Validated VDOT**
+
+**Store for create-macro**: `BASELINE_VDOT` (e.g., 45) - **MUST be athlete-validated**
+
+**Why validation is critical**:
+- VDOT is **strategic** (intensity baseline for entire plan duration), not tactical
+- Wrong VDOT = wrong training stimulus for 10-16 weeks
 - Example: "50km/week at 6:30 easy" vs "50km/week at 7:00 easy" are VERY different plans
-- Prevents "surprise paces" problem when Week 1 generated
+- Athlete must approve intensity baseline BEFORE volume structure is created
+- Prevents "surprise paces" problem and ensures informed consent
 
 **Exit criteria:**
-- [ ] BASELINE_VDOT determined (race, estimate, or conservative default)
+- [ ] BASELINE_VDOT calculated (race, estimate, or conservative default)
 - [ ] Pace ranges retrieved (`sce vdot paces`)
+- [ ] **Paces VALIDATED with athlete (confirmed they match actual fitness)**
+- [ ] VDOT adjusted if athlete indicated mismatch
 - [ ] Confidence level noted (high for race, medium for estimate, low for default)
 
 ---
 
-### Step 3: Create Macro Skeleton
+### Step 4: Create Macro Skeleton
 
 Run this command:
 ```bash
@@ -200,9 +244,11 @@ poetry run sce plan create-macro \
 
 ---
 
-### Step 4: Present Macro Plan
+### Step 5: Create Macro Plan Review Document
 
-Create `/tmp/macro_plan_review_$(date +%Y_%m_%d).md` with:
+**MANDATORY - DO NOT SKIP THIS STEP**
+
+Create `/tmp/macro_plan_review_$(date +%Y_%m_%d).md` using the Write tool with:
 
 **Macro overview**:
 - Start date (Monday), end date (Sunday race week)
@@ -241,13 +287,19 @@ Based on your current fitness (VDOT [X]), your training paces will be:
 - If multi-sport: Note load distribution targets (e.g., "Running 45%, Climbing 45%, Recovery 10%")
 - **Pace context**: Athlete sees BOTH volume trajectory AND intensity before committing
 
+**Exit criteria:**
+- [ ] Markdown file created at `/tmp/macro_plan_review_YYYY_MM_DD.md`
+- [ ] File includes all sections (overview, paces, volume table, approval prompt)
+- [ ] Validated VDOT and paces are shown
+- [ ] Multi-sport context included if applicable
+
 ---
 
-### Step 5: Save & Transition
+### Step 6: Return Summary to Main Agent
 
-**⛔ NEVER proceed without approval. ALWAYS present macro plan first.**
+**⛔ NEVER proceed without approval. Skill returns summary to main agent, who presents to athlete.**
 
-Present to athlete:
+Return to main agent:
 ```
 I've created your [Race Type] macro training plan.
 
@@ -297,20 +349,23 @@ Ready to design Week 1 workouts? I'll use the weekly-planning skill to create yo
 
 ### ⛔ Do Not Do (Macro Planning)
 
+- **Skip VDOT validation with athlete** - MUST validate paces BEFORE creating macro skeleton
 - **Generate workouts for ANY week** (including Week 1) - That's weekly-planning's job
+- **Skip Step 5 (create markdown review)** - This is MANDATORY before returning to main agent
 - **Skip recovery weeks** - Every 4-5 weeks at 70% volume
 - **Ignore CTL when setting starting volume** - Always use CTL-based starting point
 - **Use mental date calculations** - Always use `sce dates` commands
-- **Save without approval** - Present macro plan markdown first
-- **Design without confirming constraints** - Ask about run days, multi-sport schedule, time availability
+- **Present without approval** - Main agent handles athlete presentation
 
 ### ✅ Do This (Macro Planning)
 
+- **Step 3: Validate VDOT with athlete** - Present paces, compare to recent workouts, confirm accuracy
+- **Step 5: Create markdown review file** - Use Write tool, include all required sections
 - Use CLI for all computations (dates, volumes, validation)
 - Start volume = 80-100% of CTL (use `sce guardrails safe-volume`)
 - Plan recovery weeks (every 4-5 weeks at 70%)
 - Validate dates are Monday-Sunday (use `sce dates validate`)
-- Present macro plan for approval before proceeding to Week 1
+- Return path to markdown file (not raw analysis) to main agent
 - Account for multi-sport load in volume planning (see multi_sport_macro.md)
 
 ---

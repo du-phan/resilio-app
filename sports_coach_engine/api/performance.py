@@ -109,7 +109,7 @@ def api_get_performance_baseline(
     if not isinstance(vdot_result, VDOTError):
         current_vdot = vdot_result.estimated_vdot
         vdot_source = vdot_result.source
-        vdot_confidence = vdot_result.confidence.value
+        vdot_confidence = vdot_result.confidence
 
     # 2. Get current CTL
     metrics_result = get_current_metrics()
