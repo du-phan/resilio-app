@@ -47,7 +47,7 @@ Each workout needs **20+ fields total**:
 - **Purpose**: `purpose` (training stimulus), `notes` (execution cues)
 - **Metadata**: `key_workout` (bool), `status` ("scheduled"), `execution` (null initially)
 
-**Full field reference**: See [WORKOUT_PRESCRIPTION_FIELDS.md](WORKOUT_PRESCRIPTION_FIELDS.md)
+**Full field reference**: See [workout_prescription_fields.md](workout_prescription_fields.md)
 
 **Complete example**: See [COMPLETE_WORKOUT_EXAMPLE.json](COMPLETE_WORKOUT_EXAMPLE.json)
 
