@@ -7,10 +7,11 @@ Generate detailed workouts for the next week using **progressive disclosure**. E
 **Core Philosophy**: Plan 1 week at a time to maximize adaptability. AI coach designs weekly volumes using guardrails - NO algorithmic interpolation.
 
 **This skill handles**:
+- Determining week type (Week 1 initial vs Week 2+ progression)
 - Loading macro plan context (phases, recovery weeks, volume goals)
-- Analyzing previous week's response
-- Designing next week's volume (AI decision using guardrails)
-- VDOT recalibration (if needed)
+- Analyzing training history (previous weeks for Week 2+, CTL baseline for Week 1)
+- Designing volume (AI decision using guardrails)
+- VDOT determination (estimate for Week 1, recalibration for Week 2+)
 - Generating detailed workouts (intent-based format)
 - Validation & presentation
 - Saving after approval
@@ -35,13 +36,43 @@ Generate detailed workouts for the next week using **progressive disclosure**. E
 
 Before activating:
 - ✅ **Macro plan exists** - MasterPlan skeleton with phases, recovery weeks, volume goals (`data/plans/current_plan.yaml`)
-- ✅ **Current week completed** (if generating week N+1)
-- ✅ **Weekly analysis done** (optional but recommended)
+- ✅ **Current week completed** (if generating week N+1) OR Week 1 (initial plan)
 - ✅ **Profile constraints current** - Run days, available days, max session duration
+- ✅ **Weekly analysis done** (optional but recommended for Week 2+)
 
 ---
 
 ## Workflow
+
+### Step 0: Determine Week Type
+
+**Check what week we're generating**:
+
+```bash
+# Check current plan state
+LAST_WEEK=$(jq -r '.weeks[-1].week_number // 0' data/plans/current_plan.yaml)
+NEXT_WEEK=$((LAST_WEEK + 1))
+```
+
+**Branch logic**:
+
+**If NEXT_WEEK == 1** (Initial week generation):
+- No previous week to analyze
+- Baseline: `sce status` (CTL, TSB, ACWR, readiness)
+- Volume source: Macro plan's week 1 `target_volume_km` (reference, AI can adjust)
+- VDOT: Load `baseline_vdot` from macro plan (already determined during macro planning)
+
+**If NEXT_WEEK > 1** (Weekly progression):
+- Previous week: `sce week` (actual volume, adherence)
+- Recent weeks: `sce week --offset 1,2,3` (trend analysis)
+- Adherence patterns: `sce analysis adherence --days 28` (last 4 weeks)
+- Intensity distribution: `sce analysis intensity --days 28` (80/20 compliance)
+- Volume progression: Based on recent trend, not just last week
+- VDOT: Check for recalibration signals (race, breakthrough workout)
+
+**Proceed to appropriate steps based on week type.**
+
+---
 
 ### Step 1: Load Context from Master Plan
 
@@ -147,13 +178,20 @@ sce guardrails analyze-progression \
 3. **Mixed signals** → Apply methodology judgment (prefer safety)
 4. **Pfitzinger guideline violated** → Reduce run frequency (4→3 runs)
 
-**See**: [volume_progression.md](../training-plan-design/references/volume_progression.md) for detailed interpretation framework.
+**See**: [volume_progression_weekly.md](references/volume_progression_weekly.md) for detailed interpretation framework.
 
 **Output**: `FINAL_VOLUME` for next week (AI decision informed by guardrails).
 
 ---
 
-### Step 6: VDOT Recalibration (Optional)
+### Step 6: VDOT Determination/Recalibration
+
+**For Week 1** (initial generation):
+- Load `baseline_vdot` from macro plan (already determined during macro planning)
+- Use baseline paces (no recalibration needed)
+- Skip this step entirely for Week 1
+
+**For Week 2+** (optional recalibration):
 
 **Signals for VDOT adjustment**:
 
@@ -162,9 +200,10 @@ sce guardrails analyze-progression \
 3. **Every 4 weeks**: `sce vdot estimate-current --lookback-days 28`
 
 **Decision**:
-- New VDOT differs by ≥2 points → Update
+- New VDOT differs by ≥2 points → Update `current_vdot`
 - <2 points → Keep current (avoid micro-adjustments)
 - Communicate change: "Your fitness improved - updating paces!"
+- Store in VDOT history: `{week: N, vdot: X, source: "race"/"estimate"}`
 
 **Goal re-validation**: Only if VDOT changes significantly (±2 points). Most cases: skip, let race-preparation skill handle final check.
 
@@ -235,7 +274,7 @@ sce dates week-boundaries --start <week_start_date>
 
 **Save to file**: `/tmp/weekly_plan_w${NEXT_WEEK_NUMBER}.json`
 
-**See**: [json_workflow.md](../training-plan-design/references/json_workflow.md) for complete workout_pattern format.
+**See**: [json_workflow.md](references/json_workflow.md) for complete workout_pattern format.
 
 ---
 
@@ -438,9 +477,14 @@ When athlete needs to adjust upcoming week:
 
 ## Additional Resources
 
-- **Volume Progression Guide**: [volume_progression.md](../training-plan-design/references/volume_progression.md)
-- **Workout Pattern Format**: [json_workflow.md](../training-plan-design/references/json_workflow.md)
-- **Common Pitfalls**: [common_pitfalls.md](../training-plan-design/references/common_pitfalls.md)
+- **Volume Progression Guide**: [volume_progression_weekly.md](references/volume_progression_weekly.md)
+- **Workout Pattern Format**: [json_workflow.md](references/json_workflow.md)
+- **Common Pitfalls**: [common_pitfalls_weekly.md](references/common_pitfalls_weekly.md)
+- **Workout Generation**: [workout_generation.md](references/workout_generation.md)
+- **Pace Zones**: [pace_zones.md](references/pace_zones.md)
+- **Choosing Run Count**: [choosing_run_count.md](references/choosing_run_count.md)
+- **Guardrails**: [guardrails_weekly.md](references/guardrails_weekly.md)
+- **Multi-Sport Integration**: [multi_sport_weekly.md](references/multi_sport_weekly.md)
 - **CLI Reference**: [docs/coaching/cli/cli_planning.md](../../../docs/coaching/cli/cli_planning.md)
 - **Training Plan Design**: [training-plan-design/SKILL.md](../training-plan-design/SKILL.md)
 - **Weekly Analysis**: [weekly-analysis/SKILL.md](../weekly-analysis/SKILL.md)

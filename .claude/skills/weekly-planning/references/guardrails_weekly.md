@@ -1,6 +1,8 @@
-# Training Guardrails Quick Reference
+# Training Guardrails - Weekly Planning
 
-Evidence-based safety rules that protect against injury and overtraining. Based on Daniels, Pfitzinger, and 80/20 Running research.
+Workout-level guardrails for weekly plan validation. Ensures safe intensity distribution, quality volume limits, and workout structure.
+
+---
 
 ## 80/20 Intensity Distribution
 
@@ -67,9 +69,13 @@ sce guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --r-pace 2.0 --weekly-vo
 - Intervals: 2 km warm-up + 3 × 1 km I-pace (3 km quality) + 2 km cool-down = 7 km total
 
 ### Enforcement
-- Check during plan design (weekly validation)
+- Check during weekly plan validation
 - Adjust workout volumes to comply
 - Exception: Recovery weeks can proportionally reduce limits
+
+**Example violation**:
+- 40 km week with 6 km T-pace (15%) → VIOLATION
+- Solution: Reduce T-pace to 4 km (10%) OR increase weekly volume to 60 km
 
 ---
 
@@ -114,6 +120,11 @@ sce guardrails long-run --duration 150 --weekly-volume 60 --pct-limit 30
 - Adjust long run duration or increase weekly volume
 - Taper: Long run can be higher % (40-50%) as volume drops
 
+**Example violation**:
+- 40 km week with 18 km long run (45%) → VIOLATION
+- Solution A: Increase weekly volume to 60 km (18 km = 30%)
+- Solution B: Reduce long run to 12 km (30% of 40 km)
+
 ---
 
 ## Weekly Progression (10% Rule)
@@ -146,38 +157,9 @@ sce guardrails progression --previous 40 --current 48
 - Week 5: 52 km (+10% from week 3's 48 km, NOT +53% from week 4)
 
 ### Enforcement
-- Check during plan design (week-to-week validation)
+- Check during weekly plan design
 - Flag violations, suggest safer progression
 - Exception: First week after injury/illness (use return-to-training protocol)
-
----
-
-## Recovery Week Frequency
-
-**Rule**: Every 4th week during base/build phases
-
-### Purpose
-- Consolidate adaptations from previous 3 weeks
-- Prevent overtraining accumulation
-- Allow body to supercompensate
-
-### Structure
-- **Volume**: 70% of previous week
-- **Intensity**: Maintain (keep quality, reduce duration)
-- **Frequency**: Reduce number of runs if needed
-
-**Example**:
-- Week 3: 50 km (3 easy, 1 tempo, 1 intervals, 1 long)
-- Week 4: 35 km (2 easy, 1 short tempo, 1 short long) = 70% volume, maintains intensity
-
-### When NOT to Schedule
-- Peak phase (maintaining high load)
-- Taper (already reducing volume)
-- First 2 weeks of plan (building from base)
-
-### Masters Adjustment (45+)
-- Every 3rd week instead of 4th
-- See `sce guardrails masters-recovery --age 52`
 
 ---
 
@@ -207,6 +189,17 @@ sce today  # Returns adaptation triggers including "session_density_high"
 - Easy runs (RPE 3-4) between hard days
 - Consider multi-sport schedule (climbing intensity impacts running)
 
+**Example week structure**:
+- Monday: Easy run
+- Tuesday: Tempo run (RPE 8)
+- Wednesday: Climbing (moderate, RPE 5)
+- Thursday: Easy run
+- Friday: Intervals (RPE 9)
+- Saturday: Easy run
+- Sunday: Long run (RPE 4)
+
+→ Hard sessions (Tue, Fri) are 3 days apart ✓
+
 ---
 
 ## ACWR Safety
@@ -224,19 +217,23 @@ sce today  # Returns adaptation triggers including "session_density_high"
 3. Multi-sport load accumulation
 4. Insufficient recovery weeks
 
-### Prevention During Plan Design
-- Validate weekly progression (10% rule)
-- Schedule recovery weeks
-- Forecast ACWR across plan:
-  ```bash
-  sce risk forecast --weeks 4 --metrics metrics.json --plan plan.json
-  ```
+### Weekly Response to Elevated ACWR
 
-### Action if ACWR Elevated
+**If ACWR 1.3-1.5**:
 - Hold volume steady (don't increase)
-- Add recovery days
-- Reduce intensity temporarily
-- See `daily-workout` skill for adaptation decisions
+- Skip quality session, replace with easy run
+- Monitor next week's ACWR
+
+**If ACWR >1.5**:
+- Reduce volume 10-15%
+- Easy runs only (no quality)
+- Insert recovery day
+- Reassess after 1 week
+
+**Check ACWR**:
+```bash
+sce status  # Returns current ACWR with risk level
+```
 
 ---
 
@@ -269,13 +266,79 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 - Day 15+: Resume normal training
 
 ### Enforcement
-- Flag if plan schedules race + hard workout within recovery window
-- Suggest easy runs during recovery period
+- Don't schedule quality workouts within recovery window
+- Easy runs only during recovery period
 - Check for "back-to-back race" violations (races <2 weeks apart)
+
+**Example post-half-marathon week**:
+- Days 1-3: Rest
+- Days 4-5: 2× 25 min easy (50% volume)
+- Days 6-7: 2× 35 min easy (75% volume)
+- Week 2: Resume normal volume, easy runs only
+- Week 3: Add quality work
 
 ---
 
-## Guardrail Validation Commands
+## Illness Recovery Protocol
+
+### Return-to-Running Guidelines
+
+**Mild illness** (2-4 days, no fever):
+- Day 1 post-illness: Rest or 20 min easy
+- Day 2-3: 50% normal volume, easy pace only
+- Day 4+: Resume normal volume
+
+**Moderate illness** (5-7 days, fever):
+- Days 1-3 post-illness: Rest
+- Days 4-7: 50% normal volume, easy only
+- Week 2: 75% normal volume, no quality
+- Week 3+: Resume normal training
+
+**Severe illness** (8+ days, hospitalization):
+- Medical clearance required
+- Restart base building (treat as training break >14 days)
+
+### Validation
+```bash
+sce guardrails illness-recovery --severity moderate --days-missed 7
+```
+
+**Returns**:
+- `restart_protocol`: Day-by-day guidance
+- `volume_limits`: Weekly caps during return
+- `red_flags`: When to stop and seek medical advice
+
+---
+
+## Guardrail Enforcement Philosophy
+
+**Important**: Guardrails are **validated** by modules, **enforced** by coach (you).
+
+### Toolkit Approach
+1. **Modules return violations**: "T-pace volume is 12% (exceeds 10% limit)"
+2. **You interpret with context**: "Athlete is experienced, CTL is high, no injury history"
+3. **You decide enforcement**: "Acceptable violation" OR "Adjust plan"
+
+### When to Enforce Strictly (Weekly Level)
+- New athletes (limited injury history)
+- Recent injury recovery
+- ACWR already elevated
+- Masters athletes (45+)
+- Multi-sport athletes (complex load)
+- First week returning from illness
+
+### When to Allow Flexibility
+- Experienced athletes with good history
+- CTL is well-established
+- Athlete knows their body well
+- Violation is minor (e.g., 11% T-pace vs 10%)
+- One-time exception (not pattern)
+
+**Key**: Use guardrails as **guidance**, not absolute rules. Coach with context.
+
+---
+
+## Weekly Guardrail Commands
 
 ```bash
 # 80/20 intensity distribution
@@ -293,47 +356,17 @@ sce guardrails progression --previous 40 --current 48
 # Race recovery
 sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
-# Return after training break
-sce guardrails break-return --days 21 --ctl 44 --cross-training moderate
-
 # Illness recovery
 sce guardrails illness-recovery --severity moderate --days-missed 7
 
-# Masters recovery adjustments
-sce guardrails masters-recovery --age 52
+# Current ACWR check
+sce status
 ```
-
----
-
-## Guardrail Enforcement Philosophy
-
-**Important**: Guardrails are **validated** by modules, **enforced** by coach (you).
-
-### Toolkit Approach
-1. **Modules return violations**: "T-pace volume is 12% (exceeds 10% limit)"
-2. **You interpret with context**: "Athlete is experienced, CTL is high, no injury history"
-3. **You decide enforcement**: "Acceptable violation" OR "Adjust plan"
-
-### When to Enforce Strictly
-- New athletes (limited injury history)
-- Recent injury recovery
-- ACWR already elevated
-- Masters athletes (45+)
-- Multi-sport athletes (complex load)
-
-### When to Allow Flexibility
-- Experienced athletes with good history
-- CTL is well-established
-- Athlete knows their body well
-- Violation is minor (e.g., 11% T-pace vs 10%)
-
-**Key**: Use guardrails as **guidance**, not absolute rules. Coach with context.
 
 ---
 
 ## Deep Dive Resources
 
-For complete guardrails methodology:
 - [80/20 Running](../../../docs/training_books/80_20_matt_fitzgerald.md) - Intensity distribution research
 - [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md) - Quality volume limits
 - [Advanced Marathoning](../../../docs/training_books/advanced_marathoning_pete_pfitzinger.md) - Recovery protocols
