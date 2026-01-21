@@ -1594,25 +1594,25 @@ def create_macro_plan(
             for week_num in range(phase_dict["start_week"], phase_dict["end_week"] + 1):
                 week_to_phase[week_num] = phase_dict["phase"]
 
-        # Calculate volume trajectory (linear progression)
-        volume_delta = (peak_volume_km - starting_volume_km) / (total_weeks - 1)
-
-        # Create stub weeks with volume targets
+        # Create stub weeks WITHOUT automatic volume calculation
+        # AI Coach will determine volumes using guardrails during macro planning:
+        # - sce guardrails safe-volume (CTL-based capacity)
+        # - sce guardrails analyze-progression (phase-aware progression rates)
+        # - Training methodology (Pfitzinger phase rates, minimum volume constraints)
         stub_weeks = []
         for week_num in range(1, total_weeks + 1):
             week_start = start_date + timedelta(weeks=week_num - 1)
             week_end = week_start + timedelta(days=6)
 
-            # Calculate target volume for this week
-            target_volume = starting_volume_km + (volume_delta * (week_num - 1))
+            # Stub weeks start with zero volume
+            # AI Coach will populate during macro planning workflow
+            target_volume = 0.0
 
             # Determine phase
             phase = week_to_phase.get(week_num, "base")
 
-            # Determine recovery week (every 4th week in base/build)
+            # Recovery week flag for metadata only (AI Coach uses this context)
             is_recovery = (week_num % 4 == 0) and phase in ["base", "build"]
-            if is_recovery:
-                target_volume *= 0.75  # 25% reduction
 
             # Create stub week with ONLY structural data
             # AI Coach will generate workout structure progressively via training-plan-design skill

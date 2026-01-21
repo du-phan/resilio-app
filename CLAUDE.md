@@ -102,22 +102,30 @@ sce dates validate --date 2026-06-15 --must-be saturday
 
 ### ISO Weekday Reference
 
-Python's `date.weekday()` returns:
-- 0 = Monday
-- 1 = Tuesday
-- 2 = Wednesday
-- 3 = Thursday
-- 4 = Friday
-- 5 = Saturday
-- 6 = Sunday
+**IMPORTANT**: The codebase uses ISO weekday numbering (1-7), NOT Python's weekday() (0-6).
 
-**In plan JSON:** `run_days: [1, 3, 5]` means Tuesday, Thursday, Saturday.
+ISO weekday (used in workout_pattern JSON):
+- 1 = Monday
+- 2 = Tuesday
+- 3 = Wednesday
+- 4 = Thursday
+- 5 = Friday
+- 6 = Saturday
+- 7 = Sunday
+
+**In plan JSON:** `run_days: [1, 3, 5]` means **Monday, Wednesday, Friday**.
+
+**Examples**:
+- `run_days: [2, 4, 7]` = Tuesday, Thursday, Sunday
+- `run_days: [1, 3, 5, 7]` = Monday, Wednesday, Friday, Sunday
+
+**Note**: Python's `date.weekday()` returns different values (0=Monday, 6=Sunday) but this is NOT used in JSON. Always use ISO weekday 1-7 in workout_pattern.
 
 ### Validation Requirements
 
 **Before saving any training plan:**
-- All `week.start_date` must be Monday (weekday() == 0)
-- All `week.end_date` must be Sunday (weekday() == 6)
+- All `week.start_date` must be Monday (ISO weekday 1)
+- All `week.end_date` must be Sunday (ISO weekday 7)
 - Use `sce dates validate` to verify each date
 
 **Common Mistakes to Avoid:**

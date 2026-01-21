@@ -69,12 +69,33 @@ poetry run sce plan show
 | Field | Type | Purpose | Example |
 |-------|------|---------|---------|
 | `structure` | string | Human-readable structure | `"3 easy + 1 long"` |
-| `run_days` | array[int] | Days to run (ISO weekdays: 0=Mon, 6=Sun) | `[1, 3, 6]` = Tue, Thu, Sun |
-| `long_run_day` | int | Which day is the long run | `6` (Sunday) |
+| `run_days` | array[int] | Days to run (ISO weekdays: 1=Mon, 7=Sun) | `[1, 3, 6]` = Mon, Wed, Sat |
+| `long_run_day` | int | Which day is the long run | `7` (Sunday) |
 | `long_run_pct` | float | Long run as % of weekly volume | `0.45` (45%) |
 | `quality_sessions` | array | Quality workouts (tempo/intervals) | `[]` (base phase) or see below |
 | `easy_run_paces` | string | Easy pace range (min/km) | `"6:30-6:50"` |
 | `long_run_pace` | string | Long run pace range | `"6:30-6:50"` |
+
+### Why workout_pattern is Required
+
+The `workout_pattern` field is a **transient API construct** used during plan population:
+
+1. **Input**: JSON contains `workout_pattern` (coaching intent)
+2. **Processing**: System generates detailed `workouts` array from pattern
+3. **Output**: Plan saves `workouts`, NOT `workout_pattern`
+
+**Architectural flow**:
+```
+AI Coach → workout_pattern (intent) → System calculates → workouts array → Pydantic validation → YAML persistence
+```
+
+**Why this design**:
+- Separates coaching decisions (intent) from arithmetic (mechanics)
+- Guarantees workouts sum exactly to target volume
+- Prevents rounding errors in manual calculations
+- Single source of truth for workout generation logic
+
+**Common confusion**: The `workout_pattern` field doesn't appear in the Pydantic `WeekPlan` schema because it's consumed during processing and never persisted.
 
 ### Quality Sessions Format
 
