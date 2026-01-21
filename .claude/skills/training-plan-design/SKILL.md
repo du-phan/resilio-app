@@ -48,8 +48,10 @@ sce vdot paces --vdot $VDOT                    # Get training paces
 sce plan suggest-run-count --volume $WEEK1_VOLUME --max-runs $MAX --phase base
 # AI coach manually creates /tmp/weekly_plan_w1.json with workout_pattern
 
-# Validation & Save (AFTER approval)
-sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
+# Validation (BEFORE presenting to athlete - pre-flight check)
+sce plan validate --file /tmp/weekly_plan_w1.json  # Catch errors early!
+# If validation passes, create review markdown and present to athlete
+# ONLY save after athlete approval:
 sce plan populate --from-json /tmp/weekly_plan_w1.json  # Safe: merges weeks, preserves existing
 ```
 
@@ -331,7 +333,7 @@ echo '<JSON_CONTENT>' > /tmp/weekly_plan_w1.json
 
 **Run**:
 ```bash
-sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
+sce plan validate --file /tmp/weekly_plan_w1.json
 ```
 
 **Check**:
@@ -398,7 +400,7 @@ Approve, request changes, or ask questions?
 cp /tmp/macro_plan.json data/plans/current_plan_macro.json
 sce plan populate --from-json /tmp/weekly_plan_w1.json
 sce plan save-review --from-file /tmp/training_plan_review_$(date +%Y_%m_%d).md --approved
-sce plan init-log
+# Note: Training log auto-creates when first week summary is added (no init-log needed)
 ```
 
 **Verify**:

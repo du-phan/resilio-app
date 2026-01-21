@@ -126,13 +126,13 @@ class TestProfileIntegration:
         monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Mock regenerate_plan to avoid complex setup
-        from sports_coach_engine.api import profile
+        from sports_coach_engine import api
         from unittest.mock import Mock
 
         mock_plan = Mock()
         mock_plan.total_weeks = 12
-        original_regenerate = profile.regenerate_plan
-        profile.regenerate_plan = lambda goal: mock_plan
+        original_regenerate = api.regenerate_plan
+        api.regenerate_plan = lambda goal: mock_plan
 
         try:
             target_date = date.today() + timedelta(weeks=12)
@@ -153,7 +153,7 @@ class TestProfileIntegration:
 
         finally:
             # Restore original function
-            profile.regenerate_plan = original_regenerate
+            api.regenerate_plan = original_regenerate
 
 
 # ============================================================

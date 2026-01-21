@@ -10,7 +10,7 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api import get_current_plan, regenerate_plan
+from sports_coach_engine.api import get_current_plan
 from sports_coach_engine.api.plan import (
     get_plan_weeks,
     populate_plan_workouts,
@@ -32,65 +32,158 @@ app = typer.Typer(help="Manage training plans")
 
 
 @app.command(name="show")
-def plan_show_command(ctx: typer.Context) -> None:
-    """Get the current training plan with all weeks.
+def plan_show_command(
+    ctx: typer.Context,
+    type: str = typer.Option(
+        "plan",
+        "--type",
+        help="What to show: 'plan' (default), 'review', or 'log'"
+    ),
+    last_weeks: Optional[int] = typer.Option(
+        None,
+        "--last-weeks",
+        help="For log type: show only last N weeks (default: all)"
+    )
+) -> None:
+    """Show training plan, review, or log (consolidated command).
 
-    Returns:
+    Replaces the old show, show-review, and show-log commands with a single
+    unified command using --type flag.
+
+    Plan (default):
     - Goal details: race type, target date, target time
     - Total weeks and current week
     - All weeks with phases and workouts
     - Weekly volume progression
-    - Guardrail validation results
 
-    This gives Claude Code the complete plan structure for analysis.
+    Review:
+    - Complete plan review markdown including original structure
+    - Any adaptations that have been appended
+
+    Log:
+    - Weekly training summaries with completed workouts
+    - Metrics and coach observations
+
+    Examples:
+        sce plan show                      # Show plan (default)
+        sce plan show --type plan          # Show plan explicitly
+        sce plan show --type review        # Show plan review
+        sce plan show --type log           # Show training log
+        sce plan show --type log --last-weeks 4  # Show last 4 weeks of log
     """
-    # Call API
-    result = get_current_plan()
+    if type == "plan":
+        # Original show command behavior
+        result = get_current_plan()
 
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message=_build_plan_message(result),
-    )
+        # Convert to envelope
+        envelope = api_result_to_envelope(
+            result,
+            success_message=_build_plan_message(result),
+        )
 
-    # Output JSON
-    output_json(envelope)
+        # Output JSON
+        output_json(envelope)
 
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
+        # Exit with appropriate code
+        exit_code = get_exit_code_from_envelope(envelope)
+        raise typer.Exit(code=exit_code)
 
+    elif type == "review":
+        # show-review behavior
+        from sports_coach_engine.core.paths import current_plan_review_path
+        from sports_coach_engine.core.repository import RepositoryIO
 
-@app.command(name="regen")
-def plan_regen_command(ctx: typer.Context) -> None:
-    """Regenerate training plan based on current goal.
+        repo = RepositoryIO()
+        review_path = current_plan_review_path()
+        review_abs_path = repo.resolve_path(review_path)
 
-    Workflow:
-    1. Archives current plan to plans/archive/
-    2. Generates new plan using M10 toolkit functions
-    3. Validates against guardrails (80/20, long run caps, etc.)
-    4. Saves new plan to plans/current_plan.yaml
+        if not review_abs_path.exists():
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message="Plan review not found. Generate and save a plan first.",
+                data={"expected_path": review_path}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=2)
 
-    The athlete's current goal (set via `sce goal`) determines:
-    - Race type and distance
-    - Target date and time
-    - Plan duration and periodization
-    """
-    # Call API (no goal parameter - uses existing goal from profile)
-    result = regenerate_plan()
+        # Read and return markdown content
+        with open(review_abs_path, 'r') as f:
+            content = f.read()
 
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message="Regenerated training plan based on current goal",
-    )
+        envelope = {
+            "success": True,
+            "message": "Plan review retrieved",
+            "data": {
+                "path": review_path,
+                "content": content
+            }
+        }
 
-    # Output JSON
-    output_json(envelope)
+        output_json(envelope)
+        raise typer.Exit(code=0)
 
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
+    elif type == "log":
+        # show-log behavior
+        from sports_coach_engine.core.paths import current_training_log_path
+        from sports_coach_engine.core.repository import RepositoryIO
+
+        repo = RepositoryIO()
+        log_path = current_training_log_path()
+        log_abs_path = repo.resolve_path(log_path)
+
+        if not log_abs_path.exists():
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message="Training log not found. Initialize it with: sce plan init-log",
+                data={"expected_path": log_path}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=2)
+
+        # Read markdown content
+        with open(log_abs_path, 'r') as f:
+            content = f.read()
+
+        # If last_weeks specified, filter content
+        if last_weeks is not None:
+            # Split by week markers (## Week N:)
+            import re
+            weeks = re.split(r'(## Week \d+:)', content)
+
+            # Reconstruct with header and last N weeks
+            if len(weeks) > 1:
+                # First element is the header before first week
+                header = weeks[0]
+                # Remaining elements alternate: [marker, content, marker, content, ...]
+                week_pairs = [(weeks[i], weeks[i+1]) for i in range(1, len(weeks)-1, 2)]
+
+                # Take last N weeks
+                selected_weeks = week_pairs[-last_weeks:] if last_weeks < len(week_pairs) else week_pairs
+
+                # Reconstruct content
+                content = header + ''.join([marker + text for marker, text in selected_weeks])
+
+        envelope = {
+            "success": True,
+            "message": f"Training log retrieved{' (last ' + str(last_weeks) + ' weeks)' if last_weeks else ''}",
+            "data": {
+                "path": log_path,
+                "content": content,
+                "weeks_shown": last_weeks if last_weeks else "all"
+            }
+        }
+
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    else:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Invalid type '{type}'. Must be 'plan', 'review', or 'log'",
+            data={"provided_type": type, "valid_types": ["plan", "review", "log"]}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
 
 
 @app.command(name="week")
@@ -255,13 +348,13 @@ def plan_populate_command(
     raise typer.Exit(code=exit_code)
 
 
-@app.command(name="validate-json")
-def plan_validate_json_command(
+@app.command(name="validate")
+def plan_validate_command(
     ctx: typer.Context,
     file: str = typer.Option(
         ...,
         "--file",
-        help="Path to JSON file to validate"
+        help="Path to weekly plan JSON file to validate"
     ),
     verbose: bool = typer.Option(
         False,
@@ -269,20 +362,20 @@ def plan_validate_json_command(
         help="Show detailed validation output"
     )
 ) -> None:
-    """Validate training plan JSON before populating.
+    """Validate weekly plan JSON before populating (unified validation).
 
-    Checks for:
-    - JSON structure and syntax
-    - Required fields present
-    - Date alignment (Monday-Sunday)
-    - Valid enum values
-    - If using explicit format: workout distances sum to target
+    Runs two-stage validation:
+    1. Syntax check: JSON structure, required fields, date alignment
+    2. Semantic check: Guardrails, minimum durations, volume limits
+
+    This replaces the old validate-json and validate-week commands with a
+    single unified command that automatically runs both checks.
 
     Returns exit code 0 if valid, 1 if errors found.
 
     Examples:
-        sce plan validate-json --file /tmp/plan.json
-        sce plan validate-json --file /tmp/plan.json --verbose
+        sce plan validate --file /tmp/week1.json
+        sce plan validate --file /tmp/week1.json --verbose
     """
     # Validate file exists
     json_path = Path(file)
@@ -295,21 +388,58 @@ def plan_validate_json_command(
         output_json(envelope)
         raise typer.Exit(code=2)
 
-    # Call API validation
-    is_valid, errors, warnings = validate_plan_json_structure(file, verbose)
+    # STAGE 1: Syntax validation (fast check)
+    is_syntax_valid, syntax_errors, syntax_warnings = validate_plan_json_structure(file, verbose)
 
-    # Build result as plain JSON (not a dataclass envelope)
-    import sys
-    import json as json_module
-
-    if is_valid:
+    if not is_syntax_valid:
+        # Fail fast on syntax errors
+        import json as json_module
         result = {
-            "success": True,
-            "message": "JSON is valid and ready to populate!",
+            "success": False,
+            "message": f"Syntax validation failed: {len(syntax_errors)} error(s) in JSON",
+            "error_type": "validation",
             "data": {
                 "file": file,
-                "warnings": warnings,
-                "warnings_count": len(warnings)
+                "stage": "syntax",
+                "errors": syntax_errors,
+                "warnings": syntax_warnings,
+                "errors_count": len(syntax_errors),
+                "warnings_count": len(syntax_warnings)
+            }
+        }
+        print(json_module.dumps(result, indent=2))
+        raise typer.Exit(code=1)
+
+    # STAGE 2: Semantic validation (guardrails, minimums, etc.)
+    from sports_coach_engine.api.plan import validate_week_plan
+
+    semantic_result = validate_week_plan(weekly_plan_path=file, verbose=verbose)
+
+    # Check result type
+    if isinstance(semantic_result, PlanError):
+        envelope = api_result_to_envelope(semantic_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=1)
+
+    # Build combined result
+    is_semantic_valid = semantic_result.get("is_valid", False)
+    semantic_errors = semantic_result.get("errors", [])
+    semantic_warnings = semantic_result.get("warnings", [])
+
+    # Combine warnings from both stages
+    all_warnings = syntax_warnings + semantic_warnings
+
+    import json as json_module
+
+    if is_semantic_valid:
+        result = {
+            "success": True,
+            "message": "Weekly plan is valid and ready to populate!",
+            "data": {
+                "file": file,
+                "stages_passed": ["syntax", "semantic"],
+                "warnings": all_warnings,
+                "warnings_count": len(all_warnings)
             }
         }
         print(json_module.dumps(result, indent=2))
@@ -317,14 +447,15 @@ def plan_validate_json_command(
     else:
         result = {
             "success": False,
-            "message": f"Found {len(errors)} error(s) in JSON",
+            "message": f"Semantic validation failed: {len(semantic_errors)} error(s) in weekly plan",
             "error_type": "validation",
             "data": {
                 "file": file,
-                "errors": errors,
-                "warnings": warnings,
-                "errors_count": len(errors),
-                "warnings_count": len(warnings)
+                "stage": "semantic",
+                "errors": semantic_errors,
+                "warnings": all_warnings,
+                "errors_count": len(semantic_errors),
+                "warnings_count": len(all_warnings)
             }
         }
         print(json_module.dumps(result, indent=2))
@@ -514,41 +645,6 @@ def plan_save_review_command(
     raise typer.Exit(code=exit_code)
 
 
-@app.command(name="init-log")
-def plan_init_log_command(ctx: typer.Context) -> None:
-    """Initialize training log for current plan.
-
-    Creates initial training log markdown file with plan header.
-    Called automatically after plan approval to set up logging.
-
-    Workflow:
-    1. Reads current plan details
-    2. Reads athlete profile for name
-    3. Creates log file at data/plans/logs/{start_date}_{goal_type}_log.md
-    4. Creates symlink at data/plans/current_training_log.md
-
-    Example:
-        sce plan init-log
-
-    Returns JSON with log path and symlink location.
-    """
-    # Call API
-    result = initialize_plan_training_log()
-
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message="Training log initialized",
-    )
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
 @app.command(name="append-week")
 def plan_append_week_command(
     ctx: typer.Context,
@@ -651,193 +747,6 @@ def plan_append_week_command(
     raise typer.Exit(code=exit_code)
 
 
-@app.command(name="append-adaptation")
-def plan_append_adaptation_command(
-    ctx: typer.Context,
-    from_file: str = typer.Option(
-        ...,
-        "--from-file",
-        help="Path to adaptation markdown file (e.g., /tmp/plan_adaptation_2026_02_15.md)"
-    ),
-    reason: str = typer.Option(
-        ...,
-        "--reason",
-        help="Adaptation reason (illness/injury/schedule_change/missed_workouts/etc)"
-    )
-) -> None:
-    """Append plan adaptation to existing review.
-
-    Updates the plan review markdown with adaptation details
-    when plan is modified mid-cycle.
-
-    Called by plan-adaptation skill after athlete approves changes.
-
-    Workflow:
-    1. Reads existing plan review
-    2. Reads adaptation markdown from source file
-    3. Appends adaptation section with header and context
-    4. Saves updated review back to repository
-
-    Example:
-        sce plan append-adaptation \\
-            --from-file /tmp/plan_adaptation_2026_02_15.md \\
-            --reason illness
-
-    Returns JSON with updated review path and adaptation timestamp.
-    """
-    # Validate file exists
-    file_path = Path(from_file)
-    if not file_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message=f"Adaptation file not found: {from_file}",
-            data={"path": str(file_path.absolute())}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    # Call API
-    result = append_training_plan_adaptation(
-        adaptation_file_path=from_file,
-        reason=reason
-    )
-
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message=f"Appended {reason} adaptation to plan review",
-    )
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-@app.command(name="show-review")
-def plan_show_review_command(ctx: typer.Context) -> None:
-    """Display current plan review markdown.
-
-    Shows the complete plan review including original structure
-    and any adaptations that have been appended.
-
-    Useful for coach to reference during coaching sessions.
-
-    Example:
-        sce plan show-review
-
-    Returns markdown content for display.
-    """
-    from sports_coach_engine.core.paths import current_plan_review_path
-    from sports_coach_engine.core.repository import RepositoryIO
-
-    repo = RepositoryIO()
-    review_path = current_plan_review_path()
-    review_abs_path = repo.resolve_path(review_path)
-
-    if not review_abs_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message="Plan review not found. Generate and save a plan first.",
-            data={"expected_path": review_path}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    # Read and return markdown content
-    with open(review_abs_path, 'r') as f:
-        content = f.read()
-
-    envelope = {
-        "success": True,
-        "message": "Plan review retrieved",
-        "data": {
-            "path": review_path,
-            "content": content
-        }
-    }
-
-    output_json(envelope)
-    raise typer.Exit(code=0)
-
-
-@app.command(name="show-log")
-def plan_show_log_command(
-    ctx: typer.Context,
-    last_weeks: int = typer.Option(
-        None,
-        "--last-weeks",
-        help="Show only last N weeks (default: all weeks)"
-    )
-) -> None:
-    """Display current training log markdown.
-
-    Shows weekly training summaries with completed workouts,
-    metrics, and coach observations.
-
-    Useful for reviewing recent progress during coaching sessions.
-
-    Example:
-        sce plan show-log              # Show entire log
-        sce plan show-log --last-weeks 4   # Show last 4 weeks only
-
-    Returns markdown content for display.
-    """
-    from sports_coach_engine.core.paths import current_training_log_path
-    from sports_coach_engine.core.repository import RepositoryIO
-
-    repo = RepositoryIO()
-    log_path = current_training_log_path()
-    log_abs_path = repo.resolve_path(log_path)
-
-    if not log_abs_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message="Training log not found. Initialize it with: sce plan init-log",
-            data={"expected_path": log_path}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    # Read markdown content
-    with open(log_abs_path, 'r') as f:
-        content = f.read()
-
-    # If last_weeks specified, filter content
-    if last_weeks is not None:
-        # Split by week markers (## Week N:)
-        import re
-        weeks = re.split(r'(## Week \d+:)', content)
-
-        # Reconstruct with header and last N weeks
-        if len(weeks) > 1:
-            # First element is the header before first week
-            header = weeks[0]
-            # Remaining elements alternate: [marker, content, marker, content, ...]
-            week_pairs = [(weeks[i], weeks[i+1]) for i in range(1, len(weeks)-1, 2)]
-
-            # Take last N weeks
-            selected_weeks = week_pairs[-last_weeks:] if last_weeks < len(week_pairs) else week_pairs
-
-            # Reconstruct content
-            content = header + ''.join([marker + text for marker, text in selected_weeks])
-
-    envelope = {
-        "success": True,
-        "message": f"Training log retrieved{' (last ' + str(last_weeks) + ' weeks)' if last_weeks else ''}",
-        "data": {
-            "path": log_path,
-            "content": content,
-            "weeks_shown": last_weeks if last_weeks else "all"
-        }
-    }
-
-    output_json(envelope)
-    raise typer.Exit(code=0)
-
-
 # ============================================================
 # PROGRESSIVE DISCLOSURE COMMANDS (Phase 2: Monthly Planning)
 # ============================================================
@@ -923,22 +832,23 @@ def create_macro_command(
     raise typer.Exit(code=exit_code)
 
 
-@app.command(name="assess-month")
-def assess_month_command(
+@app.command(name="assess-period")
+def assess_period_command(
     ctx: typer.Context,
-    month_number: int = typer.Option(..., "--month-number", help="Month number (1-indexed)"),
-    week_numbers: str = typer.Option(..., "--week-numbers", help="Comma-separated week numbers (e.g., '1,2,3,4')"),
+    month_number: int = typer.Option(..., "--period-number", help="Period number (1-indexed, typically 1-5)"),
+    week_numbers: str = typer.Option(..., "--week-numbers", help="Comma-separated week numbers (e.g., '1,2,3,4' or '9,10,11')"),
     planned_workouts_json: str = typer.Option(..., "--planned-workouts", help="Path to JSON file with planned workouts"),
     completed_activities_json: str = typer.Option(..., "--completed-activities", help="Path to JSON file with completed activities"),
-    starting_ctl: float = typer.Option(..., "--starting-ctl", help="CTL at month start"),
-    ending_ctl: float = typer.Option(..., "--ending-ctl", help="CTL at month end"),
-    target_ctl: float = typer.Option(..., "--target-ctl", help="Target CTL for month end"),
-    current_vdot: float = typer.Option(..., "--current-vdot", help="VDOT used for month's paces"),
+    starting_ctl: float = typer.Option(..., "--starting-ctl", help="CTL at period start"),
+    ending_ctl: float = typer.Option(..., "--ending-ctl", help="CTL at period end"),
+    target_ctl: float = typer.Option(..., "--target-ctl", help="Target CTL for period end"),
+    current_vdot: float = typer.Option(..., "--current-vdot", help="VDOT used for period's paces"),
 ) -> None:
     """
-    Assess completed month for next month planning.
+    Assess completed training period for adaptive planning.
 
-    Analyzes execution and response to inform adaptive planning:
+    Flexible assessment for any N-week period (typically 2-6 weeks, often 4).
+    Analyzes execution and response to inform next planning cycle:
     - Adherence rates
     - CTL progression vs. targets
     - VDOT recalibration needs
@@ -947,14 +857,21 @@ def assess_month_command(
     - Patterns detected
 
     Examples:
-        sce plan assess-month --month-number 1 --week-numbers "1,2,3,4" \\
+        # Assess 4-week period (weeks 1-4)
+        sce plan assess-period --period-number 1 --week-numbers "1,2,3,4" \\
             --planned-workouts /tmp/planned.json \\
             --completed-activities /tmp/completed.json \\
             --starting-ctl 44.0 --ending-ctl 50.5 --target-ctl 52.0 --current-vdot 48.0
 
+        # Assess 3-week period (weeks 9-11 of an 11-week plan)
+        sce plan assess-period --period-number 3 --week-numbers "9,10,11" \\
+            --planned-workouts /tmp/planned.json \\
+            --completed-activities /tmp/completed.json \\
+            --starting-ctl 58.0 --ending-ctl 60.5 --target-ctl 62.0 --current-vdot 49.5
+
     Returns:
-        Monthly assessment with adherence, CTL analysis, VDOT recommendations,
-        signals detected, and recommendations for next month.
+        Period assessment with adherence, CTL analysis, VDOT recommendations,
+        signals detected, and recommendations for next period.
     """
     from sports_coach_engine.api.plan import assess_month_completion
     import json
@@ -1013,355 +930,6 @@ def assess_month_command(
     envelope = api_result_to_envelope(
         result,
         success_message=f"Month {month_number} assessed: {result.get('adherence_pct', 0):.1f}% adherence"
-    )
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-@app.command(name="validate-month")
-def validate_month_command(
-    ctx: typer.Context,
-    monthly_plan_json: str = typer.Option(..., "--monthly-plan", help="Path to JSON file with 4 weeks of monthly plan"),
-    macro_targets_json: str = typer.Option(..., "--macro-targets", help="Path to JSON file with 4 volume targets from macro plan"),
-) -> None:
-    """
-    Validate 4-week monthly plan before saving.
-
-    Checks for:
-    - Volume discrepancies vs. macro plan targets (<5% acceptable, >10% regenerate)
-    - Guardrail violations (minimum workout durations)
-    - Phase consistency
-    - Workout field completeness
-
-    Examples:
-        sce plan validate-month \\
-            --monthly-plan /tmp/monthly_plan.json \\
-            --macro-targets /tmp/macro_targets.json
-
-    Returns:
-        Validation result with overall_ok status, violations list, warnings,
-        and summary message.
-    """
-    from sports_coach_engine.api.plan import validate_month_plan
-    import json
-
-    # Load JSON files
-    try:
-        with open(monthly_plan_json, 'r') as f:
-            monthly_weeks = json.load(f)
-        with open(macro_targets_json, 'r') as f:
-            macro_targets = json.load(f)
-    except FileNotFoundError as e:
-        envelope = {
-            "success": False,
-            "message": f"File not found: {e}",
-            "error_type": "not_found",
-            "data": None
-        }
-        output_json(envelope)
-        raise typer.Exit(code=2)
-    except json.JSONDecodeError as e:
-        envelope = {
-            "success": False,
-            "message": f"Invalid JSON: {e}",
-            "error_type": "validation",
-            "data": None
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Call API
-    result = validate_month_plan(
-        monthly_plan_weeks=monthly_weeks,
-        macro_volume_targets=macro_targets
-    )
-
-    # Convert to envelope
-    summary = result.get("summary", "Validation complete")
-    envelope = api_result_to_envelope(result, success_message=summary)
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-@app.command(name="generate-month")
-def generate_month_command(
-    ctx: typer.Context,
-    month_number: int = typer.Option(..., "--month-number", help="Month number (1-5)"),
-    week_numbers: str = typer.Option(..., "--week-numbers", help="Comma-separated week numbers (e.g., '1,2,3,4' or '9,10,11')"),
-    target_volumes_km: str = typer.Option(..., "--target-volumes-km", help="Comma-separated volume targets in km (e.g., '25,27.5,30,21')"),
-    from_macro: str = typer.Option(..., "--from-macro", help="Path to macro plan JSON file"),
-    current_vdot: float = typer.Option(..., "--current-vdot", help="Current VDOT (30-85)"),
-    profile_path: str = typer.Option(..., "--profile", help="Path to athlete profile file"),
-    volume_adjustment: float = typer.Option(1.0, "--volume-adjustment", help="Volume multiplier (0.5-1.5, default 1.0)"),
-) -> None:
-    """
-    Generate detailed monthly plan (2-6 weeks) with workout prescriptions.
-
-    AI coach designs weekly volumes using guardrails, then generates detailed workouts.
-
-    Examples:
-        # Generate first month (4 weeks) with AI-designed volumes
-        sce plan generate-month --month-number 1 --week-numbers "1,2,3,4" \\
-          --target-volumes-km "25,27.5,30,21" \\
-          --from-macro /tmp/macro.json --current-vdot 48 --profile data/athlete/profile.yaml
-
-        # Generate 3-week cycle for 11-week plan
-        sce plan generate-month --month-number 3 --week-numbers "9,10,11" \\
-          --target-volumes-km "48,50,35" \\
-          --from-macro /tmp/macro.json --current-vdot 49 --profile data/athlete/profile.yaml
-
-        # Generate with volume reduction (10% less)
-        sce plan generate-month --month-number 2 --week-numbers "5,6,7,8" \\
-          --target-volumes-km "32,35,38,28" \\
-          --from-macro /tmp/macro.json --current-vdot 48.5 --profile data/athlete/profile.yaml \\
-          --volume-adjustment 0.9
-    """
-    import json
-    import yaml
-    from pathlib import Path
-    from sports_coach_engine.api.plan import generate_month_plan
-    from sports_coach_engine.cli.output import output_json, api_result_to_envelope, get_exit_code_from_envelope
-
-    # Parse week numbers
-    try:
-        week_nums = [int(w.strip()) for w in week_numbers.split(",")]
-    except ValueError:
-        envelope = {
-            "ok": False,
-            "error": "validation",
-            "message": f"Invalid week-numbers format: '{week_numbers}'. Expected comma-separated integers."
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Parse target volumes
-    try:
-        target_vols = [float(v.strip()) for v in target_volumes_km.split(",")]
-    except ValueError:
-        envelope = {
-            "ok": False,
-            "error": "validation",
-            "message": f"Invalid target-volumes-km format: '{target_volumes_km}'. Expected comma-separated numbers."
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Validate week_numbers
-    if not week_nums:
-        envelope = {
-            "ok": False,
-            "error": "validation",
-            "message": "week-numbers cannot be empty"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    if not (2 <= len(week_nums) <= 6):
-        envelope = {
-            "ok": False,
-            "error": "validation",
-            "message": f"Cycle must be 2-6 weeks, got {len(week_nums)} weeks: {week_nums}"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Validate target_volumes_km
-    if len(target_vols) != len(week_nums):
-        envelope = {
-            "ok": False,
-            "error": "validation",
-            "message": f"target-volumes-km length ({len(target_vols)}) must match week-numbers length ({len(week_nums)})"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Load macro plan
-    macro_path = Path(from_macro)
-    if not macro_path.exists():
-        envelope = {
-            "ok": False,
-            "error": "file_not_found",
-            "message": f"Macro plan file not found: {from_macro}"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    try:
-        with open(macro_path) as f:
-            macro_plan = json.load(f)
-    except json.JSONDecodeError as e:
-        envelope = {
-            "ok": False,
-            "error": "invalid_json",
-            "message": f"Invalid macro plan JSON: {str(e)}"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Load profile
-    profile_file = Path(profile_path)
-    if not profile_file.exists():
-        envelope = {
-            "ok": False,
-            "error": "file_not_found",
-            "message": f"Profile file not found: {profile_path}"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    try:
-        with open(profile_file) as f:
-            if profile_path.endswith(".yaml") or profile_path.endswith(".yml"):
-                profile = yaml.safe_load(f)
-            else:
-                profile = json.load(f)
-    except (yaml.YAMLError, json.JSONDecodeError) as e:
-        envelope = {
-            "ok": False,
-            "error": "invalid_file",
-            "message": f"Invalid profile file: {str(e)}"
-        }
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Call API
-    result = generate_month_plan(
-        month_number=month_number,
-        week_numbers=week_nums,
-        target_volumes_km=target_vols,
-        macro_plan=macro_plan,
-        current_vdot=current_vdot,
-        profile=profile,
-        volume_adjustment=volume_adjustment
-    )
-
-    # Convert to envelope
-    cycle_weeks = f"{len(week_nums)}-week"
-    success_message = f"Monthly plan generated for month {month_number} ({cycle_weeks} cycle): weeks {min(week_nums)}-{max(week_nums)}"
-    envelope = api_result_to_envelope(result, success_message=success_message)
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-@app.command(name="validate-week")
-def plan_validate_week_command(
-    ctx: typer.Context,
-    weekly_plan: str = typer.Option(..., "--weekly-plan", help="Path to weekly plan JSON file"),
-    verbose: bool = typer.Option(False, "--verbose", help="Show detailed validation output")
-) -> None:
-    """Validate a single week's workout plan before saving.
-
-    Checks for:
-    - Volume discrepancy (<5% acceptable, 5-10% review, >10% regenerate)
-    - Minimum duration violations (easy ≥5km, long ≥8km)
-    - Quality volume limits (T≤10%, I≤8%, R≤5%)
-    - Week-over-week progression (<10% increase)
-    - Date alignment (start=Monday, end=Sunday)
-
-    Returns exit code 0 if valid, 1 if errors found.
-
-    Examples:
-        sce plan validate-week --weekly-plan /tmp/weekly_plan_w1.json
-        sce plan validate-week --weekly-plan week2.json --verbose
-    """
-    from sports_coach_engine.api.plan import validate_week_plan
-
-    # Validate file exists
-    plan_path = Path(weekly_plan)
-    if not plan_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message=f"Weekly plan file not found: {weekly_plan}",
-            data={"path": str(plan_path.absolute())}
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    # Call API validation
-    result = validate_week_plan(weekly_plan_path=weekly_plan, verbose=verbose)
-
-    # Check result type
-    if isinstance(result, PlanError):
-        envelope = api_result_to_envelope(result, success_message="")
-        output_json(envelope)
-        raise typer.Exit(code=1)
-
-    # Build result based on validation
-    is_valid = result.get("is_valid", False)
-    errors = result.get("errors", [])
-    warnings = result.get("warnings", [])
-
-    if is_valid:
-        envelope = {
-            "success": True,
-            "message": "Weekly plan is valid and ready to populate!",
-            "data": {
-                "file": weekly_plan,
-                "warnings": warnings,
-                "warnings_count": len(warnings)
-            }
-        }
-        output_json(envelope)
-        raise typer.Exit(code=0)
-    else:
-        envelope = {
-            "success": False,
-            "message": f"Found {len(errors)} error(s) in weekly plan",
-            "error_type": "validation",
-            "data": {
-                "file": weekly_plan,
-                "errors": errors,
-                "warnings": warnings,
-                "errors_count": len(errors),
-                "warnings_count": len(warnings)
-            }
-        }
-        output_json(envelope)
-        raise typer.Exit(code=1)
-
-
-@app.command(name="revert-week")
-def plan_revert_week_command(
-    ctx: typer.Context,
-    week_number: int = typer.Option(..., "--week-number", help="Week number to revert (1-indexed)"),
-) -> None:
-    """Revert a week's plan to macro plan targets (remove detailed workouts).
-
-    Useful for:
-    - Rolling back a week if athlete disagrees with generated workouts
-    - Allowing regeneration with different parameters
-    - Resetting to mileage target only
-
-    After reverting, week will have target_volume_km but NO workout_pattern.
-    Can regenerate with different VDOT, volume adjustment, or other parameters.
-
-    Examples:
-        sce plan revert-week --week-number 3
-    """
-    from sports_coach_engine.api.plan import revert_week_plan
-
-    # Call API
-    result = revert_week_plan(week_number=week_number)
-
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message=f"Week {week_number} reverted to macro plan targets (workouts removed)"
     )
 
     # Output JSON

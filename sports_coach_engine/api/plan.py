@@ -910,15 +910,36 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
         >>> populate_plan_workouts([{"week_number": 3, ...}, {"week_number": 4, ...}, {"week_number": 5, ...}])
     """
     repo = RepositoryIO()
-    # 1. Load current plan
+    # 1. Load current plan (auto-create from goal if missing)
     plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        return PlanError(
-            error_type="not_found",
-            message="No plan found. Run 'sce plan regen' first to create skeleton.",
-        )
+        # AUTO-CREATE skeleton from goal (replaces manual 'regen' step)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("No plan skeleton found - creating automatically from goal")
+
+        profile = get_profile()
+        if isinstance(profile, ProfileError) or not profile.goal:
+            return PlanError(
+                error_type="no_goal",
+                message="No goal found. Set a goal first with: sce goal set --type <race_type> --date <date> --time <target_time>"
+            )
+
+        # Create skeleton automatically (same logic as regenerate_plan)
+        skeleton_result = regenerate_plan()
+        if isinstance(skeleton_result, PlanError):
+            return skeleton_result
+
+        # Re-load the newly created skeleton
+        result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
+
+        if result is None:
+            return PlanError(
+                error_type="unknown",
+                message="Failed to create plan skeleton automatically"
+            )
 
     if isinstance(result, RepoError):
         return PlanError(
@@ -1086,15 +1107,36 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
         >>> plan = update_plan_from_week(5, remaining_weeks)
     """
     repo = RepositoryIO()
-    # 1. Load current plan
+    # 1. Load current plan (auto-create from goal if missing)
     plan_path = current_plan_path()
     result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
 
     if result is None:
-        return PlanError(
-            error_type="not_found",
-            message="No plan found. Run 'sce plan regen' first to create skeleton.",
-        )
+        # AUTO-CREATE skeleton from goal (replaces manual 'regen' step)
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("No plan skeleton found - creating automatically from goal")
+
+        profile = get_profile()
+        if isinstance(profile, ProfileError) or not profile.goal:
+            return PlanError(
+                error_type="no_goal",
+                message="No goal found. Set a goal first with: sce goal set --type <race_type> --date <date> --time <target_time>"
+            )
+
+        # Create skeleton automatically (same logic as regenerate_plan)
+        skeleton_result = regenerate_plan()
+        if isinstance(skeleton_result, PlanError):
+            return skeleton_result
+
+        # Re-load the newly created skeleton
+        result = repo.read_yaml(plan_path, MasterPlan, ReadOptions(should_validate=True))
+
+        if result is None:
+            return PlanError(
+                error_type="unknown",
+                message="Failed to create plan skeleton automatically"
+            )
 
     if isinstance(result, RepoError):
         return PlanError(
@@ -1144,10 +1186,77 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
             message=f"Failed to save plan: {str(write_result)}",
         )
 
-    # 6. Log success
+    # 6. Auto-log plan change (v0 simple version - only for update-from)
+    week_nums = [w.week_number for w in validated_weeks]
+    if len(week_nums) == 1:
+        change_desc = f"Replanned week {week_nums[0]}"
+    else:
+        change_desc = f"Replanned weeks {min(week_nums)}-{max(week_nums)}"
+    _auto_log_plan_change(change_desc)
+
+    # 7. Log success
     total_workouts = sum(len(w.workouts) for w in validated_weeks)
 
     return complete_plan
+
+# ============================================================
+# AUTO-LOGGING HELPER (V0 - Simple)
+# ============================================================
+
+
+def _auto_log_plan_change(change_description: str) -> None:
+    """
+    Auto-log plan changes to review markdown (v0 simple version).
+
+    Appends a timestamped entry to the Adaptations section of the plan review.
+    Fails silently if review doesn't exist (no error thrown).
+
+    Args:
+        change_description: Brief description of what changed (e.g., "Replanned weeks 5-10")
+
+    Example:
+        _auto_log_plan_change("Replanned weeks 5-10 due to illness")
+    """
+    from sports_coach_engine.core.paths import current_plan_review_path
+    from datetime import datetime
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        repo = RepositoryIO()
+        review_path = current_plan_review_path()
+        review_abs_path = repo.resolve_path(review_path)
+
+        if not review_abs_path.exists():
+            # No review yet - skip logging (not an error)
+            logger.debug("Plan review not found, skipping auto-log")
+            return
+
+        # Read existing content
+        with open(review_abs_path, 'r') as f:
+            content = f.read()
+
+        # Check if Adaptations section exists
+        if "## Adaptations" not in content:
+            # Add new section at end
+            content += "\n\n## Adaptations\n\n"
+
+        # Append new entry with timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
+        entry = f"### {timestamp}\n{change_description}\n\n"
+        content += entry
+
+        # Write back
+        with open(review_abs_path, 'w') as f:
+            f.write(content)
+
+        logger.info(f"Auto-logged plan change: {change_description}")
+
+    except Exception as e:
+        # Fail silently - logging shouldn't break the operation
+        logger.warning(f"Failed to auto-log plan change: {str(e)}")
+
 
 # ============================================================
 # PLAN REVIEW AND TRAINING LOG API

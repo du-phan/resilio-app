@@ -3,18 +3,16 @@
 ## Quick Start
 
 ```bash
-# 1. Create plan skeleton
-poetry run sce plan regen
+# 1. Create JSON using intent-based format (see below)
+#    Plan skeleton auto-created on first populate
 
-# 2. Create JSON using intent-based format (see below)
+# 2. Validate JSON (unified syntax + semantic check)
+poetry run sce plan validate --file /tmp/plan.json
 
-# 3. Validate JSON
-poetry run sce plan validate-json --file /tmp/plan.json
-
-# 4. Populate plan (system calculates exact distances)
+# 3. Populate plan (system calculates exact distances, auto-creates skeleton if needed)
 poetry run sce plan populate --from-json /tmp/plan.json
 
-# 5. Verify
+# 4. Verify
 poetry run sce plan show
 poetry run sce today
 ```
@@ -258,20 +256,26 @@ Next Monday: 2026-01-26
 
 ## Validation Before Populate
 
-Always validate before populating to catch errors early:
+Always validate before populating to catch errors early. The unified `validate` command runs two-stage validation:
 
 ```bash
-poetry run sce plan validate-json --file /tmp/plan.json
+poetry run sce plan validate --file /tmp/plan.json
 ```
 
-### What It Checks
+### What It Checks (Two Stages)
 
+**Stage 1: Syntax Check (fast)**
 - ✓ JSON syntax valid
 - ✓ Required fields present (`week_number`, `phase`, `start_date`, `end_date`, `target_volume_km`)
 - ✓ Dates aligned correctly (Monday-Sunday)
 - ✓ Valid enum values (phase, intensity_zone, etc.)
 - ✓ If intent-based: `workout_pattern` has required fields
 - ✓ If explicit format: Distances sum to target
+
+**Stage 2: Semantic Check (slower, runs only if syntax passes)**
+- ✓ Guardrails validated (minimum durations, progression limits)
+- ✓ Volume discrepancies checked
+- ✓ Quality volume limits enforced
 
 ### Example Output
 
@@ -522,9 +526,11 @@ System automatically calculates exact distances:
 
 1. **Always validate before populate**
    ```bash
-   poetry run sce plan validate-json --file /tmp/plan.json
+   poetry run sce plan validate --file /tmp/plan.json
    poetry run sce plan populate --from-json /tmp/plan.json
    ```
+
+   Note: Plan skeleton auto-creates on first populate - no need for `sce plan regen`
 
 2. **Use intent-based format** for new plans
    - Let system handle arithmetic

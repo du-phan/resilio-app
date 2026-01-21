@@ -349,7 +349,7 @@ def estimate_current_vdot(
         # Load activities
         repo = RepositoryIO()
         activities_dir = get_activities_dir()
-        activity_files = list(Path(activities_dir).glob("*.json"))
+        activity_files = list(Path(activities_dir).rglob("*.yaml"))
 
         if not activity_files:
             return VDOTError(
@@ -363,10 +363,10 @@ def estimate_current_vdot(
         # Load and filter activities
         activities: list[NormalizedActivity] = []
         for activity_file in activity_files:
-            result = repo.read_json(str(activity_file), NormalizedActivity, ReadOptions())
+            result = repo.read_yaml(str(activity_file), NormalizedActivity, ReadOptions())
             if isinstance(result, NormalizedActivity):
                 # Filter by date and sport type
-                activity_date = dt_date.fromisoformat(result.start_date.split("T")[0])
+                activity_date = result.date
                 if activity_date >= cutoff_date and result.sport_type.lower() == "run":
                     activities.append(result)
 
@@ -382,13 +382,13 @@ def estimate_current_vdot(
 
         for activity in activities:
             # Check for workout keywords
-            title = (activity.title or "").lower()
+            title = (activity.name or "").lower()
             description = (activity.description or "").lower()
             has_quality_keyword = any(keyword in title or keyword in description for keyword in quality_keywords)
 
             # Calculate average pace (sec per km)
-            if activity.distance_km > 0 and activity.moving_time_seconds > 0:
-                avg_pace_sec_per_km = int(activity.moving_time_seconds / activity.distance_km)
+            if activity.distance_km > 0 and activity.duration_seconds > 0:
+                avg_pace_sec_per_km = int(activity.duration_seconds / activity.distance_km)
 
                 # Only consider paces faster than 6:00/km (360 sec/km) as quality efforts
                 if has_quality_keyword and avg_pace_sec_per_km < 360:
@@ -397,7 +397,7 @@ def estimate_current_vdot(
 
                     if implied_vdot:
                         workout_data = WorkoutPaceData(
-                            date=activity.start_date.split("T")[0],
+                            date=activity.date.isoformat(),
                             workout_type="tempo" if "tempo" in title or "threshold" in title else "interval",
                             pace_sec_per_km=avg_pace_sec_per_km,
                             implied_vdot=implied_vdot,
