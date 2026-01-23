@@ -387,7 +387,7 @@ That's 20 weeks. Based on your fitness and constraints (4 run days/week, climbin
 Would you like me to create a personalized plan now?"
 ```
 
-**If yes**: Activate `training-plan-design` skill
+**If yes**: Run `vdot-baseline-proposal`, then `macro-plan-create`
 
 ---
 
@@ -472,7 +472,7 @@ Would you like me to create a personalized plan now?"
 - Natural conversation for text/number inputs
 - Injury history in memory system with proper tags
 
-**Handoff**: "Would you like me to design your training plan now?" → Activate `training-plan-design`
+**Handoff**: "Would you like me to design your training plan now?" → Run `vdot-baseline-proposal` → `macro-plan-create`
 
 ---
 

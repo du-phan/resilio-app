@@ -56,7 +56,7 @@ def main(
 
 
 # Import and register commands
-from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, validation, memory, activity, race, dates, performance, goal
+from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, validation, memory, activity, race, dates, performance, goal, approvals
 from sports_coach_engine.cli.commands.init_cmd import init_command
 from sports_coach_engine.cli.commands.status import status_command
 from sports_coach_engine.cli.commands.sync import sync_command
@@ -86,3 +86,4 @@ app.add_typer(activity.app, name="activity", help="List and search activities")
 app.add_typer(race.app, name="race", help="Race performance tracking and PB management")
 app.add_typer(dates.app, name="dates", help="Date utilities for training plan generation")
 app.add_typer(performance.app, name="performance", help="Performance baseline and fitness tracking")
+app.add_typer(approvals.app, name="approvals", help="Manage approval state for planning workflows")

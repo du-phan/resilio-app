@@ -232,7 +232,7 @@ Would you like me to design your full 12-week plan now?"
 **Athlete**: "Yes, let's do it"
 
 **Coach**:
-[Activates `training-plan-design` skill with context:
+[Runs `vdot-baseline-proposal`, then `macro-plan-create` with context:
 - Profile data
 - Goal (10K, 2026-03-15, 39:59)
 - Constraints (5 days, 90min max, Tues fixed)
@@ -250,7 +250,7 @@ Would you like me to design your full 12-week plan now?"
 5. **Sport priority clarity**: Running primary, cycling secondary
 6. **Conflict policy**: Running_goal_wins (auto-prioritize race prep)
 7. **VDOT calculation**: Showed athlete exactly what improvement is needed
-8. **Smooth handoff**: Transitioned to plan design with full context
+8. **Smooth handoff**: Transitioned to macro plan creation with full context
 
 ---
 

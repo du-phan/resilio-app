@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Key Principle**: You use tools to compute (CTL, ACWR, guardrails), then based on your knowledge base above, apply judgment and athlete context to coach. **Tools provide quantitative data; you provide qualitative coaching.**
 
-**Philosophy Example - Volume Progression**: The `sce guardrails analyze-progression` command provides rich context (volume classification, risk/protective factors, Pfitzinger absolute load analysis), but doesn't make pass/fail decisions. You interpret this context using training methodology to decide whether a progression is appropriate. For instance, a 33% weekly increase might be acceptable at low volumes if the absolute load per session is within Pfitzinger's 1.6km guideline and protective factors outweigh risks. See `.claude/skills/training-plan-design/references/volume_progression.md` for detailed interpretation guidance.
+**Philosophy Example - Volume Progression**: The `sce guardrails analyze-progression` command provides rich context (volume classification, risk/protective factors, Pfitzinger absolute load analysis), but doesn't make pass/fail decisions. You interpret this context using training methodology to decide whether a progression is appropriate. For instance, a 33% weekly increase might be acceptable at low volumes if the absolute load per session is within Pfitzinger's 1.6km guideline and protective factors outweigh risks. See `.claude/skills/macro-plan-create/references/volume_progression_macro.md` for detailed interpretation guidance.
 
 **Core Concept**: Generate personalized running plans that adapt to training load across ALL tracked activities (running, climbing, cycling, etc.), continuously adjusting based on metrics like CTL/ATL/TSB, ACWR, and readiness scores.
 
@@ -102,30 +102,30 @@ sce dates validate --date 2026-06-15 --must-be saturday
 
 ### ISO Weekday Reference
 
-**IMPORTANT**: The codebase uses ISO weekday numbering (1-7), NOT Python's weekday() (0-6).
+**IMPORTANT**: The codebase uses weekday numbering **0–6** (0=Monday, 6=Sunday), matching Python's `date.weekday()`.
 
-ISO weekday (used in workout_pattern JSON):
-- 1 = Monday
-- 2 = Tuesday
-- 3 = Wednesday
-- 4 = Thursday
-- 5 = Friday
-- 6 = Saturday
-- 7 = Sunday
+Weekday index (used in workout_pattern JSON):
+- 0 = Monday
+- 1 = Tuesday
+- 2 = Wednesday
+- 3 = Thursday
+- 4 = Friday
+- 5 = Saturday
+- 6 = Sunday
 
-**In plan JSON:** `run_days: [1, 3, 5]` means **Monday, Wednesday, Friday**.
+**In plan JSON:** `run_days: [0, 2, 4]` means **Monday, Wednesday, Friday**.
 
 **Examples**:
-- `run_days: [2, 4, 7]` = Tuesday, Thursday, Sunday
-- `run_days: [1, 3, 5, 7]` = Monday, Wednesday, Friday, Sunday
+- `run_days: [1, 3, 6]` = Tuesday, Thursday, Sunday
+- `run_days: [0, 2, 4, 6]` = Monday, Wednesday, Friday, Sunday
 
-**Note**: Python's `date.weekday()` returns different values (0=Monday, 6=Sunday) but this is NOT used in JSON. Always use ISO weekday 1-7 in workout_pattern.
+**Note**: This aligns with Python's `date.weekday()` and the internal schemas.
 
 ### Validation Requirements
 
 **Before saving any training plan:**
-- All `week.start_date` must be Monday (ISO weekday 1)
-- All `week.end_date` must be Sunday (ISO weekday 7)
+- All `week.start_date` must be Monday (weekday 0)
+- All `week.end_date` must be Sunday (weekday 6)
 - Use `sce dates validate` to verify each date
 
 **Common Mistakes to Avoid:**
@@ -147,55 +147,17 @@ Onboard new athletes with complete setup workflow
 - **Workflow**: Auth → Sync → Profile setup → Goal setting → Constraints discussion
 - **Key commands**: `sce auth`, `sce sync`, `sce profile`, `sce goal`
 
-### 2. **daily-workout**
-Provide daily workout recommendations with adaptation logic
-- **Use when**: "What should I do today?", "today's workout", "run recommendation"
-- **Workflow**: Check metrics → Detect triggers → Assess risk → Present options
-- **Key commands**: `sce today`, `sce status`, `sce risk assess`
-
-### 3. **weekly-analysis**
+### 2. **weekly-analysis**
 Comprehensive weekly training review including adherence, intensity distribution, and pattern detection
 - **Use when**: "How was my week?", "weekly review", "analyze training", "did I follow the plan?"
-- **Workflow**: Adherence → Intensity distribution → Load balance → Pattern detection → Log summary → Activate weekly-planning skill
+- **Workflow**: Adherence → Intensity distribution → Load balance → Pattern detection → Log summary → Trigger weekly plan generation flow
 - **Key commands**: `sce week`, `sce analysis adherence`, `sce analysis intensity`
-- **Integration**: After analysis completion, asks athlete if ready to plan next week (activates weekly-planning skill)
+- **Integration**: After analysis completion, ask athlete if ready to plan next week → run `weekly-plan-generate` → athlete approval → `weekly-plan-apply`
 
-### 4. **weekly-planning**
-Generate next week's detailed workouts using progressive disclosure workflow
-- **Use when**: After weekly-analysis completion, or when athlete asks "plan next week", "generate next week"
-- **Workflow**: Check macro plan → Assess volume adjustment → VDOT recalibration → Generate workouts → Validate → Present → Save after approval
-- **Key commands**: `sce plan generate-week`, `sce plan validate-week`, `sce guardrails progression`, `sce vdot estimate-current`
-- **Adaptive planning**: Each week tailored based on previous week's adherence, ACWR, readiness, and detected patterns
-
-### 5. **training-plan-design**
-Design periodized training plans using progressive disclosure (macro + weekly detail)
-- **Use when**: "Design my plan", "create training program", "how should I train for [race]"
-- **Workflow**: Assess CTL → Generate macro (16 weeks, mileage targets) → Generate week 1 (detailed workouts) → Validation → Markdown review
-- **Key commands**: `sce plan create-macro`, `sce plan generate-week`, `sce vdot`, `sce guardrails`, `sce dates`
-- **Progressive disclosure**: Macro plan provides structure (phases, volume trajectory), week 1 has detailed workouts, weeks 2-16 remain as mileage targets until generated weekly (via weekly-analysis skill)
-
-**Date Handling (see "Date Handling Rules" section above)**:
-- Use `sce dates next-monday` to calculate plan start date
-- Use `sce dates validate` to verify all week boundaries before saving
-- All `week.start_date` must be Monday, `week.end_date` must be Sunday
-
-### 6. **plan-adaptation**
-Adjust plans mid-cycle for illness, injury, or schedule changes
-- **Use when**: "I got sick", "adjust my plan", "missed workouts", "schedule changed"
-- **Workflow**: Assess impact → Replan strategy → Update affected weeks → Validate
-- **Key commands**: `sce plan populate`, `sce plan update-from`, `sce guardrails illness-recovery`
-
-### 7. **injury-risk-management**
-Assess injury risk and provide mitigation strategies
-- **Use when**: "Am I at risk?", "injury probability", "too much training?"
-- **Workflow**: Current risk → Contributing factors → Forecast → Mitigation recommendations
-- **Key commands**: `sce risk assess`, `sce risk forecast`, `sce guardrails progression`
-
-### 8. **race-preparation**
-Verify taper status and race readiness
-- **Use when**: "Race week", "taper check", "am I ready to race?"
-- **Workflow**: Taper status → TSB trajectory → Final adjustments → Race day readiness
-- **Key commands**: `sce risk taper-status`, `sce status`, `sce vdot predict`
+### 3. **weekly-plan-generate / weekly-plan-apply**
+Weekly planning executor flow (non-interactive)
+- **Use when**: Planning next week after weekly analysis
+- **Workflow**: `weekly-plan-generate` → athlete approval → `weekly-plan-apply`
 
 **Each skill contains**:
 - Step-by-step workflow instructions
@@ -203,7 +165,18 @@ Verify taper status and race readiness
 - Decision trees for common scenarios
 - Links to training methodology
 
-**Direct CLI usage**: For quick data checks, use CLI commands directly without activating skills (`sce status`, `sce today`, `sce week`).
+### Executor Skills (Non-Interactive)
+
+These skills run in forked context and **must not** ask the athlete questions. Use them to produce artifacts for the main agent to present:
+
+1. **vdot-baseline-proposal** — propose baseline VDOT + review doc
+2. **macro-plan-create** — create macro plan + review doc (requires approved baseline VDOT)
+3. **weekly-plan-generate** — generate a single-week JSON + review doc (no apply)
+4. **weekly-plan-apply** — validate + persist an approved weekly JSON
+
+**Subagents**: These executor skills run in dedicated subagents (`vdot-analyst`, `macro-planner`, `weekly-planner`) to keep context isolated and focused.
+
+**Direct CLI usage**: For quick data checks, use CLI commands directly without activating skills (`sce status`, `sce week`).
 
 ---
 
@@ -218,9 +191,8 @@ sce sync           # Import activities from Strava (last 120 days)
 sce status         # Get current metrics (CTL/ATL/TSB/ACWR/readiness)
 ```
 
-**Daily coaching**:
+**Weekly coaching**:
 ```bash
-sce today          # Today's workout with context
 sce week           # Weekly summary
 ```
 
@@ -249,8 +221,21 @@ sce performance baseline               # View current vs. historical performance
 
 **Training plans**:
 ```bash
-sce plan show      # View current plan
-sce plan regen     # Regenerate plan from goal
+sce plan show              # View current plan
+sce plan status            # Summary: next unpopulated week, phases, VDOT, etc.
+sce plan next-unpopulated  # First week with empty workouts
+sce plan generate-week     # Scaffold weekly JSON (pattern decided by coach)
+sce plan validate-macro    # Validate macro structure
+sce plan validate --file /tmp/week.json  # Validate weekly JSON
+sce plan populate --from-json /tmp/week.json --validate  # Apply approved week
+sce plan create-macro ... --baseline-vdot <VDOT> --weekly-volumes-json /tmp/weekly_volumes.json  # Macro skeleton
+```
+
+**Approvals (required gates)**:
+```bash
+sce approvals approve-vdot --value <VDOT>                     # Required before create-macro
+sce approvals approve-macro                                   # Record macro approval
+sce approvals approve-week --week <N> --file /tmp/week.json   # Required before populate
 ```
 
 **VDOT & pacing**:
@@ -457,13 +442,15 @@ Options: A) Tell me, B) Skip
 
 ### Training Plan Presentation
 
-**When generating ANY training plan** (initial, regeneration, or weekly update):
+**Planning approval protocol (macro → weekly):**
 
-1. **Generate plan using toolkit**: Use CLI commands (vdot, guardrails, validation)
-2. **Create markdown file**: Write full plan to `/tmp/training_plan_review_YYYY_MM_DD.md`
-3. **Present to athlete**: Show highlights, link to markdown file
-4. **Wait for approval**: Athlete reviews structure, requests modifications, or approves
-5. **Save after approval**: `sce plan populate --from-json plan.json`
+1. **VDOT baseline proposal**: `vdot-baseline-proposal` writes `/tmp/vdot_review_YYYY_MM_DD.md`
+2. **Athlete approval**: Main agent asks once; record approved baseline VDOT (`sce approvals approve-vdot --value <VDOT>`)
+3. **Macro plan**: `macro-plan-create` writes `/tmp/macro_plan_review_YYYY_MM_DD.md`
+4. **Athlete approval**: Main agent confirms macro structure (`sce approvals approve-macro`)
+5. **Weekly plan**: `weekly-plan-generate` writes `/tmp/weekly_plan_review_YYYY_MM_DD.md` + weekly JSON
+6. **Athlete approval**: Main agent confirms weekly plan (`sce approvals approve-week --week <N> --file /tmp/weekly_plan_wN.json`)
+7. **Apply**: `weekly-plan-apply` → `sce plan populate --from-json /tmp/weekly_plan_wX.json --validate`
 
 **Why this matters**:
 - Transparency: Athlete sees full plan before committing
@@ -530,7 +517,7 @@ fi
    - Profile: Use computational tools for injury history detection
    - Profile: Use AskUserQuestion for conflict policy (trade-offs)
    - Goal: `sce goal --type half_marathon --date 2026-06-01`
-3. Suggest plan generation: "Now let's design your plan" → Activate `training-plan-design` skill
+3. Suggest plan generation: "Now let's design your plan" → Run `vdot-baseline-proposal`, then `macro-plan-create`
 4. Complete onboarding without losing context
 
 ---

@@ -31,7 +31,8 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 - [**Profile Management**](cli_profile.md) - Create, update, sports, analyze (`sce profile`, `sce goal`)
 
 ### Training Plans
-- [**Planning**](cli_planning.md) - Macro plans, monthly cycles, weekly views (`sce plan`)
+- [**Planning**](cli_planning.md) - Macro plans, weekly validation, plan updates (`sce plan`)
+- [**Approvals**](cli_planning.md#weekly-planning-workflow-cli) - Approval state for plan apply (`sce approvals`)
 - [**VDOT & Pacing**](cli_vdot.md) - Calculate, predict, adjust paces (`sce vdot`)
 
 ### Safety & Validation
@@ -55,7 +56,8 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | `sce week` | Metrics | [cli_metrics.md](cli_metrics.md) |
 | `sce profile {create\|get\|set\|...}` | Profile | [cli_profile.md](cli_profile.md) |
 | `sce goal --type --date` | Profile | [cli_profile.md](cli_profile.md) |
-| `sce plan {show\|regen\|week\|...}` | Planning | [cli_planning.md](cli_planning.md) |
+| `sce plan {show\|week\|populate\|validate\|...}` | Planning | [cli_planning.md](cli_planning.md) |
+| `sce approvals {status\|approve-vdot\|approve-week\|approve-macro}` | Planning | [cli_planning.md](cli_planning.md#weekly-planning-workflow-cli) |
 | `sce vdot {calculate\|paces\|predict\|...}` | VDOT | [cli_vdot.md](cli_vdot.md) |
 | `sce activity {list\|search}` | Activity | [cli_activity.md](cli_activity.md) |
 | `sce memory {add\|list\|search}` | Memory | [cli_memory.md](cli_memory.md) |
@@ -103,12 +105,15 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce profile edit`** | Open in $EDITOR | [Profile](cli_profile.md#sce-profile-edit) |
 | **`sce profile analyze`** | Analyze Strava history | [Profile](cli_profile.md#sce-profile-analyze) |
 | **`sce plan show`** | Get current plan | [Planning](cli_planning.md#sce-plan-show) |
-| **`sce plan regen`** | Regenerate plan | [Planning](cli_planning.md#sce-plan-regen) |
 | **`sce plan week [--next\|--week N]`** | Get specific week(s) | [Planning](cli_planning.md#sce-plan-week) |
 | **`sce plan create-macro`** | Generate macro plan | [Planning](cli_planning.md#sce-plan-create-macro) |
-| **`sce plan generate-month`** | Generate monthly plan | [Planning](cli_planning.md#sce-plan-generate-month) |
-| **`sce plan assess-month`** | Assess completed month | [Planning](cli_planning.md#sce-plan-assess-month) |
-| **`sce plan validate-month`** | Validate monthly plan | [Planning](cli_planning.md#sce-plan-validate-month) |
+| **`sce plan populate`** | Add/update weekly workouts | [Planning](cli_planning.md#sce-plan-populate) |
+| **`sce plan validate`** | Validate weekly plan JSON | [Planning](cli_planning.md#sce-plan-validate) |
+| **`sce plan update-from`** | Replace plan weeks from a point | [Planning](cli_planning.md#sce-plan-update-from) |
+| **`sce plan save-review`** | Save plan review markdown | [Planning](cli_planning.md#sce-plan-save-review) |
+| **`sce plan append-week`** | Append weekly summary to log | [Planning](cli_planning.md#sce-plan-append-week) |
+| **`sce plan assess-period`** | Assess completed period | [Planning](cli_planning.md#sce-plan-assess-period) |
+| **`sce plan suggest-run-count`** | Suggest run count | [Planning](cli_planning.md#sce-plan-suggest-run-count) |
 | **`sce vdot calculate`** | Calculate VDOT from race | [VDOT](cli_vdot.md#sce-vdot-calculate) |
 | **`sce vdot paces`** | Get training pace zones | [VDOT](cli_vdot.md#sce-vdot-paces) |
 | **`sce vdot predict`** | Predict race times | [VDOT](cli_vdot.md#sce-vdot-predict) |

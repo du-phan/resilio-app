@@ -42,6 +42,7 @@ def init_command(ctx: typer.Context) -> None:
         repo_root / paths.metrics_dir / "weekly",
         repo_root / paths.plans_dir / "archive",
         repo_root / paths.plans_dir / "workouts",
+        repo_root / paths.state_dir,
         repo_root / paths.conversations_dir,
         repo_root / paths.backup_dir,
     ]
@@ -125,6 +126,7 @@ paths:
   activities_dir: "data/activities"
   metrics_dir: "data/metrics"
   plans_dir: "data/plans"
+  state_dir: "data/state"
   conversations_dir: "data/conversations"
   backup_dir: "data/backup"
 

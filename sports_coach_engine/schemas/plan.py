@@ -176,6 +176,25 @@ class WeekPlan(BaseModel):
     )
 
 
+class VDOTHistoryEntry(BaseModel):
+    """Record of VDOT changes over time."""
+
+    week: int = Field(..., ge=1, description="Week number when VDOT was recorded")
+    vdot: float = Field(..., ge=30, le=85, description="VDOT value")
+    source: str = Field(..., description="Source: race | estimate | manual")
+    confidence: Optional[str] = Field(None, description="Confidence: low | medium | high")
+
+
+class PlanState(BaseModel):
+    """Plan state for progressive disclosure workflows."""
+
+    last_populated_week: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Last week number with populated workouts"
+    )
+
+
 class MasterPlan(BaseModel):
     """
     Complete training plan from start date to goal/race date.
@@ -210,6 +229,30 @@ class MasterPlan(BaseModel):
     # Volume progression
     starting_volume_km: float = Field(..., ge=0, description="Initial weekly volume")
     peak_volume_km: float = Field(..., ge=0, description="Peak weekly volume")
+
+    # VDOT context
+    baseline_vdot: Optional[float] = Field(
+        default=None,
+        ge=30,
+        le=85,
+        description="Baseline VDOT approved for macro plan"
+    )
+    current_vdot: Optional[float] = Field(
+        default=None,
+        ge=30,
+        le=85,
+        description="Current VDOT for weekly planning"
+    )
+    vdot_history: list[VDOTHistoryEntry] = Field(
+        default_factory=list,
+        description="VDOT history entries"
+    )
+
+    # Plan state
+    plan_state: Optional[PlanState] = Field(
+        default=None,
+        description="Progressive disclosure state tracking"
+    )
 
     # Metadata
     constraints_applied: list[str] = Field(

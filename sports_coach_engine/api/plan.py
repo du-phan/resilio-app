@@ -517,15 +517,15 @@ def _calculate_date(start_date_str: str, day_of_week: int) -> str:
 
     Args:
         start_date_str: Week start date (Monday) as ISO string
-        day_of_week: ISO weekday (1=Mon, 2=Tue, ..., 7=Sun)
+        day_of_week: Weekday index (0=Mon, 6=Sun)
 
     Returns:
         Workout date as ISO string
     """
     start_date = date.fromisoformat(start_date_str)
-    # ISO weekday: Monday=1, Sunday=7
+    # Weekday index: Monday=0, Sunday=6
     # Calculate offset from Monday
-    offset = day_of_week - 1
+    offset = day_of_week
     workout_date = start_date + timedelta(days=offset)
     return workout_date.isoformat()
 
@@ -574,7 +574,7 @@ def _create_workout_prescription(
     Args:
         week_number: Week number in plan
         date_str: Workout date (ISO format)
-        day_of_week: ISO weekday (1-7)
+        day_of_week: Weekday index (0=Mon, 6=Sun)
         distance_km: Workout distance
         workout_type: "easy", "long_run", "tempo", etc.
         phase: Training phase
@@ -682,8 +682,8 @@ def _generate_workouts_from_pattern(
         target_volume_km: Total weekly volume target
         pattern: Intent pattern dict with:
             - structure: "3 easy + 1 long" (descriptive)
-            - run_days: [1, 3, 5, 6] (ISO weekdays)
-            - long_run_day: 6 (ISO weekday for long run)
+            - run_days: [0, 2, 4, 5] (0=Mon .. 6=Sun)
+            - long_run_day: 5 (weekday index for long run)
             - long_run_pct: 0.45 (percentage of weekly volume)
             - easy_run_paces: "6:30-6:50"
             - long_run_pace: "6:30-6:50"
@@ -859,12 +859,12 @@ def validate_plan_json_structure(
                     f"(>50% of weekly volume, consider 0.45-0.50)"
                 )
 
-            # Validate run_days are valid ISO weekdays (1-7)
+            # Validate run_days are valid weekdays (0-6)
             if "run_days" in pattern:
                 for day in pattern["run_days"]:
-                    if not isinstance(day, int) or day < 1 or day > 7:
+                    if not isinstance(day, int) or day < 0 or day > 6:
                         errors.append(
-                            f"Week {week_num}: Invalid run_day {day}, must be 1-7 (ISO weekday)"
+                            f"Week {week_num}: Invalid run_day {day}, must be 0-6 (Mon=0 .. Sun=6)"
                         )
 
         # Validate phase is valid enum value
@@ -920,7 +920,8 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
             message="No training plan found. Create a macro plan first with:\n"
                     "sce plan create-macro --goal-type <type> --race-date <date> "
                     "--total-weeks <N> --start-date <YYYY-MM-DD> "
-                    "--current-ctl <X> --starting-volume-km <Y> --peak-volume-km <Z>"
+                    "--current-ctl <X> --starting-volume-km <Y> --peak-volume-km <Z> "
+                    "--weekly-volumes-json /tmp/weekly_volumes.json"
         )
 
     if isinstance(result, RepoError):
@@ -1507,6 +1508,8 @@ def create_macro_plan(
     current_ctl: float,
     starting_volume_km: float,
     peak_volume_km: float,
+    baseline_vdot: Optional[float] = None,
+    weekly_volumes_km: Optional[list[float]] = None,
 ) -> Union["MasterPlan", PlanError]:
     """
     Create training plan skeleton with stub weeks.
@@ -1531,6 +1534,8 @@ def create_macro_plan(
         current_ctl: CTL at plan creation
         starting_volume_km: Initial weekly volume
         peak_volume_km: Peak weekly volume
+        baseline_vdot: Approved baseline VDOT (optional but recommended)
+        weekly_volumes_km: Explicit weekly volume targets (AI coach computed)
 
     Returns:
         MasterPlan: Plan skeleton with stub weeks (0 weeks populated)
@@ -1588,6 +1593,24 @@ def create_macro_plan(
         # Create phase structure
         phases = _create_phase_structure(total_weeks)
 
+        # Strict CLI-only: AI coach must supply weekly volume targets
+        if not weekly_volumes_km:
+            return PlanError(
+                error_type="validation",
+                message="weekly_volumes_km is required (AI coach must supply weekly targets)"
+            )
+        if len(weekly_volumes_km) != total_weeks:
+            return PlanError(
+                error_type="validation",
+                message=f"weekly_volumes_km length {len(weekly_volumes_km)} != total_weeks {total_weeks}"
+            )
+        for idx, value in enumerate(weekly_volumes_km, start=1):
+            if not isinstance(value, (int, float)) or value <= 0:
+                return PlanError(
+                    error_type="validation",
+                    message=f"weekly_volumes_km[{idx}] must be a positive number"
+                )
+
         # Create week-to-phase mapping
         week_to_phase = {}
         for phase_dict in phases:
@@ -1604,9 +1627,8 @@ def create_macro_plan(
             week_start = start_date + timedelta(weeks=week_num - 1)
             week_end = week_start + timedelta(days=6)
 
-            # Stub weeks start with zero volume
-            # AI Coach will populate during macro planning workflow
-            target_volume = 0.0
+            # Weekly target volume from AI-provided list
+            target_volume = weekly_volumes_km[week_num - 1]
 
             # Determine phase
             phase = week_to_phase.get(week_num, "base")
@@ -1615,7 +1637,7 @@ def create_macro_plan(
             is_recovery = (week_num % 4 == 0) and phase in ["base", "build"]
 
             # Create stub week with ONLY structural data
-            # AI Coach will generate workout structure progressively via training-plan-design skill
+            # AI Coach will generate workout structure progressively via weekly-plan-generate skill
             stub_week = WeekPlan(
                 week_number=week_num,
                 phase=phase,
@@ -1645,6 +1667,10 @@ def create_macro_plan(
             weeks=stub_weeks,  # Stub weeks with volume targets
             starting_volume_km=starting_volume_km,
             peak_volume_km=peak_volume_km,
+            baseline_vdot=baseline_vdot,
+            current_vdot=baseline_vdot,
+            vdot_history=[],
+            plan_state=None,
             constraints_applied=[],
             conflict_policy="running_goal_wins"
         )
@@ -2310,11 +2336,11 @@ def validate_week_plan(
                     f"long_run_pct is {long_pct:.0%} (>55% of weekly volume, consider 0.45-0.50)"
                 )
 
-        # Validate run_days are ISO weekdays (1-7)
+        # Validate run_days are weekdays (0-6)
         if "run_days" in pattern:
             for day in pattern["run_days"]:
-                if not isinstance(day, int) or day < 1 or day > 7:
-                    errors.append(f"Invalid run_day {day}, must be 1-7 (ISO weekday)")
+                if not isinstance(day, int) or day < 0 or day > 6:
+                    errors.append(f"Invalid run_day {day}, must be 0-6 (Mon=0 .. Sun=6)")
 
     # Check date alignment
     if "start_date" in week and "end_date" in week:

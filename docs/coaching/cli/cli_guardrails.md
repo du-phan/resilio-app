@@ -97,7 +97,7 @@ sce guardrails analyze-progression \
 - `coaching_considerations[]`: Methodology-based guidance
 - `methodology_references[]`: Links to training book sections
 
-**See detailed interpretation guidance**: `.claude/skills/training-plan-design/references/volume_progression.md`
+**See detailed interpretation guidance**: `.claude/skills/macro-plan-create/references/volume_progression_macro.md`
 
 ---
 

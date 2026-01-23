@@ -7,6 +7,7 @@ paths:
   activities_dir: "data/activities"
   metrics_dir: "data/metrics"
   plans_dir: "data/plans"
+  state_dir: "data/state"
   conversations_dir: "data/conversations"
   backup_dir: "data/backup"
 

@@ -39,6 +39,7 @@ class PathSettings(BaseModel):
     activities_dir: str = "data/activities"
     metrics_dir: str = "data/metrics"
     plans_dir: str = "data/plans"
+    state_dir: str = "data/state"
     conversations_dir: str = "data/conversations"
     backup_dir: str = "data/backup"
 

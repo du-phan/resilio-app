@@ -577,42 +577,23 @@ sce plan show --format json | jq '.weeks[] | select(.week_number == 2)'
 
 # Generate detailed workouts for Week 2
 sce plan generate-week \
-  --week-number 2 \
-  --from-macro data/plans/current_plan_macro.json \
-  --current-vdot 48.0 \
-  --volume-adjustment 1.0 \
-  > /tmp/weekly_plan_w2.json
+  --week 2 \
+  --run-days "0,2,4,5" \
+  --long-run-day 5 \
+  --long-run-pct 0.45 \
+  --easy-run-paces "6:15-6:45" \
+  --long-run-pace "6:15-6:45" \
+  --out /tmp/weekly_plan_w2.json
 
 # Returns:
 # {
 #   "ok": true,
-#   "message": "Week 2 plan generated: 26.0 km across 4 runs",
+#   "message": "Weekly plan JSON generated for week 2",
 #   "data": {
-#     "weeks": [{
-#       "week_number": 2,
-#       "phase": "base",
-#       "start_date": "2026-01-27",
-#       "end_date": "2026-02-02",
-#       "target_volume_km": 26.0,
-#       "workout_pattern": {
-#         "structure": "3 easy + 1 long",
-#         "run_days": [1, 3, 5, 6],  // Mon, Wed, Fri, Sat
-#         "easy_runs": [
-#           {"distance_km": 4.5, "duration_min": 31, "day": 1},
-#           {"distance_km": 5.0, "duration_min": 34, "day": 3},
-#           {"distance_km": 4.5, "duration_min": 31, "day": 5}
-#         ],
-#         "long_run": {
-#           "distance_km": 12.0,
-#           "duration_min": 72,
-#           "pace_intention": "E-pace"
-#         },
-#         "paces": {
-#           "e_pace_min_km": "06:15",
-#           "e_pace_max_km": "06:45"
-#         }
-#       }
-#     }]
+#     "week_number": 2,
+#     "file": "/tmp/weekly_plan_w2.json",
+#     "phase": "base",
+#     "target_volume_km": 26.0
 #   }
 # }
 
@@ -621,7 +602,7 @@ sce plan generate-week \
 # ========================================
 
 # Validate BEFORE presenting to athlete
-sce plan validate-week --weekly-plan /tmp/weekly_plan_w2.json
+sce plan validate --file /tmp/weekly_plan_w2.json
 
 # Returns:
 # {
@@ -685,7 +666,8 @@ Does this look good to you? Any adjustments needed?"
 # ========================================
 
 # After athlete approval, save to system
-sce plan populate --from-json /tmp/weekly_plan_w2.json
+sce approvals approve-week --week 2 --file /tmp/weekly_plan_w2.json
+sce plan populate --from-json /tmp/weekly_plan_w2.json --validate
 
 # Returns:
 # {
@@ -713,7 +695,7 @@ sce today  # Will show Monday's workout (4.5 km easy run)
 # 5. Generate Week 3 workouts
 # 6. Validate
 # 7. Present
-# 8. Save after approval
+# 8. Approve + save after approval
 ```
 
 ### Alternative Scenarios Within Workflow
@@ -729,10 +711,13 @@ sce today  # Will show Monday's workout (4.5 km easy run)
 
 # Decision: Reduce Week 3 volume by 10%
 sce plan generate-week \
-  --week-number 3 \
-  --from-macro data/plans/current_plan_macro.json \
-  --current-vdot 48.0 \
-  --volume-adjustment 0.9  # 10% reduction
+  --week 3 \
+  --run-days "0,2,4,6" \
+  --long-run-day 6 \
+  --long-run-pct 0.45 \
+  --easy-run-paces "6:20-6:50" \
+  --long-run-pace "6:20-6:50" \
+  --out /tmp/weekly_plan_w3.json
 
 # Macro target: 30 km → Adjusted target: 27 km
 ```
@@ -762,9 +747,13 @@ sce vdot paces --vdot 49
 
 # Generate Week 5 with updated VDOT
 sce plan generate-week \
-  --week-number 5 \
-  --from-macro data/plans/current_plan_macro.json \
-  --current-vdot 49.0  # Updated!
+  --week 5 \
+  --run-days "0,2,4,6" \
+  --long-run-day 6 \
+  --long-run-pct 0.45 \
+  --easy-run-paces "6:10-6:40" \
+  --long-run-pace "6:10-6:40" \
+  --out /tmp/weekly_plan_w5.json
 ```
 
 **Coach explains**:
@@ -784,15 +773,17 @@ Week 5 workouts will reflect these updated paces. Your fitness is improving!"
 ```bash
 # Athlete: "I have a work trip Thursday-Friday next week, can we shift workouts?"
 
-# Option 1: Revert week 5 and regenerate with profile update
-sce plan revert-week --week-number 5
-
+# Option 1: Regenerate with profile update
 sce profile set --available-days "monday,tuesday,saturday,sunday"  # Remove Thu/Fri
 
 sce plan generate-week \
-  --week-number 5 \
-  --from-macro data/plans/current_plan_macro.json \
-  --current-vdot 49.0
+  --week 5 \
+  --run-days "0,1,5,6" \
+  --long-run-day 6 \
+  --long-run-pct 0.45 \
+  --easy-run-paces "6:10-6:40" \
+  --long-run-pace "6:10-6:40" \
+  --out /tmp/weekly_plan_w5.json
 
 # System generates workouts only on Mon, Tue, Sat, Sun
 

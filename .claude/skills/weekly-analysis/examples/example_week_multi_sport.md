@@ -253,7 +253,8 @@ sce memory add --type INSIGHT \
 1. **Reduce volume to 35 km**:
    ```bash
    # AI coach creates week 7 JSON with 35km volume, then:
-   sce plan populate --from-json /tmp/weekly_plan_w7.json
+   sce approvals approve-week --week 7 --file /tmp/weekly_plan_w7.json
+   sce plan populate --from-json /tmp/weekly_plan_w7.json --validate
    ```
 
 2. **Monitor readiness mid-week**:

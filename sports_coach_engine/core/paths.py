@@ -64,6 +64,11 @@ def get_plans_dir() -> str:
     return _get_paths().plans_dir
 
 
+def get_state_dir() -> str:
+    """Get state data directory path."""
+    return _get_paths().state_dir
+
+
 def get_backup_dir() -> str:
     """Get backup data directory path."""
     return _get_paths().backup_dir
@@ -192,6 +197,11 @@ def plan_workouts_dir(week_number: int) -> str:
     return f"{get_plans_dir()}/workouts/week_{week_number:02d}"
 
 
+def approvals_state_path() -> str:
+    """Get path to approvals state JSON."""
+    return f"{get_state_dir()}/approvals.json"
+
+
 def current_plan_review_path() -> str:
     """Get path to current plan review markdown.
 
@@ -208,5 +218,4 @@ def current_training_log_path() -> str:
         Path to current_training_log.md (e.g., "data/plans/current_training_log.md")
     """
     return f"{get_plans_dir()}/current_training_log.md"
-
 

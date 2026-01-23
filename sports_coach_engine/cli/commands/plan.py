@@ -25,7 +25,7 @@ from sports_coach_engine.api.plan import (
     PlanError,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, output_json
+from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
 
 # Create subcommand app
 app = typer.Typer(help="Manage training plans")
@@ -259,6 +259,357 @@ def plan_week_command(
     raise typer.Exit(code=exit_code)
 
 
+@app.command(name="status")
+def plan_status_command(ctx: typer.Context) -> None:
+    """Get summarized plan status for routing decisions."""
+    from sports_coach_engine.api.profile import get_profile
+    from sports_coach_engine.schemas.profile import AthleteProfile
+
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        envelope = api_result_to_envelope(plan_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    plan = plan_result
+    last_populated_week = 0
+    next_unpopulated_week = None
+    for week in plan.weeks:
+        if week.workouts:
+            last_populated_week = week.week_number
+        if not week.workouts and next_unpopulated_week is None:
+            next_unpopulated_week = week.week_number
+
+    recovery_weeks = [w.week_number for w in plan.weeks if w.is_recovery_week]
+
+    profile = None
+    profile_result = get_profile()
+    if isinstance(profile_result, AthleteProfile):
+        profile = profile_result
+
+    data = {
+        "plan_start": plan.start_date,
+        "plan_end": plan.end_date,
+        "total_weeks": plan.total_weeks,
+        "baseline_vdot": getattr(plan, "baseline_vdot", None),
+        "current_vdot": getattr(plan, "current_vdot", None),
+        "last_populated_week": last_populated_week,
+        "next_unpopulated_week": next_unpopulated_week,
+        "phases": plan.phases,
+        "recovery_weeks": recovery_weeks,
+        "conflict_policy": plan.conflict_policy,
+        "run_days": getattr(getattr(profile, "training_constraints", None), "available_run_days", None),
+        "max_run_days_per_week": getattr(getattr(profile, "training_constraints", None), "max_run_days_per_week", None),
+    }
+
+    envelope = api_result_to_envelope(
+        plan,
+        success_message="Plan status retrieved",
+    )
+    envelope.data = data
+    output_json(envelope)
+    raise typer.Exit(code=0)
+
+
+@app.command(name="next-unpopulated")
+def plan_next_unpopulated_command(ctx: typer.Context) -> None:
+    """Return the first week with empty workouts."""
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        envelope = api_result_to_envelope(plan_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    plan = plan_result
+    target_week = None
+    for week in plan.weeks:
+        if not week.workouts:
+            target_week = week
+            break
+
+    if target_week is None:
+        envelope = api_result_to_envelope(
+            plan,
+            success_message="All weeks already populated",
+        )
+        envelope.data = {"week_number": None}
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    envelope = api_result_to_envelope(
+        plan,
+        success_message=f"Next unpopulated week: {target_week.week_number}",
+    )
+    envelope.data = {
+        "week_number": target_week.week_number,
+        "start_date": target_week.start_date,
+        "end_date": target_week.end_date,
+        "phase": target_week.phase,
+        "target_volume_km": target_week.target_volume_km,
+        "is_recovery_week": target_week.is_recovery_week,
+    }
+    output_json(envelope)
+    raise typer.Exit(code=0)
+
+
+@app.command(name="validate-macro")
+def plan_validate_macro_command(ctx: typer.Context) -> None:
+    """Validate macro plan structure (phases, weeks, dates)."""
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        envelope = api_result_to_envelope(plan_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    plan = plan_result
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    # Basic checks
+    if plan.start_date.weekday() != 0:
+        errors.append("Plan start_date must be Monday")
+
+    # Week sequence and date alignment
+    expected_week = 1
+    previous_start = None
+    for week in plan.weeks:
+        if week.week_number != expected_week:
+            errors.append(f"Week numbers not sequential (expected {expected_week}, got {week.week_number})")
+            expected_week = week.week_number
+        if week.start_date.weekday() != 0:
+            errors.append(f"Week {week.week_number}: start_date must be Monday")
+        if week.end_date.weekday() != 6:
+            errors.append(f"Week {week.week_number}: end_date must be Sunday")
+        if previous_start and (week.start_date - previous_start).days != 7:
+            errors.append(f"Week {week.week_number}: start_date not 7 days after previous week")
+        if week.target_volume_km <= 0:
+            warnings.append(f"Week {week.week_number}: target_volume_km is {week.target_volume_km} (expected > 0)")
+        previous_start = week.start_date
+        expected_week += 1
+
+    is_valid = len(errors) == 0
+    message = "Macro plan is valid" if is_valid else "Macro plan validation failed"
+    data = {"errors": errors, "warnings": warnings}
+
+    if is_valid:
+        envelope = api_result_to_envelope(plan, success_message=message)
+        envelope.data = data
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    envelope = create_error_envelope(
+        error_type="validation",
+        message=message,
+        data=data
+    )
+    output_json(envelope)
+    raise typer.Exit(code=1)
+
+
+@app.command(name="generate-week")
+def plan_generate_week_command(
+    ctx: typer.Context,
+    week: Optional[int] = typer.Option(
+        None,
+        "--week",
+        help="Week number to generate (defaults to next unpopulated week)"
+    ),
+    run_days: str = typer.Option(
+        ...,
+        "--run-days",
+        help="Comma-separated weekday indices to run (0=Mon..6=Sun), e.g., '0,2,6'"
+    ),
+    long_run_day: int = typer.Option(
+        ...,
+        "--long-run-day",
+        help="Weekday index for long run (0=Mon..6=Sun)"
+    ),
+    long_run_pct: float = typer.Option(
+        ...,
+        "--long-run-pct",
+        help="Long run fraction of weekly volume (e.g., 0.45)"
+    ),
+    easy_run_paces: str = typer.Option(
+        ...,
+        "--easy-run-paces",
+        help="Easy run pace range (e.g., '6:30-6:50')"
+    ),
+    long_run_pace: str = typer.Option(
+        ...,
+        "--long-run-pace",
+        help="Long run pace range (e.g., '6:30-6:50')"
+    ),
+    structure: Optional[str] = typer.Option(
+        None,
+        "--structure",
+        help="Optional descriptive structure string (e.g., '3 easy + 1 long')"
+    ),
+    out: Optional[str] = typer.Option(
+        None,
+        "--out",
+        help="Output path for weekly JSON (defaults to /tmp/weekly_plan_w<week>.json)"
+    ),
+    allow_populated: bool = typer.Option(
+        False,
+        "--allow-populated",
+        help="Allow generating for a week that already has workouts"
+    ),
+) -> None:
+    """Generate a single week's intent-based plan JSON (no apply)."""
+    from datetime import date as dt_date
+
+    def parse_run_days(value: str) -> list[int]:
+        value = value.strip()
+        if value.startswith("["):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Invalid JSON array for run_days: {e}") from e
+            if not isinstance(parsed, list):
+                raise ValueError("run_days JSON must be an array of integers")
+            return parsed
+        parts = [p.strip() for p in value.split(",") if p.strip()]
+        if not parts:
+            raise ValueError("run_days must include at least one day")
+        return [int(p) for p in parts]
+
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        envelope = api_result_to_envelope(plan_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    plan = plan_result
+
+    target_week = None
+    if week is not None:
+        for w in plan.weeks:
+            if w.week_number == week:
+                target_week = w
+                break
+        if target_week is None:
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message=f"Week {week} not found in current plan",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=2)
+    else:
+        for w in plan.weeks:
+            if not w.workouts:
+                target_week = w
+                break
+        if target_week is None:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message="All weeks already populated; specify --week to regenerate",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    if target_week.workouts and not allow_populated:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Week {target_week.week_number} already has workouts. Use --allow-populated to proceed.",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    try:
+        run_days_list = parse_run_days(run_days)
+    except ValueError as e:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=str(e),
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if not all(isinstance(d, int) for d in run_days_list):
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="run_days must be integers (0=Mon..6=Sun)",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if any(d < 0 or d > 6 for d in run_days_list):
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="run_days must be within 0-6 (Mon=0 .. Sun=6)",
+            data={"run_days": run_days_list},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    run_days_list = sorted(set(run_days_list))
+    if long_run_day not in run_days_list:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="long_run_day must be included in run_days",
+            data={"long_run_day": long_run_day, "run_days": run_days_list},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if long_run_pct <= 0 or long_run_pct >= 1:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="long_run_pct must be between 0 and 1",
+            data={"long_run_pct": long_run_pct},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    structure_text = structure
+    if structure_text is None:
+        structure_text = f"{max(len(run_days_list) - 1, 0)} easy + 1 long"
+
+    weekly_payload = {
+        "weeks": [
+            {
+                "week_number": target_week.week_number,
+                "phase": target_week.phase,
+                "start_date": target_week.start_date.isoformat()
+                if isinstance(target_week.start_date, dt_date)
+                else str(target_week.start_date),
+                "end_date": target_week.end_date.isoformat()
+                if isinstance(target_week.end_date, dt_date)
+                else str(target_week.end_date),
+                "target_volume_km": target_week.target_volume_km,
+                "workout_pattern": {
+                    "structure": structure_text,
+                    "run_days": run_days_list,
+                    "long_run_day": long_run_day,
+                    "long_run_pct": long_run_pct,
+                    "easy_run_paces": easy_run_paces,
+                    "long_run_pace": long_run_pace,
+                },
+            }
+        ]
+    }
+
+    out_path = out or f"/tmp/weekly_plan_w{target_week.week_number}.json"
+    out_file = Path(out_path)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(json.dumps(weekly_payload, indent=2))
+
+    envelope = create_success_envelope(
+        message=f"Weekly plan JSON generated for week {target_week.week_number}",
+        data={
+            "week_number": target_week.week_number,
+            "file": str(out_file),
+            "phase": target_week.phase,
+            "target_volume_km": target_week.target_volume_km,
+            "run_days": run_days_list,
+            "long_run_day": long_run_day,
+            "long_run_pct": long_run_pct,
+        },
+    )
+    output_json(envelope)
+    raise typer.Exit(code=0)
+
+
 @app.command(name="populate")
 def plan_populate_command(
     ctx: typer.Context,
@@ -267,11 +618,17 @@ def plan_populate_command(
         "--from-json",
         help="Path to JSON file with weekly workout data"
     ),
+    validate: bool = typer.Option(
+        False,
+        "--validate",
+        help="Validate weekly plan JSON before populating (blocks on errors)"
+    ),
 ) -> None:
     """Add or update weekly workouts in the training plan.
 
     Merges weeks into the plan: updates existing weeks (same week_number) or
     adds new weeks. Safe to call multiple times - existing weeks are preserved.
+    Requires approval state for the exact weekly JSON payload.
 
     Progressive workflow:
         sce plan populate --from-json /tmp/week1.json   # Add week 1
@@ -295,6 +652,18 @@ def plan_populate_command(
           ]
         }
     """
+    # Optional validation gate (reuses same rules as plan validate)
+    if validate:
+        is_valid, errors, warnings = _validate_weekly_plan_file(from_json, verbose=False)
+        if not is_valid:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Weekly plan validation failed: {len(errors)} error(s)",
+                data={"file": from_json, "errors": errors, "warnings": warnings}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=1)
+
     # Validate file exists
     json_path = Path(from_json)
     if not json_path.exists():
@@ -330,6 +699,82 @@ def plan_populate_command(
         raise typer.Exit(code=5)
 
     weeks_data = data["weeks"]
+    if not isinstance(weeks_data, list):
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="'weeks' must be an array",
+            data={"type": type(weeks_data).__name__}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Approval gate: require exact approved weekly JSON file before writing
+    from sports_coach_engine.core.state import load_approval_state
+    from sports_coach_engine.schemas.repository import RepoError
+
+    approval_state = load_approval_state()
+    if isinstance(approval_state, RepoError):
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Failed to load approvals state: {approval_state}",
+            data={"path": getattr(approval_state, "path", None)},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if approval_state is None or approval_state.weekly_approval is None:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Weekly approval is required before applying a plan",
+            data={
+                "next_steps": "Run: sce approvals approve-week --week <N> --file <approved_json>"
+            },
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if len(weeks_data) != 1:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Approval gate requires a single-week JSON payload",
+            data={"week_count": len(weeks_data)},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    week_number = weeks_data[0].get("week_number")
+    if week_number is None:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Week payload missing required field: week_number",
+            data={"keys_found": list(weeks_data[0].keys())},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    approved = approval_state.weekly_approval
+    if week_number != approved.week_number:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Approved week number does not match payload",
+            data={"approved_week": approved.week_number, "payload_week": week_number},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    resolved_payload = Path(from_json).expanduser().resolve()
+    resolved_approved = Path(approved.approved_file).expanduser().resolve()
+    if resolved_payload != resolved_approved:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Approved file path does not match payload path",
+            data={
+                "approved_file": str(resolved_approved),
+                "payload_file": str(resolved_payload),
+            },
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
 
     # Call API
     result = populate_plan_workouts(weeks_data)
@@ -585,6 +1030,26 @@ def _build_week_message(result: any) -> str:
         return f"{result.week_range}: {len(result.weeks)} weeks retrieved"
 
 
+def _validate_weekly_plan_file(file_path: str, verbose: bool) -> tuple[bool, list[str], list[str]]:
+    """Validate weekly plan JSON file; return (is_valid, errors, warnings)."""
+    # Stage 1: Syntax validation
+    is_syntax_valid, syntax_errors, syntax_warnings = validate_plan_json_structure(file_path, verbose)
+    if not is_syntax_valid:
+        return False, syntax_errors, syntax_warnings
+
+    # Stage 2: Semantic validation
+    semantic_result = validate_week_plan(weekly_plan_path=file_path, verbose=verbose)
+    if isinstance(semantic_result, PlanError):
+        return False, [semantic_result.message], []
+
+    is_semantic_valid = semantic_result.get("is_valid", False)
+    semantic_errors = semantic_result.get("errors", [])
+    semantic_warnings = semantic_result.get("warnings", [])
+    all_warnings = syntax_warnings + semantic_warnings
+
+    return is_semantic_valid, semantic_errors, all_warnings
+
+
 @app.command(name="save-review")
 def plan_save_review_command(
     ctx: typer.Context,
@@ -763,6 +1228,16 @@ def create_macro_command(
     current_ctl: float = typer.Option(..., "--current-ctl", help="Current CTL"),
     starting_volume_km: float = typer.Option(..., "--starting-volume-km", help="Initial weekly volume (km)"),
     peak_volume_km: float = typer.Option(..., "--peak-volume-km", help="Peak weekly volume (km)"),
+    baseline_vdot: Optional[float] = typer.Option(
+        None,
+        "--baseline-vdot",
+        help="Approved baseline VDOT for macro plan"
+    ),
+    weekly_volumes_json: Optional[str] = typer.Option(
+        None,
+        "--weekly-volumes-json",
+        help="Path to JSON file with weekly volume targets (array or {volumes_km: []})"
+    ),
 ) -> None:
     """
     Generate high-level training plan structure (macro plan).
@@ -778,6 +1253,8 @@ def create_macro_command(
         sce plan create-macro --goal-type half_marathon --race-date 2026-05-03 \\
             --target-time "1:30:00" --total-weeks 16 --start-date 2026-01-20 \\
             --current-ctl 44.0 --starting-volume-km 25.0 --peak-volume-km 55.0
+
+    Requires an approved baseline VDOT in approvals state.
 
     Returns:
         Macro plan structure with phases, volume trajectory, CTL projections,
@@ -800,7 +1277,111 @@ def create_macro_command(
         output_json(envelope)
         raise typer.Exit(code=5)
 
+    # Enforce baseline VDOT approval before creating macro plan
+    if baseline_vdot is None:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="baseline_vdot is required and must be approved before macro creation",
+            data={"next_steps": "Run: sce approvals approve-vdot --value <VDOT>"},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    from sports_coach_engine.core.state import load_approval_state
+    from sports_coach_engine.schemas.repository import RepoError
+    import math
+
+    approval_state = load_approval_state()
+    if isinstance(approval_state, RepoError):
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Failed to load approvals state: {approval_state}",
+            data={"path": getattr(approval_state, "path", None)},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    approved_vdot = getattr(approval_state, "approved_baseline_vdot", None) if approval_state else None
+    if approved_vdot is None:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Approved baseline VDOT not found in approvals state",
+            data={"next_steps": "Run: sce approvals approve-vdot --value <VDOT>"},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if not math.isclose(float(baseline_vdot), float(approved_vdot), abs_tol=0.01):
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Provided baseline_vdot does not match approved baseline VDOT",
+            data={"approved_baseline_vdot": approved_vdot, "provided_baseline_vdot": baseline_vdot},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
     # Call API
+    weekly_volumes_km = None
+    if weekly_volumes_json:
+        json_path = Path(weekly_volumes_json)
+        if not json_path.exists():
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message=f"Weekly volumes JSON file not found: {weekly_volumes_json}",
+                data={"path": str(json_path.absolute())}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=2)
+        try:
+            with open(json_path, "r") as f:
+                payload = json.load(f)
+        except json.JSONDecodeError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid JSON in weekly volumes file: {str(e)}",
+                data={"file": weekly_volumes_json}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        if not isinstance(payload, dict) or "volumes_km" not in payload:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message="Weekly volumes JSON must be an object with 'volumes_km' array",
+                data={"file": weekly_volumes_json}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        weekly_volumes_km = payload["volumes_km"]
+        if not isinstance(weekly_volumes_km, list) or len(weekly_volumes_km) == 0:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message="'volumes_km' must be a non-empty array",
+                data={"file": weekly_volumes_json}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        if len(weekly_volumes_km) != total_weeks:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"'volumes_km' length {len(weekly_volumes_km)} != total_weeks {total_weeks}",
+                data={"file": weekly_volumes_json}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        for idx, value in enumerate(weekly_volumes_km, start=1):
+            if not isinstance(value, (int, float)) or value <= 0:
+                envelope = create_error_envelope(
+                    error_type="validation",
+                    message=f"volumes_km[{idx}] must be a positive number",
+                    data={"file": weekly_volumes_json}
+                )
+                output_json(envelope)
+                raise typer.Exit(code=5)
+
     result = create_macro_plan(
         goal_type=goal_type,
         race_date=race_date_parsed,
@@ -809,7 +1390,9 @@ def create_macro_command(
         start_date=start_date_parsed,
         current_ctl=current_ctl,
         starting_volume_km=starting_volume_km,
-        peak_volume_km=peak_volume_km
+        peak_volume_km=peak_volume_km,
+        baseline_vdot=baseline_vdot,
+        weekly_volumes_km=weekly_volumes_km,
     )
 
     # Construct success message only if result is successful
@@ -817,7 +1400,8 @@ def create_macro_command(
         success_message = (
             f"Training plan skeleton created: {total_weeks} weeks, {len(result.phases)} phases\n"
             f"Saved to: data/plans/current_plan.yaml (0 weeks populated)\n"
-            f"Next: Present macro plan to athlete for approval, then use weekly-planning skill for Week 1"
+            f"Next: Present macro plan to athlete for approval, then use weekly-plan-generate "
+            f"+ weekly-plan-apply for Week 1"
         )
     else:
         success_message = "Macro plan creation failed"

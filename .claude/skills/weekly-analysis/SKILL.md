@@ -187,7 +187,7 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 
 ---
 
-### Step 8: Plan Next Week (Activate weekly-planning Skill)
+### Step 8: Plan Next Week (Weekly Executor Flow)
 
 **After completing weekly analysis**, transition to planning next week's workouts for adaptive training.
 
@@ -198,16 +198,12 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 
 **If athlete says yes**:
 
-Activate the **`weekly-planning`** skill, which will:
-1. Check macro plan for next week's targets
-2. Assess volume adjustment needs (based on this week's analysis)
-3. Check for VDOT recalibration signals
-4. Generate next week's detailed workouts
-5. Validate plan (volume, minimum durations, guardrails)
-6. Present plan to athlete
-7. Save after approval
+Run the executor flow:
+1. `weekly-plan-generate` → creates weekly JSON + review doc
+2. Athlete approval (main agent)
+3. `weekly-plan-apply` → validates + persists approved week
 
-**Context to pass to weekly-planning skill**:
+**Context to pass to weekly-plan-generate**:
 - Current week's adherence rate
 - ACWR and readiness scores
 - Any illness/injury signals detected
@@ -216,7 +212,7 @@ Activate the **`weekly-planning`** skill, which will:
 
 **If athlete says no** (wants to wait):
 ```
-"No problem! When you're ready to plan next week, just let me know or use the weekly-planning skill."
+"No problem! When you're ready to plan next week, just let me know."
 ```
 
 **Alternative**: If athlete only wants weekly analysis (not planning), you're done after Step 7.
@@ -243,10 +239,10 @@ Coach: [Step 8] "Ready to plan next week's workouts?"
 
 Athlete: "Yes"
 
-Coach: [Activates weekly-planning skill]
-  → Skill generates Week 2 plan (26km, 4 runs)
+Coach: [Runs weekly executor flow]
+  → weekly-plan-generate creates Week 2 plan review + JSON
   → Presents plan with rationale based on this week's analysis
-  → Saves after athlete approval
+  → weekly-plan-apply saves after athlete approval
 
 Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 ```
@@ -258,7 +254,7 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 ### Q: Adherence <50%
 1. Don't criticize - investigate barriers
 2. Assess cause: External (life stress), plan mismatch, motivation, physical
-3. Adapt: Adjust current week OR replan → Use `plan-adaptation` skill
+3. Adapt: Adjust current week using `weekly-plan-generate` + `weekly-plan-apply` (target current week)
 
 ### Q: Intensity violates 80/20 (moderate-intensity rut)
 1. Show distribution (e.g., 65/35 instead of 80/20)

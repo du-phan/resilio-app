@@ -62,24 +62,24 @@ class TestCalculateDate:
     """Test date calculation from week start and day of week."""
 
     def test_calculate_date_monday(self):
-        """Test Monday (day 1)."""
+        """Test Monday (day 0)."""
         # Week starting 2026-01-19 (Monday)
-        result = _calculate_date("2026-01-19", 1)
+        result = _calculate_date("2026-01-19", 0)
         assert result == "2026-01-19"
 
     def test_calculate_date_tuesday(self):
-        """Test Tuesday (day 2)."""
-        result = _calculate_date("2026-01-19", 2)
+        """Test Tuesday (day 1)."""
+        result = _calculate_date("2026-01-19", 1)
         assert result == "2026-01-20"
 
     def test_calculate_date_sunday(self):
-        """Test Sunday (day 7)."""
-        result = _calculate_date("2026-01-19", 7)
+        """Test Sunday (day 6)."""
+        result = _calculate_date("2026-01-19", 6)
         assert result == "2026-01-25"
 
     def test_calculate_date_wednesday(self):
-        """Test Wednesday (day 3)."""
-        result = _calculate_date("2026-01-19", 3)
+        """Test Wednesday (day 2)."""
+        result = _calculate_date("2026-01-19", 2)
         assert result == "2026-01-21"
 
 
@@ -91,7 +91,7 @@ class TestCreateWorkoutPrescription:
         workout = _create_workout_prescription(
             week_number=1,
             date_str="2026-01-20",
-            day_of_week=2,
+            day_of_week=1,
             distance_km=5.0,
             workout_type="easy",
             phase="base",
@@ -102,7 +102,7 @@ class TestCreateWorkoutPrescription:
         # Check required fields
         assert workout["week_number"] == 1
         assert workout["date"] == "2026-01-20"
-        assert workout["day_of_week"] == 2
+        assert workout["day_of_week"] == 1
         assert workout["distance_km"] == 5.0
         assert workout["workout_type"] == "easy"
         assert workout["phase"] == "base"
@@ -125,7 +125,7 @@ class TestCreateWorkoutPrescription:
         workout = _create_workout_prescription(
             week_number=1,
             date_str="2026-01-25",
-            day_of_week=7,
+            day_of_week=6,
             distance_km=10.5,
             workout_type="long_run",
             phase="base",
@@ -149,8 +149,8 @@ class TestGenerateWorkoutsFromPattern:
         """Test Week 1 from Du's plan (23km, 3 easy + 1 long)."""
         pattern = {
             "structure": "3 easy + 1 long",
-            "run_days": [2, 4, 6, 7],  # Tue, Thu, Sat, Sun
-            "long_run_day": 7,  # Sunday
+            "run_days": [1, 3, 5, 6],  # Tue, Thu, Sat, Sun
+            "long_run_day": 6,  # Sunday
             "long_run_pct": 0.45,
             "easy_run_paces": "6:30-6:50",
             "long_run_pace": "6:30-6:50"
@@ -175,7 +175,7 @@ class TestGenerateWorkoutsFromPattern:
         # Check long run
         long_runs = [w for w in workouts if w["workout_type"] == "long_run"]
         assert len(long_runs) == 1
-        assert long_runs[0]["day_of_week"] == 7  # Sunday
+        assert long_runs[0]["day_of_week"] == 6  # Sunday
         assert long_runs[0]["date"] == "2026-01-25"
         # Long run should be ~45% of 23km = ~10.5km
         assert 10.0 <= long_runs[0]["distance_km"] <= 11.0
@@ -196,8 +196,8 @@ class TestGenerateWorkoutsFromPattern:
         """Test Week 4 from Du's plan (21km, 2 easy + 1 long, recovery)."""
         pattern = {
             "structure": "2 easy + 1 long",
-            "run_days": [2, 4, 7],  # Tue, Thu, Sun
-            "long_run_day": 7,  # Sunday
+            "run_days": [1, 3, 6],  # Tue, Thu, Sun
+            "long_run_day": 6,  # Sunday
             "long_run_pct": 0.52,
             "easy_run_paces": "6:30-6:50",
             "long_run_pace": "6:30-6:50"
@@ -243,8 +243,8 @@ class TestGenerateWorkoutsFromPattern:
         for target_km, num_runs, long_pct in test_cases:
             pattern = {
                 "structure": f"{num_runs-1} easy + 1 long",
-                "run_days": list(range(1, num_runs + 1)),
-                "long_run_day": num_runs,
+                "run_days": list(range(0, num_runs)),
+                "long_run_day": num_runs - 1,
                 "long_run_pct": long_pct,
                 "easy_run_paces": "6:30-6:50",
                 "long_run_pace": "6:30-6:50"
@@ -268,7 +268,7 @@ class TestGenerateWorkoutsFromPattern:
         """Test that missing pattern fields raise appropriate error."""
         pattern = {
             # Missing run_days
-            "long_run_day": 7,
+            "long_run_day": 6,
             "long_run_pct": 0.45,
             "easy_run_paces": "6:30-6:50",
             "long_run_pace": "6:30-6:50"
@@ -300,8 +300,8 @@ class TestIntegrationArithmetic:
         for i, week_spec in enumerate(weeks, 1):
             pattern = {
                 "structure": f"{week_spec['runs']-1} easy + 1 long",
-                "run_days": list(range(1, week_spec['runs'] + 1)),
-                "long_run_day": week_spec['runs'],
+                "run_days": list(range(0, week_spec['runs'])),
+                "long_run_day": week_spec['runs'] - 1,
                 "long_run_pct": week_spec['long_pct'],
                 "easy_run_paces": "6:30-6:50",
                 "long_run_pace": "6:30-6:50"
