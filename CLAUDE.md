@@ -169,9 +169,9 @@ Weekly planning executor flow (non-interactive)
 
 These skills run in forked context and **must not** ask the athlete questions. Use them to produce artifacts for the main agent to present:
 
-1. **vdot-baseline-proposal** — propose baseline VDOT + review doc
+1. **vdot-baseline-proposal** — propose baseline VDOT + present review in chat
 2. **macro-plan-create** — create macro plan + review doc (requires approved baseline VDOT)
-3. **weekly-plan-generate** — generate a single-week JSON + review doc (no apply)
+3. **weekly-plan-generate** — generate a single-week JSON + present review in chat (no apply)
 4. **weekly-plan-apply** — validate + persist an approved weekly JSON
 
 **Subagents**: These executor skills run in dedicated subagents (`vdot-analyst`, `macro-planner`, `weekly-planner`) to keep context isolated and focused.
@@ -444,11 +444,11 @@ Options: A) Tell me, B) Skip
 
 **Planning approval protocol (macro → weekly):**
 
-1. **VDOT baseline proposal**: `vdot-baseline-proposal` writes `/tmp/vdot_review_YYYY_MM_DD.md`
+1. **VDOT baseline proposal**: `vdot-baseline-proposal` presents the review directly in chat
 2. **Athlete approval**: Main agent asks once; record approved baseline VDOT (`sce approvals approve-vdot --value <VDOT>`)
 3. **Macro plan**: `macro-plan-create` writes `/tmp/macro_plan_review_YYYY_MM_DD.md`
 4. **Athlete approval**: Main agent confirms macro structure (`sce approvals approve-macro`)
-5. **Weekly plan**: `weekly-plan-generate` writes `/tmp/weekly_plan_review_YYYY_MM_DD.md` + weekly JSON
+5. **Weekly plan**: `weekly-plan-generate` presents the review directly in chat + weekly JSON
 6. **Athlete approval**: Main agent confirms weekly plan (`sce approvals approve-week --week <N> --file /tmp/weekly_plan_wN.json`)
 7. **Apply**: `weekly-plan-apply` → `sce plan populate --from-json /tmp/weekly_plan_wX.json --validate`
 

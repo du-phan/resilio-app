@@ -199,7 +199,7 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 **If athlete says yes**:
 
 Run the executor flow:
-1. `weekly-plan-generate` → creates weekly JSON + review doc
+1. `weekly-plan-generate` → creates weekly JSON + presents review in chat
 2. Athlete approval (main agent)
 3. `weekly-plan-apply` → validates + persists approved week
 

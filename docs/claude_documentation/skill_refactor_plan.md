@@ -25,7 +25,7 @@
 **In scope**
 - Skill/subagent refactor for macro + weekly planning.
 - CLI-first workflows and new CLI commands to support them.
-- Approval state handling and review docs in `/tmp/`.
+- Approval state handling; review docs in `/tmp/` for macro only (VDOT + weekly reviews are chat-only).
 
 **Out of scope (for now)**
 - Changing training methodology rules in the Python engine.
@@ -34,7 +34,7 @@
 
 ## Guiding Principles
 - CLI-first: skills interact **only** via `sce` CLI (no direct Python engine calls).
-- Executor skills/subagents do computation and write artifacts; they never ask the athlete anything.
+- Executor skills/subagents do computation and, when needed, write artifacts; they never ask the athlete anything.
 - Main agent owns dialogue, approvals, and state handoff (e.g., approved VDOT, weekly JSON payloads).
 - Macro plan defines the structure and baseline intensity; weekly plans may adjust volume within explicit bounds and must not save without approval.
 - Guardrails > algorithms: use CLI metrics + coaching judgment; keep heuristics descriptive (rationales), not hard-coded formulas.
@@ -98,7 +98,7 @@
 ## Skills (contracts)
 - `vdot-baseline-proposal` (new)
   - Inputs: profile/status/races via CLI; optional overrides.
-  - Outputs: proposed_vdot, pace table, evidence summary, athlete prompt text, `/tmp/vdot_review_YYYY_MM_DD.md`.
+  - Outputs: proposed_vdot, pace table, evidence summary, athlete prompt text (presented in chat).
   - Blockers: fail if required profile/goal data missing.
 
 - `macro-plan-create` (new)
@@ -108,7 +108,7 @@
 
 - `weekly-plan-generate` (new split)
   - Inputs: plan context, current metrics, next-week index (first unpopulated week); baseline/current VDOT from plan state.
-  - Outputs: proposed week JSON (not applied), rationale, guardrail interpretation, `/tmp/weekly_plan_review_YYYY_MM_DD.md`, athlete prompt.
+  - Outputs: proposed week JSON (not applied), rationale, guardrail interpretation, athlete prompt (presented in chat).
   - Rules: default volume deviation band ±5–10% vs macro target; outside band must be flagged with rationale and must be escalated to macro-adjust unless coach explicitly overrides with justification recorded.
   - If `sce plan generate-week` exists: call it and capture output JSON. If not, generate JSON in-skill using CLI outputs + guardrails only.
 
@@ -122,18 +122,18 @@
 
 ## Approval Protocol (main agent only)
 1) VDOT approval:
-   - Present `/tmp/vdot_review_YYYY_MM_DD.md`.
+   - Present the VDOT review directly in chat.
    - Ask a single structured prompt (e.g., “Do these easy/tempo paces feel right?”).
    - Record `approved_baseline_vdot` and approval timestamp.
 2) Macro approval:
    - Present `/tmp/macro_plan_review_YYYY_MM_DD.md`.
    - Record `macro_approved = true`.
 3) Weekly approval (repeats each week):
-   - Present `/tmp/weekly_plan_review_YYYY_MM_DD.md`.
+   - Present the weekly review directly in chat.
    - Record approved week number and approved JSON file path.
 
 ## Subagents (to manage large context)
-- `vdot-analyst` (haiku/sonnet): tools Bash/Read/Write; preload `vdot-baseline-proposal`; no AskUserQuestion.
+- `vdot-analyst` (haiku/sonnet): tools Bash/Read; preload `vdot-baseline-proposal`; no AskUserQuestion.
 - `macro-planner` (sonnet): tools Bash/Read/Write; preload `macro-plan-create`.
 - `weekly-planner` (sonnet): tools Bash/Read/Write; preload `weekly-plan-generate` and `weekly-plan-apply`.
 Notes:
@@ -145,8 +145,8 @@ Notes:
 ```
 ---
 name: vdot-analyst
-description: Computes baseline VDOT proposal and review docs
-tools: Read, Grep, Glob, Bash, Write
+description: Computes baseline VDOT proposal and review summary
+tools: Read, Grep, Glob, Bash
 skills:
   - vdot-baseline-proposal
 model: sonnet
@@ -182,7 +182,7 @@ model: sonnet
 - Plan fields: `baseline_vdot`, `current_vdot`, `vdot_history[] {week, vdot, source, confidence}`.
 - State helper: `data/state/approvals.json` to persist approved decisions between skills (e.g., APPROVED_BASELINE_VDOT, approved_week_payload).
 - Plan state: `plan_state.last_populated_week` (or derive via CLI helper) to avoid relying on `weeks[-1]` in the macro skeleton.
-- Review docs: version if regenerated same day (suffix `_vN`); always surface latest path to the main agent.
+- Review docs: macro only; version if regenerated same day (suffix `_vN`); always surface latest path to the main agent.
 - Approval state machine (recommended): `vdot_proposed` → `vdot_approved` → `macro_created` → `macro_approved` → `week_generated` → `week_approved` → `week_applied`.
 - Integrity: store the approved weekly JSON file path in approvals state; `weekly-plan-apply` must use that exact file when writing.
 
@@ -199,7 +199,7 @@ model: sonnet
 4) Weekly cycle (Week 1 and beyond):
    - Determine next unpopulated week (CLI helper).
    - Invoke `weekly-plan-generate` (via `weekly-planner` subagent if context large).
-   - Main agent presents weekly review doc/prompt; on approval, invoke `weekly-plan-apply` to write.
+   - Main agent presents weekly review/prompt in chat; on approval, invoke `weekly-plan-apply` to write.
    - Repeat weekly; no workouts generated during macro stage.
 
 ## Error Handling & Recovery
@@ -391,7 +391,7 @@ All items below are implemented:
    - Add `SKILL.md` to each with:
      - `disable-model-invocation: true`
      - `context: fork`
-     - `allowed-tools: Bash, Read, Write`
+     - `allowed-tools: Bash, Read` (add Write only if the skill outputs files)
      - concise description + argument-hint for required inputs
 
 2) Subagent definitions (context control)
@@ -408,7 +408,7 @@ All items below are implemented:
    - `vdot-baseline-proposal`:
      - run CLI: `sce race list`, `sce vdot estimate-current`, `sce activity list` (as needed)
      - compute proposed VDOT and paces via `sce vdot paces`
-     - write `/tmp/vdot_review_YYYY_MM_DD.md` with evidence + athlete prompt
+     - present review directly in chat with evidence + athlete prompt
    - `macro-plan-create`:
      - require `baseline_vdot` input (fail-fast if missing)
      - run CLI: `sce dates next-monday`, `sce status`, `sce guardrails safe-volume`
@@ -419,7 +419,7 @@ All items below are implemented:
    - `weekly-plan-generate`:
      - find next unpopulated week via CLI (`sce plan next-unpopulated` or `sce plan status`)
      - run guardrails (`sce guardrails analyze-progression`)
-     - generate weekly JSON (no writes) and write `/tmp/weekly_plan_review_YYYY_MM_DD.md`
+     - generate weekly JSON (no writes) and present review directly in chat
    - `weekly-plan-apply`:
      - verify approved file path matches approvals state
      - validate dates and schema (`sce plan validate --file`)
@@ -445,5 +445,5 @@ All items below are implemented:
 ## Validation Plan
 - Happy-path dry run: VDOT proposal → approval → macro create → approval → weekly generate/apply for Week 1.
 - Negative tests: missing baseline_vdot must abort macro-create; weekly generate must flag >10% macro deviation; apply must reject invalid dates/schema.
-- Regression: ensure both macro and weekly review docs are always produced and paths reported to the main agent; confirm no workouts are written during macro creation.
+- Regression: ensure macro review docs are produced and paths reported to the main agent; confirm no workouts are written during macro creation; ensure weekly reviews are presented in chat.
 - Subagent routing test: long-context conversation should still run cleanly using subagents with no athlete questions emitted from subagent output.

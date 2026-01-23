@@ -9,7 +9,7 @@ allowed-tools: Read
 
 This skill is deprecated in favor of the split, non-interactive executor skills:
 
-- `vdot-baseline-proposal` (produce baseline VDOT + review doc)
+- `vdot-baseline-proposal` (produce baseline VDOT + present review in chat)
 - `macro-plan-create` (create macro plan + review doc)
 
 All athlete dialogue and approvals must occur in the main agent.

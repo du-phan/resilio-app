@@ -1,6 +1,6 @@
 ---
 name: weekly-plan-generate
-description: Generates a single-week intent-based plan JSON and review doc without applying it. Use for Week 1 and all subsequent weeks.
+description: Generates a single-week intent-based plan JSON and presents the review directly in chat without applying it. Use for Week 1 and all subsequent weeks.
 disable-model-invocation: true
 context: fork
 agent: weekly-planner
@@ -73,7 +73,7 @@ sce plan generate-week \
 sce plan validate --file /tmp/weekly_plan_w<week>.json
 ```
 
-6) Write `/tmp/weekly_plan_review_YYYY_MM_DD.md` with:
+6) Present directly in chat:
 - Summary + rationale
 - Volume change vs previous week
 - Workouts by day
@@ -95,5 +95,5 @@ sce plan validate --file /tmp/weekly_plan_w<week>.json
 ## Output
 Return:
 - `weekly_json_path`
-- `review_path`
 - `week_number`
+- `athlete_prompt` (single yes/no + adjustment question)

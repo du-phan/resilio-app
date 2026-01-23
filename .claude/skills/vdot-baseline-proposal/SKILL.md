@@ -1,16 +1,16 @@
 ---
 name: vdot-baseline-proposal
-description: Proposes a baseline VDOT and writes a review doc with evidence and a single approval prompt. Use when a macro plan needs an approved baseline VDOT.
+description: Proposes a baseline VDOT and presents evidence and a single approval prompt directly in chat. Use when a macro plan needs an approved baseline VDOT.
 disable-model-invocation: true
 context: fork
 agent: vdot-analyst
-allowed-tools: Bash, Read, Write
+allowed-tools: Bash, Read
 argument-hint: "[notes]"
 ---
 
 # VDOT Baseline Proposal (Executor)
 
-Non-interactive. Use CLI only. Write a review doc for the main agent to present.
+Non-interactive. Use CLI only. Present the review directly in chat for the main agent to use.
 
 ## Preconditions (block if missing)
 - Goal exists (race type/date) and profile exists
@@ -39,7 +39,7 @@ sce activity list --since 30d --sport run
 sce vdot paces --vdot <VDOT>
 ```
 
-4) Write `/tmp/vdot_review_YYYY_MM_DD.md` with:
+4) Present directly in chat:
 - Proposed VDOT + confidence + source
 - Recent evidence (race or key workouts)
 - Pace table (easy/tempo/interval/long)
@@ -54,5 +54,4 @@ sce vdot paces --vdot <VDOT>
 ## Output
 Return:
 - `proposed_vdot`
-- `review_path`
 - `athlete_prompt` (single yes/no + adjustment question)

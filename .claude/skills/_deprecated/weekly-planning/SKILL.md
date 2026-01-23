@@ -9,7 +9,7 @@ allowed-tools: Read
 
 This skill is deprecated. Use the executor skills instead:
 
-- `weekly-plan-generate` to create the weekly JSON + review doc
+- `weekly-plan-generate` to create the weekly JSON + present review in chat
 - `weekly-plan-apply` to validate and persist an approved weekly plan
 
 This keeps all athlete dialogue and approvals in the main agent and enforces the generate → approve → apply loop.
