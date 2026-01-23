@@ -185,10 +185,9 @@ def goal_set_command(
             base_msg += f" - {verdict}"
 
         # Create success envelope with combined data
-        envelope = {
-            "status": "success",
-            "message": base_msg,
-            "data": {
+        envelope = create_success_envelope(
+            message=base_msg,
+            data={
                 "goal": {
                     "race_type": race_type,
                     "target_date": target_date,
@@ -196,7 +195,7 @@ def goal_set_command(
                 },
                 "validation": validation_data,
             },
-        }
+        )
     else:
         # Goal creation failed
         envelope = api_result_to_envelope(
@@ -266,10 +265,9 @@ def goal_validate_command(
 
     # If no target_time, can't validate pace goal
     if not target_time:
-        envelope = {
-            "status": "success",
-            "message": f"Goal: {race_type} on {target_date_str} (no target time set - cannot validate pace goal)",
-            "data": {
+        envelope = create_success_envelope(
+            message=f"Goal: {race_type} on {target_date_str} (no target time set - cannot validate pace goal)",
+            data={
                 "goal": {
                     "race_type": race_type,
                     "target_date": target_date_str,
@@ -277,7 +275,7 @@ def goal_validate_command(
                 },
                 "validation": None,
             },
-        }
+        )
         output_json(envelope)
         raise typer.Exit(code=0)
 
