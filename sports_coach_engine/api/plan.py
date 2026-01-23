@@ -941,6 +941,7 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     # 2. Process weeks_data - generate workouts from intent-based patterns
     processed_weeks_data = []
+    week_hint_map = {w.week_number: w.workout_structure_hints for w in plan.weeks}
     for week_data in weeks_data:
         # Check if using intent-based format (workout_pattern required)
         if "workout_pattern" not in week_data:
@@ -971,6 +972,14 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
             # Add generated workouts to week data
             week_data_copy = week_data.copy()
             week_data_copy["workouts"] = workouts
+            if "workout_structure_hints" not in week_data_copy:
+                hints = week_hint_map.get(week_data_copy["week_number"])
+                if hints is None:
+                    return PlanError(
+                        error_type="validation",
+                        message=f"Week {week_data_copy.get('week_number', '?')}: Missing workout_structure_hints and no macro hints found"
+                    )
+                week_data_copy["workout_structure_hints"] = hints.model_dump()
             processed_weeks_data.append(week_data_copy)
         except KeyError as e:
             return PlanError(
@@ -1517,20 +1526,22 @@ def create_macro_plan(
     peak_volume_km: float,
     baseline_vdot: Optional[float] = None,
     weekly_volumes_km: Optional[list[float]] = None,
+    weekly_structure_hints: Optional[list[dict]] = None,
 ) -> Union["MasterPlan", PlanError]:
     """
     Create training plan skeleton with stub weeks.
 
-    Stub weeks contain ONLY structural data:
+    Stub weeks contain structural data:
     - Week number, phase, start/end dates
-    - Target volume (linear progression from starting to peak)
+    - Target volume (AI-supplied progression)
+    - Macro workout_structure_hints (AI-supplied)
     - Recovery week flag (every 4th week in base/build)
     - Empty workouts list (filled progressively via populate)
 
     IMPORTANT: This function does NOT generate workout structure hints.
-    The AI Coach (Claude Code) generates workout structure for each week
-    progressively using guardrails, VDOT paces, and training methodology.
-    This preserves the core philosophy: package provides tools, AI provides intelligence.
+    The AI Coach must supply weekly_structure_hints (macro-level guidance)
+    via CLI input. Detailed weekly structure is created progressively by the
+    AI Coach via weekly-plan generation.
 
     Args:
         goal_type: Race distance ("5k", "10k", "half_marathon", "marathon")
@@ -1543,6 +1554,7 @@ def create_macro_plan(
         peak_volume_km: Peak weekly volume
         baseline_vdot: Approved baseline VDOT (optional but recommended)
         weekly_volumes_km: Explicit weekly volume targets (AI coach computed)
+        weekly_structure_hints: Macro-level workout structure hints (AI coach computed)
 
     Returns:
         MasterPlan: Plan skeleton with stub weeks (0 weeks populated)
@@ -1557,7 +1569,13 @@ def create_macro_plan(
         ...     start_date=date(2026, 1, 20),
         ...     current_ctl=44.0,
         ...     starting_volume_km=25.0,
-        ...     peak_volume_km=55.0
+        ...     peak_volume_km=55.0,
+        ...     weekly_volumes_km=[25.0] * 16,
+        ...     weekly_structure_hints=[{
+        ...         "quality": {"max_sessions": 1, "types": ["strides_only"]},
+        ...         "long_run": {"emphasis": "steady", "pct_range": [24, 30]},
+        ...         "intensity_balance": {"low_intensity_pct": 0.90}
+        ...     }] * 16,
         ... )
         >>> len(plan.weeks)
         16  # All stub weeks with volume targets
@@ -1568,7 +1586,7 @@ def create_macro_plan(
         # Import here to avoid circular dependency
         from sports_coach_engine.core.repository import RepositoryIO
         from sports_coach_engine.core.plan import persist_plan
-        from sports_coach_engine.schemas.plan import GoalType, MasterPlan, WeekPlan
+        from sports_coach_engine.schemas.plan import GoalType, MasterPlan, WeekPlan, WorkoutStructureHints
         from datetime import timedelta
         import uuid
 
@@ -1618,6 +1636,28 @@ def create_macro_plan(
                     message=f"weekly_volumes_km[{idx}] must be a positive number"
                 )
 
+        # Strict CLI-only: AI coach must supply workout structure hints
+        if not weekly_structure_hints:
+            return PlanError(
+                error_type="validation",
+                message="weekly_structure_hints is required (AI coach must supply workout structure hints)"
+            )
+        if len(weekly_structure_hints) != total_weeks:
+            return PlanError(
+                error_type="validation",
+                message=f"weekly_structure_hints length {len(weekly_structure_hints)} != total_weeks {total_weeks}"
+            )
+
+        validated_hints: list[WorkoutStructureHints] = []
+        for idx, hint in enumerate(weekly_structure_hints, start=1):
+            try:
+                validated_hints.append(WorkoutStructureHints.model_validate(hint))
+            except Exception as e:
+                return PlanError(
+                    error_type="validation",
+                    message=f"weekly_structure_hints[{idx}] invalid: {str(e)}"
+                )
+
         # Create week-to-phase mapping
         week_to_phase = {}
         for phase_dict in phases:
@@ -1636,6 +1676,7 @@ def create_macro_plan(
 
             # Weekly target volume from AI-provided list
             target_volume = weekly_volumes_km[week_num - 1]
+            structure_hints = validated_hints[week_num - 1]
 
             # Determine phase
             phase = week_to_phase.get(week_num, "base")
@@ -1643,8 +1684,7 @@ def create_macro_plan(
             # Recovery week flag for metadata only (AI Coach uses this context)
             is_recovery = (week_num % 4 == 0) and phase in ["base", "build"]
 
-            # Create stub week with ONLY structural data
-            # AI Coach will generate workout structure progressively via weekly-plan-generate skill
+            # Create stub week with structural data + macro-level workout structure hints
             stub_week = WeekPlan(
                 week_number=week_num,
                 phase=phase,
@@ -1652,6 +1692,7 @@ def create_macro_plan(
                 end_date=week_end,
                 target_volume_km=target_volume,
                 target_systemic_load_au=0.0,  # Calculated when workouts added
+                workout_structure_hints=structure_hints,
                 workouts=[],  # Empty - filled via populate
                 is_recovery_week=is_recovery,
                 notes=f"{phase.capitalize()} phase"  # Simple phase label

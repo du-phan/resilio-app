@@ -16,9 +16,19 @@ from sports_coach_engine.schemas.plan import (
     WorkoutType,
     IntensityZone,
     WorkoutPrescription,
+    WorkoutStructureHints,
+    QualitySessionHints,
+    LongRunHints,
+    IntensityBalanceHints,
     WeekPlan,
     MasterPlan,
     PlanGenerationResult,
+)
+
+DEFAULT_WORKOUT_STRUCTURE_HINTS = WorkoutStructureHints(
+    quality=QualitySessionHints(max_sessions=0, types=[]),
+    long_run=LongRunHints(emphasis="steady", pct_range=[24, 30]),
+    intensity_balance=IntensityBalanceHints(low_intensity_pct=0.85),
 )
 
 
@@ -38,6 +48,25 @@ class TestGoalType:
         assert GoalType.HALF_MARATHON.value == "half_marathon"
         assert GoalType.MARATHON.value == "marathon"
 
+
+class TestWorkoutStructureHints:
+    """Test workout structure hints validation."""
+
+    def test_valid_hints(self):
+        hints = WorkoutStructureHints(
+            quality=QualitySessionHints(max_sessions=1, types=["tempo"]),
+            long_run=LongRunHints(emphasis="steady", pct_range=[24, 30]),
+            intensity_balance=IntensityBalanceHints(low_intensity_pct=0.85),
+        )
+        assert hints.quality.max_sessions == 1
+
+    def test_invalid_quality_empty_with_max(self):
+        with pytest.raises(ValidationError):
+            WorkoutStructureHints(
+                quality=QualitySessionHints(max_sessions=1, types=[]),
+                long_run=LongRunHints(emphasis="steady", pct_range=[24, 30]),
+                intensity_balance=IntensityBalanceHints(low_intensity_pct=0.85),
+            )
     def test_goal_type_from_string(self):
         """Goal types should be creatable from string values."""
         assert GoalType("5k") == GoalType.FIVE_K
@@ -246,6 +275,7 @@ class TestWeekPlan:
             end_date=date(2026, 1, 26),
             target_volume_km=30.0,
             target_systemic_load_au=800.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[workout],
         )
 
@@ -275,6 +305,7 @@ class TestWeekPlan:
             end_date=date(2026, 2, 16),
             target_volume_km=20.0,  # Reduced for recovery
             target_systemic_load_au=500.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[workout],
             is_recovery_week=True,
         )
@@ -307,6 +338,7 @@ class TestMasterPlan:
             end_date=date(2026, 1, 26),
             target_volume_km=30.0,
             target_systemic_load_au=800.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[workout],
         )
 
@@ -353,6 +385,7 @@ class TestPlanGenerationResult:
             end_date=date(2026, 1, 26),
             target_volume_km=30.0,
             target_systemic_load_au=800.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[workout],
         )
 
@@ -402,6 +435,7 @@ class TestPlanGenerationResult:
             end_date=date(2026, 1, 26),
             target_volume_km=30.0,
             target_systemic_load_au=800.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[workout],
         )
 
@@ -1059,6 +1093,7 @@ class TestGuardrailValidation:
             end_date=date(2026, 1, 19),
             target_volume_km=50.0,
             target_systemic_load_au=300.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[tempo, intervals, fartlek]
         )
 
@@ -1091,6 +1126,7 @@ class TestGuardrailValidation:
             end_date=date(2026, 1, 19),
             target_volume_km=50.0,
             target_systemic_load_au=300.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[tempo_tue, intervals_wed]
         )
 
@@ -1120,6 +1156,7 @@ class TestGuardrailValidation:
             end_date=date(2026, 1, 19),
             target_volume_km=40.0,
             target_systemic_load_au=280.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=workouts_week1
         )
 
@@ -1172,6 +1209,7 @@ class TestPlanPersistence:
             end_date=date(2026, 1, 26),
             target_volume_km=50.0,
             target_systemic_load_au=500.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=workouts,
         )
 
@@ -1217,6 +1255,7 @@ class TestPlanPersistence:
             end_date=date(2026, 1, 26),
             target_volume_km=50.0,
             target_systemic_load_au=500.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=workouts,
         )
         plan = MasterPlan(
@@ -1266,6 +1305,7 @@ class TestPlanPersistence:
             end_date=date(2026, 1, 26),
             target_volume_km=50.0,
             target_systemic_load_au=500.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=workouts,
         )
         plan = MasterPlan(
@@ -1440,6 +1480,7 @@ class TestWeekValidation:
             end_date=date(2026, 1, 26),
             target_volume_km=25.0,  # Target 25km but only have 12km
             target_systemic_load_au=175.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=workouts,
         )
 
@@ -1505,6 +1546,7 @@ class TestWeekValidation:
             end_date=date(2026, 1, 26),
             target_volume_km=25.0,  # Total: 12+7+6 = 25km
             target_systemic_load_au=175.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=workouts,
         )
 
@@ -1583,6 +1625,7 @@ class TestMinimumWorkoutEnforcement:
             end_date=date(2026, 1, 26),
             target_volume_km=3.0,
             target_systemic_load_au=30.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[short_workout],
         )
 
@@ -1624,6 +1667,7 @@ class TestMinimumWorkoutEnforcement:
             end_date=date(2026, 1, 26),
             target_volume_km=5.0,
             target_systemic_load_au=50.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[workout],
         )
 
@@ -1661,6 +1705,7 @@ class TestMinimumWorkoutEnforcement:
             end_date=date(2026, 1, 26),
             target_volume_km=6.0,
             target_systemic_load_au=60.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
             workouts=[adequate_workout],
         )
 
@@ -1750,3 +1795,4 @@ class TestVolumeDistributionMinimums:
         assert abs(total_allocated - 20.0) < 0.5, f"Should still allocate all volume"
 
         # Easy runs will be below minimum (validation will catch this)
+        # Easy runs will be below minimum (validation will catch this)workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,

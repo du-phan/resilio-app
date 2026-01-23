@@ -537,8 +537,13 @@ sce plan show --format json | jq '.weeks[] | select(.week_number == 2)'
 #   "start_date": "2026-01-27",
 #   "end_date": "2026-02-02",
 #   "target_volume_km": 26.0,
+#   "workout_structure_hints": {
+#     "quality": {"max_sessions": 1, "types": ["strides_only"]},
+#     "long_run": {"emphasis": "steady", "pct_range": [24, 30]},
+#     "intensity_balance": {"low_intensity_pct": 0.90}
+#   },
 #   "is_recovery_week": false
-#   // NO workout_pattern - this is macro plan (structure only)
+#   // NO workout_pattern - this is macro plan (structure only + hints)
 # }
 
 # ========================================

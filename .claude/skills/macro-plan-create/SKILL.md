@@ -35,15 +35,29 @@ sce memory list --type INJURY_HISTORY
 sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECENT>
 ```
 
-3) Create a weekly volumes JSON (AI coach computed) at `/tmp/weekly_volumes.json` **using this exact format**:
+3) Create a weekly macro JSON (AI coach computed) at `/tmp/weekly_volumes.json` **using this exact format**:
 ```json
 {
-  "volumes_km": [32.0, 35.0, 38.0, 28.0, 40.0, 43.0, 46.0, 32.0, ...]
+  "volumes_km": [32.0, 35.0, 38.0, 28.0, 40.0, 43.0, 46.0, 32.0, ...],
+  "workout_structure_hints": [
+    {
+      "quality": {"max_sessions": 1, "types": ["strides_only"]},
+      "long_run": {"emphasis": "steady", "pct_range": [24, 30]},
+      "intensity_balance": {"low_intensity_pct": 0.90}
+    },
+    {
+      "quality": {"max_sessions": 2, "types": ["tempo", "intervals"]},
+      "long_run": {"emphasis": "progression", "pct_range": [24, 30]},
+      "intensity_balance": {"low_intensity_pct": 0.85}
+    }
+  ]
 }
 ```
 Rules:
 - `volumes_km` length MUST equal `total_weeks`
+- `workout_structure_hints` length MUST equal `total_weeks`
 - All values must be positive numbers
+- Hints are AI-coach defined (macro-level guidance only; no detailed workouts)
 
 4) Create macro plan (store baseline VDOT):
 ```bash

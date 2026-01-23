@@ -7,8 +7,8 @@ phases. These schemas support evidence-based plan generation with training
 guardrails (80/20 rule, long run caps, hard/easy separation).
 """
 
-from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
+from typing import Optional, List, Literal
 from datetime import date
 from enum import Enum
 
@@ -145,6 +145,101 @@ class WorkoutPrescription(BaseModel):
     )
 
 
+# ============================================================
+# MACRO STRUCTURE HINTS (Progressive Disclosure)
+# ============================================================
+
+
+QualityType = Literal[
+    "tempo",
+    "intervals",
+    "hills",
+    "race_pace",
+    "fartlek",
+    "strides_only",
+]
+
+
+LongRunEmphasis = Literal[
+    "easy",
+    "steady",
+    "progression",
+    "race_specific",
+]
+
+
+class QualitySessionHints(BaseModel):
+    """Macro-level guidance for non-long-run quality sessions."""
+
+    max_sessions: int = Field(
+        ...,
+        ge=0,
+        le=3,
+        description="Upper bound on quality sessions (excluding long run)"
+    )
+    types: List[QualityType] = Field(
+        ...,
+        description="Quality session focus types (e.g., ['tempo', 'intervals'])"
+    )
+
+    @model_validator(mode="after")
+    def validate_quality_types(self) -> "QualitySessionHints":
+        if self.max_sessions == 0:
+            if self.types:
+                raise ValueError("quality.types must be empty when quality.max_sessions is 0")
+        elif not self.types:
+            raise ValueError("quality.types must be non-empty when quality.max_sessions > 0")
+        return self
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class LongRunHints(BaseModel):
+    """Macro-level guidance for long run emphasis and sizing."""
+
+    emphasis: LongRunEmphasis = Field(..., description="Long run emphasis for the week")
+    pct_range: List[float] = Field(
+        ...,
+        description="Preferred long-run percentage range of weekly volume (e.g., [24, 30])"
+    )
+
+    @field_validator("pct_range")
+    @classmethod
+    def validate_pct_range(cls, value: List[float]) -> List[float]:
+        if len(value) != 2:
+            raise ValueError("long_run.pct_range must have exactly two values")
+        if value[0] >= value[1]:
+            raise ValueError("long_run.pct_range must be ascending (min < max)")
+        if value[0] < 15 or value[1] > 35:
+            raise ValueError("long_run.pct_range must be within 15-35%")
+        return value
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class IntensityBalanceHints(BaseModel):
+    """Macro-level intensity distribution guidance (80/20-style)."""
+
+    low_intensity_pct: float = Field(
+        ...,
+        ge=0.75,
+        le=0.95,
+        description="Target proportion of low-intensity volume (0.75-0.95)"
+    )
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
+class WorkoutStructureHints(BaseModel):
+    """Compact macro-level hints to guide weekly plan generation."""
+
+    quality: QualitySessionHints = Field(..., description="Quality session guidance")
+    long_run: LongRunHints = Field(..., description="Long run guidance")
+    intensity_balance: IntensityBalanceHints = Field(..., description="Intensity distribution guidance")
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
 class WeekPlan(BaseModel):
     """
     Single week's training plan with volume targets and workouts.
@@ -162,6 +257,10 @@ class WeekPlan(BaseModel):
     # Weekly targets
     target_volume_km: float = Field(..., ge=0, description="Target run volume for week")
     target_systemic_load_au: float = Field(..., ge=0, description="Target systemic load (from M8)")
+    workout_structure_hints: WorkoutStructureHints = Field(
+        ...,
+        description="Macro-level workout structure hints to guide weekly planning"
+    )
 
     # Workouts
     workouts: list[WorkoutPrescription] = Field(..., description="All workouts for this week")

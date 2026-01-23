@@ -254,10 +254,22 @@ sce plan create-macro \
 - `--starting-volume-km` (required) - Starting weekly volume in km
 - `--peak-volume-km` (required) - Peak weekly volume in km
 - `--baseline-vdot` (required) - Approved baseline VDOT for the macro plan
-- `--weekly-volumes-json` (required) - JSON file with weekly volume targets in this exact format:
+- `--weekly-volumes-json` (required) - JSON file with weekly volume targets and workout structure hints in this exact format:
 ```json
 {
-  "volumes_km": [32.0, 35.0, 38.0, 28.0]
+  "volumes_km": [32.0, 35.0, 38.0, 28.0],
+  "workout_structure_hints": [
+    {
+      "quality": {"max_sessions": 1, "types": ["strides_only"]},
+      "long_run": {"emphasis": "steady", "pct_range": [24, 30]},
+      "intensity_balance": {"low_intensity_pct": 0.90}
+    },
+    {
+      "quality": {"max_sessions": 2, "types": ["tempo", "intervals"]},
+      "long_run": {"emphasis": "progression", "pct_range": [24, 30]},
+      "intensity_balance": {"low_intensity_pct": 0.85}
+    }
+  ]
 }
 ```
 

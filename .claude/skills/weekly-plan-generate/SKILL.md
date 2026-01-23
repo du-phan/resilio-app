@@ -31,6 +31,7 @@ sce plan week --week <N>
 If the parent agent requests a current-week update, use `sce plan week` to set
 `week_number`, `start_date`, `end_date`, and `phase`. Otherwise default to
 the next unpopulated week.
+Use `workout_structure_hints` from the macro plan week as the primary structure guide.
 
 2) Load current metrics and recent response:
 ```bash

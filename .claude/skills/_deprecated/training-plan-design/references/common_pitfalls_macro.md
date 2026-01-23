@@ -41,7 +41,7 @@
 **Why wrong**: Defeats adaptability (can't adjust based on training response), creates rigid plan, increases error surface area.
 
 **Correct pattern**:
-- **Macro plan** (via `sce plan create-macro`): All 16 weeks with `target_volume_km` ONLY, NO workout_pattern
+- **Macro plan** (via `sce plan create-macro`): All 16 weeks with `target_volume_km` + `workout_structure_hints`, NO workout_pattern
 - **Week 1** (generated via weekly-planning skill): ONLY week 1 with complete workout_pattern
 - **Weeks 2-16**: Remain as volume targets until generated progressively (via weekly-planning skill)
 

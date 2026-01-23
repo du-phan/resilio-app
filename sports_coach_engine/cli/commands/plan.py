@@ -1234,10 +1234,10 @@ def create_macro_command(
         "--baseline-vdot",
         help="Approved baseline VDOT for macro plan"
     ),
-    weekly_volumes_json: Optional[str] = typer.Option(
-        None,
+    weekly_volumes_json: str = typer.Option(
+        ...,
         "--weekly-volumes-json",
-        help="Path to JSON file with weekly volume targets (array or {volumes_km: []})"
+        help="Path to JSON file with weekly volume targets and workout structure hints"
     ),
 ) -> None:
     """
@@ -1245,7 +1245,7 @@ def create_macro_command(
 
     Creates the structural roadmap for the full training period without detailed
     workout prescriptions. Shows phases, volume progression, CTL trajectory,
-    recovery weeks, and key milestones.
+    recovery weeks, and macro-level workout structure hints.
 
     This provides the "big picture" for athlete confidence. Monthly plans provide
     execution detail generated every 4 weeks.
@@ -1322,66 +1322,95 @@ def create_macro_command(
         raise typer.Exit(code=5)
 
     # Call API
-    weekly_volumes_km = None
-    if weekly_volumes_json:
-        json_path = Path(weekly_volumes_json)
-        if not json_path.exists():
+    json_path = Path(weekly_volumes_json)
+    if not json_path.exists():
+        envelope = create_error_envelope(
+            error_type="not_found",
+            message=f"Weekly volumes JSON file not found: {weekly_volumes_json}",
+            data={"path": str(json_path.absolute())}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=2)
+    try:
+        with open(json_path, "r") as f:
+            payload = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Invalid JSON in weekly volumes file: {str(e)}",
+            data={"file": weekly_volumes_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if not isinstance(payload, dict) or "volumes_km" not in payload or "workout_structure_hints" not in payload:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Weekly volumes JSON must be an object with 'volumes_km' and 'workout_structure_hints'",
+            data={"file": weekly_volumes_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    weekly_volumes_km = payload["volumes_km"]
+    if not isinstance(weekly_volumes_km, list) or len(weekly_volumes_km) == 0:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="'volumes_km' must be a non-empty array",
+            data={"file": weekly_volumes_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if len(weekly_volumes_km) != total_weeks:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"'volumes_km' length {len(weekly_volumes_km)} != total_weeks {total_weeks}",
+            data={"file": weekly_volumes_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    for idx, value in enumerate(weekly_volumes_km, start=1):
+        if not isinstance(value, (int, float)) or value <= 0:
             envelope = create_error_envelope(
-                error_type="not_found",
-                message=f"Weekly volumes JSON file not found: {weekly_volumes_json}",
-                data={"path": str(json_path.absolute())}
+                error_type="validation",
+                message=f"volumes_km[{idx}] must be a positive number",
+                data={"file": weekly_volumes_json}
             )
             output_json(envelope)
-            raise typer.Exit(code=2)
+            raise typer.Exit(code=5)
+
+    weekly_structure_hints = payload["workout_structure_hints"]
+    if not isinstance(weekly_structure_hints, list) or len(weekly_structure_hints) == 0:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="'workout_structure_hints' must be a non-empty array",
+            data={"file": weekly_volumes_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+    if len(weekly_structure_hints) != total_weeks:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"'workout_structure_hints' length {len(weekly_structure_hints)} != total_weeks {total_weeks}",
+            data={"file": weekly_volumes_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    from sports_coach_engine.schemas.plan import WorkoutStructureHints
+    for idx, hint in enumerate(weekly_structure_hints, start=1):
         try:
-            with open(json_path, "r") as f:
-                payload = json.load(f)
-        except json.JSONDecodeError as e:
+            WorkoutStructureHints.model_validate(hint)
+        except Exception as e:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"Invalid JSON in weekly volumes file: {str(e)}",
+                message=f"workout_structure_hints[{idx}] invalid: {str(e)}",
                 data={"file": weekly_volumes_json}
             )
             output_json(envelope)
             raise typer.Exit(code=5)
-
-        if not isinstance(payload, dict) or "volumes_km" not in payload:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message="Weekly volumes JSON must be an object with 'volumes_km' array",
-                data={"file": weekly_volumes_json}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-        weekly_volumes_km = payload["volumes_km"]
-        if not isinstance(weekly_volumes_km, list) or len(weekly_volumes_km) == 0:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message="'volumes_km' must be a non-empty array",
-                data={"file": weekly_volumes_json}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-        if len(weekly_volumes_km) != total_weeks:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"'volumes_km' length {len(weekly_volumes_km)} != total_weeks {total_weeks}",
-                data={"file": weekly_volumes_json}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-        for idx, value in enumerate(weekly_volumes_km, start=1):
-            if not isinstance(value, (int, float)) or value <= 0:
-                envelope = create_error_envelope(
-                    error_type="validation",
-                    message=f"volumes_km[{idx}] must be a positive number",
-                    data={"file": weekly_volumes_json}
-                )
-                output_json(envelope)
-                raise typer.Exit(code=5)
 
     result = create_macro_plan(
         goal_type=goal_type,
@@ -1394,6 +1423,7 @@ def create_macro_command(
         peak_volume_km=peak_volume_km,
         baseline_vdot=baseline_vdot,
         weekly_volumes_km=weekly_volumes_km,
+        weekly_structure_hints=weekly_structure_hints,
     )
 
     # Construct success message only if result is successful
