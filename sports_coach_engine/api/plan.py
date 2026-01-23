@@ -808,7 +808,14 @@ def validate_plan_json_structure(
         week_num = week.get("week_number", "?")
 
         # Required week fields
-        required = ["week_number", "phase", "start_date", "end_date", "target_volume_km"]
+        required = [
+            "week_number",
+            "phase",
+            "start_date",
+            "end_date",
+            "target_volume_km",
+            "target_systemic_load_au",
+        ]
         for field in required:
             if field not in week:
                 errors.append(f"Week {week_num}: Missing required field '{field}'")
@@ -2310,7 +2317,14 @@ def validate_week_plan(
     warnings = []
 
     # Check required fields
-    required_fields = ["week_number", "phase", "start_date", "end_date", "target_volume_km"]
+    required_fields = [
+        "week_number",
+        "phase",
+        "start_date",
+        "end_date",
+        "target_volume_km",
+        "target_systemic_load_au",
+    ]
     for field in required_fields:
         if field not in week:
             errors.append(f"Missing required field: '{field}'")

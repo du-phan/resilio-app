@@ -51,7 +51,7 @@ sce guardrails analyze-progression \
 ```
 
 4) Produce intent-based weekly JSON:
-- `week_number`, `phase`, `start_date`, `end_date`, `target_volume_km`
+- `week_number`, `phase`, `start_date`, `end_date`, `target_volume_km`, `target_systemic_load_au`
 - `workout_pattern` with `run_days` (0=Mon..6=Sun), `long_run_day`, `long_run_pct`, paces
 
 Write to `/tmp/weekly_plan_w<week>.json`.

@@ -48,6 +48,7 @@ poetry run sce plan show
     "start_date": "2026-01-20",
     "end_date": "2026-01-26",
     "target_volume_km": 23.0,
+    "target_systemic_load_au": 0.0,
     "is_recovery_week": false,
     "notes": "Base Phase Week 1 - Establishing routine",
     "workout_pattern": {
@@ -72,6 +73,7 @@ poetry run sce plan show
 | `start_date` | string | Week start (MUST be Monday) | `"2026-01-20"` |
 | `end_date` | string | Week end (MUST be Sunday) | `"2026-01-26"` |
 | `target_volume_km` | float | Target weekly volume | `23.0` |
+| `target_systemic_load_au` | float | Target systemic load (from M8; use 0.0 if unknown) | `0.0` |
 | `is_recovery_week` | bool | Is this a recovery week? | `false` |
 | `notes` | string | Week-level notes | `"Base Phase Week 1"` |
 | `workout_pattern` | object | Workout structure (see below) | See below |

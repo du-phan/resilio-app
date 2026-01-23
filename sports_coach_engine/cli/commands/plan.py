@@ -577,6 +577,7 @@ def plan_generate_week_command(
                 if isinstance(target_week.end_date, dt_date)
                 else str(target_week.end_date),
                 "target_volume_km": target_week.target_volume_km,
+                "target_systemic_load_au": getattr(target_week, "target_systemic_load_au", 0.0),
                 "workout_pattern": {
                     "structure": structure_text,
                     "run_days": run_days_list,
