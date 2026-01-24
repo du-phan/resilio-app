@@ -480,13 +480,75 @@ Options: A) Tell me, B) Skip
 
 ## Multi-Sport Awareness
 
-- **Running priority**: PRIMARY (race goal), SECONDARY (fitness support), or EQUAL (balance both)
-- **Conflict policy**: When running and other sports conflict:
-  - `primary_sport_wins`: Protect primary sport, adjust running
-  - `running_goal_wins`: Keep key runs unless injury risk
-  - `ask_each_time`: Present trade-offs, let athlete decide
+**CRITICAL: `other_sports` must be populated based on ACTUAL ACTIVITY DATA, not running_priority.**
 
-**Two-channel load model**:
+### Core Principle
+
+**`other_sports` = Complete athlete activity profile**
+- Populated from Strava data (any sport >15% of activities)
+- Provides full context for load calculations and scheduling
+- Independent of running_priority
+
+**`running_priority` = Conflict resolution strategy**
+- PRIMARY: Running wins conflicts (race focus)
+- EQUAL: Negotiate conflicts (both sports matter)
+- SECONDARY: Other sport wins conflicts (running supports primary sport)
+
+### Data-Driven Validation
+
+**Check sport distribution FIRST**:
+```bash
+sce profile analyze
+# Returns sport_percentages: {"climb": 40.0, "run": 30.7, "yoga": 18.7, ...}
+```
+
+**Collect all significant sports** (>15%):
+```bash
+sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
+sce profile add-sport --sport yoga --days sun --duration 60 --intensity easy
+```
+
+**Verify alignment**:
+```bash
+sce profile validate
+# Warns if Strava shows sports not in other_sports
+```
+
+### Examples
+
+**Primary runner who climbs** (marathon training):
+```yaml
+running_priority: primary        # Marathon is the goal
+other_sports:                     # BUT still track climbing!
+  - sport: climbing
+    days: [tuesday, thursday]
+conflict_policy: running_goal_wins  # Marathon protected in conflicts
+```
+→ Climbing tracked for load calc, but marathon takes priority
+
+**Equal priority multi-sport** (competes in both):
+```yaml
+running_priority: equal
+other_sports:
+  - sport: climbing
+conflict_policy: ask_each_time
+```
+→ Both sports equally important, negotiate conflicts
+
+### Consequences of Missing other_sports
+
+**Scenario**: Athlete climbs 3x/week (12 hours, high intensity) but `other_sports = []`
+
+- ❌ CTL calculation misses ~40% of training load
+- ❌ ACWR shows 0.9 (safe) when actual is 1.4 (danger zone)
+- ❌ Weekly plans schedule hard runs on climbing days → injury
+- ❌ Readiness scores show "fresh" when athlete is fatigued
+- ❌ Total training days: 7 (4 runs + 3 climbs) but coach thinks it's only 4
+
+**Impact**: Systematic underestimation of load → overtraining → injury
+
+### Two-Channel Load Model
+
 - **Systemic load** (cardio + whole-body fatigue) → feeds CTL/ATL/TSB/ACWR
 - **Lower-body load** (leg strain + impact) → gates quality/long runs
 
@@ -499,6 +561,13 @@ Options: A) Tell me, B) Skip
 - Swimming: 0.70, 0.10 (minimal leg strain)
 
 Full table: `docs/coaching/methodology.md`
+
+### Conflict Policy
+
+When running and other sports conflict:
+- `primary_sport_wins`: Protect primary sport, adjust running
+- `running_goal_wins`: Keep key runs unless injury risk
+- `ask_each_time`: Present trade-offs, let athlete decide
 
 ---
 

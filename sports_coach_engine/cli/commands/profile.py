@@ -11,6 +11,7 @@ import subprocess
 import typer
 
 from sports_coach_engine.api import create_profile, get_profile, update_profile
+from sports_coach_engine.api.profile import ProfileError
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json, OutputEnvelope
 from sports_coach_engine.schemas.profile import Weekday, DetailLevel, CoachingStyle, IntensityMetric
@@ -614,6 +615,48 @@ def profile_list_sports_command(ctx: typer.Context) -> None:
     # Exit with appropriate code
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
+
+
+@app.command(name="validate")
+def profile_validate_command(ctx: typer.Context) -> None:
+    """Validate profile completeness against actual Strava data.
+
+    Checks if other_sports is populated for all significant activities
+    (>15% of total) in your Strava data.
+    """
+    from sports_coach_engine.api.profile import validate_profile_completeness
+
+    result = validate_profile_completeness()
+
+    if isinstance(result, ProfileError):
+        envelope = create_error_envelope(
+            error_type=result.error_type,
+            message=result.message,
+            data={}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Check validation result
+    issues = result.get("issues", [])
+
+    if not issues:
+        envelope = OutputEnvelope(
+            ok=True,
+            message="✅ Profile validation passed - other_sports matches activity data",
+            data={"valid": True, "issues": []}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    # Has warnings
+    envelope = OutputEnvelope(
+        ok=True,
+        message=f"⚠️  Profile has {len(issues)} data alignment issue(s)",
+        data={"valid": False, "issues": issues}
+    )
+    output_json(envelope)
+    raise typer.Exit(code=0)  # Warning, not error
 
 
 @app.command(name="edit")

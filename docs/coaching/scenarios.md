@@ -830,6 +830,100 @@ not separate "analysis" and "planning" sessions.
 
 ---
 
+## Scenario 13: Detecting and Fixing Incomplete Multi-Sport Profile
+
+**Context**: Coach notices ACWR seems unrealistically low despite athlete reporting fatigue.
+
+**Why This Matters**:
+- **Accurate load tracking**: Missing sports = systematic underestimation of training load
+- **Injury prevention**: ACWR/CTL calculations require ALL activities, not just running
+- **Intelligent scheduling**: Can't avoid conflicts without knowing all commitments
+- **Complete athlete picture**: Need full context for personalized coaching
+
+**Problem**: Athlete has significant non-running activities (e.g., climbing 40%, yoga 15%) but `other_sports = []` in profile.
+
+**Impact**:
+- CTL calculation misses ~40% of actual training load
+- ACWR shows 0.9 (safe) when actual is 1.4 (danger zone)
+- Weekly plans schedule hard runs on climbing days → injury risk
+- Readiness scores show "fresh" when athlete is fatigued
+- Total training days: 7 (4 runs + 3 climbs) but coach thinks it's only 4
+
+### Workflow: Detect, Fix, Verify
+
+**Step 1: Check profile**:
+```bash
+sce profile get | jq '{running_priority, other_sports}'
+# Returns: {"running_priority": "primary", "other_sports": []}
+```
+
+**Step 2: Check actual activity data**:
+```bash
+sce profile analyze
+# Returns: sport_percentages: {"climb": 42.0, "run": 28.0, "yoga": 15.0, ...}
+```
+
+**Step 3: Identify mismatch**:
+```
+Coach: "I see a mismatch. Your Strava shows:
+- Climbing: 42% (39 sessions in last 120 days)
+- Running: 28% (26 sessions)
+- Yoga: 15% (14 sessions)
+
+But your profile only tracks running. This means I'm missing 57% of your training
+load in my fatigue calculations. That's why you feel tired but my metrics say you're fine."
+```
+
+**Step 4: Collect missing data**:
+```bash
+# Climbing (42% - significant)
+sce profile add-sport --sport climbing --days mon,wed,fri --duration 120 --intensity hard
+
+# Yoga (15% - just above threshold)
+sce profile add-sport --sport yoga --days sun --duration 60 --intensity easy
+```
+
+**Step 5: Verify fix**:
+```bash
+sce profile validate
+# Should return: {"valid": true, "issues": []}
+
+sce status
+# CTL/ACWR now reflect true load
+```
+
+**Step 6: Explain impact**:
+```
+Coach: "Now I see the full picture. Your true CTL is 56 (not 34), and ACWR is 1.38
+(caution zone). This explains the fatigue. Let's adjust this week's plan to account
+for your Monday climbing session - I'll move the tempo run to Wednesday instead."
+```
+
+### Key Teaching Points
+
+**Data-driven validation**:
+- Use `sce profile analyze` to see actual sport distribution
+- Sports >15% of activities should always be tracked
+- `running_priority` determines conflict resolution, NOT whether to track sports
+
+**When to check**:
+- During first-session onboarding (Step 4f validation checkpoint)
+- First weekly analysis if onboarding was incomplete
+- Anytime athlete reports unexplained fatigue despite "good" metrics
+- When ACWR seems unrealistically low for reported training load
+
+**Common scenarios**:
+1. **Primary runner who climbs**: Still need to track climbing for accurate CTL
+2. **Equal priority athlete**: Obvious - track everything
+3. **Athlete with flexible other sports**: Even if days vary, track average duration/intensity
+
+**Prevention**:
+- Make Step 4f-validation mandatory in first-session workflow
+- Run `sce profile validate` before generating first macro plan
+- Include validation reminder in weekly-analysis skill
+
+---
+
 ## Tips for Effective Scenario-Based Coaching
 
 1. **Always start with data**: Run `sce status` or `sce today` before giving advice

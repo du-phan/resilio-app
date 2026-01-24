@@ -992,4 +992,66 @@ def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]
             error_type="unknown",
             message=f"Failed to save profile: {write_result.message}",
         )
-        return profile
+    return profile
+
+
+def validate_profile_completeness() -> Union[Dict, ProfileError]:
+    """
+    Validate profile completeness by comparing to actual Strava activity data.
+
+    Checks if other_sports is populated for athletes with significant
+    non-running activity (>15% of total activities).
+
+    This is data-driven validation: we compare the profile to actual observed
+    behavior from Strava, not just internal profile field consistency.
+
+    Returns:
+        Dict with {"valid": bool, "issues": List[Dict]} where each issue includes:
+        - field: "other_sports"
+        - severity: "warning"
+        - sport: sport name
+        - percentage: actual percentage from Strava
+        - message: actionable remediation
+    """
+    # Load profile
+    profile_result = get_profile()
+    if isinstance(profile_result, ProfileError):
+        return profile_result
+    profile = profile_result
+
+    # Analyze Strava data
+    analysis_result = analyze_profile_from_activities()
+    if isinstance(analysis_result, ProfileError):
+        # Can't validate without data - return valid (not an error)
+        return {"valid": True, "issues": []}
+
+    issues = []
+
+    # Get sports currently tracked in profile
+    tracked_sports = {s.sport.lower() for s in (profile.other_sports or [])}
+
+    # Check each sport in Strava data
+    sport_percentages = analysis_result.sport_percentages
+
+    for sport, percentage in sport_percentages.items():
+        # Skip running sports (tracked separately)
+        if sport in ["run", "trail_run", "treadmill_run"]:
+            continue
+
+        # If sport is significant (>15%) but not tracked
+        if percentage > 15.0:
+            if sport.lower() not in tracked_sports:
+                issues.append({
+                    "field": "other_sports",
+                    "severity": "warning",
+                    "sport": sport,
+                    "percentage": percentage,
+                    "message": (
+                        f"Your Strava data shows {sport} as {percentage:.1f}% of activities "
+                        f"({analysis_result.sport_distribution.get(sport, 0)} sessions in last 120 days), "
+                        f"but it's not in other_sports. Add it for accurate load calculations: "
+                        f"sce profile add-sport --sport {sport} --days <days> --duration <mins> --intensity <level>"
+                    )
+                })
+
+    return {"valid": len(issues) == 0, "issues": issues}

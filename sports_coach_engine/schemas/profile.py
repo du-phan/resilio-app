@@ -2,10 +2,11 @@
 Profile schemas - Athlete profile data models.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Optional, List
 from datetime import date
 from enum import Enum
+import warnings
 
 from sports_coach_engine.schemas.adaptation import AdaptationThresholds
 from sports_coach_engine.schemas.vdot import RaceSource
@@ -247,3 +248,21 @@ class AthleteProfile(BaseModel):
         default_factory=AdaptationThresholds,
         description="Athlete-specific thresholds for adaptation triggers"
     )
+
+    @model_validator(mode="after")
+    def validate_multi_sport_awareness(self) -> "AthleteProfile":
+        """
+        Remind about other_sports completeness.
+
+        Note: This is a simple reminder. Full validation happens in API layer
+        with access to actual activity data via analyze_profile_from_activities().
+        """
+        if not self.other_sports or len(self.other_sports) == 0:
+            warnings.warn(
+                "Profile has empty other_sports. If you have any regular non-running "
+                "activities (climbing, cycling, yoga, etc.), add them for accurate load "
+                "calculations. Run 'sce profile analyze' to see your sport distribution, "
+                "then: sce profile add-sport --sport <name> --days <days> --duration <mins>",
+                UserWarning
+            )
+        return self

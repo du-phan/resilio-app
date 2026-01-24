@@ -280,42 +280,114 @@ sce memory add --type RACE_HISTORY \
 
 ---
 
-### Step 4f: Other Sports Collection (If Multi-Sport Athlete)
+### Step 4f: Other Sports Collection (Data-Driven, MANDATORY)
 
-**CRITICAL: Only for athletes with `running_priority = "equal"` or `"secondary"`**
+**CRITICAL: Check Strava data and collect ALL significant activities, regardless of running_priority.**
 
-If sport distribution from `sce profile analyze` shows significant other sports (>20% of total load):
+#### Why This Matters
 
-**Ask about regular sports** (natural conversation):
+- **Complete athlete picture**: Need full activity context for intelligent coaching
+- **Accurate load calculations**: CTL/ACWR require ALL training load, not just running
+- **Schedule awareness**: Can't avoid conflicts without knowing commitments
+- **Recovery planning**: Upper-body work (climbing) affects systemic fatigue even if legs are fresh
+
+**running_priority determines CONFLICT RESOLUTION, not whether to track sports.**
+
+#### Workflow: Analyze Data FIRST, Then Collect
+
+**Step 1: Check sport distribution**:
+```bash
+sce profile analyze
+# Examine sport_distribution and sport_percentages
 ```
-Coach: "I see climbing makes up 42% of your training. What days do you typically climb?"
-Athlete: "Tuesdays and Thursdays, usually 2-hour sessions"
+
+**Step 2: Present findings to athlete** (reference actual data):
+```
+Coach: "Looking at your last 120 days on Strava:
+- Climbing: 40% (30 sessions)
+- Running: 31% (23 sessions)
+- Yoga: 19% (14 sessions)
+- Cycling: 10% (8 sessions)
+
+I need to track your climbing/yoga schedule to:
+1. Calculate total training load (CTL/ACWR)
+2. Design run days that avoid overtraining
+3. Understand when you're truly rested vs fatigued"
 ```
 
-**For each sport, collect**:
-- Sport name (climbing, cycling, swimming, etc.)
-- Days per week (fixed schedule or flexible)
-- Typical duration (minutes)
-- Intensity level (easy, moderate, moderate_to_hard, hard)
+**Step 3: Collect EACH significant sport** (>15% of activities):
 
-**Add each sport**:
+For climbing (40%):
+```
+Coach: "What days do you typically climb?"
+Athlete: "Tuesdays and Thursdays, usually 2-hour sessions."
+Coach: "Intensity? Light technique work or full sending?"
+Athlete: "Moderate to hard - I push pretty hard both days."
+```
+
 ```bash
 sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
-sce profile add-sport --sport cycling --days flexible --duration 90 --intensity moderate
 ```
 
-**Verify**:
+For yoga (19%):
+```bash
+sce profile add-sport --sport yoga --days sun --duration 60 --intensity easy
+```
+
+**Step 4: Handle edge cases**:
+
+**If running_priority='primary' AND significant other sports exist**:
+```
+Coach: "You said running is your primary sport (marathon focus), but I see you also
+climb 40% of the time. I'll track your climbing to avoid scheduling conflicts, but
+when there's a conflict, the marathon training will take priority. Sound good?"
+```
+→ Still collect other_sports, just set conflict_policy appropriately
+
+**If running_priority='equal' but Strava shows >85% running**:
+```
+Coach: "Your Strava shows mostly running (91%). Do you have other sports not tracked
+on Strava, or should I change running_priority to 'primary'?"
+
+→ If other sports off Strava: Collect manually
+→ If truly just running: Update running_priority="primary"
+```
+
+**Verify collection**:
 ```bash
 sce profile list-sports
+# Should show all sports >15% from analyze data
 ```
 
-**Review with athlete**:
-```
-Coach: "I have climbing (Tue/Thu, 120 min, moderate-hard) and cycling (flexible, 90 min, moderate).
-This helps me design run days around your fixed climbing schedule."
+---
+
+### Step 4f-validation: Data Alignment Check
+
+**MANDATORY: Verify other_sports matches actual activity patterns**
+
+```bash
+sce profile validate
+# Or manually:
+sce profile get | jq '.other_sports'
+sce profile analyze | jq '.sport_percentages'
 ```
 
-**Why this matters**: Multi-sport load affects CTL/ATL calculations, lower-body fatigue gates, and workout scheduling.
+**Check for alignment**:
+
+- ✅ **Good**: Climbing shows 40% in analyze → climbing in other_sports
+- ❌ **Bad**: Climbing shows 40% in analyze → other_sports is empty
+
+**If validation shows missing sports**:
+```
+Coach: "I see a mismatch. Your Strava shows {sport} at {percentage}%, but it's not
+in your profile. Let me add it now before we continue."
+```
+
+**Return to Step 4f and collect missing sports.**
+
+**Only proceed when**:
+- All sports >15% from analyze are in other_sports
+- OR athlete confirms those activities are irregular/one-off
 
 ---
 
@@ -581,13 +653,18 @@ Would you like me to create a personalized plan now?"
 5. ✅ Race history captured (PBs added via `sce race add`, auto-import run)
 6. ✅ Goal set (race type, date)
 7. ✅ Constraints discussed (run days, duration, other sports)
-8. ✅ Ready for plan generation
+8. ✅ Other sports data collected (all sports >15% from sce profile analyze)
+9. ✅ Data validation passed (other_sports matches Strava distribution)
+10. ✅ Ready for plan generation
 
 **Quality checks**:
 - All data referenced from `sce profile analyze`
 - AskUserQuestion used ONLY for conflict policy
 - Natural conversation for text/number inputs
 - Injury history in memory system with proper tags
+- Multi-sport athletes have other_sports populated based on actual Strava data
+- Validation checkpoint prevents progression until data is complete
+- Coach explains WHY other_sports matters (load calc, not just priority)
 
 **Handoff**: "Would you like me to design your training plan now?" → Run `vdot-baseline-proposal` → `macro-plan-create`
 
