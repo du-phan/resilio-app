@@ -9,9 +9,11 @@ from datetime import date, datetime, timedelta
 from typing import Optional, Union, Any, Dict, List
 from dataclasses import dataclass
 from collections import defaultdict, Counter
+import logging
 
 from sports_coach_engine.core.paths import athlete_profile_path, get_activities_dir
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
+from sports_coach_engine.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 from sports_coach_engine.schemas.profile import (
     AthleteProfile,
@@ -668,16 +670,17 @@ def _analyze_volume(activities: List[NormalizedActivity]) -> Dict:
 def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
     """Compute typical workout distances/durations for profile-aware minimums.
 
-    Classifies runs from last 60 days:
-    - Easy runs: 3-10km (typical base runs)
-    - Long runs: 10+ km (weekly long runs)
+    Classifies runs from last N days (matches Strava sync window, DEFAULT_SYNC_LOOKBACK_DAYS):
+    - Easy runs: 3-8km (typical base runs)
+    - Long runs: >= 8km (weekly long runs)
+
+    Fallback: If no runs >= 8km exist, uses longest run >= 6km as proxy estimate
+    (helps athletes building volume who haven't done "long" runs yet).
 
     Returns averages for each category to set profile-aware minimums.
     """
-    from datetime import datetime
-
-    # Filter to last 60 days of running activities
-    cutoff_date = date.today() - timedelta(days=60)
+    # Filter to last N days of running activities (matches Strava sync window)
+    cutoff_date = date.today() - timedelta(days=DEFAULT_SYNC_LOOKBACK_DAYS)
     recent_runs = [
         a for a in activities
         if a.sport_type in ["run", "trail_run", "treadmill_run"]
@@ -695,8 +698,9 @@ def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
         }
 
     # Classify runs by distance (heuristic)
-    easy_runs = [r for r in recent_runs if 3.0 <= r.distance_km < 10.0]
-    long_runs = [r for r in recent_runs if r.distance_km >= 10.0]
+    # Easy runs: 3-8km, Long runs: >= 8km
+    easy_runs = [r for r in recent_runs if 3.0 <= (r.distance_km or 0) < 8.0]
+    long_runs = [r for r in recent_runs if (r.distance_km or 0) >= 8.0]
 
     # Compute averages
     typical_easy_km = None
@@ -716,6 +720,14 @@ def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
         long_with_duration = [r for r in long_runs if r.duration_minutes]
         if long_with_duration:
             typical_long_min = sum(r.duration_minutes for r in long_with_duration) / len(long_with_duration)
+    elif recent_runs:
+        # Fallback: Use longest run as proxy if no runs >= 8km exist
+        # This helps athletes building volume who haven't done "long" runs yet
+        longest_run = max(recent_runs, key=lambda r: r.distance_km or 0)
+        if longest_run.distance_km and longest_run.distance_km >= 6.0:  # Lower threshold for proxy
+            typical_long_km = longest_run.distance_km
+            if longest_run.duration_minutes:
+                typical_long_min = longest_run.duration_minutes
 
     return {
         'typical_easy_distance_km': round(typical_easy_km, 1) if typical_easy_km else None,
@@ -794,32 +806,49 @@ def _auto_update_profile_patterns(workout_patterns: Dict) -> None:
     This makes workout patterns immediately available for profile-aware minimums.
     Silent operation - no error if profile doesn't exist yet.
     """
+    logger = logging.getLogger(__name__)
+
     repo = RepositoryIO()
     profile_path = athlete_profile_path()
 
     # Try to load profile (silently fail if doesn't exist)
-    result = repo.read_yaml(
-        profile_path, AthleteProfile, ReadOptions(should_validate=True, allow_missing=True)
-    )
+    try:
+        result = repo.read_yaml(
+            profile_path, AthleteProfile, ReadOptions(should_validate=True, allow_missing=True)
+        )
+    except Exception as e:
+        logger.debug(f"Failed to load profile for auto-update: {e}")
+        return
 
     # If profile doesn't exist or failed to load, skip update
     if result is None or isinstance(result, RepoError):
+        logger.debug("Profile not found or error loading, skipping auto-update")
         return
 
     profile = result
+    updated_fields = []
 
     # Update pattern fields
     if workout_patterns['typical_easy_distance_km'] is not None:
         profile.typical_easy_distance_km = workout_patterns['typical_easy_distance_km']
+        updated_fields.append('typical_easy_distance_km')
     if workout_patterns['typical_easy_duration_min'] is not None:
         profile.typical_easy_duration_min = workout_patterns['typical_easy_duration_min']
+        updated_fields.append('typical_easy_duration_min')
     if workout_patterns['typical_long_run_distance_km'] is not None:
         profile.typical_long_run_distance_km = workout_patterns['typical_long_run_distance_km']
+        updated_fields.append('typical_long_run_distance_km')
     if workout_patterns['typical_long_run_duration_min'] is not None:
         profile.typical_long_run_duration_min = workout_patterns['typical_long_run_duration_min']
+        updated_fields.append('typical_long_run_duration_min')
 
-    # Save updated profile (silently fail if save fails)
-    repo.write_yaml(profile_path, profile)
+    # Save updated profile (with error handling)
+    try:
+        repo.write_yaml(profile_path, profile)
+        if updated_fields:
+            logger.debug(f"Auto-updated profile fields: {', '.join(updated_fields)}")
+    except Exception as e:
+        logger.warning(f"Failed to save profile after auto-update: {e}")
 
 
 # ============================================================
