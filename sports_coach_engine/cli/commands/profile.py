@@ -195,6 +195,9 @@ def profile_set_command(
     run_priority: Optional[str] = typer.Option(
         None, "--run-priority", help="Running priority: primary, secondary, or equal"
     ),
+    primary_sport: Optional[str] = typer.Option(
+        None, "--primary-sport", help="Primary sport name (e.g., 'running', 'climbing')"
+    ),
     conflict_policy: Optional[str] = typer.Option(
         None,
         "--conflict-policy",
@@ -244,7 +247,7 @@ def profile_set_command(
         sce profile set --name "Alex" --age 32
         sce profile set --max-hr 190 --resting-hr 55
         sce profile set --vdot 42
-        sce profile set --run-priority primary
+        sce profile set --run-priority primary --primary-sport running
         sce profile set --conflict-policy ask_each_time
         sce profile set --min-run-days 3 --max-run-days 4
         sce profile set --max-session-minutes 180
@@ -266,7 +269,9 @@ def profile_set_command(
     if vdot is not None:
         fields["vdot"] = vdot
     if run_priority is not None:
-        fields["run_priority"] = run_priority
+        fields["running_priority"] = run_priority
+    if primary_sport is not None:
+        fields["primary_sport"] = primary_sport
     if conflict_policy is not None:
         fields["conflict_policy"] = conflict_policy
 
@@ -401,7 +406,9 @@ def profile_set_command(
     if vdot is not None:
         updated_fields.append("vdot")
     if run_priority is not None:
-        updated_fields.append("run_priority")
+        updated_fields.append("running_priority")
+    if primary_sport is not None:
+        updated_fields.append("primary_sport")
     if conflict_policy is not None:
         updated_fields.append("conflict_policy")
     if min_run_days is not None:
