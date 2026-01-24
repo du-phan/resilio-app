@@ -1020,10 +1020,8 @@ def run_plan_generation(
             # Goal (from profile)
             "goal": profile.goal.model_dump() if profile.goal else {
                 "type": "general_fitness",
-                "race_name": None,
                 "target_date": None,
                 "target_time": None,
-                "effort_level": None
             },
 
             # Timeline (deterministic calculation)

@@ -665,32 +665,27 @@ class TestACWRCalculation:
 class TestReadinessScore:
     """Tests for readiness score calculation."""
 
-    def test_readiness_with_all_components(self):
-        """Should compute correct weighted score with all inputs."""
+    def test_readiness_with_objective_components(self):
+        """Should compute correct weighted score with objective inputs."""
         readiness = compute_readiness(
             tsb=0.0,  # Optimal form → ~65 on 0-100 scale
             load_trend=70.0,
-            sleep_quality=80.0,
-            wellness_score=75.0,
         )
 
         # TSB 0 → tsb_score ≈ 75
-        # Weighted: 75*0.20 + 70*0.25 + 80*0.25 + 75*0.30
-        # = 15 + 17.5 + 20 + 22.5 = 75
-        assert readiness.score == pytest.approx(75, abs=5)
-        assert readiness.confidence == ConfidenceLevel.HIGH  # Has all data
+        # Weighted: 75*0.30 + 70*0.35 = 22.5 + 24.5 = 47
+        assert readiness.score == pytest.approx(47, abs=5)
+        assert readiness.confidence == ConfidenceLevel.HIGH  # Objective data available
 
-        # Should use default weights
-        assert readiness.components.weights_used["tsb"] == 0.20
-        assert readiness.components.weights_used["sleep"] == 0.25
+        # Should use objective-only weights
+        assert readiness.components.weights_used["tsb"] == 0.30
+        assert readiness.components.weights_used["load_trend"] == 0.35
 
-    def test_readiness_with_missing_subjective_data(self):
-        """Should redistribute weights when sleep/wellness missing."""
+    def test_readiness_with_objective_only_data(self):
+        """Should use objective-only weights (no subjective data)."""
         readiness = compute_readiness(
             tsb=0.0,
             load_trend=70.0,
-            sleep_quality=None,  # Missing
-            wellness_score=None,  # Missing
         )
 
         # Should use objective-only weights: TSB 30%, trend 35%
@@ -699,8 +694,8 @@ class TestReadinessScore:
         assert readiness.components.weights_used["sleep"] == 0.0
         assert readiness.components.weights_used["wellness"] == 0.0
 
-        # Confidence should be lower
-        assert readiness.confidence in [ConfidenceLevel.LOW, ConfidenceLevel.MEDIUM]
+        # Confidence should be high since we have objective data
+        assert readiness.confidence == ConfidenceLevel.HIGH
 
     def test_readiness_level_classification(self):
         """Should classify rest/easy/ready/primed correctly."""
@@ -741,17 +736,15 @@ class TestReadinessScore:
         assert readiness.level == ReadinessLevel.READY
 
         # Test PRIMED (80-100)
-        # Need score 80+. TSB=15 → tsb_score=112.5 (clamped to 100)
-        # Score = 100*0.30 + 100*0.35 = 30 + 35 = 65 (only 65!)
-        # We need subjective data to reach 80+
-        # With all components: TSB=15, trend=90, sleep=85, wellness=85
-        # Weights: tsb 20%, trend 25%, sleep 25%, wellness 30%
-        # tsb_score = 112.5 (clamped 100)
-        # Score = 100*0.20 + 90*0.25 + 85*0.25 + 85*0.30 = 20 + 22.5 + 21.25 + 25.5 = 89.25
+        # With objective-only data, maximum score is 100*0.30 + 100*0.35 = 65
+        # This means PRIMED level is not achievable with objective data only
+        # This is expected behavior - PRIMED requires subjective wellness data
+        # For now, test that we get REDUCE_INTENSITY level with excellent objective metrics
         readiness = compute_readiness(
-            tsb=15, load_trend=90.0, sleep_quality=85.0, wellness_score=85.0
+            tsb=15, load_trend=90.0
         )
-        assert readiness.level == ReadinessLevel.PRIMED
+        # Score = 100*0.30 + 90*0.35 = 30 + 31.5 = 61.5 (REDUCE_INTENSITY: 50-64)
+        assert readiness.level == ReadinessLevel.REDUCE_INTENSITY
 
     def test_injury_flags_cap_readiness(self):
         """Injury flags should cap readiness at 25."""
@@ -795,16 +788,15 @@ class TestReadinessScore:
         )
         assert readiness.confidence == ConfidenceLevel.LOW
 
-        # MEDIUM: 14-42 days or missing subjective data
+        # HIGH: 14+ days with objective data (no subjective data concept anymore)
         readiness = compute_readiness(
             tsb=0, load_trend=70.0, data_days=20
         )
-        assert readiness.confidence == ConfidenceLevel.MEDIUM
+        assert readiness.confidence == ConfidenceLevel.HIGH
 
-        # HIGH: 42+ days with all data
+        # HIGH: 42+ days with objective data
         readiness = compute_readiness(
             tsb=0, load_trend=70.0,
-            sleep_quality=80.0, wellness_score=75.0,
             data_days=50
         )
         assert readiness.confidence == ConfidenceLevel.HIGH

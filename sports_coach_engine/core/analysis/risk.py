@@ -339,7 +339,7 @@ def estimate_recovery_window(
     elif "TSB" in trigger_type:
         monitoring_metrics = ["TSB", "ATL", "readiness"]
     elif "READINESS" in trigger_type:
-        monitoring_metrics = ["readiness", "sleep_quality", "resting_hr"]
+        monitoring_metrics = ["readiness", "resting_hr"]
 
     note = "Recovery depends on athlete's rest quality and CTL trajectory"
 

@@ -13,6 +13,7 @@ from sports_coach_engine.api.race import (
     add_race_performance,
     list_race_history,
     import_races_from_strava,
+    remove_race_performance,
 )
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import output_json
@@ -195,6 +196,51 @@ def race_import_command(
             msg += " - no new races found that aren't already in your history"
     else:
         msg = "Failed to import races from Strava"
+
+    # Convert to envelope
+    envelope = api_result_to_envelope(result, success_message=msg)
+
+    # Output JSON
+    output_json(envelope)
+
+    # Exit with appropriate code
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+
+@app.command(name="remove")
+def race_remove_command(
+    ctx: typer.Context,
+    date: str = typer.Option(
+        ...,
+        "--date",
+        help="Race date to remove (YYYY-MM-DD)"
+    ),
+    distance: Optional[str] = typer.Option(
+        None,
+        "--distance",
+        help="Distance filter if multiple races on same date"
+    ),
+) -> None:
+    """Remove a race performance from your race history.
+
+    If multiple races exist on the same date, you must specify --distance.
+    Automatically recalculates PB flags and peak VDOT after removal.
+
+    Examples:
+        sce race remove --date 2025-01-15
+        sce race remove --date 2025-03-20 --distance half_marathon
+    """
+    # Call API
+    result = remove_race_performance(
+        date=date,
+        distance=distance,
+    )
+
+    # Build success message
+    if result is True:
+        msg = f"Removed race on {date}" + (f" ({distance})" if distance else "")
+    else:
+        msg = "Failed to remove race"
 
     # Convert to envelope
     envelope = api_result_to_envelope(result, success_message=msg)

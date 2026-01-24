@@ -235,13 +235,11 @@ class TestProfileService:
 
         profile = AthleteProfile(
             name="Complete Profile",
-            email="test@example.com",
             created_at="2026-01-12",
             age=32,
             strava=StravaConnection(athlete_id="12345678"),
             running_experience_years=5,
             current_weekly_run_km=28.0,
-            current_run_days_per_week=3,
             running_priority=RunningPriority.SECONDARY,
             primary_sport="bouldering",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
@@ -251,13 +249,11 @@ class TestProfileService:
                     Weekday.WEDNESDAY,
                     Weekday.SATURDAY,
                 ],
-                preferred_run_days=[Weekday.TUESDAY, Weekday.SATURDAY],
                 min_run_days_per_week=2,
                 max_run_days_per_week=3,
             ),
             goal=Goal(
                 type=GoalType.HALF_MARATHON,
-                race_name="Paris Half",
                 target_date="2026-03-01",
                 target_time="1:45:00",
             ),
@@ -277,10 +273,8 @@ class TestProfileService:
 
         loaded = service.load_profile()
         assert loaded is not None
-        assert loaded.email == "test@example.com"
         assert loaded.age == 32
         assert loaded.strava.athlete_id == "12345678"
-        assert loaded.recent_race.time == "47:00"
         assert len(loaded.other_sports) == 1
         assert loaded.other_sports[0].sport == "bouldering"
 

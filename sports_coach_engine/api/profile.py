@@ -21,7 +21,6 @@ from sports_coach_engine.schemas.profile import (
     Weekday,
     RunningPriority,
     ConflictPolicy,
-    TimePreference,
     VitalSigns,
     CommunicationPreferences,
     DetailLevel,
@@ -52,13 +51,10 @@ class ProfileError:
 def create_profile(
     name: str,
     age: Optional[int] = None,
-    email: Optional[str] = None,
     max_hr: Optional[int] = None,
     resting_hr: Optional[int] = None,
-    lthr: Optional[int] = None,
     running_experience_years: Optional[int] = None,
     current_weekly_run_km: Optional[float] = None,
-    current_run_days_per_week: Optional[int] = None,
     vdot: Optional[float] = None,
     running_priority: str = "equal",
     primary_sport: Optional[str] = None,
@@ -66,8 +62,6 @@ def create_profile(
     min_run_days: int = 2,
     max_run_days: int = 4,
     available_run_days: Optional[List[Weekday]] = None,
-    preferred_run_days: Optional[List[Weekday]] = None,
-    time_preference: Optional[TimePreference] = None,
     detail_level: Optional["DetailLevel"] = None,
     coaching_style: Optional["CoachingStyle"] = None,
     intensity_metric: Optional["IntensityMetric"] = None,
@@ -88,19 +82,17 @@ def create_profile(
     Args:
         name: Athlete name (required)
         age: Age in years (optional)
-        email: Contact email (optional)
         max_hr: Maximum heart rate (optional)
         resting_hr: Resting heart rate (optional)
-        lthr: Lactate threshold heart rate (optional)
         running_experience_years: Years of running experience (optional)
         current_weekly_run_km: Current weekly run volume baseline (optional)
-        current_run_days_per_week: Current run frequency baseline (optional)
         vdot: Jack Daniels VDOT (optional, 30.0-85.0)
         running_priority: "primary", "secondary", or "equal" (default: "equal")
         primary_sport: Primary sport name for multi-sport athletes (optional)
         conflict_policy: "primary_sport_wins", "running_goal_wins", or "ask_each_time" (default: "ask_each_time")
         min_run_days: Minimum run days per week (default: 2)
         max_run_days: Maximum run days per week (default: 4)
+        available_run_days: List of available weekdays (defaults to all 7 days)
 
     Returns:
         Created AthleteProfile
@@ -155,26 +147,23 @@ def create_profile(
 
     # Create vital signs if any HR values provided
     vital_signs = None
-    if max_hr is not None or resting_hr is not None or lthr is not None:
+    if max_hr is not None or resting_hr is not None:
         vital_signs = VitalSigns(
             max_hr=max_hr,
             resting_hr=resting_hr,
-            lthr=lthr,
         )
 
     # Create constraints
-    # Use provided values, or defaults
-    if available_run_days is None:
-        # Default: all days available
-        available_run_days = [day for day in Weekday]
+    # Schema now provides default for available_run_days (all 7 days)
+    # Only pass if explicitly provided
+    constraint_kwargs = {
+        "min_run_days_per_week": min_run_days,
+        "max_run_days_per_week": max_run_days,
+    }
+    if available_run_days is not None:
+        constraint_kwargs["available_run_days"] = available_run_days
 
-    constraints = TrainingConstraints(
-        available_run_days=available_run_days,
-        preferred_run_days=preferred_run_days,
-        min_run_days_per_week=min_run_days,
-        max_run_days_per_week=max_run_days,
-        time_preference=time_preference if time_preference is not None else TimePreference.FLEXIBLE,
-    )
+    constraints = TrainingConstraints(**constraint_kwargs)
 
     # Create preferences with provided values or defaults
     preferences = CommunicationPreferences(
@@ -190,13 +179,11 @@ def create_profile(
     try:
         profile = AthleteProfile(
             name=name,
-            email=email,
             created_at=datetime.now().date().isoformat(),
             age=age,
             vital_signs=vital_signs,
             running_experience_years=running_experience_years,
             current_weekly_run_km=current_weekly_run_km,
-            current_run_days_per_week=current_run_days_per_week,
             vdot=vdot,
             constraints=constraints,
             running_priority=priority_enum,
@@ -299,14 +286,15 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
         >>> # Update training constraints
         >>> profile = update_profile(
         ...     constraints={
-        ...         "runs_per_week": 4,
-        ...         "preferred_run_days": ["monday", "wednesday", "friday", "sunday"]
+        ...         "min_run_days_per_week": 3,
+        ...         "max_run_days_per_week": 5,
+        ...         "available_run_days": ["monday", "wednesday", "friday", "sunday"]
         ...     }
         ... )
         >>> if isinstance(profile, ProfileError):
         ...     print(f"Error: {profile.message}")
         ... else:
-        ...     print(f"Updated: {profile.constraints.runs_per_week} runs/week")
+        ...     print(f"Updated constraints")
     """
     repo = RepositoryIO()
     field_names = ", ".join(fields.keys())# Load current profile

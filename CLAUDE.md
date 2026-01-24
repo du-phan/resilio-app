@@ -213,6 +213,25 @@ sce goal set --type 10k --date 2026-06-01 --time "40:00"  # Set goal (automatic 
 sce goal validate                                          # Re-validate existing goal
 ```
 
+**Race performance tracking**:
+```bash
+# Add race performances
+sce race add --distance 10k --time 42:30 --date 2025-01-15 --location "City 10K" --source official_race
+sce race add --distance half_marathon --time 1:30:00 --date 2025-03-20 --source gps_watch
+
+# List race history
+sce race list                           # All races grouped by distance
+sce race list --distance 10k            # Filter by distance
+sce race list --since 2025-01-01        # Filter by date
+
+# Import from Strava
+sce race import-from-strava --since 2025-01-01  # Auto-detect races from activities
+
+# Remove race entry
+sce race remove --date 2025-01-15                        # Remove race on specific date
+sce race remove --date 2025-03-20 --distance half_marathon  # Specify distance if multiple races
+```
+
 **Performance baseline & goal validation**:
 ```bash
 sce performance baseline               # View current vs. historical performance

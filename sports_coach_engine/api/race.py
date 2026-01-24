@@ -447,3 +447,75 @@ def get_peak_vdot_info(profile: AthleteProfile) -> Optional[Dict[str, Any]]:
         "location": peak_race.location,
         "source": peak_race.source,
     }
+
+
+def remove_race_performance(
+    date: str,
+    distance: Optional[str] = None,
+) -> Union[bool, RaceError]:
+    """
+    Remove a race performance from athlete's race history.
+
+    If multiple races exist on the same date, distance filter is required.
+    Automatically recalculates PB flags and peak_vdot after removal.
+
+    Args:
+        date: Race date (ISO format "YYYY-MM-DD")
+        distance: Optional distance filter if multiple races on same date
+
+    Returns:
+        True on successful removal, RaceError on failure
+
+    Example:
+        >>> result = remove_race_performance(date="2025-01-15")
+        >>> if isinstance(result, RaceError):
+        ...     print(f"Error: {result.message}")
+        ... else:
+        ...     print("Race removed successfully")
+    """
+    # Load profile
+    profile = _load_profile()
+    if isinstance(profile, RaceError):
+        return profile
+
+    # Find races matching the date
+    matching_races = [r for r in profile.race_history if r.date == date]
+
+    if not matching_races:
+        return RaceError(
+            error_type="not_found",
+            message=f"No race found on {date}",
+        )
+
+    # If multiple races on same date, require distance filter
+    if len(matching_races) > 1 and not distance:
+        distances = [r.distance for r in matching_races]
+        return RaceError(
+            error_type="validation",
+            message=f"Multiple races found on {date}: {', '.join(distances)}. Specify --distance to remove a specific race.",
+        )
+
+    # Find the race to remove
+    if distance:
+        race_to_remove = next((r for r in matching_races if r.distance == distance), None)
+        if not race_to_remove:
+            return RaceError(
+                error_type="not_found",
+                message=f"No {distance} race found on {date}",
+            )
+    else:
+        race_to_remove = matching_races[0]
+
+    # Remove the race
+    profile.race_history.remove(race_to_remove)
+
+    # Recalculate PB flags and peak VDOT
+    _update_pb_flags(profile)
+    _recalculate_peak_vdot(profile)
+
+    # Save profile
+    error = _save_profile(profile)
+    if error:
+        return error
+
+    return True

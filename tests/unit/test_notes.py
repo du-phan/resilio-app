@@ -55,8 +55,6 @@ def basic_athlete():
         created_at="2026-01-01",
         vital_signs=VitalSigns(
             max_hr=185,
-            lthr=165,
-            weight_kg=70,
         ),
         vdot=45.0,  # VDOT for pace-based estimation
         constraints=TrainingConstraints(
@@ -441,7 +439,6 @@ class TestHelperFunctions:
             average_hr=160,
             max_hr_activity=175,
             athlete_max_hr=185,
-            athlete_lthr=165,
             duration_minutes=45,
         )
 
@@ -498,7 +495,6 @@ class TestErrorHandling:
             average_hr=None,
             max_hr_activity=None,
             athlete_max_hr=None,
-            athlete_lthr=None,
             duration_minutes=45,
         )
 
@@ -532,7 +528,6 @@ class TestCorrectedHRZones:
             average_hr=153,
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,  # No LTHR, uses max HR% fallback
             duration_minutes=61,
         )
 
@@ -557,7 +552,6 @@ class TestCorrectedHRZones:
             average_hr=164,
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,
             duration_minutes=49,
         )
 
@@ -576,7 +570,6 @@ class TestCorrectedHRZones:
             average_hr=154,  # 78% of 198
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,
             duration_minutes=45,
         )
 
@@ -593,64 +586,11 @@ class TestCorrectedHRZones:
             average_hr=155,  # 78.3% of 198
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,
             duration_minutes=45,
         )
 
         assert estimate is not None
         assert estimate.value == 5  # Moderate/tempo (Zone 3)
-
-    def test_lthr_based_zone2_easy_run(self):
-        """
-        With LTHR available, Zone 2 uses 80-95% LTHR (gold standard).
-
-        This is more accurate than max HR% for individualization.
-        """
-        # Athlete with LTHR = 180 bpm
-        estimate = estimate_rpe_from_hr(
-            average_hr=162,  # 90% of LTHR 180
-            max_hr_activity=None,
-            athlete_max_hr=200,
-            athlete_lthr=180,  # LTHR-based zones used
-            duration_minutes=45,
-        )
-
-        assert estimate is not None
-        assert estimate.value == 4  # Easy/aerobic (80-95% LTHR)
-        assert estimate.confidence == "high"  # LTHR is gold standard
-        assert "LTHR" in estimate.reasoning
-        assert "90%" in estimate.reasoning
-
-    def test_lthr_based_zone3_tempo_run(self):
-        """
-        Tempo run at 98% LTHR should be RPE 5 (lower LT zone).
-        """
-        estimate = estimate_rpe_from_hr(
-            average_hr=176,  # 98% of LTHR 180
-            max_hr_activity=None,
-            athlete_max_hr=200,
-            athlete_lthr=180,
-            duration_minutes=30,
-        )
-
-        assert estimate is not None
-        assert estimate.value == 5  # Tempo (95-100% LTHR)
-        assert estimate.confidence == "high"
-
-    def test_lthr_based_zone4_threshold_run(self):
-        """
-        Threshold run at 103% LTHR should be RPE 6 (lactate threshold).
-        """
-        estimate = estimate_rpe_from_hr(
-            average_hr=185,  # 103% of LTHR 180
-            max_hr_activity=None,
-            athlete_max_hr=200,
-            athlete_lthr=180,
-            duration_minutes=20,
-        )
-
-        assert estimate is not None
-        assert estimate.value == 6  # Lactate threshold (100-105% LTHR)
 
     def test_max_hr_fallback_recovery_zone_67_percent(self):
         """
@@ -663,7 +603,6 @@ class TestCorrectedHRZones:
             average_hr=133,  # 67% of 198
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,
             duration_minutes=30,
         )
 
@@ -681,7 +620,6 @@ class TestCorrectedHRZones:
             average_hr=182,  # 92% of 198
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,
             duration_minutes=15,
         )
 
@@ -698,7 +636,6 @@ class TestCorrectedHRZones:
             average_hr=150,  # 76% of 198 → base RPE 4
             max_hr_activity=None,
             athlete_max_hr=198,
-            athlete_lthr=None,
             duration_minutes=120,  # 2 hours
         )
 

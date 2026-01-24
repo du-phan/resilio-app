@@ -54,12 +54,6 @@ class GoalType(str, Enum):
     GENERAL_FITNESS = "general_fitness"
 
 
-class TimePreference(str, Enum):
-    """Preferred time of day for training."""
-
-    MORNING = "morning"
-    EVENING = "evening"
-    FLEXIBLE = "flexible"
 
 
 class DetailLevel(str, Enum):
@@ -96,30 +90,33 @@ class VitalSigns(BaseModel):
 
     resting_hr: Optional[int] = Field(default=None, ge=30, le=100)
     max_hr: Optional[int] = Field(default=None, ge=120, le=220)
-    lthr: Optional[int] = Field(
-        default=None, ge=100, le=200
-    )  # Lactate threshold heart rate
 
 
 class Goal(BaseModel):
     """Training goal."""
 
     type: GoalType
-    race_name: Optional[str] = None
     target_date: Optional[str] = None  # ISO date string
     target_time: Optional[str] = None  # HH:MM:SS format
-    effort_level: Optional[str] = None  # pr_attempt, comfortable, just_finish
 
 
 class TrainingConstraints(BaseModel):
     """Training constraints and availability."""
 
-    available_run_days: List[Weekday]
-    preferred_run_days: Optional[List[Weekday]] = None
+    available_run_days: List[Weekday] = Field(
+        default_factory=lambda: [
+            Weekday.MONDAY,
+            Weekday.TUESDAY,
+            Weekday.WEDNESDAY,
+            Weekday.THURSDAY,
+            Weekday.FRIDAY,
+            Weekday.SATURDAY,
+            Weekday.SUNDAY,
+        ]
+    )
     min_run_days_per_week: int = Field(ge=0, le=7)
     max_run_days_per_week: int = Field(ge=0, le=7)
     max_time_per_session_minutes: Optional[int] = Field(default=90, ge=0)
-    time_preference: TimePreference = TimePreference.FLEXIBLE
 
 
 class OtherSport(BaseModel):
@@ -165,7 +162,6 @@ class AthleteProfile(BaseModel):
 
     # Basic Info
     name: str
-    email: Optional[str] = None
     created_at: str  # ISO date string
     age: Optional[int] = Field(default=None, ge=0, le=120)
 
@@ -180,7 +176,6 @@ class AthleteProfile(BaseModel):
 
     # Recent Fitness Snapshot
     current_weekly_run_km: Optional[float] = Field(default=None, ge=0)
-    current_run_days_per_week: Optional[int] = Field(default=None, ge=0, le=7)
     vdot: Optional[float] = Field(
         default=None,
         ge=30.0,

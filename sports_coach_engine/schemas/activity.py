@@ -367,7 +367,6 @@ class IllnessFlag(BaseModel):
 class WellnessIndicators(BaseModel):
     """Extracted wellness signals."""
 
-    sleep_quality: Optional[str] = None  # "good" | "poor" | "disrupted"
     sleep_hours: Optional[float] = None
     soreness_level: Optional[int] = None  # 1-10
     stress_level: Optional[str] = None  # "low" | "moderate" | "high"

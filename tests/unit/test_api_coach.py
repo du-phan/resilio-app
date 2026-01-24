@@ -70,6 +70,12 @@ def mock_profile():
     return profile
 
 
+@pytest.fixture
+def mock_log():
+    """Mock logger for testing."""
+    return Mock()
+
+
 # ============================================================
 # GET_TODAYS_WORKOUT TESTS
 # ============================================================

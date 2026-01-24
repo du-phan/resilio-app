@@ -231,8 +231,6 @@ def compute_daily_metrics(
     readiness = compute_readiness(
         tsb=ctl_atl.tsb,
         load_trend=load_trend,
-        sleep_quality=None,  # TODO: Extract from activity notes (deferred to later version)
-        wellness_score=None,  # TODO: Extract from activity notes (deferred to later version)
         injury_flags=injury_flags,
         illness_flags=illness_flags,
         acwr_available=acwr_available,
@@ -604,25 +602,17 @@ def calculate_acwr(
 def compute_readiness(
     tsb: float,
     load_trend: float,
-    sleep_quality: Optional[float] = None,
-    wellness_score: Optional[float] = None,
     injury_flags: list[str] = None,
     illness_flags: list[str] = None,
     acwr_available: bool = True,
     data_days: int = 42,
 ) -> ReadinessScore:
     """
-    Compute readiness score from available components.
+    Compute readiness score from objective training metrics.
 
-    Weights (default):
-        - TSB: 20%
-        - Load trend: 25%
-        - Sleep: 25%
-        - Wellness: 30%
-
-    If subjective data (sleep/wellness) missing:
-        Redistribute weights proportionally to TSB and load_trend
-        Set confidence to LOW
+    Weights:
+        - TSB: 30%
+        - Load trend: 35%
 
     Safety overrides:
         - Injury flags → cap at 25
@@ -631,8 +621,6 @@ def compute_readiness(
     Args:
         tsb: Training Stress Balance
         load_trend: 0-100 scale (100 = fresh, 0 = accumulating)
-        sleep_quality: Optional sleep score 0-100
-        wellness_score: Optional subjective wellness 0-100
         injury_flags: List of injury keywords found
         illness_flags: List of illness keywords found
         acwr_available: Whether ACWR is available (affects confidence)
@@ -650,28 +638,14 @@ def compute_readiness(
     # TSB -25 → 0, TSB -10 → 40, TSB 0 → 65, TSB +5 → 80, TSB +15 → 100
     tsb_score = max(0, min(100, (tsb + 30) * 2.5))
 
-    # Determine weights based on available data
-    has_subjective_data = sleep_quality is not None or wellness_score is not None
+    # Use objective-only weights (no subjective data)
+    weights = READINESS_WEIGHTS_OBJECTIVE_ONLY.copy()
 
-    if has_subjective_data:
-        weights = READINESS_WEIGHTS_DEFAULT.copy()
-        sleep_score = sleep_quality if sleep_quality is not None else 70.0  # Default
-        wellness = wellness_score if wellness_score is not None else 70.0  # Default
-    else:
-        weights = READINESS_WEIGHTS_OBJECTIVE_ONLY.copy()
-        sleep_score = None
-        wellness = None
-
-    # Calculate weighted sum
+    # Calculate weighted sum using only objective metrics
     score = (
         tsb_score * weights["tsb"] +
         load_trend * weights["load_trend"]
     )
-
-    if sleep_score is not None:
-        score += sleep_score * weights["sleep"]
-    if wellness is not None:
-        score += wellness * weights["wellness"]
 
     # Apply safety overrides
     injury_flag_override = False
@@ -699,11 +673,9 @@ def compute_readiness(
     # Classify level
     level = _classify_readiness_level(score)
 
-    # Determine confidence
+    # Determine confidence (always HIGH for objective data since we have all available metrics)
     if data_days < BASELINE_DAYS_THRESHOLD:
         confidence = ConfidenceLevel.LOW
-    elif data_days < 42 or not has_subjective_data:
-        confidence = ConfidenceLevel.MEDIUM
     else:
         confidence = ConfidenceLevel.HIGH
 
@@ -714,8 +686,8 @@ def compute_readiness(
     components = ReadinessComponents(
         tsb_contribution=round(tsb_score, 1),
         load_trend_contribution=round(load_trend, 1),
-        sleep_contribution=round(sleep_score, 1) if sleep_score is not None else None,
-        wellness_contribution=round(wellness, 1) if wellness is not None else None,
+        sleep_contribution=None,
+        wellness_contribution=None,
         weights_used=weights,
     )
 

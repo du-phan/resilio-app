@@ -65,7 +65,6 @@ class TestPhase1Integration:
 
         profile = AthleteProfile(
             name="Integration Test Athlete",
-            email="test@example.com",
             created_at="2026-01-12",
             age=32,
             strava=StravaConnection(athlete_id="12345678"),
@@ -80,7 +79,6 @@ class TestPhase1Integration:
             ),
             goal=Goal(
                 type=GoalType.HALF_MARATHON,
-                race_name="Paris Half",
                 target_date="2026-04-01",
                 target_time="1:45:00",
             ),
@@ -104,9 +102,7 @@ class TestPhase1Integration:
         assert loaded is not None
         assert not isinstance(loaded, ProfileError)
         assert loaded.name == "Integration Test Athlete"
-        assert loaded.email == "test@example.com"
         assert loaded.goal.type == GoalType.HALF_MARATHON
-        assert loaded.goal.race_name == "Paris Half"
         assert len(loaded.constraints.available_run_days) == 2
         assert Weekday.TUESDAY in loaded.constraints.available_run_days
 

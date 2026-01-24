@@ -101,6 +101,15 @@ Athlete: "Yes" OR "Actually, I think it's 190"
 Coach: [Store actual value]
 ```
 
+**Resting HR** (natural conversation):
+```
+Coach: "What's your morning resting heart rate? (Measure first thing when you wake up)"
+Athlete: "Around 52 bpm"
+Coach: [Store value]
+```
+
+**If athlete doesn't know**: "No problem - you can measure it tomorrow and add later with `sce profile set --resting-hr XX`"
+
 #### 4b. Injury History (Context-Aware with Memory System)
 
 **Gather injury signals**:
@@ -271,6 +280,92 @@ sce memory add --type RACE_HISTORY \
 
 ---
 
+### Step 4f: Other Sports Collection (If Multi-Sport Athlete)
+
+**CRITICAL: Only for athletes with `running_priority = "equal"` or `"secondary"`**
+
+If sport distribution from `sce profile analyze` shows significant other sports (>20% of total load):
+
+**Ask about regular sports** (natural conversation):
+```
+Coach: "I see climbing makes up 42% of your training. What days do you typically climb?"
+Athlete: "Tuesdays and Thursdays, usually 2-hour sessions"
+```
+
+**For each sport, collect**:
+- Sport name (climbing, cycling, swimming, etc.)
+- Days per week (fixed schedule or flexible)
+- Typical duration (minutes)
+- Intensity level (easy, moderate, moderate_to_hard, hard)
+
+**Add each sport**:
+```bash
+sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
+sce profile add-sport --sport cycling --days flexible --duration 90 --intensity moderate
+```
+
+**Verify**:
+```bash
+sce profile list-sports
+```
+
+**Review with athlete**:
+```
+Coach: "I have climbing (Tue/Thu, 120 min, moderate-hard) and cycling (flexible, 90 min, moderate).
+This helps me design run days around your fixed climbing schedule."
+```
+
+**Why this matters**: Multi-sport load affects CTL/ATL calculations, lower-body fatigue gates, and workout scheduling.
+
+---
+
+### Step 4g: Communication Preferences (Optional - Can Skip)
+
+**Offer customization without creating decision fatigue**:
+
+```
+Coach: "I can tailor my coaching style to your preferences, or use defaults if you'd like to get started quickly.
+Would you like to customize how I communicate?"
+```
+
+**If athlete says YES** (natural conversation):
+
+**Detail level**:
+```
+Coach: "Do you prefer brief updates, moderate detail, or comprehensive analysis after each workout?"
+Athlete: "Moderate detail works for me"
+# Store: detail_level = "moderate"
+```
+
+**Coaching style**:
+```
+Coach: "What coaching tone works best for you: supportive, direct, or analytical?"
+Athlete: "Direct - just tell me what to do"
+# Store: coaching_style = "direct"
+```
+
+**Intensity metric**:
+```
+Coach: "For workouts, do you prefer pace targets, heart rate zones, or RPE (perceived effort)?"
+Athlete: "Pace - I like tangible numbers"
+# Store: intensity_metric = "pace"
+```
+
+**Update profile**:
+```bash
+sce profile set --detail-level moderate --coaching-style direct --intensity-metric pace
+```
+
+**If athlete says NO or "use defaults"**:
+```
+Coach: "No problem! I'll use moderate detail, supportive tone, and pace-based workouts.
+You can adjust anytime with 'sce profile set'."
+```
+
+**Skip to Step 5**
+
+---
+
 ### Step 5: Goal Setting
 
 **Questions** (natural conversation):
@@ -363,15 +458,37 @@ Let's take a conservative approach initially and reassess after your first tempo
 **CRITICAL: Discuss constraints before designing plan.**
 
 **Questions** (natural conversation):
-1. **Run frequency**: "How many days per week can you realistically run?" (3-6 typical)
-2. **Available days**: "Which days work best? I see you typically train Tuesdays and weekends."
-3. **Session duration**: "Longest time for a long run?" (90-180 min typical)
-4. **Other sports**: "Are climbing days fixed or flexible?"
-5. **Time preference**: "Morning or evening runs?" (optional)
+
+1. **Run frequency (minimum)**: "What's the minimum days per week you can commit to running?" (2-3 typical)
+   - Store as: `--min-run-days N`
+
+2. **Run frequency (maximum)**: "How many days per week can you realistically run?" (3-6 typical)
+   - Store as: `--max-run-days N`
+
+3. **Available days (reverse logic)**: "Are there any days you absolutely CANNOT run?"
+   - **If athlete says "No" or "All days work"**: Keep default (all 7 days available)
+   - **If athlete says "Tuesdays and Thursdays"**: Remove those from available_run_days
+   - **Example**: If "cannot run Tue/Thu" → `--available-days "monday,wednesday,friday,saturday,sunday"`
+   - **Default assumes all 7 days available** - ask only for exceptions
+
+4. **Session duration**: "What's the longest time for a long run?" (90-180 min typical)
+   - Store as: `--max-session-minutes N`
+
+5. **Other sports schedule**: "Are climbing days fixed or flexible?" (if applicable)
+   - Context for workout scheduling around other sports
 
 **Store constraints**:
 ```bash
-sce profile set --max-run-days 4 --available-days "tuesday,thursday,saturday,sunday" --max-session-minutes 120
+# Example: Cannot run Tue/Thu, 3-4 days/week, max 120 min sessions
+sce profile set --min-run-days 3 --max-run-days 4 \
+  --available-days "monday,wednesday,friday,saturday,sunday" \
+  --max-session-minutes 120
+```
+
+**If athlete says "all days work"**:
+```bash
+# No need to specify --available-days (defaults to all 7 days)
+sce profile set --min-run-days 3 --max-run-days 4 --max-session-minutes 120
 ```
 
 ---

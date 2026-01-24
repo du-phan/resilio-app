@@ -52,7 +52,6 @@ from sports_coach_engine.schemas.profile import (
     Goal,
     VitalSigns,
     Weekday,
-    TimePreference,
 )
 
 
@@ -186,23 +185,19 @@ def sample_profile():
         vital_signs=VitalSigns(
             max_hr=185,
             resting_hr=55,
-            lthr=170,
         ),
         constraints=TrainingConstraints(
             available_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SUNDAY],
             min_run_days_per_week=3,
             max_run_days_per_week=4,
-            time_preference=TimePreference.MORNING,
         ),
         running_priority=RunningPriority.PRIMARY,
         primary_sport="running",
         conflict_policy=ConflictPolicy.RUNNING_GOAL_WINS,
         goal=Goal(
             type=GoalType.HALF_MARATHON,
-            race_name="Spring Half Marathon",
             target_date="2026-04-15",
             target_time="01:30:00",
-            effort_level="pr_attempt",
         ),
     )
 
@@ -210,7 +205,6 @@ def sample_profile():
 @pytest.fixture
 def sample_workout(sample_profile):
     """Create sample WorkoutPrescription for testing."""
-    lthr = sample_profile.vital_signs.lthr if sample_profile.vital_signs else None
     return WorkoutPrescription(
         id="test_workout_1",
         week_number=4,
@@ -221,10 +215,10 @@ def sample_workout(sample_profile):
         duration_minutes=45,
         target_rpe=7,
         intensity_zone=IntensityZone.ZONE_4,
-        pace_range_min_km="5:15" if lthr else None,
-        pace_range_max_km="5:25" if lthr else None,
-        hr_range_low=int(lthr * 0.88) if lthr else None,
-        hr_range_high=int(lthr * 0.92) if lthr else None,
+        pace_range_min_km="5:15",
+        pace_range_max_km="5:25",
+        hr_range_low=None,
+        hr_range_high=None,
         purpose="Build lactate threshold capacity",
         notes=None,
     )

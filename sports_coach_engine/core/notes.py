@@ -149,7 +149,7 @@ def estimate_rpe(
 
     Args:
         activity: Activity with HR, notes, suffer_score
-        athlete_profile: Profile with max_hr, lthr
+        athlete_profile: Profile with max_hr for HR-based estimates
 
     Returns:
         List of all available RPE estimates (Claude Code decides which to use)
@@ -172,9 +172,6 @@ def estimate_rpe(
             average_hr=activity.average_hr,
             max_hr_activity=activity.max_hr,
             athlete_max_hr=athlete_profile.vital_signs.max_hr
-            if athlete_profile and athlete_profile.vital_signs
-            else None,
-            athlete_lthr=athlete_profile.vital_signs.lthr
             if athlete_profile and athlete_profile.vital_signs
             else None,
             duration_minutes=activity.duration_seconds // 60,
@@ -226,20 +223,12 @@ def estimate_rpe_from_hr(
     average_hr: int,
     max_hr_activity: Optional[int],
     athlete_max_hr: Optional[int],
-    athlete_lthr: Optional[int],
     duration_minutes: int,
 ) -> Optional[RPEEstimate]:
     """
-    Derive RPE from heart rate data using individualized zones.
+    Derive RPE from heart rate data using max HR zones.
 
-    Approach (in priority order):
-    1. LTHR-based zones (gold standard, individualized)
-       - Zone 1 (< 80% LTHR): RPE 2-3 (recovery/easy)
-       - Zone 2 (80-95% LTHR): RPE 3-4 (easy/aerobic, conversational)
-       - Zone 3 (95-105% LTHR): RPE 5-6 (tempo/lactate threshold)
-       - Zone 4-5 (> 105% LTHR): RPE 7-9 (VO2max/anaerobic)
-
-    2. Max HR % zones (improved proxy, fallback when LTHR not available)
+    Max HR % zones:
        - < 60% max HR: RPE 2 (very easy)
        - 60-68% max HR: RPE 3 (easy recovery)
        - 68-78% max HR: RPE 4 (easy/aerobic, Zone 2)
@@ -259,75 +248,40 @@ def estimate_rpe_from_hr(
         average_hr: Average heart rate during activity
         max_hr_activity: Max HR reached during activity
         athlete_max_hr: Athlete's known max HR
-        athlete_lthr: Athlete's lactate threshold heart rate (optional, gold standard)
         duration_minutes: Activity duration
 
     Returns:
         RPE estimate or None if insufficient data
     """
-    # APPROACH 1: LTHR-based zones (gold standard, individualized)
-    if athlete_lthr:
-        # Use LTHR as anchor point (Zone 3 boundary at 100% LTHR)
-        # Sport science: LTHR is most reliable individualized marker
-        # Zone 1: < 80% LTHR (recovery)
-        # Zone 2: 80-95% LTHR (easy/aerobic, conversational)
-        # Zone 3: 95-105% LTHR (tempo/lactate threshold)
-        # Zone 4: 105-110% LTHR (VO2max)
-        # Zone 5: > 110% LTHR (anaerobic/maximal)
+    # Determine max HR to use
+    max_hr = athlete_max_hr or max_hr_activity
+    if not max_hr:
+        return None
 
-        hr_percent_lthr = (average_hr / athlete_lthr) * 100
+    hr_percent_max = (average_hr / max_hr) * 100
 
-        if hr_percent_lthr < 75:
-            base_rpe = 2  # Recovery
-        elif hr_percent_lthr < 85:
-            base_rpe = 3  # Easy recovery
-        elif hr_percent_lthr < 95:
-            base_rpe = 4  # Easy/aerobic (Zone 2)
-        elif hr_percent_lthr < 100:
-            base_rpe = 5  # Tempo (lower LT)
-        elif hr_percent_lthr < 105:
-            base_rpe = 6  # Lactate threshold
-        elif hr_percent_lthr < 108:
-            base_rpe = 7  # VO2max (lower)
-        elif hr_percent_lthr < 112:
-            base_rpe = 8  # VO2max (upper)
-        else:
-            base_rpe = 9  # Anaerobic/maximal
-
-        confidence = "high"  # LTHR-based is gold standard
-        reasoning = f"HR {average_hr} = {hr_percent_lthr:.0f}% of LTHR ({athlete_lthr})"
-
-    # APPROACH 2: Max HR % zones (improved proxy, fallback)
+    # Improved thresholds (less aggressive than original)
+    # Based on typical LTHR ~88-92% of max HR for trained athletes
+    # Zone 2 boundary moved from 70% to 78% (key fix for 80/20 distribution)
+    if hr_percent_max < 60:
+        base_rpe = 2  # Very easy
+    elif hr_percent_max < 68:
+        base_rpe = 3  # Easy recovery
+    elif hr_percent_max < 78:  # FIX: Was 70% (caused easy runs → moderate)
+        base_rpe = 4  # Easy/aerobic (Zone 2)
+    elif hr_percent_max < 85:  # FIX: Was 80%
+        base_rpe = 5  # Moderate/tempo (Zone 3)
+    elif hr_percent_max < 90:  # FIX: Was 85% (LT proxy)
+        base_rpe = 6  # Lactate threshold
+    elif hr_percent_max < 94:  # FIX: Was 90%
+        base_rpe = 7  # VO2max (lower)
+    elif hr_percent_max < 97:  # FIX: Was 95%
+        base_rpe = 8  # VO2max (upper)
     else:
-        # Determine max HR to use
-        max_hr = athlete_max_hr or max_hr_activity
-        if not max_hr:
-            return None
+        base_rpe = 9  # Anaerobic/maximal
 
-        hr_percent_max = (average_hr / max_hr) * 100
-
-        # Improved thresholds (less aggressive than original)
-        # Based on typical LTHR ~88-92% of max HR for trained athletes
-        # Zone 2 boundary moved from 70% to 78% (key fix for 80/20 distribution)
-        if hr_percent_max < 60:
-            base_rpe = 2  # Very easy
-        elif hr_percent_max < 68:
-            base_rpe = 3  # Easy recovery
-        elif hr_percent_max < 78:  # FIX: Was 70% (caused easy runs → moderate)
-            base_rpe = 4  # Easy/aerobic (Zone 2)
-        elif hr_percent_max < 85:  # FIX: Was 80%
-            base_rpe = 5  # Moderate/tempo (Zone 3)
-        elif hr_percent_max < 90:  # FIX: Was 85% (LT proxy)
-            base_rpe = 6  # Lactate threshold
-        elif hr_percent_max < 94:  # FIX: Was 90%
-            base_rpe = 7  # VO2max (lower)
-        elif hr_percent_max < 97:  # FIX: Was 95%
-            base_rpe = 8  # VO2max (upper)
-        else:
-            base_rpe = 9  # Anaerobic/maximal
-
-        confidence = "medium"  # Max HR% is proxy, higher variability
-        reasoning = f"HR {average_hr} = {hr_percent_max:.0f}% of max ({max_hr})"
+    confidence = "medium"  # Max HR% is proxy, higher variability
+    reasoning = f"HR {average_hr} = {hr_percent_max:.0f}% of max ({max_hr})"
 
     # Duration adjustment (applies to both approaches)
     duration_adjustment = 0

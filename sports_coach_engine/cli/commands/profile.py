@@ -13,7 +13,7 @@ import typer
 from sports_coach_engine.api import create_profile, get_profile, update_profile
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json, OutputEnvelope
-from sports_coach_engine.schemas.profile import Weekday, TimePreference, DetailLevel, CoachingStyle, IntensityMetric
+from sports_coach_engine.schemas.profile import Weekday, DetailLevel, CoachingStyle, IntensityMetric
 
 # Create subcommand app
 app = typer.Typer(help="Manage athlete profile")
@@ -43,16 +43,6 @@ def profile_create_command(
         "--available-days",
         help="Available run days (comma-separated, e.g., 'monday,wednesday,friday')"
     ),
-    preferred_days: Optional[str] = typer.Option(
-        None,
-        "--preferred-days",
-        help="Preferred run days (comma-separated subset of available)"
-    ),
-    time_preference: Optional[str] = typer.Option(
-        None,
-        "--time-preference",
-        help="Time preference: morning, evening, or flexible"
-    ),
     detail_level: Optional[str] = typer.Option(
         None,
         "--detail-level",
@@ -77,7 +67,7 @@ def profile_create_command(
     Examples:
         sce profile create --name "Alex" --age 32 --max-hr 190
         sce profile create --name "Sam" --run-priority primary
-        sce profile create --name "Alex" --available-days "monday,wednesday,friday" --time-preference morning
+        sce profile create --name "Alex" --available-days "monday,wednesday,friday"
     """
     # Parse constraint fields (comma-separated days to List[Weekday])
     available_days_list = None
@@ -88,32 +78,6 @@ def profile_create_command(
             envelope = create_error_envelope(
                 error_type="validation",
                 message=f"Invalid day in --available-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
-                data={}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-    preferred_days_list = None
-    if preferred_days:
-        try:
-            preferred_days_list = [Weekday(d.strip().lower()) for d in preferred_days.split(',')]
-        except ValueError as e:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid day in --preferred-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
-                data={}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-    time_pref_enum = None
-    if time_preference:
-        try:
-            time_pref_enum = TimePreference(time_preference.lower())
-        except ValueError:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid --time-preference: {time_preference}. Use: morning, evening, or flexible",
                 data={}
             )
             output_json(envelope)
@@ -170,8 +134,6 @@ def profile_create_command(
         min_run_days=min_run_days,
         max_run_days=max_run_days,
         available_run_days=available_days_list,
-        preferred_run_days=preferred_days_list,
-        time_preference=time_pref_enum,
         detail_level=detail_level_enum,
         coaching_style=coaching_style_enum,
         intensity_metric=intensity_metric_enum,
@@ -257,16 +219,6 @@ def profile_set_command(
         "--available-days",
         help="Available run days (comma-separated, e.g., 'monday,wednesday,friday')"
     ),
-    preferred_days: Optional[str] = typer.Option(
-        None,
-        "--preferred-days",
-        help="Preferred run days (comma-separated subset of available)"
-    ),
-    time_preference: Optional[str] = typer.Option(
-        None,
-        "--time-preference",
-        help="Time preference: morning, evening, or flexible"
-    ),
     detail_level: Optional[str] = typer.Option(
         None,
         "--detail-level",
@@ -296,7 +248,6 @@ def profile_set_command(
         sce profile set --min-run-days 3 --max-run-days 4
         sce profile set --max-session-minutes 180
         sce profile set --available-days "tuesday,thursday,saturday,sunday"
-        sce profile set --time-preference morning
     """
     # Collect non-None fields
     fields = {}
@@ -335,32 +286,6 @@ def profile_set_command(
             envelope = create_error_envelope(
                 error_type="validation",
                 message=f"Invalid day in --available-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
-                data={}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-    if preferred_days is not None:
-        try:
-            preferred_days_list = [Weekday(d.strip().lower()) for d in preferred_days.split(',')]
-            constraint_updates["preferred_run_days"] = preferred_days_list
-        except ValueError as e:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid day in --preferred-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
-                data={}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-    if time_preference is not None:
-        try:
-            time_pref_enum = TimePreference(time_preference.lower())
-            constraint_updates["time_preference"] = time_pref_enum
-        except ValueError:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid --time-preference: {time_preference}. Use: morning, evening, or flexible",
                 data={}
             )
             output_json(envelope)

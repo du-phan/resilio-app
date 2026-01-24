@@ -52,7 +52,6 @@ def integration_repo(tmp_path):
         created_at=today.isoformat(),
         constraints=TrainingConstraints(
             available_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SATURDAY],
-            preferred_run_days=[Weekday.SATURDAY],
             min_run_days_per_week=3,
             max_run_days_per_week=4,
         ),
@@ -104,7 +103,6 @@ class TestProfileIntegration:
         assert isinstance(profile, AthleteProfile)
         assert profile.name == "Integration Test Athlete"
         assert profile.constraints.min_run_days_per_week == 3
-        assert Weekday.SATURDAY in profile.constraints.preferred_run_days
 
         # Update constraints (must include all required fields)
         updated = update_profile(
@@ -112,13 +110,11 @@ class TestProfileIntegration:
                 "available_run_days": [Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SUNDAY],
                 "min_run_days_per_week": 4,
                 "max_run_days_per_week": 5,
-                "preferred_run_days": [Weekday.SUNDAY],
             }
         )
 
         assert isinstance(updated, AthleteProfile)
         assert updated.constraints.min_run_days_per_week == 4
-        assert Weekday.SUNDAY in updated.constraints.preferred_run_days
 
     def test_set_goal_flow(self, integration_repo, tmp_path, monkeypatch):
         """Test setting a goal (without plan generation in integration test)."""
