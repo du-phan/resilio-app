@@ -52,12 +52,8 @@ sce guardrails analyze-progression \
 ```
 
 4) Produce intent-based weekly JSON:
-- `week_number`, `phase`, `start_date`, `end_date`, `target_volume_km`, `target_systemic_load_au`
-- `workout_pattern` with `run_days` (0=Mon..6=Sun), `long_run_day`, `long_run_pct`, paces
+**CRITICAL: ALWAYS use the CLI generator - NEVER manually construct JSON**
 
-Write to `/tmp/weekly_plan_w<week>.json`.
-
-Preferred: use CLI generator if available to avoid manual JSON edits:
 ```bash
 sce plan generate-week \
   --week <WEEK_NUMBER> \
@@ -66,8 +62,14 @@ sce plan generate-week \
   --long-run-pct <LONG_RUN_PCT> \
   --easy-run-paces "<EASY_PACES>" \
   --long-run-pace "<LONG_PACE>" \
+  --structure "<DESCRIPTIVE_STRUCTURE>" \
   --out /tmp/weekly_plan_w<week>.json
 ```
+
+This command automatically generates a properly formatted JSON with all required fields:
+- `week_number`, `phase`, `start_date`, `end_date`, `target_volume_km`, `target_systemic_load_au`
+- `workout_pattern` with `run_days` (0=Mon..6=Sun), `long_run_day`, `long_run_pct`, and all required pace fields
+- Complete workout specifications that pass validation
 
 5) Validate:
 ```bash
