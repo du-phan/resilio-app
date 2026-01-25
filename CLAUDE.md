@@ -187,7 +187,7 @@ These skills run in forked context and **must not** ask the athlete questions. U
 **Session initialization (CRITICAL - always start here)**:
 ```bash
 sce auth status    # Check authentication (exit code 3 = expired)
-sce sync           # Import activities from Strava (last 120 days)
+sce sync           # Import activities from Strava (last 6 months (180 days))
 sce status         # Get current metrics (CTL/ATL/TSB/ACWR/readiness)
 ```
 
@@ -420,7 +420,7 @@ echo "Your CTL is $ctl ($interpretation)"
 **Standard coaching session flow**:
 
 1. **Check auth**: `sce auth status` (exit code 3 = expired → guide through OAuth flow)
-2. **Sync activities**: `sce sync` (imports last 120 days)
+2. **Sync activities**: `sce sync` (imports last 6 months (180 days))
 3. **Verify dates**: `sce dates today` (confirms current date/day for planning context)
 4. **Assess state**: `sce status` (CTL/ATL/TSB/ACWR/readiness)
 5. **Use appropriate skill or direct CLI commands**:
@@ -600,7 +600,7 @@ fi
 1. Activate `first-session` skill (matches user intent)
 2. Follow skill workflow:
    - Check auth: `sce auth status` (exit code 3 → guide OAuth)
-   - Sync: `sce sync` (120 days of history)
+   - Sync: `sce sync` (180 days of history)
    - Profile: Use natural conversation for name/age/HR
    - Profile: Use computational tools for injury history detection
    - Profile: Use AskUserQuestion for conflict policy (trade-offs)

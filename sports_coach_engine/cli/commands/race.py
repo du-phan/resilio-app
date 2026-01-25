@@ -183,7 +183,7 @@ def race_import_command(
         sce race import-from-strava --since 2025-01-01
         sce race import-from-strava --no-interactive
 
-    Note: This only detects races from synced activities (last 120 days).
+    Note: This only detects races from synced activities (last 6 months / 180 days by default).
     For older PBs, use 'sce race add' to manually add them.
     """
     # Call API

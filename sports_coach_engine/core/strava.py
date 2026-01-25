@@ -87,7 +87,7 @@ STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_API_BASE = "https://www.strava.com/api/v3"
 
 # Sync window defaults
-DEFAULT_SYNC_LOOKBACK_DAYS = 120  # 4 months - optimal for CTL accuracy (2.86× time constant)
+DEFAULT_SYNC_LOOKBACK_DAYS = 180  # 6 months - captures seasonal patterns (4.29× time constant)
 
 # Rate limits (Strava defaults)
 DEFAULT_RETRY_ATTEMPTS = 3

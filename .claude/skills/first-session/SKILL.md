@@ -10,7 +10,7 @@ allowed-tools: Bash, Read, Write, AskUserQuestion
 
 This skill guides complete athlete onboarding from authentication to goal setting. The workflow ensures historical data is available before profile setup, enabling data-driven questions instead of generic prompts.
 
-**Why historical data matters**: With 120 days synced, ask "I see you average 35km/week - should we maintain this?" instead of "How much do you run?" (no context).
+**Why historical data matters**: With 180 days synced, ask "I see you average 35km/week - should we maintain this?" instead of "How much do you run?" (no context).
 
 ---
 
@@ -48,7 +48,7 @@ sce sync
 ```
 
 **What this provides**:
-- 120 days of activity history
+- 180 days of activity history
 - CTL/ATL/TSB calculated from historical load
 - Activity patterns (training days, volume, sport distribution)
 
@@ -109,6 +109,31 @@ Coach: [Store value]
 ```
 
 **If athlete doesn't know**: "No problem - you can measure it tomorrow and add later with `sce profile set --resting-hr XX`"
+
+#### 4a-experience. Running Experience
+
+**Ask about running background** (natural conversation):
+
+```
+Coach: "How long have you been running? Just a rough estimate is fine."
+Athlete: "About 5 years, but took a 2-year break in the middle"
+```
+
+**Save to profile**:
+```bash
+sce profile set --running-experience-years 5
+```
+
+**Why this matters**:
+- Helps contextualize fitness level and injury risk
+- Newer runners (<2 years) need more conservative volume progression
+- Experienced runners (>5 years) can handle higher training loads
+- Informs coaching tone (more explanations for beginners)
+
+**Handle edge cases**:
+- "Just started this year" → Calculate from first activity: `sce profile analyze` shows first activity date
+- "Been running since high school but stopped for a decade" → Count active years only
+- "Not sure" → Skip, mark in notes: "Running experience not specified during onboarding"
 
 #### 4b. Injury History (Context-Aware with Memory System)
 
@@ -188,7 +213,7 @@ sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_t
 
 **Why this matters**: PBs provide accurate fitness baseline + motivational context. Even old PBs reveal progression/regression.
 
-**CRITICAL**: Strava sync only captures last 120 days. PBs older than 4 months won't be auto-detected. **Manual entry is PRIMARY workflow.**
+**CRITICAL**: Strava sync only captures last 6 months (180 days). PBs older than 6 months won't be auto-detected. **Manual entry is PRIMARY workflow.**
 
 #### Workflow: Manual Entry FIRST, Then Auto-Import
 
@@ -224,7 +249,7 @@ sce race import-from-strava --since 120d
 
 **Present detected races for confirmation**:
 ```
-Coach: "Found 2 potential races in last 120 days:
+Coach: "Found 2 potential races in last 6 months (180 days):
 - Half Marathon 1:32:00 (Nov 2025) - not yet in race_history
 - 10K 43:00 (Dec 2025) - not yet in race_history
 
@@ -259,7 +284,7 @@ sce memory add --type RACE_HISTORY \
 
 #### Benefits of Race History
 
-1. **Accurate VDOT baseline**: Use historical PBs (even if >120 days old) for training pace calculation
+1. **Accurate VDOT baseline**: Use historical PBs (even if >180 days old) for training pace calculation
 2. **Goal validation**: "Your 10K PB (VDOT 48) predicts 1:25 half, is 1:20 realistic?"
 3. **Motivational context**: "Let's rebuild to your 42:30 fitness"
 4. **Progression tracking**: Compare current VDOT estimate to peak PB VDOT over time
@@ -303,7 +328,7 @@ sce profile analyze
 
 **Step 2: Present findings to athlete** (reference actual data):
 ```
-Coach: "Looking at your last 120 days on Strava:
+Coach: "Looking at your last 6 months (180 days) on Strava:
 - Climbing: 40% (30 sessions)
 - Running: 31% (23 sessions)
 - Yoga: 19% (14 sessions)
@@ -583,7 +608,7 @@ Would you like me to create a personalized plan now?"
 ## Quick Decision Trees
 
 ### Q: Athlete has no recent Strava data
-**Scenario**: Sync returns <10 activities in 120 days
+**Scenario**: Sync returns <10 activities in 180 days
 
 **Response**: "I see minimal recent Strava activity. No problem - we'll start from scratch. CTL starts at 0, building volume gradually from conservative baseline."
 
@@ -639,7 +664,7 @@ Would you like me to create a personalized plan now?"
 ❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
 ✅ **Good**: Ask directly for PBs first, then auto-import as supplement
 
-**Manual entry is primary** - Strava only has 120 days
+**Manual entry is primary** - Strava only has 180 days
 
 ---
 
@@ -647,8 +672,9 @@ Would you like me to create a personalized plan now?"
 
 **Onboarding complete when**:
 1. ✅ Authentication successful (`sce auth status` returns 0)
-2. ✅ Activities synced (120 days)
+2. ✅ Activities synced (180 days)
 3. ✅ Profile created (name, age, max HR, conflict policy)
+3.5. ✅ Running experience collected (years, or marked as unknown)
 4. ✅ Injury history recorded in memory system (if applicable)
 5. ✅ Race history captured (PBs added via `sce race add`, auto-import run)
 6. ✅ Goal set (race type, date)

@@ -75,7 +75,8 @@ sce sync --since 2026-01-01
 **Parameters:**
 - `--since PERIOD` - Sync activities since this period (optional)
   - Format: `14d` (days), `2026-01-01` (date)
-  - Default: Last 120 days
+  - Default: Last 6 months (180 days)
+  - Note: Avoid syncing more than 1 year - 6 months is optimal for CTL accuracy
 
 **Returns:**
 

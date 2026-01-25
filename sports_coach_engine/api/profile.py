@@ -567,7 +567,7 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
     )
 
     # 9. Auto-update profile with workout patterns (if profile exists)
-    _auto_update_profile_patterns(workout_patterns)
+    _auto_update_profile_patterns(workout_patterns, volume_data)
 
     # Build result
     analysis = ProfileAnalysis(
@@ -800,7 +800,7 @@ def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) ->
     }
 
 
-def _auto_update_profile_patterns(workout_patterns: Dict) -> None:
+def _auto_update_profile_patterns(workout_patterns: Dict, volume_data: Dict) -> None:
     """Automatically update profile with workout patterns if profile exists.
 
     This makes workout patterns immediately available for profile-aware minimums.
@@ -841,6 +841,11 @@ def _auto_update_profile_patterns(workout_patterns: Dict) -> None:
     if workout_patterns['typical_long_run_duration_min'] is not None:
         profile.typical_long_run_duration_min = workout_patterns['typical_long_run_duration_min']
         updated_fields.append('typical_long_run_duration_min')
+
+    # Update current weekly run volume from recent 4-week average
+    if volume_data and volume_data.get('recent_4wk') is not None:
+        profile.current_weekly_run_km = round(volume_data['recent_4wk'], 1)
+        updated_fields.append('current_weekly_run_km')
 
     # Save updated profile (with error handling)
     try:

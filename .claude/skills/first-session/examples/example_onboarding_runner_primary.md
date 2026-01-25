@@ -54,10 +54,10 @@ sce auth exchange --code ABC123XYZ789
 **Coach**:
 ```bash
 sce sync
-# Imported 127 activities (120 days)
+# Imported 127 activities (6 months)
 ```
 
-"Great! Imported 127 activities from the last 120 days. Let me analyze your training patterns."
+"Great! Imported 127 activities from the last 6 months (180 days). Let me analyze your training patterns."
 
 ---
 
@@ -257,7 +257,7 @@ Would you like me to design your full 12-week plan now?"
 ## Onboarding Checklist
 
 - ✅ Authentication successful
-- ✅ 127 activities synced (120 days)
+- ✅ 127 activities synced (180 days)
 - ✅ Profile created (name, age, max HR, priority, conflict policy)
 - ✅ No injury history (confirmed via activity gap check)
 - ✅ Goal set (10K, March 15th, sub-40)

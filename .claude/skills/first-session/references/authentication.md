@@ -8,7 +8,7 @@ Historical activity data from Strava is essential for intelligent coaching. With
 
 ## Why Authentication Matters
 
-**With authentication** (120 days of history):
+**With authentication** (6 months / 180 days of history):
 - Ask: "I see you average 35km/week - should we maintain this?"
 - Reference actual data: "Your CTL is 44 (solid recreational fitness)"
 - Identify patterns: "You typically train Tuesdays and weekends"
@@ -120,7 +120,7 @@ Here's a fresh authorization link. This time, I'll wait right here - just author
 
 ### Q: Athlete has no recent Strava data
 
-**Scenario**: Sync returns 0 activities or very few (<10 in 120 days).
+**Scenario**: Sync returns 0 activities or very few (<10 in 6 months / 180 days).
 
 **Response**:
 ```

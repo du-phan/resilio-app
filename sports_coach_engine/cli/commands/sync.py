@@ -23,36 +23,31 @@ def sync_command(
         "--since",
         help="Sync activities since (e.g., '14d' for 14 days, or '2026-01-01')",
     ),
-    all_history: bool = typer.Option(
-        False,
-        "--all",
-        help="Sync ALL historical activities (overrides default 120-day window)",
-    ),
 ) -> None:
     """Import activities from Strava and update metrics.
 
     Fetches activities from Strava, normalizes sport types, calculates RPE estimates,
     computes training loads, and updates daily/weekly metrics.
 
-    By default, syncs the last 120 days (optimal for CTL accuracy and training patterns).
-    Use --all to fetch complete history, or --since to specify a custom window.
+    By default, syncs the last 6 months (180 days) to capture seasonal training patterns.
+    Use --since to specify a custom window (not recommended to go beyond 1 year).
 
     Examples:
-        sce sync                    # Sync last 120 days (recommended default)
-        sce sync --all              # Sync ALL historical activities
-        sce sync --since 14d        # Sync last 14 days
+        sce sync                    # Sync last 6 months / 180 days (recommended)
+        sce sync --since 14d        # Sync last 14 days (recent activities only)
+        sce sync --since 365d       # Sync last year (not recommended - large dataset)
         sce sync --since 2026-01-01 # Sync since specific date
+
+    Note: Avoid syncing more than 1 year of data - it may be slow and is not
+    necessary for accurate CTL/training patterns. 6 months is optimal.
     """
     # Parse since parameter
     since_dt: Optional[datetime] = None
-    if all_history:
-        # Explicit --all flag: fetch all history (since=None)
-        since_dt = None
-    elif since:
+    if since:
         # Explicit --since: use provided value
         since_dt = _parse_since_param(since)
     else:
-        # Default: use 120-day window (optimal for CTL accuracy)
+        # Default: use 180-day window (captures seasonal patterns)
         since_dt = datetime.now() - timedelta(days=DEFAULT_SYNC_LOOKBACK_DAYS)
 
     # Call API

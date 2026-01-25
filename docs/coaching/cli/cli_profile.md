@@ -281,7 +281,7 @@ Analyze synced activity history to suggest profile values.
 sce profile analyze
 ```
 
-This analyzes your Strava activity history (last 120 days) to suggest:
+This analyzes your Strava activity history (last 6 months / 180 days) to suggest:
 - `max_hr` - Observed peak heart rate
 - `weekly_km` - 4-week average volume
 - `available_run_days` - Days you typically train

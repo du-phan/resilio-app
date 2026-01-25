@@ -208,8 +208,8 @@ sce race import-from-strava --no-interactive
 
 - This command **detects** races but does **NOT** automatically add them to race history
 - Review detected races, then use `sce race add` for each race you want to save
-- Only detects races from synced activities (last 120 days by default)
-- For historical PBs older than 120 days, use `sce race add` manually
+- Only detects races from synced activities (last 6 months / 180 days by default)
+- For historical PBs older than 6 months, use `sce race add` manually
 
 **Typical workflow:**
 
