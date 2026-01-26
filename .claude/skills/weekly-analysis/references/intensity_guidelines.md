@@ -173,4 +173,3 @@ sce memory add --type TRAINING_RESPONSE \
 
 - **Matt Fitzgerald's 80/20 Running**: Complete book in [docs/training_books/80_20_matt_fitzgerald.md](../../../docs/training_books/80_20_matt_fitzgerald.md)
 - **Seiler's Talk Faster Podcast**: Discussion of intensity distribution research
-- **Coaching Methodology**: [docs/coaching/methodology.md](../../../docs/coaching/methodology.md#8020-intensity-distribution)

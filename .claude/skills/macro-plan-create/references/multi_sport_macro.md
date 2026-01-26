@@ -202,4 +202,5 @@ sce guardrails safe-volume --ctl 44 --goal-type half_marathon --priority equal
 ## Deep Dive Resources
 
 - [Run Less, Run Faster](../../../docs/training_books/run_less_run_faster_bill_pierce.md) - FIRST method for multi-sport athletes
-- [Coaching Methodology - Multi-Sport Awareness](../../../docs/coaching/methodology.md#multi-sport-awareness) - Complete system
+
+**Note**: For complete multi-sport methodology, see SKILL.md Additional Resources section.

@@ -256,5 +256,5 @@ sce risk forecast --weeks 1 --metrics metrics.json --plan plan.json
 ## Deep Dive Resources
 
 - [Run Less, Run Faster](../../../docs/training_books/run_less_run_faster_bill_pierce.md) - FIRST method for multi-sport athletes
-- [Coaching Methodology - Sport Multipliers](../../../docs/coaching/methodology.md#sport-multipliers--load-model) - Two-channel load model
-- [Coaching Methodology - Multi-Sport Awareness](../../../docs/coaching/methodology.md#multi-sport-awareness) - Complete system
+
+**Note**: For complete multi-sport methodology and sport multipliers, see SKILL.md Additional Resources section.

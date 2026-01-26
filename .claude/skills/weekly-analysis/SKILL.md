@@ -2,6 +2,7 @@
 name: weekly-analysis
 description: Comprehensive weekly training review including adherence analysis, intensity distribution validation (80/20), multi-sport load breakdown, and pattern detection. Use when athlete asks "how was my week?", "weekly review", "analyze training", or "did I follow the plan?".
 allowed-tools: Bash, Read, Write
+argument-hint: ""
 ---
 
 # Weekly Analysis: Comprehensive Training Review

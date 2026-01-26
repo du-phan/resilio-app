@@ -53,7 +53,7 @@ Each sport has different systemic and lower-body multipliers relative to running
 | **Strength Training** | 0.50 | 0.40 | Depends on focus (legs vs upper-body) |
 | **Yoga** | 0.30 | 0.15 | Low intensity, flexibility focus |
 
-**Full table**: [docs/coaching/methodology.md](../../../docs/coaching/methodology.md#sport-multipliers--load-model)
+**Note**: This table shows common sports. For complete sport multipliers methodology, see SKILL.md Additional Resources section.
 
 ---
 
@@ -305,6 +305,7 @@ Either increase is safe given your stable ACWR trend.
 
 ## Additional Resources
 
-- **Complete sport multipliers table**: [docs/coaching/methodology.md](../../../docs/coaching/methodology.md#sport-multipliers--load-model)
 - **Multi-sport case studies**: [docs/coaching/scenarios.md](../../../docs/coaching/scenarios.md)
 - **Conflict policy settings**: See profile setup in first-session skill
+
+**Note**: For complete sport multipliers table and methodology, see SKILL.md Additional Resources section.

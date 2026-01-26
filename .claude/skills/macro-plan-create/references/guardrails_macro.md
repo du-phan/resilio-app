@@ -263,4 +263,5 @@ sce guardrails break-return --days 21 --ctl 44 --cross-training moderate
 - [80/20 Running](../../../docs/training_books/80_20_matt_fitzgerald.md) - Intensity distribution research
 - [Daniels' Running Formula](../../../docs/training_books/daniel_running_formula.md) - Quality volume limits
 - [Advanced Marathoning](../../../docs/training_books/advanced_marathoning_pete_pfitzinger.md) - Recovery protocols
-- [Coaching Methodology](../../../docs/coaching/methodology.md#training-guardrails) - Complete guardrails system
+
+**Note**: For complete guardrails methodology, see SKILL.md Additional Resources section.
