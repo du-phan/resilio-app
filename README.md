@@ -6,6 +6,12 @@ AI-powered adaptive running coach for multi-sport athletes, running entirely in 
 
 ## Setup
 
+### Getting Started (Non-Coders)
+
+If you are not comfortable with the terminal, use the guided setup page:
+
+- `docs/getting_started_non_coders.html`
+
 ### 1. Install Dependencies
 
 ```bash

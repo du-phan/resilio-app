@@ -212,7 +212,11 @@ data/
 data_samples/
 config/secrets.local.yaml
 *.bak
+*.backup
 .env.local
+
+# Documentation build artifacts
+docs/artifacts/
 
 # Development & testing scripts (local utilities)
 scripts/*

@@ -11,6 +11,8 @@ argument-hint: "[athlete-name]"
 
 This skill guides complete athlete onboarding from authentication to goal setting. The workflow ensures historical data is available before profile setup, enabling data-driven questions instead of generic prompts.
 
+**Prerequisites**: This skill assumes your environment is ready (Python 3.11+, `sce` CLI available). If you haven't set up your environment yet, use the `complete-setup` skill first to install Python and the package.
+
 **Why historical data matters**: With 180 days synced, ask "I see you average 35km/week - should we maintain this?" instead of "How much do you run?" (no context).
 
 ---
@@ -29,6 +31,18 @@ sce auth status
 - **Exit code 0**: Authenticated → Proceed to Step 2
 - **Exit code 3**: Expired/missing → Guide OAuth flow
 - **Exit code 2**: Config missing → Run `sce init` first
+
+**If config is missing or credentials are empty**:
+1. Run `sce init` to create `config/secrets.local.yaml` (if missing).
+2. Read `config/secrets.local.yaml` and verify `strava.client_id` and `strava.client_secret` are present.
+3. If either is missing or still the placeholder, ask the athlete to paste the **Client ID** and **Client Secret** from the Strava API settings page (`https://www.strava.com/settings/api`).
+4. Write the values into `config/secrets.local.yaml` under:
+   ```yaml
+   strava:
+     client_id: "..."
+     client_secret: "..."
+   ```
+5. Confirm: "Saved locally. I’ll use these for authentication going forward."
 
 **If auth expired/missing** (exit code 3):
 1. Explain why: "I need Strava access to provide intelligent coaching based on actual training patterns."
@@ -314,19 +328,23 @@ Would you like me to create a personalized plan now?"
 
 **Auth must be first** - historical data enables intelligent setup
 
-### 4. Not discussing constraints before planning
+### 4. Asking the athlete to edit YAML manually
+❌ **Bad**: "Open config/secrets.local.yaml and edit it."
+✅ **Good**: Ask for Client ID/Secret in chat and write them locally.
+
+### 5. Not discussing constraints before planning
 ❌ **Bad**: Creating plan without knowing schedule
 ✅ **Good**: Ask run days, duration, other sports BEFORE planning
 
 **Constraints shape entire plan**
 
-### 5. Generic injury questions
+### 6. Generic injury questions
 ❌ **Bad**: "Any injuries?" (no context)
 ✅ **Good**: "I see 2-week gap in November with CTL drop - injury-related?"
 
 **Use activity gaps as conversation starters**
 
-### 6. Only relying on Strava auto-import for PBs
+### 7. Only relying on Strava auto-import for PBs
 ❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
 ✅ **Good**: Ask directly for PBs first, then auto-import as supplement
 
