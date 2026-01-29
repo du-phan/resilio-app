@@ -1,15 +1,14 @@
 """
 Unit tests for analysis API layer.
 
-Tests error handling, input validation, and successful execution for all 9
-analysis functions (5 weekly + 4 risk).
+Tests error handling, input validation, and successful execution for all 8
+analysis functions (4 weekly + 4 risk).
 """
 
 import pytest
 from datetime import date, timedelta
 
 from sports_coach_engine.api.analysis import (
-    api_analyze_week_adherence,
     api_validate_intensity_distribution,
     api_detect_activity_gaps,
     api_analyze_load_distribution_by_sport,
@@ -22,7 +21,6 @@ from sports_coach_engine.api.analysis import (
 )
 
 from sports_coach_engine.schemas.analysis import (
-    WeekAdherenceAnalysis,
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,
@@ -37,72 +35,6 @@ from sports_coach_engine.schemas.analysis import (
 # ============================================================
 # TEST DATA FIXTURES
 # ============================================================
-
-
-@pytest.fixture
-def sample_planned_workouts():
-    """Sample planned workouts for Week 5."""
-    return [
-        {
-            "workout_type": "easy",
-            "duration_minutes": 40,
-            "distance_km": 6.0,
-            "target_systemic_load_au": 160,
-            "target_lower_body_load_au": 160,
-        },
-        {
-            "workout_type": "tempo",
-            "duration_minutes": 45,
-            "distance_km": 8.0,
-            "target_systemic_load_au": 315,
-            "target_lower_body_load_au": 315,
-        },
-        {
-            "workout_type": "easy",
-            "duration_minutes": 30,
-            "distance_km": 5.0,
-            "target_systemic_load_au": 120,
-            "target_lower_body_load_au": 120,
-        },
-        {
-            "workout_type": "long_run",
-            "duration_minutes": 65,
-            "distance_km": 12.0,
-            "target_systemic_load_au": 400,
-            "target_lower_body_load_au": 400,
-        },
-    ]
-
-
-@pytest.fixture
-def sample_completed_activities():
-    """Sample completed activities for Week 5."""
-    return [
-        {
-            "sport": "running",
-            "duration_minutes": 40,
-            "distance_km": 6.0,
-            "systemic_load_au": 160,
-            "lower_body_load_au": 160,
-            "workout_type": "easy",
-        },
-        {
-            "sport": "running",
-            "duration_minutes": 30,
-            "distance_km": 5.0,
-            "systemic_load_au": 120,
-            "lower_body_load_au": 120,
-            "workout_type": "easy",
-        },
-        {
-            "sport": "running",
-            "duration_minutes": 65,
-            "distance_km": 12.0,
-            "systemic_load_au": 400,
-            "lower_body_load_au": 400,
-            "workout_type": "long_run",
-        },
-    ]
 
 
 @pytest.fixture
@@ -265,61 +197,6 @@ def sample_recent_weeks():
 # ============================================================
 # WEEKLY ANALYSIS TESTS
 # ============================================================
-
-
-class TestAnalyzeWeekAdherence:
-    """Tests for api_analyze_week_adherence."""
-
-    def test_valid_adherence_analysis(self, sample_planned_workouts, sample_completed_activities):
-        """Valid adherence analysis returns WeekAdherenceAnalysis."""
-        result = api_analyze_week_adherence(
-            week_number=5,
-            planned_workouts=sample_planned_workouts,
-            completed_activities=sample_completed_activities,
-        )
-
-        assert isinstance(result, WeekAdherenceAnalysis)
-        assert result.week_number == 5
-        assert result.completion_stats.total_workouts_planned == 4
-        assert result.completion_stats.total_workouts_completed == 3
-        assert result.completion_stats.completion_rate_pct == 75.0
-
-    def test_invalid_week_number(self, sample_planned_workouts, sample_completed_activities):
-        """Week number < 1 returns error."""
-        result = api_analyze_week_adherence(
-            week_number=0,
-            planned_workouts=sample_planned_workouts,
-            completed_activities=sample_completed_activities,
-        )
-
-        assert isinstance(result, AnalysisError)
-        assert result.error_type == "invalid_input"
-        assert "Week number must be >= 1" in result.message
-
-    def test_empty_planned_workouts(self, sample_completed_activities):
-        """Empty planned workouts returns error."""
-        result = api_analyze_week_adherence(
-            week_number=5,
-            planned_workouts=[],
-            completed_activities=sample_completed_activities,
-        )
-
-        assert isinstance(result, AnalysisError)
-        assert result.error_type == "insufficient_data"
-
-    def test_malformed_planned_workout(self, sample_completed_activities):
-        """Missing required keys in planned workout returns error."""
-        malformed = [{"workout_type": "easy"}]  # Missing duration, distance
-
-        result = api_analyze_week_adherence(
-            week_number=5,
-            planned_workouts=malformed,
-            completed_activities=sample_completed_activities,
-        )
-
-        assert isinstance(result, AnalysisError)
-        assert result.error_type == "invalid_input"
-        assert "missing required keys" in result.message
 
 
 class TestValidateIntensityDistribution:

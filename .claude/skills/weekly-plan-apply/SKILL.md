@@ -28,7 +28,7 @@ Confirm `weekly_approval.week_number` and `weekly_approval.approved_file` match 
 
 2) Validate payload:
 ```bash
-sce plan validate --file <APPROVED_FILE>
+sce plan validate-week --file <APPROVED_FILE>
 ```
 
 3) Apply with validation gate:

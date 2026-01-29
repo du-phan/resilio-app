@@ -802,7 +802,6 @@ from typing import Union, List, Dict, Any, Optional
 from datetime import date
 
 from sports_coach_engine.schemas.analysis import (
-    WeekAdherenceAnalysis,
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,
@@ -815,14 +814,6 @@ from sports_coach_engine.schemas.analysis import (
 
 
 # Weekly Analysis Functions
-
-def api_analyze_week_adherence(
-    week_number: int,
-    planned_workouts: List[Dict[str, Any]],
-    completed_activities: List[Dict[str, Any]],
-) -> Union[WeekAdherenceAnalysis, AnalysisError]:
-    """Compare planned vs actual training for adherence patterns."""
-    ...
 
 def api_validate_intensity_distribution(
     activities: List[Dict[str, Any]],
@@ -892,7 +883,6 @@ def api_assess_taper_status(
 ```
 
 **Key Features:**
-- **Week Adherence:** Completion stats, load variance, workout type adherence, pattern detection
 - **80/20 Validation:** Polarization scoring, compliance levels, moderate-intensity rut detection
 - **Gap Detection:** CTL impact analysis, cause inference from notes (injury/illness keywords)
 - **Multi-Sport Load:** Systemic + lower-body breakdown by sport, priority adherence, fatigue flags

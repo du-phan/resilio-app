@@ -1,6 +1,6 @@
 ---
 name: weekly-analysis
-description: Comprehensive weekly training review including adherence analysis, intensity distribution validation (80/20), multi-sport load breakdown, and pattern detection. Use when athlete asks "how was my week?", "weekly review", "analyze training", or "did I follow the plan?".
+description: Comprehensive weekly training review including completion checks, intensity distribution validation (80/20), multi-sport load breakdown, and pattern detection. Use when athlete asks "how was my week?", "weekly review", "analyze training", or "did I follow the plan?".
 allowed-tools: Bash, Read, Write
 argument-hint: ""
 ---
@@ -10,7 +10,7 @@ argument-hint: ""
 ## Overview
 
 This skill provides complete weekly training analysis by:
-1. Comparing planned vs. actual training (adherence)
+1. Comparing planned vs. actual training (completion)
 2. Validating intensity distribution (80/20 rule)
 3. Analyzing multi-sport load breakdown
 4. Detecting patterns and suggesting adaptations
@@ -32,20 +32,12 @@ sce week
 - Running volume vs. other activities
 - CTL/ATL/TSB/ACWR/readiness changes
 
-### Step 2: Adherence Analysis
+### Step 2: Weekly Completion Check
 
-```bash
-sce analysis adherence --week [WEEK_NUMBER] --planned [PLAN_FILE] --completed [ACTIVITIES_FILE]
-```
+Use the `sce week` summary to compare planned vs completed workouts and volume.
 
-**Returns**:
-- `completion_rate`: 0-100%
-- `workout_type_adherence`: Breakdown by type (easy, tempo, long, intervals)
-- `missed_workouts`: List with reasons
-- `patterns`: Detected trends
-
-**Interpretation zones**:
-- ≥90%: Excellent adherence
+**Interpretation zones** (by completion rate or volume match):
+- ≥90%: Excellent completion
 - 70-89%: Good, minor adjustments needed
 - 50-69%: Fair, discuss barriers
 - <50%: Poor, major replanning needed
@@ -136,7 +128,7 @@ sce memory add --type TRAINING_RESPONSE \
 
 **Structure**:
 1. **Opening**: Overall summary + key achievement (positive first)
-2. **Adherence**: Planned vs. completed
+2. **Completion**: Planned vs. completed
 3. **Intensity**: 80/20 compliance, violations if any
 4. **Load**: Multi-sport breakdown, concerns
 5. **Patterns**: Notable trends (positive and concerning)
@@ -145,7 +137,7 @@ sce memory add --type TRAINING_RESPONSE \
 
 **Example opening**:
 ```
-Great week! You completed 7/8 planned workouts (88% adherence) and your CTL increased from 42 → 44.
+Great week! You completed 7/8 planned workouts (88% completion) and your CTL increased from 42 → 44.
 ```
 
 **See complete worked examples**:
@@ -205,7 +197,7 @@ Run the executor flow:
 3. `weekly-plan-apply` → validates + persists approved week
 
 **Context to pass to weekly-plan-generate**:
-- Current week's adherence rate
+- Current week's completion rate
 - ACWR and readiness scores
 - Any illness/injury signals detected
 - 80/20 intensity distribution compliance
@@ -228,7 +220,7 @@ Run the executor flow:
 Athlete: "How was my week?"
 
 Coach: [Runs Steps 1-7: Weekly Analysis]
-  → 7/8 workouts completed (88% adherence)
+  → 7/8 workouts completed (88% completion)
   → 82% easy, 18% hard (80/20 compliant ✓)
   → CTL increased 42 → 44 (healthy progression)
   → No concerning patterns
@@ -291,7 +283,7 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 Before sending weekly review, verify:
 
 1. ✅ **Started with positive** - Not leading with criticism
-2. ✅ **Contextualized adherence** - Investigated why low (if applicable)
+2. ✅ **Contextualized completion** - Investigated why low (if applicable)
 3. ✅ **Flagged 80/20 violations** - Checked intensity distribution
 4. ✅ **Connected multi-sport dots** - Showed total load across activities
 5. ✅ **Specific recommendations** - Concrete numbers, not vague advice
@@ -308,7 +300,7 @@ Before sending weekly review, verify:
 ## Summary
 [One sentence: overall + key achievement]
 
-## Adherence
+## Completion
 **Completion rate**: [X]% ([Y]/[Z] workouts)
 
 Completed: [list]

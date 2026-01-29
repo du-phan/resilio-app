@@ -92,7 +92,7 @@
 **Solution**:
 ```bash
 # Validate week before presenting
-sce plan validate --file /tmp/weekly_plan_w1.json
+sce plan validate-week --file /tmp/weekly_plan_w1.json
 
 # Validate dates
 sce dates validate --date <week_start> --must-be monday
@@ -159,7 +159,7 @@ Fix ALL validation failures before athlete sees plan.
 
 **Solution**:
 - Use `sce plan generate-week` to scaffold the weekly JSON.
-- Validate with `sce plan validate --file ...` before presenting.
+- Validate with `sce plan validate-week --file ...` before presenting.
 
 ---
 
@@ -239,7 +239,7 @@ sce dates validate --date 2026-01-20 --must-be monday
 - [ ] **<5% volume discrepancy acceptable** (focus on guardrails, not arithmetic precision)
 - [ ] **Workout prescriptions populated** (NOT empty arrays)
 - [ ] **All 20+ workout fields present** (id, date, paces, purpose, etc.)
-- [ ] Plan validated: `sce plan validate --file plan.json`
+- [ ] Plan validated: `sce plan validate-week --file plan.json`
 - [ ] Markdown presentation created: `/tmp/weekly_plan_w[N]_YYYY_MM_DD.md`
 - [ ] **Athlete approval obtained BEFORE saving**
 - [ ] CLI tested after saving: `sce today` and `sce week` work

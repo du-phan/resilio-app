@@ -76,6 +76,18 @@ class DeclineResult:
 
 
 @dataclass
+class PlanStructureExport:
+    """Export of stored macro plan structure for validation."""
+
+    total_weeks: int
+    goal_type: str
+    race_week: int
+    phases: dict
+    weekly_volumes_km: list
+    recovery_weeks: list
+
+
+@dataclass
 class PlanWeeksResult:
     """Result from getting specific weeks from plan."""
 
@@ -927,8 +939,8 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
             message="No training plan found. Create a macro plan first with:\n"
                     "sce plan create-macro --goal-type <type> --race-date <date> "
                     "--total-weeks <N> --start-date <YYYY-MM-DD> "
-                    "--current-ctl <X> --starting-volume-km <Y> --peak-volume-km <Z> "
-                    "--weekly-volumes-json /tmp/weekly_volumes.json"
+                    "--current-ctl <X> --baseline-vdot <VDOT> "
+                    "--macro-template-json /tmp/macro_template.json"
         )
 
     if isinstance(result, RepoError):
@@ -1116,7 +1128,8 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
             message="No training plan found. Create a macro plan first with:\n"
                     "sce plan create-macro --goal-type <type> --race-date <date> "
                     "--total-weeks <N> --start-date <YYYY-MM-DD> "
-                    "--current-ctl <X> --starting-volume-km <Y> --peak-volume-km <Z>"
+                    "--current-ctl <X> --baseline-vdot <VDOT> "
+                    "--macro-template-json /tmp/macro_template.json"
         )
 
     if isinstance(result, RepoError):
@@ -1306,15 +1319,117 @@ def save_training_plan_review(
         )
         return result
     except FileNotFoundError as e:
-        return PlanError(
-            error_type="not_found",
-            message=str(e)
-        )
+        return PlanError(error_type="not_found", message=str(e))
     except Exception as e:
+        return PlanError(error_type="unknown", message=f"Failed to save review: {str(e)}")
+
+
+def export_plan_structure() -> Union[PlanStructureExport, PlanError]:
+    """Export stored macro plan structure for CLI validation.
+
+    Returns:
+        PlanStructureExport with phases, volumes, recovery weeks, and race week.
+        PlanError if plan is missing or data is invalid.
+    """
+    plan = get_current_plan()
+    if isinstance(plan, PlanError):
+        return plan
+
+    # Goal details (dict in MasterPlan)
+    goal = getattr(plan, "goal", None)
+    if goal is None:
+        return PlanError(error_type="validation", message="Plan missing goal data")
+
+    goal_type = goal.get("type") if isinstance(goal, dict) else getattr(goal, "type", None)
+    goal_date = goal.get("target_date") if isinstance(goal, dict) else getattr(goal, "target_date", None)
+    if goal_type is None or goal_date is None:
+        return PlanError(error_type="validation", message="Goal type/date missing in plan")
+
+    if isinstance(goal_date, str):
+        try:
+            goal_date = date.fromisoformat(goal_date)
+        except ValueError:
+            return PlanError(error_type="validation", message="Invalid goal target_date in plan")
+
+    total_weeks = getattr(plan, "total_weeks", None)
+    if not isinstance(total_weeks, int) or total_weeks <= 0:
+        return PlanError(error_type="validation", message="Invalid total_weeks in plan")
+
+    # Phase counts (phase -> weeks)
+    phases_list = getattr(plan, "phases", None) or []
+    phases: dict = {}
+    for phase in phases_list:
+        if not isinstance(phase, dict):
+            continue
+        phase_name = phase.get("phase")
+        start_week = phase.get("start_week")
+        end_week = phase.get("end_week")
+        if phase_name is None or start_week is None or end_week is None:
+            continue
+        phases[phase_name] = int(end_week) - int(start_week) + 1
+
+    # Weeks (sorted by week_number)
+    weeks_list = getattr(plan, "weeks", None) or []
+    weeks_sorted = sorted(weeks_list, key=lambda w: getattr(w, "week_number", 0))
+    week_numbers = [getattr(w, "week_number", None) for w in weeks_sorted]
+    if len(weeks_sorted) != total_weeks or set(week_numbers) != set(range(1, total_weeks + 1)):
         return PlanError(
-            error_type="unknown",
-            message=f"Failed to save review: {str(e)}"
+            error_type="validation",
+            message="Plan weeks mismatch total_weeks (expected contiguous weeks 1..N)",
         )
+
+    weekly_volumes_km = [getattr(w, "target_volume_km", 0.0) for w in weeks_sorted]
+    recovery_weeks = [
+        getattr(w, "week_number", 0)
+        for w in weeks_sorted
+        if getattr(w, "is_recovery_week", False)
+    ]
+
+    # Race week: find week containing goal date
+    race_week = total_weeks
+    for week in weeks_sorted:
+        week_start = getattr(week, "start_date", None)
+        week_end = getattr(week, "end_date", None)
+        if isinstance(week_start, str):
+            week_start = date.fromisoformat(week_start)
+        if isinstance(week_end, str):
+            week_end = date.fromisoformat(week_end)
+        if week_start and week_end and week_start <= goal_date <= week_end:
+            race_week = getattr(week, "week_number", total_weeks)
+            break
+
+    return PlanStructureExport(
+        total_weeks=total_weeks,
+        goal_type=str(goal_type),
+        race_week=race_week,
+        phases=phases,
+        weekly_volumes_km=weekly_volumes_km,
+        recovery_weeks=recovery_weeks,
+    )
+
+
+def build_macro_template(total_weeks: int) -> Union[dict, PlanError]:
+    """Build a blank macro plan template with required fields.
+
+    The template uses null placeholders that must be filled by the AI coach
+    before calling create-macro.
+    """
+    if not isinstance(total_weeks, int) or total_weeks <= 0:
+        return PlanError(error_type="validation", message="total_weeks must be a positive integer")
+
+    return {
+        "template_version": "macro_template_v1",
+        "total_weeks": total_weeks,
+        "volumes_km": [None] * total_weeks,
+        "workout_structure_hints": [
+            {
+                "quality": {"max_sessions": None, "types": None},
+                "long_run": {"emphasis": None, "pct_range": [None, None]},
+                "intensity_balance": {"low_intensity_pct": None},
+            }
+            for _ in range(total_weeks)
+        ],
+    }
 
 
 def append_training_plan_adaptation(
@@ -1522,8 +1637,6 @@ def create_macro_plan(
     total_weeks: int,
     start_date: date,
     current_ctl: float,
-    starting_volume_km: float,
-    peak_volume_km: float,
     baseline_vdot: Optional[float] = None,
     weekly_volumes_km: Optional[list[float]] = None,
     weekly_structure_hints: Optional[list[dict]] = None,
@@ -1550,8 +1663,6 @@ def create_macro_plan(
         total_weeks: Total weeks in plan
         start_date: Plan start date (should be Monday)
         current_ctl: CTL at plan creation
-        starting_volume_km: Initial weekly volume
-        peak_volume_km: Peak weekly volume
         baseline_vdot: Approved baseline VDOT (optional but recommended)
         weekly_volumes_km: Explicit weekly volume targets (AI coach computed)
         weekly_structure_hints: Macro-level workout structure hints (AI coach computed)
@@ -1568,8 +1679,7 @@ def create_macro_plan(
         ...     total_weeks=16,
         ...     start_date=date(2026, 1, 20),
         ...     current_ctl=44.0,
-        ...     starting_volume_km=25.0,
-        ...     peak_volume_km=55.0,
+        ...     baseline_vdot=48.0,
         ...     weekly_volumes_km=[25.0] * 16,
         ...     weekly_structure_hints=[{
         ...         "quality": {"max_sessions": 1, "types": ["strides_only"]},
@@ -1635,6 +1745,10 @@ def create_macro_plan(
                     error_type="validation",
                     message=f"weekly_volumes_km[{idx}] must be a positive number"
                 )
+
+        # Derive starting/peak from template (single source of truth)
+        starting_volume_km = weekly_volumes_km[0]
+        peak_volume_km = max(weekly_volumes_km)
 
         # Strict CLI-only: AI coach must supply workout structure hints
         if not weekly_structure_hints:

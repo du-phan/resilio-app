@@ -2,7 +2,6 @@
 Analysis CLI commands - Weekly insights and risk assessment.
 
 Commands:
-    sce analysis adherence      - Analyze week adherence
     sce analysis intensity      - Validate 80/20 distribution
     sce analysis gaps           - Detect activity gaps
     sce analysis load           - Analyze multi-sport load
@@ -19,7 +18,6 @@ from typing import Optional
 from datetime import date
 
 from sports_coach_engine.api import (
-    api_analyze_week_adherence,
     api_validate_intensity_distribution,
     api_detect_activity_gaps,
     api_analyze_load_distribution_by_sport,
@@ -41,61 +39,6 @@ risk_app = typer.Typer(help="Risk assessment commands")
 # WEEKLY ANALYSIS COMMANDS
 # ============================================================
 
-
-@app.command(name="adherence")
-def adherence_command(
-    ctx: typer.Context,
-    week_number: int = typer.Option(..., "--week", help="Week number in plan"),
-    planned_json: str = typer.Option(..., "--planned", help="JSON file with planned workouts"),
-    completed_json: str = typer.Option(..., "--completed", help="JSON file with completed activities"),
-) -> None:
-    """
-    Analyze planned vs actual training adherence.
-
-    Compares planned workouts to completed activities, identifies patterns,
-    and provides recommendations for improving adherence.
-
-    Example:
-        sce analysis adherence --week 5 \\
-            --planned planned_week5.json \\
-            --completed completed_week5.json
-    """
-    try:
-        # Load planned workouts
-        with open(planned_json, "r") as f:
-            planned_workouts = json.load(f)
-
-        # Load completed activities
-        with open(completed_json, "r") as f:
-            completed_activities = json.load(f)
-
-        result = api_analyze_week_adherence(
-            week_number=week_number,
-            planned_workouts=planned_workouts,
-            completed_activities=completed_activities,
-        )
-
-        msg = f"Adherence analysis for Week {week_number} complete"
-        envelope = api_result_to_envelope(result, success_message=msg)
-        output_json(envelope)
-
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    except FileNotFoundError as e:
-        envelope = create_error_envelope(
-            error_type="invalid_input",
-            message=f"JSON file not found: {str(e)}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    except json.JSONDecodeError as e:
-        envelope = create_error_envelope(
-            error_type="invalid_input",
-            message=f"Invalid JSON: {str(e)}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @app.command(name="intensity")

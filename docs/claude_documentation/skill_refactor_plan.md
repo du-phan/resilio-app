@@ -115,7 +115,7 @@
 - `weekly-plan-apply` (new)
   - Inputs: approved week JSON payload.
   - Purpose: safe, non-interactive write. All coaching validation happens earlier in `weekly-plan-generate`; this step only performs mechanical safety checks before persisting.
-  - Actions: run `sce plan validate --file` and ensure 0 critical errors (warnings allowed); then populate plan; confirm with `sce plan show`. No athlete-facing prompts.
+  - Actions: run `sce plan validate-week --file` and ensure 0 critical errors (warnings allowed); then populate plan; confirm with `sce plan show`. No athlete-facing prompts.
   - Blockers: refuse if payload missing/invalid or invariants fail; return errors to main agent to rerun generate with fixes.
 
 - Optional `macro-plan-adjust` (later): apply athlete-requested tweaks without full regeneration.
@@ -221,7 +221,7 @@ All items below are implemented:
 - `sce plan next-unpopulated` and `sce plan status` return the first unpopulated week number and dates.
 - `sce plan generate-week` generates weekly workout JSON (aligned with docs and progressive disclosure).
 - `sce plan validate-macro` validates macro skeleton invariants and phase coverage.
-- `sce plan validate --file <json>` is the unified weekly validator (use this, do not add `validate-week`).
+- `sce plan validate-week --file <json>` is the unified weekly validator.
 - `sce plan populate --from-json` supports `--validate` and enforces approval gating.
 
 ## CLI Improvements (detailed, CLI-first)
@@ -251,14 +251,14 @@ All items below are implemented:
 ### Should Add (robustness + safety)
 6) `sce plan validate-macro` **DONE**
    - **Purpose**: Validate macro structure (phase lengths, recovery cadence, peak placement, volume trajectory).
-   - **Reason**: Avoids constructing manual JSON for `sce validation validate-plan`.
+   - **Reason**: Avoids constructing manual JSON for `sce plan validate-structure`.
 
 7) `sce plan export --macro --format json`
    - **Purpose**: Export macro plan in JSON for `generate-week` input (if `generate-week` requires JSON).
    - **Reason**: Plan source is YAML; avoid manual conversion in skills.
 
 8) `sce plan populate --validate` **DONE**
-   - **Purpose**: Run `plan validate` logic inside populate and block on critical violations.
+   - **Purpose**: Run `plan validate-week` logic inside populate and block on critical violations.
    - **Reason**: Ensures apply step always re-checks invariants (date alignment, volume, minimum durations).
 
 9) `sce plan week --next-unpopulated`
@@ -287,7 +287,7 @@ All items below are implemented:
    - **Reason**: Helps validators and future CLI compatibility.
 
 ## Current Codebase Observations (align plan to reality)
-- CLI uses `sce plan validate --file <json>` (unified validator), not `validate-week`.
+- CLI uses `sce plan validate-week --file <json>` (unified weekly validator).
 - CLI has `sce plan populate --from-json <json> --validate` with approval gating via `sce approvals approve-week`.
 - `sce plan generate-week` exists and scaffolds intent-based weekly JSON (pattern is still AI-decided).
 - `sce plan revert-week` is documented but not implemented; recommend removing from docs/CLI to reduce command clutter.
@@ -297,7 +297,7 @@ All items below are implemented:
 ## Command Surface Management (avoid tool confusion)
 1) Define a **Core Command Set** (10–15 commands) used in 90% of sessions.
    - Example core set: `sce auth status`, `sce sync`, `sce status`, `sce week`, `sce plan status`,
-     `sce plan next-unpopulated`, `sce plan generate-week`, `sce plan validate`,
+     `sce plan next-unpopulated`, `sce plan generate-week`, `sce plan validate-week`,
      `sce plan populate`, `sce vdot paces`, `sce guardrails analyze-progression`.
    - Document this list at the top of CLI index and in each skill.
 
@@ -341,7 +341,7 @@ All items below are implemented:
 
 ## Acceptance Criteria (implementation-ready)
 - Macro creation: `sce plan create-macro` runs with baseline VDOT stored and passes `sce plan validate-macro`. **DONE**
-- Weekly generation: `sce plan generate-week` + `sce plan validate` produce zero critical issues. **READY FOR TESTING**
+- Weekly generation: `sce plan generate-week` + `sce plan validate-week` produce zero critical issues. **READY FOR TESTING**
 - Apply step: `sce plan populate` runs only after explicit approval recorded in state. **DONE**
 - No skill performs direct file edits of plan YAML.
 - Week 1 is generated via the same weekly workflow as Week N.
@@ -422,7 +422,7 @@ All items below are implemented:
      - generate weekly JSON (no writes) and present review directly in chat
    - `weekly-plan-apply`:
      - verify approved file path matches approvals state
-     - validate dates and schema (`sce plan validate --file`)
+     - validate dates and schema (`sce plan validate-week --file`)
      - apply via CLI (`sce plan populate --from-json` with `--validate` if available)
 
 5) CLI gap closure (if missing)
@@ -430,7 +430,7 @@ All items below are implemented:
      - `sce plan next-unpopulated`
      - `sce plan generate-week`
      - `sce plan validate-macro`
-     - `sce plan validate --file` (already exists; ensure documented)
+     - `sce plan validate-week --file` (already exists; ensure documented)
      - `sce plan populate --from-json` (extend with `--validate`)
    - Update skill steps to use these commands once available
 

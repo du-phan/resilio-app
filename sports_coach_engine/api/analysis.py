@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import date
 
 from sports_coach_engine.core.analysis import (
-    analyze_week_adherence,
     validate_intensity_distribution,
     detect_activity_gaps,
     analyze_load_distribution_by_sport,
@@ -22,7 +21,6 @@ from sports_coach_engine.core.analysis import (
 )
 
 from sports_coach_engine.schemas.analysis import (
-    WeekAdherenceAnalysis,
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,
@@ -50,88 +48,6 @@ class AnalysisError:
 # ============================================================
 # WEEKLY ANALYSIS FUNCTIONS
 # ============================================================
-
-
-def api_analyze_week_adherence(
-    week_number: int,
-    planned_workouts: List[Dict[str, Any]],
-    completed_activities: List[Dict[str, Any]],
-) -> Union[WeekAdherenceAnalysis, AnalysisError]:
-    """
-    Analyze planned vs actual training for a week.
-
-    Args:
-        week_number: Week number in plan (1-based)
-        planned_workouts: List of planned workout dicts with keys:
-            - workout_type (str)
-            - duration_minutes (int)
-            - distance_km (float)
-            - target_systemic_load_au (float)
-            - target_lower_body_load_au (float)
-        completed_activities: List of completed activity dicts with keys:
-            - sport (str)
-            - duration_minutes (int)
-            - distance_km (float)
-            - systemic_load_au (float)
-            - lower_body_load_au (float)
-            - workout_type (Optional[str])
-
-    Returns:
-        WeekAdherenceAnalysis or AnalysisError
-
-    Error types:
-        - invalid_input: Week number < 1 or empty lists when analysis expected
-        - insufficient_data: Not enough data for meaningful analysis
-        - calculation_failed: Unexpected error during calculation
-    """
-    try:
-        # Input validation
-        if week_number < 1:
-            return AnalysisError(
-                error_type="invalid_input",
-                message="Week number must be >= 1",
-            )
-
-        if not planned_workouts:
-            return AnalysisError(
-                error_type="insufficient_data",
-                message="No planned workouts provided - cannot analyze adherence",
-            )
-
-        # Validate planned workout structure
-        for i, workout in enumerate(planned_workouts):
-            required_keys = ["workout_type", "duration_minutes", "distance_km"]
-            missing = [k for k in required_keys if k not in workout]
-            if missing:
-                return AnalysisError(
-                    error_type="invalid_input",
-                    message=f"Planned workout {i} missing required keys: {missing}",
-                )
-
-        # Validate completed activity structure
-        for i, activity in enumerate(completed_activities):
-            required_keys = ["sport", "duration_minutes", "systemic_load_au"]
-            missing = [k for k in required_keys if k not in activity]
-            if missing:
-                return AnalysisError(
-                    error_type="invalid_input",
-                    message=f"Completed activity {i} missing required keys: {missing}",
-                )
-
-        # Call core function
-        result = analyze_week_adherence(
-            week_number=week_number,
-            planned_workouts=planned_workouts,
-            completed_activities=completed_activities,
-        )
-
-        return result
-
-    except Exception as e:
-        return AnalysisError(
-            error_type="calculation_failed",
-            message=f"Failed to analyze adherence: {str(e)}",
-        )
 
 
 def api_validate_intensity_distribution(

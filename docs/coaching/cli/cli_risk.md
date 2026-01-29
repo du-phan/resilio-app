@@ -145,4 +145,4 @@ sce risk taper-status --race-date 2026-03-15 \
 
 ---
 
-**Navigation**: [Back to Index](index.md) | [Previous: Analysis Commands](cli_analysis.md) | [Next: Validation Commands](cli_validation.md)
+**Navigation**: [Back to Index](index.md) | [Previous: Analysis Commands](cli_analysis.md) | [Next: Guardrails Commands](cli_guardrails.md)

@@ -5,35 +5,44 @@
 Commands for setting race goals and managing training plans, including macro planning, weekly plan validation, and plan persistence.
 
 **Commands in this category:**
-- `sce goal` - Set a race goal (automatically regenerates plan)
+- `sce goal set` - Set a race goal (validates feasibility if target time provided)
+- `sce goal validate` - Validate existing goal feasibility
+- `sce approvals status` - Show current approval state
+- `sce approvals approve-vdot` - Record baseline VDOT approval
+- `sce approvals approve-macro` - Record macro approval
+- `sce approvals approve-week` - Record weekly approval (with file path)
 - `sce plan show` - Get current training plan with all weeks and workouts
 - `sce plan week` - Get specific week(s) from the training plan
 - `sce plan populate` - Add/update weekly workouts in the plan
-- `sce plan validate` - Validate weekly plan JSON before populate (unified validator)
+- `sce plan validate-week` - Validate single-week JSON before populate (unified validator)
+- `sce plan validate-intervals` - Validate interval workout structure (Daniels)
+- `sce plan validate-structure` - Validate plan structure inputs (phases, volumes, taper)
 - `sce plan update-from` - Replace plan weeks from a specific week onwards
 - `sce plan save-review` - Save plan review markdown
 - `sce plan append-week` - Append weekly training summary to log
+- `sce plan template-macro` - Generate a blank macro template JSON
 - `sce plan create-macro` - Generate high-level plan structure (macro)
+- `sce plan export-structure` - Export stored macro structure JSON for validation
 - `sce plan assess-period` - Assess completed period for adaptive planning
 - `sce plan suggest-run-count` - Suggest optimal run count for volume/phase
 
 ---
 
-## sce goal
+## sce goal set
 
-Set a race goal (automatically regenerates plan).
+Set a race goal (validates feasibility if target time provided).
 
 **Usage:**
 
 ```bash
 # Set 10K goal with target time
-sce goal --type 10k --date 2026-06-01 --time 00:45:00
+sce goal set --type 10k --date 2026-06-01 --time 00:45:00
 
 # Set half marathon goal
-sce goal --type half_marathon --date 2026-09-15 --time 01:45:00
+sce goal set --type half_marathon --date 2026-09-15 --time 01:45:00
 
 # Set marathon goal (no time = fitness goal)
-sce goal --type marathon --date 2026-11-01
+sce goal set --type marathon --date 2026-11-01
 ```
 
 **Supported race types:**
@@ -63,10 +72,74 @@ sce goal --type marathon --date 2026-11-01
 **What happens:**
 
 1. Goal saved to profile
-2. M10 generates new training plan
-3. Plan saved to `data/plans/current_plan.yaml`
-4. Periodization calculated based on weeks available
-5. Volume progression set based on current CTL
+2. If a target time is provided, feasibility is assessed and returned
+3. Planning workflows use this goal as input (see `sce plan create-macro`)
+
+---
+
+## sce goal validate
+
+Re-validate the current goal feasibility without setting a new goal.
+
+**Usage:**
+
+```bash
+sce goal validate
+```
+
+**When to use:**
+
+- Goal check-in mid-plan
+- After illness/injury
+- Before taper to confirm feasibility
+
+---
+
+## sce approvals status
+
+Show current approval state (VDOT, macro, and weekly approval if present).
+
+**Usage:**
+
+```bash
+sce approvals status
+```
+
+---
+
+## sce approvals approve-vdot
+
+Record baseline VDOT approval (required before macro creation).
+
+**Usage:**
+
+```bash
+sce approvals approve-vdot --value 48.0
+```
+
+---
+
+## sce approvals approve-macro
+
+Record macro plan approval.
+
+**Usage:**
+
+```bash
+sce approvals approve-macro
+```
+
+---
+
+## sce approvals approve-week
+
+Record weekly plan approval with the exact JSON file path.
+
+**Usage:**
+
+```bash
+sce approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
+```
 
 ---
 
@@ -207,9 +280,32 @@ sce plan week --week 5 --count 2
 
 ---
 
+## sce plan template-macro
+
+Generate a blank macro template with required fields and null placeholders.
+
+**Usage:**
+
+```bash
+sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+```
+
+**Notes:**
+- Replace all `null` values before calling `sce plan create-macro`
+- Template is intentionally blank to keep planning decisions with the AI coach
+
+---
+
 ## sce plan create-macro
 
 Generate high-level training plan structure (macro plan) with phase boundaries, volume trajectory, CTL projections, and recovery week schedule.
+
+**Template-first flow:** generate a blank template, fill it, then create the plan.
+
+```bash
+sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+# Fill /tmp/macro_template.json (replace nulls)
+```
 
 **Usage:**
 
@@ -218,6 +314,8 @@ Generate high-level training plan structure (macro plan) with phase boundaries, 
 sce approvals approve-vdot --value 48.0
 
 # Generate macro plan for 16-week half marathon
+sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+# Fill /tmp/macro_template.json with volumes + hints
 sce plan create-macro \
   --goal-type half_marathon \
   --race-date 2026-05-03 \
@@ -225,22 +323,20 @@ sce plan create-macro \
   --total-weeks 16 \
   --start-date 2026-01-20 \
   --current-ctl 44.0 \
-  --starting-volume-km 25.0 \
-  --peak-volume-km 55.0 \
   --baseline-vdot 48.0 \
-  --weekly-volumes-json /tmp/weekly_volumes.json
+  --macro-template-json /tmp/macro_template.json
 
 # Generate macro plan without target time (fitness goal)
+sce plan template-macro --total-weeks 20 --out /tmp/macro_template.json
+# Fill /tmp/macro_template.json with volumes + hints
 sce plan create-macro \
   --goal-type marathon \
   --race-date 2026-11-01 \
   --total-weeks 20 \
   --start-date 2026-06-08 \
   --current-ctl 38.5 \
-  --starting-volume-km 20.0 \
-  --peak-volume-km 65.0 \
   --baseline-vdot 44.0 \
-  --weekly-volumes-json /tmp/weekly_volumes.json
+  --macro-template-json /tmp/macro_template.json
 ```
 
 **Parameters:**
@@ -251,24 +347,18 @@ sce plan create-macro \
 - `--total-weeks` (required) - Total training weeks (typically 12-20)
 - `--start-date` (required) - Plan start date (YYYY-MM-DD), must be Monday
 - `--current-ctl` (required) - Current CTL value (use `sce status` to get)
-- `--starting-volume-km` (required) - Starting weekly volume in km
-- `--peak-volume-km` (required) - Peak weekly volume in km
 - `--baseline-vdot` (required) - Approved baseline VDOT for the macro plan
-- `--weekly-volumes-json` (required) - JSON file with weekly volume targets and workout structure hints in this exact format:
+- `--macro-template-json` (required) - Macro template JSON generated by `sce plan template-macro` and filled by the AI coach (length of `workout_structure_hints` must equal `total_weeks`):
 ```json
 {
-  "volumes_km": [32.0, 35.0, 38.0, 28.0],
+  "template_version": "macro_template_v1",
+  "total_weeks": 4,
+  "volumes_km": [null, null, null, null],
   "workout_structure_hints": [
-    {
-      "quality": {"max_sessions": 1, "types": ["strides_only"]},
-      "long_run": {"emphasis": "steady", "pct_range": [24, 30]},
-      "intensity_balance": {"low_intensity_pct": 0.90}
-    },
-    {
-      "quality": {"max_sessions": 2, "types": ["tempo", "intervals"]},
-      "long_run": {"emphasis": "progression", "pct_range": [24, 30]},
-      "intensity_balance": {"low_intensity_pct": 0.85}
-    }
+    {"quality": {"max_sessions": null, "types": null}, "long_run": {"emphasis": null, "pct_range": [null, null]}, "intensity_balance": {"low_intensity_pct": null}},
+    {"quality": {"max_sessions": null, "types": null}, "long_run": {"emphasis": null, "pct_range": [null, null]}, "intensity_balance": {"low_intensity_pct": null}},
+    {"quality": {"max_sessions": null, "types": null}, "long_run": {"emphasis": null, "pct_range": [null, null]}, "intensity_balance": {"low_intensity_pct": null}},
+    {"quality": {"max_sessions": null, "types": null}, "long_run": {"emphasis": null, "pct_range": [null, null]}, "intensity_balance": {"low_intensity_pct": null}}
   ]
 }
 ```
@@ -360,7 +450,7 @@ sce plan generate-week \
   --out /tmp/weekly_plan_wN.json
 
 # 2) Validate before presenting
-sce plan validate --file /tmp/weekly_plan_wN.json
+sce plan validate-week --file /tmp/weekly_plan_wN.json
 
 # 3) Present to athlete and get approval
 sce approvals approve-week --week N --file /tmp/weekly_plan_wN.json
@@ -387,15 +477,15 @@ sce plan populate --from-json /tmp/weekly_plan_w1.json --validate
 
 ---
 
-## sce plan validate
+## sce plan validate-week
 
 Validate weekly plan JSON before populating (unified validator).
 
 **Usage:**
 
 ```bash
-sce plan validate --file /tmp/weekly_plan_w1.json
-sce plan validate --file /tmp/weekly_plan_w1.json --verbose
+sce plan validate-week --file /tmp/weekly_plan_w1.json
+sce plan validate-week --file /tmp/weekly_plan_w1.json --verbose
 ```
 
 **What it checks:**
@@ -403,6 +493,137 @@ sce plan validate --file /tmp/weekly_plan_w1.json --verbose
 - Date alignment (week start Monday, end Sunday)
 - Volume accuracy + minimum workout durations
 - Guardrails and safety constraints
+
+---
+
+## sce plan validate-intervals
+
+Validate interval workout structure per Daniels methodology.
+
+**Use when:** the week includes a structured tempo/interval session with explicit work + recovery bouts.
+
+**Usage:**
+
+```bash
+sce plan validate-intervals \
+    --type intervals \
+    --intensity I-pace \
+    --work-bouts work.json \
+    --recovery-bouts recovery.json \
+    --weekly-volume 50
+```
+
+**Input JSON Format (work.json):**
+
+```json
+[
+  {
+    "duration_minutes": 4.0,
+    "pace_per_km_seconds": 270,
+    "distance_km": 1.0
+  },
+  {
+    "duration_minutes": 4.0,
+    "pace_per_km_seconds": 270,
+    "distance_km": 1.0
+  }
+]
+```
+
+**Input JSON Format (recovery.json):**
+
+```json
+[
+  {
+    "duration_minutes": 4.0,
+    "type": "jog"
+  },
+  {
+    "duration_minutes": 4.0,
+    "type": "jog"
+  }
+]
+```
+
+**Daniels Rules Checked:**
+
+- **I-pace**: 3-5min work bouts, equal recovery (jogging), total ≤10km or 8% weekly
+- **T-pace**: 5-15min work bouts, 1min recovery per 5min work, total ≤10% weekly
+- **R-pace**: 30-90sec work bouts, 2-3x recovery, total ≤8km or 5% weekly
+
+**Returns:** Workout type, intensity, work/recovery bout analysis (ok/issue per bout), violations (type/severity/message/recommendation), total work volume (minutes/km), daniels_compliance (true/false), recommendations.
+
+---
+
+## sce plan validate-structure
+
+Validate training plan structure for common errors.
+
+**Use when:** creating or revising macro plan phases/volumes (not for single-week JSON).
+
+**Usage:**
+
+```bash
+sce plan validate-structure \
+    --total-weeks 20 \
+    --goal-type half_marathon \
+    --phases phases.json \
+    --weekly-volumes volumes.json \
+    --recovery-weeks recovery.json \
+    --race-week 20
+```
+
+**Input JSON Format (phases.json):**
+
+```json
+{
+  "base": 8,
+  "build": 8,
+  "peak": 2,
+  "taper": 2
+}
+```
+
+**Input JSON Format (volumes.json):**
+
+```json
+[25, 27, 29, 22, 31, 33, 35, 28, 37, 40, 43, 35, 46, 50, 54, 43, 60, 58, 35, 20]
+```
+
+**Input JSON Format (recovery.json):**
+
+```json
+[4, 8, 12, 16]
+```
+
+**Checks Performed:**
+
+- **Phase duration**: Base/build/peak/taper weeks appropriate for goal type
+- **Volume progression**: Average weekly increase ≤10% (10% rule)
+- **Peak placement**: Peak week 2-3 weeks before race
+- **Recovery frequency**: Recovery weeks every 3-4 weeks
+- **Taper structure**: Gradual volume reduction (70%, 50%, 30% for 3-week taper)
+
+**Returns:** Total weeks, goal type, phase duration checks, volume progression check, peak placement check, recovery week check, taper structure check, violations, overall_quality_score (0-100), recommendations.
+
+---
+
+## sce plan export-structure
+
+Export stored macro plan structure into validation-ready JSON files.
+
+**Usage:**
+
+```bash
+sce plan export-structure --out-dir /tmp
+```
+
+**Outputs:**
+- `/tmp/plan_phases.json` (phase -> weeks)
+- `/tmp/weekly_volumes_list.json` (list of weekly volumes in km)
+- `/tmp/recovery_weeks.json` (list of recovery week numbers)
+
+**Returns:** total_weeks, goal_type, race_week, phases, weekly_volumes_km, recovery_weeks, and file paths.
 
 ---
 

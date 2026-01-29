@@ -93,30 +93,30 @@
 ```
 
 **Initial observations**:
-- ✅ Perfect adherence (100%)
+- ✅ Perfect completion (100%)
 - ✅ Volume exactly as planned (36 km)
 - ✅ Metrics stable and healthy
 
-### Step 2: Adherence Analysis (`sce analysis adherence`)
+### Step 2: Completion Summary (`sce week`)
 
 ```json
 {
-  "completion_rate": 100,
-  "load_variance": 0,
-  "workout_type_adherence": {
-    "easy": "3/3 completed",
-    "tempo": "1/1 completed",
-    "long": "1/1 completed"
-  },
-  "missed_workouts": [],
-  "extra_activities": [],
-  "patterns": [
-    "Completed all planned workouts for 3rd consecutive week"
-  ]
+  "week_start": "2026-01-06",
+  "week_end": "2026-01-12",
+  "planned_workouts": 5,
+  "completed_workouts": 5,
+  "completion_rate": 1.0,
+  "total_duration_minutes": 220,
+  "total_load_au": 460,
+  "current_ctl": 44,
+  "current_tsb": -15,
+  "current_readiness": 68,
+  "ctl_change": 2,
+  "tsb_change": -3
 }
 ```
 
-**Interpretation**: Excellent adherence - athlete is highly consistent.
+**Interpretation**: Excellent completion - athlete is highly consistent.
 
 ### Step 3: Intensity Distribution (`sce analysis intensity`)
 

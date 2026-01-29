@@ -151,7 +151,7 @@ See [profile_setup_workflow.md](references/profile_setup_workflow.md) for detail
 - "What's your goal time?" (optional)
 
 ```bash
-sce goal --type half_marathon --date 2026-06-01
+sce goal set --type half_marathon --date 2026-06-01
 # Optional: --time "1:30:00" if specific goal
 ```
 

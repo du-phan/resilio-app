@@ -11,6 +11,8 @@ from unittest.mock import Mock, patch
 
 from sports_coach_engine.api.plan import (
     get_current_plan,
+    export_plan_structure,
+    build_macro_template,
     regenerate_plan,
     get_plan_weeks,
     get_pending_suggestions,
@@ -24,6 +26,7 @@ from sports_coach_engine.api.plan import (
 from sports_coach_engine.schemas.plan import MasterPlan
 from sports_coach_engine.schemas.profile import Goal, GoalType, AthleteProfile
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+from types import SimpleNamespace
 
 
 # ============================================================
@@ -75,7 +78,9 @@ class TestGetCurrentPlan:
         assert result.total_weeks == 12
 
         # Verify read_yaml was called correctly
-        mock_repo.read_yaml.assert_called_once()    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        mock_repo.read_yaml.assert_called_once()
+
+    @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_get_current_plan_not_found(self, mock_repo_cls, mock_log):
         """Test plan retrieval when no plan exists."""
         mock_repo = Mock()
@@ -89,7 +94,9 @@ class TestGetCurrentPlan:
         # Should return PlanError
         assert isinstance(result, PlanError)
         assert result.error_type == "not_found"
-        assert "No training plan found" in result.message    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert "No training plan found" in result.message
+
+    @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_get_current_plan_validation_error(self, mock_repo_cls, mock_log):
         """Test plan retrieval with validation error."""
         mock_repo = Mock()
@@ -104,6 +111,113 @@ class TestGetCurrentPlan:
         assert isinstance(result, PlanError)
         assert result.error_type == "validation"
         assert "Failed to load plan" in result.message
+
+
+# ============================================================
+# EXPORT_PLAN_STRUCTURE TESTS
+# ============================================================
+
+
+@patch("sports_coach_engine.api.plan.get_current_plan")
+def test_export_plan_structure_uses_race_week_from_plan(mock_get_plan, mock_log):
+    """Race week should match the week that contains goal date."""
+    weeks = [
+        SimpleNamespace(
+            week_number=1,
+            start_date=date(2026, 1, 26),
+            end_date=date(2026, 2, 1),
+            target_volume_km=23.0,
+            is_recovery_week=False,
+        ),
+        SimpleNamespace(
+            week_number=2,
+            start_date=date(2026, 2, 2),
+            end_date=date(2026, 2, 8),
+            target_volume_km=28.0,
+            is_recovery_week=False,
+        ),
+        SimpleNamespace(
+            week_number=3,
+            start_date=date(2026, 2, 9),
+            end_date=date(2026, 2, 15),
+            target_volume_km=32.0,
+            is_recovery_week=False,
+        ),
+    ]
+    plan = SimpleNamespace(
+        total_weeks=3,
+        goal={"type": "marathon", "target_date": date(2026, 2, 12)},
+        phases=[
+            {"phase": "base", "start_week": 1, "end_week": 3},
+        ],
+        weeks=weeks,
+    )
+    mock_get_plan.return_value = plan
+
+    result = export_plan_structure()
+
+    assert not isinstance(result, PlanError)
+    assert result.race_week == 3
+
+
+@patch("sports_coach_engine.api.plan.get_current_plan")
+def test_export_plan_structure_derives_phases_and_volumes(mock_get_plan, mock_log):
+    """Phases, volumes, and recovery weeks should match stored plan."""
+    weeks = [
+        SimpleNamespace(
+            week_number=1,
+            start_date=date(2026, 1, 26),
+            end_date=date(2026, 2, 1),
+            target_volume_km=23.0,
+            is_recovery_week=False,
+        ),
+        SimpleNamespace(
+            week_number=2,
+            start_date=date(2026, 2, 2),
+            end_date=date(2026, 2, 8),
+            target_volume_km=28.0,
+            is_recovery_week=True,
+        ),
+        SimpleNamespace(
+            week_number=3,
+            start_date=date(2026, 2, 9),
+            end_date=date(2026, 2, 15),
+            target_volume_km=32.0,
+            is_recovery_week=False,
+        ),
+    ]
+    plan = SimpleNamespace(
+        total_weeks=3,
+        goal={"type": "marathon", "target_date": date(2026, 2, 12)},
+        phases=[
+            {"phase": "base", "start_week": 1, "end_week": 2},
+            {"phase": "build", "start_week": 3, "end_week": 3},
+        ],
+        weeks=weeks,
+    )
+    mock_get_plan.return_value = plan
+
+    result = export_plan_structure()
+
+    assert not isinstance(result, PlanError)
+    assert result.phases == {"base": 2, "build": 1}
+    assert result.weekly_volumes_km == [23.0, 28.0, 32.0]
+    assert result.recovery_weeks == [2]
+
+
+# ============================================================
+# BUILD_MACRO_TEMPLATE TESTS
+# ============================================================
+
+
+def test_build_macro_template_shape():
+    """Template should include required fields and null placeholders."""
+    template = build_macro_template(3)
+
+    assert template["template_version"] == "macro_template_v1"
+    assert template["total_weeks"] == 3
+    assert template["volumes_km"] == [None, None, None]
+    assert len(template["workout_structure_hints"]) == 3
 
 
 # ============================================================
@@ -136,7 +250,9 @@ class TestRegeneratePlan:
         # Verify workflow was called
         mock_workflow.assert_called_once()
         call_args = mock_workflow.call_args
-        assert call_args.kwargs["goal"] is None    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert call_args.kwargs["goal"] is None
+
+    @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_with_new_goal(
         self, mock_workflow, mock_repo_cls, mock_log, mock_plan, mock_profile
@@ -175,7 +291,9 @@ class TestRegeneratePlan:
         # Verify workflow was called with goal
         mock_workflow.assert_called_once()
         call_args = mock_workflow.call_args
-        assert call_args.kwargs["goal"] == new_goal    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert call_args.kwargs["goal"] == new_goal
+
+    @patch("sports_coach_engine.api.plan.RepositoryIO")
     def test_regenerate_plan_profile_error(self, mock_repo_cls, mock_log):
         """Test regenerating plan with profile error."""
         mock_repo = Mock()
@@ -195,7 +313,9 @@ class TestRegeneratePlan:
         # Should return PlanError
         assert isinstance(result, PlanError)
         assert result.error_type == "validation"
-        assert "Failed to load profile" in result.message    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert "Failed to load profile" in result.message
+
+    @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_workflow_failure(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan with workflow failure."""
@@ -212,7 +332,9 @@ class TestRegeneratePlan:
         # Should return PlanError
         assert isinstance(result, PlanError)
         assert result.error_type == "unknown"
-        assert "Failed to generate plan" in result.message    @patch("sports_coach_engine.api.plan.RepositoryIO")
+        assert "Failed to generate plan" in result.message
+
+    @patch("sports_coach_engine.api.plan.RepositoryIO")
     @patch("sports_coach_engine.api.plan.run_plan_generation")
     def test_regenerate_plan_no_goal_set(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan when no goal is set."""

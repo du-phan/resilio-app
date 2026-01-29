@@ -1,9 +1,9 @@
 """
 Weekly analysis and risk assessment schemas.
 
-Pydantic models for adherence analysis, intensity distribution validation,
-activity gap detection, load distribution, capacity checks, risk assessment,
-recovery windows, training stress forecasting, and taper status tracking.
+Pydantic models for intensity distribution validation, activity gap detection,
+load distribution, capacity checks, risk assessment, recovery windows,
+training stress forecasting, and taper status tracking.
 """
 
 from typing import List, Optional, Dict, Tuple, Any
@@ -48,35 +48,6 @@ class TaperPhase(str, Enum):
 # ============================================================
 # SUPPORTING TYPES
 # ============================================================
-
-
-class CompletionStats(BaseModel):
-    """Workout completion statistics."""
-
-    total_workouts_planned: int = Field(..., description="Total workouts in week")
-    total_workouts_completed: int = Field(..., description="Workouts completed")
-    completion_rate_pct: float = Field(..., description="Percentage completed")
-
-
-class LoadVariance(BaseModel):
-    """Variance between planned and actual load."""
-
-    planned_systemic_load_au: float = Field(..., description="Planned systemic load")
-    actual_systemic_load_au: float = Field(..., description="Actual systemic load")
-    variance_pct: float = Field(..., description="Percentage variance (negative = under, positive = over)")
-
-    planned_lower_body_load_au: float = Field(..., description="Planned lower-body load")
-    actual_lower_body_load_au: float = Field(..., description="Actual lower-body load")
-    lower_body_variance_pct: float = Field(..., description="Lower-body variance percentage")
-
-
-class WorkoutTypeAdherence(BaseModel):
-    """Adherence by workout type."""
-
-    workout_type: str = Field(..., description="Type of workout (easy, tempo, long_run, etc.)")
-    planned: int = Field(..., description="Number planned")
-    completed: int = Field(..., description="Number completed")
-    adherence_pct: float = Field(..., description="Adherence percentage")
 
 
 class ActivityGap(BaseModel):
@@ -170,32 +141,6 @@ class ReadinessTrend(BaseModel):
     current_avg: float = Field(..., description="Current average readiness")
     trend: str = Field(..., description="Trend direction (improving/stable/declining)")
     on_track: bool = Field(..., description="Whether trend is positive")
-
-
-# ============================================================
-# WEEKLY ANALYSIS SCHEMAS
-# ============================================================
-
-
-class WeekAdherenceAnalysis(BaseModel):
-    """Analysis of planned vs actual training for a week."""
-
-    week_number: int = Field(..., description="Week number in plan")
-
-    completion_stats: CompletionStats = Field(..., description="Workout completion statistics")
-    load_variance: LoadVariance = Field(..., description="Planned vs actual load variance")
-
-    workout_type_adherence: Dict[str, WorkoutTypeAdherence] = Field(
-        ..., description="Adherence by workout type"
-    )
-
-    patterns_detected: List[str] = Field(
-        default_factory=list, description="Detected patterns (e.g., 'Skipped 3rd tempo in 4 weeks')"
-    )
-
-    recommendations: List[str] = Field(
-        default_factory=list, description="Recommendations based on adherence analysis"
-    )
 
 
 class IntensityDistributionAnalysis(BaseModel):

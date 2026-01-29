@@ -258,19 +258,12 @@ Week N-1: TSB -22
 → Decision: TSB declining for 3 weeks = accumulated fatigue. Hold volume or insert recovery week.
 ```
 
-**Commands for multi-week context**:
+**Commands for context**:
 ```bash
-# Recent weeks
-sce week --offset 1  # Week N-2
-sce week --offset 2  # Week N-3
+# Current week summary (planned vs completed)
+sce week
 
-# Adherence trends (3 weeks)
-sce analysis adherence --days 21
-
-# Intensity compliance (4 weeks)
-sce analysis intensity --days 28
-
-# Current metrics (already aggregate multi-week)
+# Current metrics (multi-week aggregates)
 sce status  # CTL (42-day), ATL (7-day), TSB, ACWR
 ```
 
@@ -303,11 +296,9 @@ sce guardrails long-run --duration 135 --weekly-volume 55 --pct-limit 30
 # Validate quality volume
 sce guardrails quality-volume --t-pace 5.0 --i-pace 4.0 --weekly-volume 50.0
 
-# Multi-week analysis
-sce week --offset 1,2  # Previous weeks
-sce analysis adherence --days 21  # 3-week adherence
-sce analysis intensity --days 28  # 4-week 80/20 compliance
-sce status  # Current CTL/ATL/TSB/ACWR
+# Current-week context + multi-week aggregates
+sce week
+sce status
 ```
 
 ---

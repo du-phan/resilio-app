@@ -275,6 +275,18 @@ Evidence-based training rules provided as **validation tools**. Claude Code deci
 
 **Key Principle**: Guardrails are **validated** by modules, **enforced** by Claude Code. The system returns violations with context; Claude Code reasons about whether to enforce, override, or discuss with athlete.
 
+### Minimum Workout Duration Guardrails
+
+Minimum workout durations prevent unrealistic short workouts when weekly volume is low.
+
+**Defaults (unless profile-aware values are available):**
+- Easy runs: 30 minutes / 5 km (or 80% of athlete's typical easy run)
+- Long runs: 60 minutes / 8 km (or 80% of athlete's typical long run)
+- Tempo runs: 40 minutes total (including warmup/cooldown)
+- Intervals: 35 minutes total (including warmup/cooldown)
+
+**Profile-aware minimums**: Use `sce profile analyze` to populate `typical_*` fields so minimums scale to the athlete's history. If weekly volume is too low to meet minimums at the current run frequency, reduce run count rather than prescribing unrealistic short runs.
+
 ### 80/20 Intensity Distribution
 
 **Evidence**: Matt Fitzgerald's research shows elite endurance athletes spend ~80% of training at low intensity (Zones 1-2) and ≤20% at moderate/high intensity (Zones 3-5).

@@ -33,7 +33,7 @@ sce profile get  # Check if profile exists
 # vs generic "How much do you run?" without any context
 
 # STEP 4: Set goal and generate plan
-sce goal --type 10k --date 2026-06-01
+sce goal set --type 10k --date 2026-06-01
 ```
 
 ### Detailed Profile Setup Conversation Example
@@ -225,8 +225,8 @@ sce status
 ## Scenario 4: Goal Change
 
 ```bash
-# Set new goal (automatically regenerates plan)
-sce goal --type half_marathon --date 2026-09-15 --time 01:45:00
+# Set new goal (stored in profile; use macro planning flow to generate plan)
+sce goal set --type half_marathon --date 2026-09-15 --time 01:45:00
 
 # View new plan
 sce plan show
@@ -291,7 +291,7 @@ sce status  # Check CTL drop during recovery
 sce sync --since 30d
 
 # Regenerate plan with conservative restart
-sce goal --type [same_goal] --date [adjusted_date]
+sce goal set --type [same_goal] --date [adjusted_date]
 
 # Present updated plan for review
 # Adjust phases: longer base rebuild, shorter peak
@@ -498,12 +498,8 @@ sce dates today
 sce week
 # Shows: Week 1 (Jan 20-26), 4 workouts, 23 km total
 
-# Analyze adherence
-sce analysis adherence --start 2026-01-20 --end 2026-01-26
-# Returns: 100% completion (4/4 runs completed)
-
-# Analyze intensity distribution
-sce analysis intensity --start 2026-01-20 --end 2026-01-26
+# Optional: Analyze intensity distribution if you have activities JSON
+# sce analysis intensity --activities /tmp/activities_7d.json --days 7
 # Returns: 82% easy, 18% hard (good 80/20 compliance)
 
 # Check current metrics (post-week-1)
@@ -515,7 +511,7 @@ sce status
 # ========================================
 
 # Coach analyzes results:
-# ✓ Adherence: 4/4 runs completed - excellent
+# ✓ Completion: 4/4 runs completed - excellent
 # ✓ Intensity: 82% easy, 18% hard - good 80/20 discipline
 # ✓ CTL progression: +2.2 points (target was +2.0) - on track
 # ✓ ACWR: 1.05 (safe zone) - no injury risk spike
@@ -607,7 +603,7 @@ sce plan generate-week \
 # ========================================
 
 # Validate BEFORE presenting to athlete
-sce plan validate --file /tmp/weekly_plan_w2.json
+sce plan validate-week --file /tmp/weekly_plan_w2.json
 
 # Returns:
 # {
@@ -693,7 +689,7 @@ sce today  # Will show Monday's workout (4.5 km easy run)
 # ========================================
 
 # After Week 2 completes (Feb 2), repeat this workflow:
-# 1. Analyze Week 2 adherence, intensity, CTL progression
+# 1. Analyze Week 2 completion (`sce week`), intensity, CTL progression
 # 2. Check macro plan for Week 3 target
 # 3. Assess volume adjustment (did athlete struggle? Need downgrade?)
 # 4. Recalibrate VDOT if performance breakthrough
@@ -709,7 +705,7 @@ sce today  # Will show Monday's workout (4.5 km easy run)
 
 ```bash
 # After Week 2 analysis:
-# - Adherence: 75% (3/4 runs completed)
+# - Completion: 75% (3/4 runs completed)
 # - ACWR: 1.42 (elevated risk)
 # - Readiness: 48 (low)
 # - Activity notes: "felt tired all week"

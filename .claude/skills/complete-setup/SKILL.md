@@ -1,13 +1,11 @@
-# Complete Setup Skill
-
 ---
-
 name: complete-setup
 description: Conversational environment setup for non-technical users on macOS and Linux. Handles Python 3.11+ verification, package installation via Poetry or venv, config initialization, and seamless handoff to first-session. Activates when user requests "help me get started", "I'm not technical", "setup from scratch", or "I need to install this".
 allowed-tools: Bash, Read, Write, AskUserQuestion
 argument-hint: ""
-
 ---
+
+# Complete Setup Skill
 
 ## Overview
 

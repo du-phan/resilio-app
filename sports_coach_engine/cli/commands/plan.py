@@ -10,9 +10,15 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api import get_current_plan
+from sports_coach_engine.api import (
+    get_current_plan,
+    api_validate_interval_structure,
+    api_validate_plan_structure,
+)
 from sports_coach_engine.api.plan import (
     get_plan_weeks,
+    build_macro_template,
+    export_plan_structure,
     populate_plan_workouts,
     update_plan_from_week,
     save_training_plan_review,
@@ -653,7 +659,7 @@ def plan_populate_command(
           ]
         }
     """
-    # Optional validation gate (reuses same rules as plan validate)
+    # Optional validation gate (reuses same rules as plan validate-week)
     if validate:
         is_valid, errors, warnings = _validate_weekly_plan_file(from_json, verbose=False)
         if not is_valid:
@@ -794,8 +800,8 @@ def plan_populate_command(
     raise typer.Exit(code=exit_code)
 
 
-@app.command(name="validate")
-def plan_validate_command(
+@app.command(name="validate-week")
+def plan_validate_week_command(
     ctx: typer.Context,
     file: str = typer.Option(
         ...,
@@ -808,20 +814,19 @@ def plan_validate_command(
         help="Show detailed validation output"
     )
 ) -> None:
-    """Validate weekly plan JSON before populating (unified validation).
+    """Validate a single-week plan JSON before populating (unified validation).
 
     Runs two-stage validation:
     1. Syntax check: JSON structure, required fields, date alignment
     2. Semantic check: Guardrails, minimum durations, volume limits
 
-    This replaces the old validate-json and validate-week commands with a
-    single unified command that automatically runs both checks.
+    This unified command automatically runs both checks.
 
     Returns exit code 0 if valid, 1 if errors found.
 
     Examples:
-        sce plan validate --file /tmp/week1.json
-        sce plan validate --file /tmp/week1.json --verbose
+        sce plan validate-week --file /tmp/week1.json
+        sce plan validate-week --file /tmp/week1.json --verbose
     """
     # Validate file exists
     json_path = Path(file)
@@ -992,6 +997,318 @@ def plan_update_from_command(
     # Exit with appropriate code
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
+
+
+@app.command(name="validate-intervals")
+def plan_validate_intervals_command(
+    ctx: typer.Context,
+    workout_type: str = typer.Option(..., "--type", help="Workout type (e.g., 'intervals', 'tempo')"),
+    intensity: str = typer.Option(..., "--intensity", help="Intensity (e.g., 'I-pace', 'T-pace', 'R-pace')"),
+    work_bouts_json: str = typer.Option(..., "--work-bouts", help="JSON file with work bouts"),
+    recovery_bouts_json: str = typer.Option(..., "--recovery-bouts", help="JSON file with recovery bouts"),
+    weekly_volume_km: Optional[float] = typer.Option(None, "--weekly-volume", help="Weekly volume in km (optional)"),
+) -> None:
+    """Validate interval workout structure per Daniels methodology.
+
+    Checks work/recovery ratios:
+    - I-pace: 3-5min work bouts, equal recovery
+    - T-pace: 5-15min work bouts, 1min recovery per 5min work
+    - R-pace: 30-90sec work bouts, 2-3x recovery
+
+    Example:
+        sce plan validate-intervals \\
+            --type intervals \\
+            --intensity I-pace \\
+            --work-bouts work.json \\
+            --recovery-bouts recovery.json \\
+            --weekly-volume 50
+    """
+    # Load work bouts
+    try:
+        work_bouts_path = Path(work_bouts_json)
+        if not work_bouts_path.exists():
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Work bouts file not found: {work_bouts_json}",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+        with open(work_bouts_path, "r") as f:
+            work_bouts = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in work bouts file: {e}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    # Load recovery bouts
+    try:
+        recovery_bouts_path = Path(recovery_bouts_json)
+        if not recovery_bouts_path.exists():
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Recovery bouts file not found: {recovery_bouts_json}",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+        with open(recovery_bouts_path, "r") as f:
+            recovery_bouts = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in recovery bouts file: {e}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    # Call API
+    result = api_validate_interval_structure(
+        workout_type=workout_type,
+        intensity=intensity,
+        work_bouts=work_bouts,
+        recovery_bouts=recovery_bouts,
+        weekly_volume_km=weekly_volume_km,
+    )
+
+    # Build success message
+    msg = f"Interval structure validated: {workout_type} ({intensity})"
+    if hasattr(result, "daniels_compliance"):
+        if result.daniels_compliance:
+            msg += " - Daniels compliant ✓"
+        else:
+            msg += f" - {len(result.violations)} violation(s) found"
+
+    envelope = api_result_to_envelope(result, success_message=msg)
+    output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+
+@app.command(name="validate-structure")
+def plan_validate_structure_command(
+    ctx: typer.Context,
+    total_weeks: int = typer.Option(..., "--total-weeks", help="Total number of weeks in plan"),
+    goal_type: str = typer.Option(..., "--goal-type", help="Goal race type (e.g., '5k', 'half_marathon')"),
+    phases_json: str = typer.Option(..., "--phases", help="JSON file with phases (dict: phase_name -> weeks)"),
+    weekly_volumes_json: str = typer.Option(..., "--weekly-volumes", help="JSON file with weekly volumes (list of km)"),
+    recovery_weeks_json: str = typer.Option(..., "--recovery-weeks", help="JSON file with recovery weeks (list of week numbers)"),
+    race_week: int = typer.Option(..., "--race-week", help="Week number of race"),
+) -> None:
+    """Validate training plan structure for common errors.
+
+    Checks:
+    - Phase duration appropriateness
+    - Volume progression (10% rule)
+    - Peak placement (2-3 weeks before race)
+    - Recovery week frequency (every 3-4 weeks)
+    - Taper structure (gradual volume reduction)
+
+    Example:
+        sce plan validate-structure \\
+            --total-weeks 20 \\
+            --goal-type half_marathon \\
+            --phases phases.json \\
+            --weekly-volumes volumes.json \\
+            --recovery-weeks recovery.json \\
+            --race-week 20
+    """
+    # Load phases
+    try:
+        phases_path = Path(phases_json)
+        if not phases_path.exists():
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Phases file not found: {phases_json}",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+        with open(phases_path, "r") as f:
+            phases = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in phases file: {e}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    # Load weekly volumes
+    try:
+        weekly_volumes_path = Path(weekly_volumes_json)
+        if not weekly_volumes_path.exists():
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Weekly volumes file not found: {weekly_volumes_json}",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+        with open(weekly_volumes_path, "r") as f:
+            weekly_volumes = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in weekly volumes file: {e}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    # Load recovery weeks
+    try:
+        recovery_weeks_path = Path(recovery_weeks_json)
+        if not recovery_weeks_path.exists():
+            envelope = create_error_envelope(
+                error_type="invalid_input",
+                message=f"Recovery weeks file not found: {recovery_weeks_json}",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+        with open(recovery_weeks_path, "r") as f:
+            recovery_weeks = json.load(f)
+    except json.JSONDecodeError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Invalid JSON in recovery weeks file: {e}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    # Call API
+    result = api_validate_plan_structure(
+        total_weeks=total_weeks,
+        goal_type=goal_type,
+        phases=phases,
+        weekly_volumes_km=weekly_volumes,
+        recovery_weeks=recovery_weeks,
+        race_week=race_week,
+    )
+
+    # Build success message
+    msg = f"Plan structure validated: {total_weeks} weeks, {goal_type}"
+    if hasattr(result, "overall_quality_score"):
+        msg += f" - Quality score: {result.overall_quality_score}/100"
+        if len(result.violations) > 0:
+            msg += f", {len(result.violations)} violation(s) found"
+
+    envelope = api_result_to_envelope(result, success_message=msg)
+    output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+
+@app.command(name="export-structure")
+def plan_export_structure_command(
+    ctx: typer.Context,
+    out_dir: str = typer.Option(
+        "/tmp",
+        "--out-dir",
+        help="Output directory for structure JSON files (default: /tmp)",
+    ),
+) -> None:
+    """Export stored macro plan structure into validation-ready JSON files.
+
+    Writes:
+    - plan_phases.json (dict: phase -> weeks)
+    - weekly_volumes_list.json (list of weekly volumes, length = total_weeks)
+    - recovery_weeks.json (list of recovery week numbers)
+    """
+    export_result = export_plan_structure()
+    if isinstance(export_result, PlanError):
+        envelope = api_result_to_envelope(export_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    out_path = Path(out_dir).expanduser()
+    try:
+        out_path.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Failed to create output directory: {e}",
+            data={"out_dir": str(out_path)},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    phases_file = out_path / "plan_phases.json"
+    volumes_file = out_path / "weekly_volumes_list.json"
+    recovery_file = out_path / "recovery_weeks.json"
+
+    with open(phases_file, "w") as f:
+        json.dump(export_result.phases, f, indent=2)
+    with open(volumes_file, "w") as f:
+        json.dump(export_result.weekly_volumes_km, f, indent=2)
+    with open(recovery_file, "w") as f:
+        json.dump(export_result.recovery_weeks, f, indent=2)
+
+    envelope = create_success_envelope(
+        message="Plan structure exported",
+        data={
+            "total_weeks": export_result.total_weeks,
+            "goal_type": export_result.goal_type,
+            "race_week": export_result.race_week,
+            "phases": export_result.phases,
+            "weekly_volumes_km": export_result.weekly_volumes_km,
+            "recovery_weeks": export_result.recovery_weeks,
+            "phases_file": str(phases_file),
+            "weekly_volumes_file": str(volumes_file),
+            "recovery_weeks_file": str(recovery_file),
+        },
+    )
+    output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+
+@app.command(name="template-macro")
+def plan_template_macro_command(
+    ctx: typer.Context,
+    total_weeks: int = typer.Option(..., "--total-weeks", help="Total weeks in plan"),
+    out: str = typer.Option(
+        "/tmp/macro_template.json",
+        "--out",
+        help="Output path for macro template JSON (default: /tmp/macro_template.json)",
+    ),
+) -> None:
+    """Generate a blank macro template with required fields.
+
+    The template includes null placeholders that must be filled before calling
+    create-macro.
+    """
+    template = build_macro_template(total_weeks)
+    if isinstance(template, PlanError):
+        envelope = api_result_to_envelope(template, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    out_path = Path(out).expanduser()
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        envelope = create_error_envelope(
+            error_type="invalid_input",
+            message=f"Failed to create output directory: {e}",
+            data={"out": str(out_path)},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    with open(out_path, "w") as f:
+        json.dump(template, f, indent=2)
+
+    envelope = create_success_envelope(
+        message="Macro template created",
+        data={
+            "template_path": str(out_path),
+            "total_weeks": total_weeks,
+            "template_version": template.get("template_version"),
+        },
+    )
+    output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 def _build_plan_message(result: any) -> str:
@@ -1227,17 +1544,15 @@ def create_macro_command(
     total_weeks: int = typer.Option(..., "--total-weeks", help="Total weeks in plan"),
     start_date: str = typer.Option(..., "--start-date", help="Plan start date (YYYY-MM-DD, must be Monday)"),
     current_ctl: float = typer.Option(..., "--current-ctl", help="Current CTL"),
-    starting_volume_km: float = typer.Option(..., "--starting-volume-km", help="Initial weekly volume (km)"),
-    peak_volume_km: float = typer.Option(..., "--peak-volume-km", help="Peak weekly volume (km)"),
     baseline_vdot: Optional[float] = typer.Option(
         None,
         "--baseline-vdot",
         help="Approved baseline VDOT for macro plan"
     ),
-    weekly_volumes_json: str = typer.Option(
+    macro_template_json: str = typer.Option(
         ...,
-        "--weekly-volumes-json",
-        help="Path to JSON file with weekly volume targets and workout structure hints"
+        "--macro-template-json",
+        help="Path to macro template JSON (generated by sce plan template-macro)"
     ),
 ) -> None:
     """
@@ -1253,9 +1568,10 @@ def create_macro_command(
     Examples:
         sce plan create-macro --goal-type half_marathon --race-date 2026-05-03 \\
             --target-time "1:30:00" --total-weeks 16 --start-date 2026-01-20 \\
-            --current-ctl 44.0 --starting-volume-km 25.0 --peak-volume-km 55.0
+            --current-ctl 44.0 --baseline-vdot 48.0 \\
+            --macro-template-json /tmp/macro_template.json
 
-    Requires an approved baseline VDOT in approvals state.
+    Requires an approved baseline VDOT and a filled macro template JSON.
 
     Returns:
         Macro plan structure with phases, volume trajectory, CTL projections,
@@ -1322,11 +1638,11 @@ def create_macro_command(
         raise typer.Exit(code=5)
 
     # Call API
-    json_path = Path(weekly_volumes_json)
+    json_path = Path(macro_template_json)
     if not json_path.exists():
         envelope = create_error_envelope(
             error_type="not_found",
-            message=f"Weekly volumes JSON file not found: {weekly_volumes_json}",
+            message=f"Macro template JSON file not found: {macro_template_json}",
             data={"path": str(json_path.absolute())}
         )
         output_json(envelope)
@@ -1337,8 +1653,8 @@ def create_macro_command(
     except json.JSONDecodeError as e:
         envelope = create_error_envelope(
             error_type="validation",
-            message=f"Invalid JSON in weekly volumes file: {str(e)}",
-            data={"file": weekly_volumes_json}
+            message=f"Invalid JSON in macro template file: {str(e)}",
+            data={"file": macro_template_json}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1346,18 +1662,49 @@ def create_macro_command(
     if not isinstance(payload, dict) or "volumes_km" not in payload or "workout_structure_hints" not in payload:
         envelope = create_error_envelope(
             error_type="validation",
-            message="Weekly volumes JSON must be an object with 'volumes_km' and 'workout_structure_hints'",
-            data={"file": weekly_volumes_json}
+            message="Macro template must include 'volumes_km' and 'workout_structure_hints'",
+            data={"file": macro_template_json}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
+
+    if payload.get("template_version") != "macro_template_v1":
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Macro template missing template_version (generate with sce plan template-macro)",
+            data={"file": macro_template_json},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    template_total_weeks = payload.get("total_weeks")
+    if template_total_weeks != total_weeks:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Macro template total_weeks {template_total_weeks} != --total-weeks {total_weeks}",
+            data={"file": macro_template_json},
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    def _find_placeholder_paths(value, path="root"):
+        paths = []
+        if value is None:
+            paths.append(path)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                paths.extend(_find_placeholder_paths(item, f"{path}.{key}"))
+        elif isinstance(value, list):
+            for idx, item in enumerate(value):
+                paths.extend(_find_placeholder_paths(item, f"{path}[{idx}]"))
+        return paths
 
     weekly_volumes_km = payload["volumes_km"]
     if not isinstance(weekly_volumes_km, list) or len(weekly_volumes_km) == 0:
         envelope = create_error_envelope(
             error_type="validation",
             message="'volumes_km' must be a non-empty array",
-            data={"file": weekly_volumes_json}
+            data={"file": macro_template_json}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1366,7 +1713,19 @@ def create_macro_command(
         envelope = create_error_envelope(
             error_type="validation",
             message=f"'volumes_km' length {len(weekly_volumes_km)} != total_weeks {total_weeks}",
-            data={"file": weekly_volumes_json}
+            data={"file": macro_template_json}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    placeholder_paths = _find_placeholder_paths(weekly_volumes_km, "volumes_km")
+    weekly_structure_hints = payload["workout_structure_hints"]
+    placeholder_paths.extend(_find_placeholder_paths(weekly_structure_hints, "workout_structure_hints"))
+    if placeholder_paths:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Macro template contains placeholders; fill all required fields",
+            data={"missing_fields": placeholder_paths[:20], "file": macro_template_json},
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1376,17 +1735,16 @@ def create_macro_command(
             envelope = create_error_envelope(
                 error_type="validation",
                 message=f"volumes_km[{idx}] must be a positive number",
-                data={"file": weekly_volumes_json}
+                data={"file": macro_template_json}
             )
             output_json(envelope)
             raise typer.Exit(code=5)
 
-    weekly_structure_hints = payload["workout_structure_hints"]
     if not isinstance(weekly_structure_hints, list) or len(weekly_structure_hints) == 0:
         envelope = create_error_envelope(
             error_type="validation",
             message="'workout_structure_hints' must be a non-empty array",
-            data={"file": weekly_volumes_json}
+            data={"file": macro_template_json}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1394,7 +1752,7 @@ def create_macro_command(
         envelope = create_error_envelope(
             error_type="validation",
             message=f"'workout_structure_hints' length {len(weekly_structure_hints)} != total_weeks {total_weeks}",
-            data={"file": weekly_volumes_json}
+            data={"file": macro_template_json}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1407,7 +1765,7 @@ def create_macro_command(
             envelope = create_error_envelope(
                 error_type="validation",
                 message=f"workout_structure_hints[{idx}] invalid: {str(e)}",
-                data={"file": weekly_volumes_json}
+                data={"file": macro_template_json}
             )
             output_json(envelope)
             raise typer.Exit(code=5)
@@ -1419,8 +1777,6 @@ def create_macro_command(
         total_weeks=total_weeks,
         start_date=start_date_parsed,
         current_ctl=current_ctl,
-        starting_volume_km=starting_volume_km,
-        peak_volume_km=peak_volume_km,
         baseline_vdot=baseline_vdot,
         weekly_volumes_km=weekly_volumes_km,
         weekly_structure_hints=weekly_structure_hints,

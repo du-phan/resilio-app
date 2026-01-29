@@ -5,48 +5,10 @@
 Weekly insights and multi-sport load distribution analysis.
 
 **Commands in this category:**
-- `sce analysis adherence` - Compare planned vs actual training
 - `sce analysis intensity` - Validate 80/20 rule compliance
 - `sce analysis gaps` - Detect training breaks with CTL impact
 - `sce analysis load` - Analyze systemic and lower-body load distribution
 - `sce analysis capacity` - Validate planned volume against proven capacity
-
----
-
-## sce analysis adherence
-
-Compare planned vs actual training to identify adherence patterns.
-
-**Usage:**
-
-```bash
-sce analysis adherence --week 5 \
-    --planned planned_week5.json \
-    --completed completed_week5.json
-```
-
-**Input JSON Format (planned_week5.json):**
-
-```json
-[
-  {
-    "workout_type": "easy",
-    "duration_minutes": 40,
-    "distance_km": 6.0,
-    "target_systemic_load_au": 160,
-    "target_lower_body_load_au": 160
-  },
-  {
-    "workout_type": "tempo",
-    "duration_minutes": 45,
-    "distance_km": 8.0,
-    "target_systemic_load_au": 315,
-    "target_lower_body_load_au": 315
-  }
-]
-```
-
-**Returns:** Completion rate, load variance (planned vs actual), workout type adherence breakdown, detected patterns, recommendations.
 
 ---
 

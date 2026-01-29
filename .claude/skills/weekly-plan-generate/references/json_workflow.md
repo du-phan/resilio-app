@@ -3,13 +3,17 @@
 ## Quick Start
 
 ```bash
-# 1. Create plan skeleton (auto-persists to data/plans/current_plan.yaml)
+# 1. Generate macro template and fill it
+poetry run sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+# Fill /tmp/macro_template.json (replace nulls)
+
+# 2. Create plan skeleton (auto-persists to data/plans/current_plan.yaml)
 # (Requires approved baseline VDOT: sce approvals approve-vdot --value <VDOT>)
 poetry run sce plan create-macro --goal-type half_marathon --race-date 2026-06-01 \
-  --start-date 2026-01-20 --total-weeks 16 --starting-volume-km 25 --peak-volume-km 55 \
-  --baseline-vdot 48 --weekly-volumes-json /tmp/weekly_volumes.json
+  --start-date 2026-01-20 --total-weeks 16 --current-ctl 44 --baseline-vdot 48 \
+  --macro-template-json /tmp/macro_template.json
 
-# 2. Generate week 1 JSON (coach decides pattern inputs)
+# 3. Generate week 1 JSON (coach decides pattern inputs)
 poetry run sce plan generate-week \
   --week 1 \
   --run-days "0,2,6" \
@@ -19,16 +23,16 @@ poetry run sce plan generate-week \
   --long-run-pace "6:30-6:50" \
   --out /tmp/weekly_plan_w1.json
 
-# 3. Validate JSON before presenting to athlete
-poetry run sce plan validate --file /tmp/weekly_plan_w1.json
+# 4. Validate JSON before presenting to athlete
+poetry run sce plan validate-week --file /tmp/weekly_plan_w1.json
 
-# 4. Record approval
+# 5. Record approval
 poetry run sce approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
 
-# 5. Populate week 1 into skeleton (after athlete approval)
+# 6. Populate week 1 into skeleton (after athlete approval)
 poetry run sce plan populate --from-json /tmp/weekly_plan_w1.json --validate
 
-# 6. Verify
+# 7. Verify
 poetry run sce plan show
 ```
 
@@ -184,7 +188,7 @@ sce plan create-macro ...
 # Saved to: /tmp/weekly_plan_w1.json
 
 # Step 3: Validate week 1
-sce plan validate --file /tmp/weekly_plan_w1.json
+sce plan validate-week --file /tmp/weekly_plan_w1.json
 
 # Step 4: Record approval
 sce approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
@@ -207,7 +211,7 @@ sce week  # Review adherence, metrics
 # Based on week 1 response, current CTL/ACWR, readiness
 
 # Validate
-sce plan validate --file /tmp/weekly_plan_w2.json
+sce plan validate-week --file /tmp/weekly_plan_w2.json
 
 # Record approval + populate (merges into existing plan)
 sce approvals approve-week --week 2 --file /tmp/weekly_plan_w2.json
@@ -264,7 +268,7 @@ poetry run sce dates week-boundaries --start 2026-01-20
 
 ## Validation Rules
 
-`sce plan validate --file <json>` checks:
+`sce plan validate-week --file <json>` checks:
 
 1. **Volume discrepancy**: Sum of workout distances vs target_volume_km
    - <5%: Acceptable

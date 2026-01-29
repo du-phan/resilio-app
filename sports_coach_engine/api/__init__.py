@@ -37,6 +37,8 @@ from sports_coach_engine.api.metrics import (
 
 from sports_coach_engine.api.plan import (
     get_current_plan,
+    export_plan_structure,
+    build_macro_template,
     regenerate_plan,
     get_plan_weeks,
     get_pending_suggestions,
@@ -92,7 +94,6 @@ from sports_coach_engine.api.guardrails import (
 )
 
 from sports_coach_engine.api.analysis import (
-    api_analyze_week_adherence,
     api_validate_intensity_distribution,
     api_detect_activity_gaps,
     api_analyze_load_distribution_by_sport,
@@ -140,6 +141,8 @@ __all__ = [
     "MetricsError",
     # Plan operations
     "get_current_plan",
+    "export_plan_structure",
+    "build_macro_template",
     "regenerate_plan",
     "get_plan_weeks",
     "get_pending_suggestions",
@@ -185,7 +188,6 @@ __all__ = [
     "generate_illness_recovery_plan",
     "GuardrailsError",
     # Analysis operations
-    "api_analyze_week_adherence",
     "api_validate_intensity_distribution",
     "api_detect_activity_gaps",
     "api_analyze_load_distribution_by_sport",

@@ -35,29 +35,30 @@ sce memory list --type INJURY_HISTORY
 sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECENT>
 ```
 
-3) Create a weekly macro JSON (AI coach computed) at `/tmp/weekly_volumes.json` **using this exact format**:
+3) Create a macro template JSON at `/tmp/macro_template.json` using the CLI:
+```bash
+sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
+```
+
+Fill the template (replace all nulls) with AI-coach decisions. Example for 4 weeks (use N entries for total_weeks N):
 ```json
 {
-  "volumes_km": [32.0, 35.0, 38.0, 28.0, 40.0, 43.0, 46.0, 32.0, ...],
+  "template_version": "macro_template_v1",
+  "total_weeks": 4,
+  "volumes_km": [32.0, 35.0, 28.0, 40.0],
   "workout_structure_hints": [
-    {
-      "quality": {"max_sessions": 1, "types": ["strides_only"]},
-      "long_run": {"emphasis": "steady", "pct_range": [24, 30]},
-      "intensity_balance": {"low_intensity_pct": 0.90}
-    },
-    {
-      "quality": {"max_sessions": 2, "types": ["tempo", "intervals"]},
-      "long_run": {"emphasis": "progression", "pct_range": [24, 30]},
-      "intensity_balance": {"low_intensity_pct": 0.85}
-    }
+    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "steady", "pct_range": [24, 30]}, "intensity_balance": {"low_intensity_pct": 0.90}},
+    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "steady", "pct_range": [24, 30]}, "intensity_balance": {"low_intensity_pct": 0.85}},
+    {"quality": {"max_sessions": 0, "types": []}, "long_run": {"emphasis": "easy", "pct_range": [20, 25]}, "intensity_balance": {"low_intensity_pct": 0.95}},
+    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [24, 30]}, "intensity_balance": {"low_intensity_pct": 0.85}}
   ]
 }
 ```
 Rules:
-- `volumes_km` length MUST equal `total_weeks`
-- `workout_structure_hints` length MUST equal `total_weeks`
-- All values must be positive numbers
-- Hints are AI-coach defined (macro-level guidance only; no detailed workouts)
+- `volumes_km` length MUST equal `total_weeks`; each entry must be a positive number.
+- `workout_structure_hints` length MUST equal `total_weeks`; each entry must conform to WorkoutStructureHints: `quality.max_sessions` 0–3, `quality.types` list of QualityType (e.g. tempo, intervals, strides_only); `long_run.emphasis` one of easy, steady, progression, race_specific; `long_run.pct_range` [min, max] in 15–35; `intensity_balance.low_intensity_pct` 0.75–0.95.
+- Keep `template_version` and `total_weeks` unchanged.
+- Hints are AI-coach defined (macro-level guidance only; no detailed workouts).
 
 4) Create macro plan (store baseline VDOT):
 ```bash
@@ -68,15 +69,27 @@ sce plan create-macro \
   --total-weeks <N> \
   --start-date <YYYY-MM-DD> \
   --current-ctl <CTL> \
-  --starting-volume-km <START_KM> \
-  --peak-volume-km <PEAK_KM> \
   --baseline-vdot <BASELINE_VDOT> \
-  --weekly-volumes-json /tmp/weekly_volumes.json
+  --macro-template-json /tmp/macro_template.json
 ```
 
 5) Validate macro:
 ```bash
 sce plan validate-macro
+```
+
+5b) Validate plan structure (phases/volumes/taper):
+Export structure from the stored plan, then validate:
+```bash
+sce plan export-structure --out-dir /tmp
+
+sce plan validate-structure \
+  --total-weeks <N> \
+  --goal-type <GOAL> \
+  --phases /tmp/plan_phases.json \
+  --weekly-volumes /tmp/weekly_volumes_list.json \
+  --recovery-weeks /tmp/recovery_weeks.json \
+  --race-week <RACE_WEEK>
 ```
 
 6) Write `/tmp/macro_plan_review_YYYY_MM_DD.md` with:

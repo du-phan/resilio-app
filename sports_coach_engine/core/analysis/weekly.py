@@ -1,8 +1,8 @@
 """
 Weekly analysis calculations.
 
-Implements adherence tracking, intensity distribution validation (80/20 rule),
-activity gap detection, multi-sport load analysis, and capacity checking.
+Implements intensity distribution validation (80/20 rule), activity gap
+detection, multi-sport load analysis, and capacity checking.
 
 Note: These functions provide the computational analysis logic. The API layer
 handles data retrieval and integration with the persistence layer.
@@ -13,131 +13,13 @@ from datetime import date, timedelta
 from collections import defaultdict
 
 from sports_coach_engine.schemas.analysis import (
-    WeekAdherenceAnalysis,
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,
     WeeklyCapacityCheck,
-    CompletionStats,
-    LoadVariance,
-    WorkoutTypeAdherence,
     ActivityGap,
     ComplianceLevel,
 )
-
-
-# ============================================================
-# WEEK ADHERENCE ANALYSIS
-# ============================================================
-
-
-def analyze_week_adherence(
-    week_number: int,
-    planned_workouts: List[Dict],
-    completed_activities: List[Dict],
-) -> WeekAdherenceAnalysis:
-    """
-    Analyze planned vs actual training for a week.
-
-    Compares planned workouts against completed activities to identify
-    adherence patterns, load variance, and workout completion rates.
-
-    Args:
-        week_number: Week number in training plan
-        planned_workouts: List of planned workout dicts with type, load_au, etc.
-        completed_activities: List of completed activity dicts with type, load_au, etc.
-
-    Returns:
-        WeekAdherenceAnalysis with completion stats, load variance, and recommendations
-
-    Example:
-        >>> planned = [{"type": "easy", "load_au": 120}, {"type": "tempo", "load_au": 200}]
-        >>> completed = [{"type": "easy", "load_au": 115}]
-        >>> analysis = analyze_week_adherence(5, planned, completed)
-        >>> print(f"Completion rate: {analysis.completion_stats.completion_rate_pct}%")
-    """
-    # Completion stats
-    total_planned = len(planned_workouts)
-    total_completed = len(completed_activities)
-    completion_rate = (total_completed / total_planned * 100) if total_planned > 0 else 0.0
-
-    completion_stats = CompletionStats(
-        total_workouts_planned=total_planned,
-        total_workouts_completed=total_completed,
-        completion_rate_pct=round(completion_rate, 1),
-    )
-
-    # Load variance
-    planned_systemic = sum(w.get("systemic_load_au", 0) for w in planned_workouts)
-    actual_systemic = sum(a.get("systemic_load_au", 0) for a in completed_activities)
-    systemic_variance = ((actual_systemic - planned_systemic) / planned_systemic * 100) if planned_systemic > 0 else 0.0
-
-    planned_lower = sum(w.get("lower_body_load_au", 0) for w in planned_workouts)
-    actual_lower = sum(a.get("lower_body_load_au", 0) for a in completed_activities)
-    lower_variance = ((actual_lower - planned_lower) / planned_lower * 100) if planned_lower > 0 else 0.0
-
-    load_variance = LoadVariance(
-        planned_systemic_load_au=planned_systemic,
-        actual_systemic_load_au=actual_systemic,
-        variance_pct=round(systemic_variance, 1),
-        planned_lower_body_load_au=planned_lower,
-        actual_lower_body_load_au=actual_lower,
-        lower_body_variance_pct=round(lower_variance, 1),
-    )
-
-    # Workout type adherence
-    planned_by_type = defaultdict(int)
-    for w in planned_workouts:
-        planned_by_type[w.get("workout_type", "unknown")] += 1
-
-    completed_by_type = defaultdict(int)
-    for a in completed_activities:
-        completed_by_type[a.get("workout_type", "unknown")] += 1
-
-    workout_type_adherence = {}
-    for wtype, planned_count in planned_by_type.items():
-        completed_count = completed_by_type.get(wtype, 0)
-        adherence_pct = (completed_count / planned_count * 100) if planned_count > 0 else 0.0
-        workout_type_adherence[wtype] = WorkoutTypeAdherence(
-            workout_type=wtype,
-            planned=planned_count,
-            completed=completed_count,
-            adherence_pct=round(adherence_pct, 1),
-        )
-
-    # Pattern detection
-    patterns = []
-    for wtype, adherence in workout_type_adherence.items():
-        if adherence.adherence_pct == 0 and adherence.planned > 0:
-            patterns.append(f"Skipped all {wtype} workouts ({adherence.planned} planned)")
-        elif adherence.adherence_pct < 50:
-            patterns.append(f"{wtype} workouts have low adherence ({adherence.adherence_pct:.0f}%)")
-
-    if completion_rate == 100:
-        patterns.append("Perfect adherence - all workouts completed")
-
-    # Recommendations
-    recommendations = []
-    if completion_rate < 70:
-        recommendations.append(f"Low completion rate ({completion_rate:.0f}%) - consider reducing weekly volume")
-
-    if systemic_variance < -20:
-        recommendations.append(f"Systemic load {abs(systemic_variance):.0f}% under plan - safe to increase volume next week")
-    elif systemic_variance > 20:
-        recommendations.append(f"Systemic load {systemic_variance:.0f}% over plan - monitor for fatigue")
-
-    for wtype, adherence in workout_type_adherence.items():
-        if adherence.adherence_pct == 0:
-            recommendations.append(f"{wtype.capitalize()} workouts consistently missed - consider rescheduling or swapping days")
-
-    return WeekAdherenceAnalysis(
-        week_number=week_number,
-        completion_stats=completion_stats,
-        load_variance=load_variance,
-        workout_type_adherence=workout_type_adherence,
-        patterns_detected=patterns,
-        recommendations=recommendations,
-    )
 
 
 # ============================================================

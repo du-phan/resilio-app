@@ -10,6 +10,7 @@ Complete reference for Sports Coach Engine command-line interface, optimized for
 sce auth status          # Check auth → [Auth Commands](cli_auth.md)
 sce sync                 # Import activities → [Data Commands](cli_data.md)
 sce status               # Current metrics → [Metrics Commands](cli_metrics.md)
+sce dates today          # Date context → [Date Commands](cli_dates.md)
 sce today                # Today's workout → [Metrics Commands](cli_metrics.md)
 sce week                 # Weekly summary → [Metrics Commands](cli_metrics.md)
 sce profile get          # View profile → [Profile Commands](cli_profile.md)
@@ -21,6 +22,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 ### Session Initialization
 - [**Authentication**](cli_auth.md) - OAuth flow, token management (`sce auth`)
 - [**Data Management**](cli_data.md) - Init, sync, activity import (`sce init`, `sce sync`)
+- [**Dates**](cli_dates.md) - Date utilities for planning (`sce dates`)
 
 ### Daily Coaching
 - [**Metrics & Status**](cli_metrics.md) - Current metrics, daily workouts, weekly summaries (`sce status`, `sce today`, `sce week`)
@@ -28,18 +30,18 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 - [**Memory**](cli_memory.md) - Injury history, preferences, insights (`sce memory`)
 
 ### Profile & Goals
-- [**Profile Management**](cli_profile.md) - Create, update, sports, analyze (`sce profile`, `sce goal`)
+- [**Profile Management**](cli_profile.md) - Create, update, sports, analyze (`sce profile`)
+- [**Goal Setting**](cli_planning.md#sce-goal-set) - Set/validate goals (`sce goal set`, `sce goal validate`)
 
 ### Training Plans
 - [**Planning**](cli_planning.md) - Macro plans, weekly validation, plan updates (`sce plan`)
-- [**Approvals**](cli_planning.md#weekly-planning-workflow-cli) - Approval state for plan apply (`sce approvals`)
+- [**Approvals**](cli_planning.md#sce-approvals-status) - Approval state for plan apply (`sce approvals`)
 - [**VDOT & Pacing**](cli_vdot.md) - Calculate, predict, adjust paces (`sce vdot`)
 
 ### Safety & Validation
 - [**Risk Assessment**](cli_risk.md) - Injury risk, forecasting, taper status (`sce risk`)
 - [**Guardrails**](cli_guardrails.md) - Volume limits, progression checks (`sce guardrails`)
-- [**Validation**](cli_validation.md) - Plan validation, goal assessment (`sce validation`)
-- [**Analysis**](cli_analysis.md) - Adherence, intensity, load distribution (`sce analysis`)
+- [**Analysis**](cli_analysis.md) - Intensity, gaps, load distribution, capacity (`sce analysis`)
 
 ### Race Management
 - [**Race Commands**](cli_race.md) - Add performances, list history, import from Strava (`sce race`)
@@ -55,16 +57,22 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | `sce today [--date]` | Metrics | [cli_metrics.md](cli_metrics.md) |
 | `sce week` | Metrics | [cli_metrics.md](cli_metrics.md) |
 | `sce profile {create\|get\|set\|...}` | Profile | [cli_profile.md](cli_profile.md) |
-| `sce goal --type --date` | Profile | [cli_profile.md](cli_profile.md) |
-| `sce plan {show\|week\|populate\|validate\|...}` | Planning | [cli_planning.md](cli_planning.md) |
-| `sce approvals {status\|approve-vdot\|approve-week\|approve-macro}` | Planning | [cli_planning.md](cli_planning.md#weekly-planning-workflow-cli) |
+| `sce goal set --type --date` | Planning | [cli_planning.md](cli_planning.md#sce-goal-set) |
+| `sce goal validate` | Planning | [cli_planning.md](cli_planning.md#sce-goal-validate) |
+| `sce plan {show\|week\|populate\|validate-week\|...}` | Planning | [cli_planning.md](cli_planning.md) |
+| `sce approvals {status\|approve-vdot\|approve-week\|approve-macro}` | Planning | [cli_planning.md](cli_planning.md#sce-approvals-status) |
 | `sce vdot {calculate\|paces\|predict\|...}` | VDOT | [cli_vdot.md](cli_vdot.md) |
 | `sce activity {list\|search}` | Activity | [cli_activity.md](cli_activity.md) |
+| `sce dates {today\|next-monday\|week-boundaries\|validate}` | Dates | [cli_dates.md](cli_dates.md) |
 | `sce memory {add\|list\|search}` | Memory | [cli_memory.md](cli_memory.md) |
-| `sce analysis {adherence\|intensity\|...}` | Analysis | [cli_analysis.md](cli_analysis.md) |
+| `sce analysis {intensity\|gaps\|load\|capacity}` | Analysis | [cli_analysis.md](cli_analysis.md) |
 | `sce risk {assess\|forecast\|...}` | Risk | [cli_risk.md](cli_risk.md) |
 | `sce guardrails {progression\|...}` | Guardrails | [cli_guardrails.md](cli_guardrails.md) |
-| `sce validation {validate-plan\|...}` | Validation | [cli_validation.md](cli_validation.md) |
+| `sce plan validate-week` | Planning | [cli_planning.md](cli_planning.md#sce-plan-validate-week) |
+| `sce plan validate-intervals` | Planning | [cli_planning.md](cli_planning.md#sce-plan-validate-intervals) |
+| `sce plan validate-structure` | Planning | [cli_planning.md](cli_planning.md#sce-plan-validate-structure) |
+| `sce plan export-structure` | Planning | [cli_planning.md](cli_planning.md#sce-plan-export-structure) |
+| `sce plan template-macro` | Planning | [cli_planning.md](cli_planning.md#sce-plan-template-macro) |
 | `sce race {add\|list\|import-from-strava}` | Race | [cli_race.md](cli_race.md) |
 
 ## By Use Case
@@ -77,6 +85,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 - **"What are my training paces?"** → [`sce vdot paces`](cli_vdot.md#sce-vdot-paces)
 - **"Find activities with ankle pain"** → [`sce activity search --query "ankle"`](cli_activity.md#sce-activity-search)
 - **"Record past injury"** → [`sce memory add --type INJURY_HISTORY`](cli_memory.md#sce-memory-add)
+- **"What day is this date?"** → [`sce dates validate`](cli_dates.md#sce-dates-validate)
 
 ## All Commands Reference
 
@@ -87,7 +96,8 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce status`** | Get current training metrics | [Metrics](cli_metrics.md#sce-status) |
 | **`sce today [--date YYYY-MM-DD]`** | Get workout recommendation | [Metrics](cli_metrics.md#sce-today) |
 | **`sce week`** | Get weekly summary | [Metrics](cli_metrics.md#sce-week) |
-| **`sce goal --type --date [--time]`** | Set race goal | [Profile](cli_profile.md#sce-goal) |
+| **`sce goal set --type --date [--time]`** | Set race goal | [Planning](cli_planning.md#sce-goal-set) |
+| **`sce goal validate`** | Validate existing goal | [Planning](cli_planning.md#sce-goal-validate) |
 | **`sce auth url`** | Get OAuth URL | [Auth](cli_auth.md#sce-auth-url) |
 | **`sce auth exchange --code`** | Exchange auth code | [Auth](cli_auth.md#sce-auth-exchange) |
 | **`sce auth status`** | Check token validity | [Auth](cli_auth.md#sce-auth-status) |
@@ -108,12 +118,20 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce plan week [--next\|--week N]`** | Get specific week(s) | [Planning](cli_planning.md#sce-plan-week) |
 | **`sce plan create-macro`** | Generate macro plan | [Planning](cli_planning.md#sce-plan-create-macro) |
 | **`sce plan populate`** | Add/update weekly workouts | [Planning](cli_planning.md#sce-plan-populate) |
-| **`sce plan validate`** | Validate weekly plan JSON | [Planning](cli_planning.md#sce-plan-validate) |
+| **`sce plan validate-week`** | Validate weekly plan JSON | [Planning](cli_planning.md#sce-plan-validate-week) |
+| **`sce plan validate-intervals`** | Validate interval structure | [Planning](cli_planning.md#sce-plan-validate-intervals) |
+| **`sce plan validate-structure`** | Validate plan structure | [Planning](cli_planning.md#sce-plan-validate-structure) |
+| **`sce plan export-structure`** | Export macro structure JSON | [Planning](cli_planning.md#sce-plan-export-structure) |
+| **`sce plan template-macro`** | Generate macro template JSON | [Planning](cli_planning.md#sce-plan-template-macro) |
 | **`sce plan update-from`** | Replace plan weeks from a point | [Planning](cli_planning.md#sce-plan-update-from) |
 | **`sce plan save-review`** | Save plan review markdown | [Planning](cli_planning.md#sce-plan-save-review) |
 | **`sce plan append-week`** | Append weekly summary to log | [Planning](cli_planning.md#sce-plan-append-week) |
 | **`sce plan assess-period`** | Assess completed period | [Planning](cli_planning.md#sce-plan-assess-period) |
 | **`sce plan suggest-run-count`** | Suggest run count | [Planning](cli_planning.md#sce-plan-suggest-run-count) |
+| **`sce dates today`** | Today's date context | [Dates](cli_dates.md#sce-dates-today) |
+| **`sce dates next-monday`** | Next Monday | [Dates](cli_dates.md#sce-dates-next-monday) |
+| **`sce dates week-boundaries`** | Week boundaries | [Dates](cli_dates.md#sce-dates-week-boundaries) |
+| **`sce dates validate`** | Validate weekday | [Dates](cli_dates.md#sce-dates-validate) |
 | **`sce vdot calculate`** | Calculate VDOT from race | [VDOT](cli_vdot.md#sce-vdot-calculate) |
 | **`sce vdot paces`** | Get training pace zones | [VDOT](cli_vdot.md#sce-vdot-paces) |
 | **`sce vdot predict`** | Predict race times | [VDOT](cli_vdot.md#sce-vdot-predict) |
@@ -132,7 +150,6 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce guardrails masters-recovery`** | Age-specific recovery | [Guardrails](cli_guardrails.md#sce-guardrails-masters-recovery) |
 | **`sce guardrails race-recovery`** | Post-race recovery | [Guardrails](cli_guardrails.md#sce-guardrails-race-recovery) |
 | **`sce guardrails illness-recovery`** | Illness recovery | [Guardrails](cli_guardrails.md#sce-guardrails-illness-recovery) |
-| **`sce analysis adherence`** | Analyze adherence | [Analysis](cli_analysis.md#sce-analysis-adherence) |
 | **`sce analysis intensity`** | Validate 80/20 | [Analysis](cli_analysis.md#sce-analysis-intensity) |
 | **`sce analysis gaps`** | Detect gaps | [Analysis](cli_analysis.md#sce-analysis-gaps) |
 | **`sce analysis load`** | Multi-sport breakdown | [Analysis](cli_analysis.md#sce-analysis-load) |
@@ -141,9 +158,6 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce risk recovery-window`** | Estimate recovery | [Risk](cli_risk.md#sce-risk-recovery-window) |
 | **`sce risk forecast`** | Forecast stress | [Risk](cli_risk.md#sce-risk-forecast) |
 | **`sce risk taper-status`** | Verify taper | [Risk](cli_risk.md#sce-risk-taper-status) |
-| **`sce validation validate-intervals`** | Validate intervals | [Validation](cli_validation.md#sce-validation-validate-intervals) |
-| **`sce validation validate-plan`** | Validate plan | [Validation](cli_validation.md#sce-validation-validate-plan) |
-| **`sce validation assess-goal`** | Assess goal | [Validation](cli_validation.md#sce-validation-assess-goal) |
 
 ## Error Handling & Patterns
 
@@ -155,4 +169,4 @@ See [Core Concepts](core_concepts.md) for:
 
 ---
 
-**Navigation**: [Core Concepts](core_concepts.md) | [Auth](cli_auth.md) | [Data](cli_data.md) | [Metrics](cli_metrics.md) | [Profile](cli_profile.md) | [Planning](cli_planning.md) | [VDOT](cli_vdot.md) | [Activity](cli_activity.md) | [Memory](cli_memory.md) | [Analysis](cli_analysis.md) | [Risk](cli_risk.md) | [Guardrails](cli_guardrails.md) | [Validation](cli_validation.md) | [Race](cli_race.md)
+**Navigation**: [Core Concepts](core_concepts.md) | [Auth](cli_auth.md) | [Data](cli_data.md) | [Metrics](cli_metrics.md) | [Dates](cli_dates.md) | [Profile](cli_profile.md) | [Planning](cli_planning.md) | [VDOT](cli_vdot.md) | [Activity](cli_activity.md) | [Memory](cli_memory.md) | [Analysis](cli_analysis.md) | [Risk](cli_risk.md) | [Guardrails](cli_guardrails.md) | [Race](cli_race.md)

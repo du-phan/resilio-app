@@ -37,9 +37,9 @@ Use `workout_structure_hints` from the macro plan week as the primary structure 
 ```bash
 sce status
 sce week
-sce analysis adherence --days 28
-sce analysis intensity --days 28
 ```
+If you already have an activities JSON file for the last 28 days, you may run:
+`sce analysis intensity --activities <FILE> --days 28`
 
 3) Guardrails context:
 ```bash
@@ -73,7 +73,40 @@ This command automatically generates a properly formatted JSON with all required
 
 5) Validate:
 ```bash
-sce plan validate --file /tmp/weekly_plan_w<week>.json
+sce plan validate-week --file /tmp/weekly_plan_w<week>.json
+```
+
+5b) Interval structure validation (conditional):
+Run **only if** the generated week includes a structured tempo/interval workout
+with explicit work + recovery bouts (Daniels-style). If not, skip.
+
+Prepare two small JSON files from the planned session:
+- `/tmp/work_bouts.json` (list of work bouts with durations)
+- `/tmp/recovery_bouts.json` (list of recovery bouts)
+
+Example formats:
+```json
+[
+  { "duration_minutes": 4.0, "distance_km": 1.0, "pace_per_km_seconds": 240 },
+  { "duration_minutes": 4.0, "distance_km": 1.0, "pace_per_km_seconds": 240 }
+]
+```
+
+```json
+[
+  { "duration_minutes": 2.0, "type": "jog" },
+  { "duration_minutes": 2.0, "type": "jog" }
+]
+```
+
+Then run:
+```bash
+sce plan validate-intervals \
+  --type intervals \
+  --intensity I-pace \
+  --work-bouts /tmp/work_bouts.json \
+  --recovery-bouts /tmp/recovery_bouts.json \
+  --weekly-volume <WEEKLY_KM>
 ```
 
 6) Present directly in chat:
