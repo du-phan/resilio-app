@@ -1,0 +1,41 @@
+{
+  "skills": ["complete-setup"],
+  "query": "Help me set up the Sports Coach Engine. I'm on a Mac and not very technical.",
+  "files": [],
+  "expected_behavior": [
+    "Detects macOS platform using uname (returns Darwin)",
+    "Checks for WSL (should not match on macOS)",
+    "Checks Python version and finds it missing or too old (< 3.11)",
+    "Explains what Homebrew is in non-technical terms (package manager)",
+    "Guides Homebrew installation with clear instructions",
+    "Handles potential Xcode Command Line Tools requirement gracefully",
+    "Installs Python 3.11+ via Homebrew with explanation of each step",
+    "Verifies Python installation (python3 --version shows ≥3.11.0, exit 0)",
+    "Detects Poetry availability using poetry --version",
+    "Uses Poetry for package installation (poetry install)",
+    "Explains what Poetry does (dependency management, virtual environment)",
+    "Verifies sce command is available (sce --version returns exit 0)",
+    "Runs sce init to create configuration structure",
+    "Validates environment (all checks pass: Python ≥3.11, sce works, config exists)",
+    "Provides clear success message listing what was accomplished",
+    "Seamlessly transitions to first-session workflow for Strava authentication",
+    "Maintains conversational, non-technical tone throughout",
+    "Never switches context to external documentation (HTML guides, etc.)",
+    "Explains technical concepts using analogies (virtual environment = sandbox)",
+    "Provides visual confirmations (prompt prefix indicators, output patterns)"
+  ],
+  "quality_criteria": {
+    "conversational_tone": "All explanations use non-technical language appropriate for beginners",
+    "adaptive_workflow": "Skips steps that are already complete (e.g., if Python 3.11 already installed)",
+    "error_handling": "Gracefully recovers from common errors (Xcode CLT missing, PATH issues)",
+    "educational_moments": "Explains WHY each step is needed, not just WHAT to run",
+    "context_preservation": "Handoff to first-session maintains conversation flow without explicit skill invocation"
+  },
+  "anti_patterns_to_avoid": [
+    "Using technical jargon without explanation",
+    "Directing user to external documentation (breaking conversation flow)",
+    "Running commands without explaining what they do",
+    "Proceeding to next phase before validating current phase success",
+    "Assuming user understands concepts like PATH, virtual environments, package managers"
+  ]
+}
