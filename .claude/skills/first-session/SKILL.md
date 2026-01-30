@@ -28,11 +28,13 @@ sce auth status
 ```
 
 **Handle exit codes**:
+
 - **Exit code 0**: Authenticated → Proceed to Step 2
 - **Exit code 3**: Expired/missing → Guide OAuth flow
 - **Exit code 2**: Config missing → Run `sce init` first
 
 **If config is missing or credentials are empty**:
+
 1. Run `sce init` to create `config/secrets.local.yaml` (if missing).
 2. Read `config/secrets.local.yaml` and verify `strava.client_id` and `strava.client_secret` are present.
 3. If either is missing or still the placeholder, ask the athlete to paste the **Client ID** and **Client Secret** from the Strava API settings page (`https://www.strava.com/settings/api`).
@@ -45,6 +47,7 @@ sce auth status
 5. Confirm: "Saved locally. I’ll use these for authentication going forward."
 
 **If auth expired/missing** (exit code 3):
+
 1. Explain why: "I need Strava access to provide intelligent coaching based on actual training patterns."
 2. Generate URL: `sce auth url`
 3. Instruct: "Open URL, authorize, copy code from final page"
@@ -62,20 +65,27 @@ sce auth status
 sce sync
 ```
 
+**Post-sync overview (MANDATORY)**  
+After every `sce sync`, give the athlete a brief overview. Use the sync command output (JSON envelope or success message); optionally run `sce profile analyze` to get exact date range.
+
+Include:
+
+1. **Number of activities synced** (from sync result: `activities_imported` or success message).
+2. **Time span covered** (weeks or months). From sync result if evident; otherwise from `sce profile analyze` → `data_window_days`, `synced_data_start`, `synced_data_end`.
+3. **Rate limit** (if hit): state that Strava’s limit was reached, how much data was imported (e.g. “most recent X weeks/months”), and that more history will backfill on later syncs.
+
+Keep the overview to 2–4 sentences. Do not skip this step.
+
 **What this provides**:
+
 - Up to 365 days (52 weeks) of activity history (Greedy Sync)
 - CTL/ATL/TSB calculated from historical load
 - Activity patterns (training days, volume, sport distribution)
 
 **Handling Greedy Sync & Rate Limits (IMPORTANT)**:
-The sync process is "greedy"—it fetches the most recent activities first and proceeds backwards until it hits the 52-week limit OR the Strava API rate limit (100 requests / 15 min). 
+The sync process is "greedy"—it fetches the most recent activities first and proceeds backwards until it hits the 52-week limit OR the Strava API rate limit (100 requests / 15 min).
 
 **CRITICAL**: Since 52 weeks usually contains >100 activities, the **initial sync will almost certainly pause due to rate limits**. This is expected behavior.
-
-**If the sync pauses due to rate limits**:
-1. **Explain the behavior**: "Strava limits how much data I can fetch at once. I've imported your most recent activities (approx. X months), which is perfect for building our first plan."
-2. **Reassure the athlete**: "Don't worry—the system will naturally backfill the rest of your year over our next few sessions. We have all the important recent data ready right now."
-3. **DO NOT stall**: Proceed with the onboarding using the data that was successfully synced. Recent data (last 3-4 months) is plenty for the initial VDOT and CTL estimates.
 
 **Success message**: "Imported X activities (covering approximately Y weeks). Your CTL is Z."
 
@@ -92,6 +102,7 @@ sce profile analyze       # Profile suggestions from synced data
 ```
 
 **Extract from analysis**:
+
 - `max_hr_observed`: Suggests max HR
 - `weekly_run_km_avg`: Average weekly volume
 - `training_days_distribution`: Which days athlete typically trains
@@ -113,21 +124,26 @@ sce profile analyze       # Profile suggestions from synced data
 **Step 4a - Basic Info**: Name, age, max HR (reference Strava peak), resting HR, running experience (years)
 
 **Step 4b - Injury History**: Search activities for gaps/pain mentions → Store in memory system with tags
+
 - Use `sce activity search --query "pain injury sore"` to detect signals
 - Store each injury: `sce memory add --type INJURY_HISTORY --content "..." --tags "body:knee,status:resolved"`
 
 **Step 4c - Sport Priority**: Reference `sce profile analyze` sport distribution
+
 - Options: `"running"` (PRIMARY), `"equal"` (EQUAL), other sport name (SECONDARY)
 
 **Step 4d - Conflict Policy**: Use AskUserQuestion (ONLY use here - trade-offs exist)
+
 - Options: Ask each time | Primary sport wins | Running goal wins
 
 **Step 4e - Create Profile**:
+
 ```bash
 sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
 ```
 
 **Step 4.5 - Personal Bests (Race History)**:
+
 - CRITICAL: Manual entry FIRST (Sync defaults to 365 days, but old PBs may still be missing)
 - Ask directly: "What are your PBs for 5K, 10K, half, marathon?"
 - Enter each: `sce race add --distance 10k --time 42:30 --date 2023-06-15 --source official_race`
@@ -135,16 +151,19 @@ sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_t
 - Verify: `sce race list`
 
 **Step 4f - Other Sports Collection**:
+
 - Check distribution: `sce profile analyze` → sport_percentages
 - Collect ALL sports >15%: `sce profile add-sport --sport climbing --days tue,thu --duration 120`
 - running_priority determines CONFLICT RESOLUTION, not whether to track sports
 
 **Step 4f-validation - Data Alignment**:
+
 - Verify: `sce profile validate`
 - Check: All sports >15% from analyze are in other_sports
 - Only proceed when alignment confirmed
 
 **Step 4g - Communication Preferences** (optional):
+
 - Offer customization: "Tailor coaching style or use defaults?"
 - If yes: Detail level, coaching style, intensity metric
 - If no: "I'll use moderate detail, supportive tone, pace-based workouts"
@@ -156,6 +175,7 @@ See [profile_setup_workflow.md](references/profile_setup_workflow.md) for detail
 ### Step 5: Goal Setting
 
 **Questions** (natural conversation):
+
 - "What are you training for?"
 - "When is your race?" (date)
 - "What's your goal time?" (optional)
@@ -180,6 +200,7 @@ sce performance baseline
 ```
 
 **Present context to athlete**:
+
 - Current VDOT estimate: XX (from recent workouts)
 - Peak VDOT: YY (from ZZ race on [date])
 - Goal requires VDOT: ZZ
@@ -195,6 +216,7 @@ sce goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
 ```
 
 **Output includes**:
+
 - Feasibility verdict: VERY_REALISTIC / REALISTIC / AMBITIOUS_BUT_REALISTIC / AMBITIOUS / UNREALISTIC
 - VDOT gap (current vs. required)
 - Weeks available for training
@@ -203,20 +225,24 @@ sce goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
 #### Coaching Response Based on Verdict
 
 **VERY_REALISTIC / REALISTIC:**
+
 - Build confidence: "Your goal is well within reach based on your current fitness (VDOT 48) and training history."
 - Set expectations: "We'll design a plan that maintains fitness and sharpens your speed."
 
 **AMBITIOUS_BUT_REALISTIC:**
+
 - Acknowledge challenge: "This is a stretch goal requiring VDOT improvement from 48 → 52 (+8.3%) over 20 weeks."
 - Build commitment: "It's achievable with strong adherence. Are you ready to commit to 4 quality runs/week?"
 
 **AMBITIOUS:**
+
 - Use AskUserQuestion to present options:
   - **Option 1**: Keep ambitious goal, design aggressive plan, acknowledge 40-50% success probability
   - **Option 2**: Adjust goal to realistic range (suggest alternative: 1:35:00 = VDOT 49)
   - **Option 3**: Target a later race (suggest +8 weeks for better preparation)
 
 **UNREALISTIC:**
+
 - Present reality: "Your goal requires VDOT 52, but current fitness is VDOT 45. That's a 15.6% improvement in 12 weeks."
 - Show math: "Typical VDOT gains are 1.5 points/month. You'd need 7 points in 3 months = 2.3 points/month (50% faster than typical)."
 - Recommend alternatives:
@@ -247,24 +273,29 @@ Let's take a conservative approach initially and reassess after your first tempo
 **Questions** (natural conversation):
 
 1. **Run frequency (minimum)**: "What's the minimum days per week you can commit to running?" (2-3 typical)
+
    - Store as: `--min-run-days N`
 
 2. **Run frequency (maximum)**: "How many days per week can you realistically run?" (3-6 typical)
+
    - Store as: `--max-run-days N`
 
 3. **Available days (reverse logic)**: "Are there any days you absolutely CANNOT run?"
+
    - **If athlete says "No" or "All days work"**: Keep default (all 7 days available)
    - **If athlete says "Tuesdays and Thursdays"**: Remove those from available_run_days
    - **Example**: If "cannot run Tue/Thu" → `--available-days "monday,wednesday,friday,saturday,sunday"`
    - **Default assumes all 7 days available** - ask only for exceptions
 
 4. **Session duration**: "What's the longest time for a long run?" (90-180 min typical)
+
    - Store as: `--max-session-minutes N`
 
 5. **Other sports schedule**: "Are climbing days fixed or flexible?" (if applicable)
    - Context for workout scheduling around other sports
 
 **Store constraints**:
+
 ```bash
 # Example: Cannot run Tue/Thu, 3-4 days/week, max 120 min sessions
 sce profile set --min-run-days 3 --max-run-days 4 \
@@ -273,6 +304,7 @@ sce profile set --min-run-days 3 --max-run-days 4 \
 ```
 
 **If athlete says "all days work"**:
+
 ```bash
 # No need to specify --available-days (defaults to all 7 days)
 sce profile set --min-run-days 3 --max-run-days 4 --max-session-minutes 120
@@ -283,6 +315,7 @@ sce profile set --min-run-days 3 --max-run-days 4 --max-session-minutes 120
 ### Step 7: Suggest Next Steps
 
 **After onboarding complete**:
+
 ```
 "Great! Your profile is set up. CTL is 44 (solid recreational fitness) with half marathon goal June 1st.
 
@@ -298,6 +331,7 @@ Would you like me to create a personalized plan now?"
 ## Quick Decision Trees
 
 ### Q: Athlete has no recent Strava data
+
 **Scenario**: Sync returns <10 activities in 365 days / 52 weeks
 
 **Response**: "I see minimal recent Strava activity. No problem - we'll start from scratch. CTL starts at 0, building volume gradually from conservative baseline."
@@ -305,12 +339,15 @@ Would you like me to create a personalized plan now?"
 **Adjustments**: Ask directly "How much have you been running weekly?" (no data to reference)
 
 ### Q: Athlete refuses Strava auth
+
 **Response**: "No problem - you can still use the system, but I won't have historical context. CTL starts at 0, you'll manually log via `sce log`. We can still create a great plan."
 
 **Proceed**: Rely on stated values instead of synced data
 
 ### Q: Multiple sports with complex schedule
+
 **Approach**:
+
 1. Identify fixed commitments: "Which days non-negotiable for climbing/cycling?"
 2. Map running around fixed days
 3. Consider lower-body load: "Climbing doesn't impact legs, cycling does"
@@ -321,40 +358,47 @@ Would you like me to create a personalized plan now?"
 ## Common Pitfalls
 
 ### 1. Asking for data already available
+
 ❌ **Bad**: "How much do you run per week?"
 ✅ **Good**: "I see you average 22.5 km/week - maintain this or adjust?"
 
 **Always check `sce profile analyze` first**
 
 ### 2. Using AskUserQuestion for free-form text
+
 ❌ **Bad**: AskUserQuestion for "What's your name?"
 ✅ **Good**: Natural conversation for all text/number inputs
 
 **AskUserQuestion ONLY for conflict policy**
 
 ### 3. Skipping auth check
+
 ❌ **Bad**: Proceeding to profile without auth
 ✅ **Good**: Always `sce auth status` first
 
 **Auth must be first** - historical data enables intelligent setup
 
 ### 4. Asking the athlete to edit YAML manually
+
 ❌ **Bad**: "Open config/secrets.local.yaml and edit it."
 ✅ **Good**: Ask for Client ID/Secret in chat and write them locally.
 
 ### 5. Not discussing constraints before planning
+
 ❌ **Bad**: Creating plan without knowing schedule
 ✅ **Good**: Ask run days, duration, other sports BEFORE planning
 
 **Constraints shape entire plan**
 
 ### 6. Generic injury questions
+
 ❌ **Bad**: "Any injuries?" (no context)
 ✅ **Good**: "I see 2-week gap in November with CTL drop - injury-related?"
 
 **Use activity gaps as conversation starters**
 
 ### 7. Only relying on Strava auto-import for PBs
+
 ❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
 ✅ **Good**: Ask directly for PBs first, then auto-import as supplement
 
@@ -365,10 +409,11 @@ Would you like me to create a personalized plan now?"
 ## Success Criteria
 
 **Onboarding complete when**:
+
 1. ✅ Authentication successful (`sce auth status` returns 0)
 2. ✅ Activities synced (max 365 days / 52 weeks target)
 3. ✅ Profile created (name, age, max HR, conflict policy)
-3.5. ✅ Running experience collected (years, or marked as unknown)
+   3.5. ✅ Running experience collected (years, or marked as unknown)
 4. ✅ Injury history recorded in memory system (if applicable)
 5. ✅ Race history captured (PBs added via `sce race add`, auto-import run)
 6. ✅ Goal set (race type, date)
@@ -378,6 +423,7 @@ Would you like me to create a personalized plan now?"
 10. ✅ Ready for plan generation
 
 **Quality checks**:
+
 - All data referenced from `sce profile analyze`
 - AskUserQuestion used ONLY for conflict policy
 - Natural conversation for text/number inputs
@@ -393,16 +439,20 @@ Would you like me to create a personalized plan now?"
 ## Additional Resources
 
 **Reference material**:
+
 - [Authentication Guide](references/authentication.md) - Complete OAuth flow and troubleshooting
 - [Profile Fields Reference](references/profile_fields.md) - All 28 fields with examples
 
 **Complete examples**:
+
 - [Runner Primary Onboarding](examples/example_onboarding_runner_primary.md) - Race-focused athlete
 
 **CLI documentation**:
+
 - [Profile Commands](../../../docs/coaching/cli/cli_profile.md) - Complete command reference
 - [Authentication Commands](../../../docs/coaching/cli/cli_auth.md) - OAuth troubleshooting
 
 **Training methodology**:
+
 - [Coaching Scenarios - First Session](../../../docs/coaching/scenarios.md#scenario-1-first-session) - Detailed walkthrough
 - [Coaching Methodology](../../../docs/coaching/methodology.md) - Overview

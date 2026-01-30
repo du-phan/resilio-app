@@ -233,7 +233,7 @@ Next: Let's connect to Strava and set up your athlete profile...
 **What first-session handles**:
 1. Credential collection and save to config/secrets.local.yaml
 2. OAuth flow (`sce auth url`)
-3. Activity sync (`sce sync`)
+3. Activity sync (`sce sync`) — then a brief overview: activities synced, time span (weeks/months), and whether rate limit was hit
 4. Profile setup (name, age, max HR, sports)
 5. Goal setting and constraints
 
