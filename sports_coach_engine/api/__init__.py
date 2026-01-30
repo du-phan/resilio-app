@@ -54,7 +54,6 @@ from sports_coach_engine.api.plan import (
     calculate_volume_progression,
     suggest_volume_adjustment,
     create_workout,
-    validate_guardrails,
     detect_adaptation_triggers,
     assess_override_risk,
 )
@@ -159,7 +158,6 @@ __all__ = [
     "calculate_volume_progression",
     "suggest_volume_adjustment",
     "create_workout",
-    "validate_guardrails",
     "detect_adaptation_triggers",
     "assess_override_risk",
     # Profile operations

@@ -55,6 +55,12 @@ def mock_profile():
     return profile
 
 
+@pytest.fixture
+def mock_log():
+    """Mock logger."""
+    return Mock()
+
+
 # ============================================================
 # GET_CURRENT_PLAN TESTS
 # ============================================================

@@ -27,7 +27,6 @@ from sports_coach_engine.core.plan import (
     calculate_volume_progression,
     suggest_volume_adjustment,
     create_workout,
-    validate_guardrails,
     save_plan_review,
     append_plan_adaptation,
     initialize_training_log,

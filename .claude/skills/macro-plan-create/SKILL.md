@@ -46,56 +46,39 @@ sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 
 Fill the template (replace all nulls) with AI-coach decisions.
 
-**Example 1: Single-sport runner (12-week half marathon)**
+**Example 1: Single-sport runner (4-week generic block)**
 
 ```json
 {
   "template_version": "macro_template_v1",
-  "total_weeks": 12,
-  "weekly_volumes_km": [40.0, 42.0, 45.0, 42.0, 48.0, 50.0, 52.0, 48.0, 55.0, 58.0, 50.0, 35.0],
-  "target_systemic_load_au": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+  "total_weeks": 4,
+  "weekly_volumes_km": [40.0, 42.0, 45.0, 35.0],
+  "target_systemic_load_au": [0.0, 0.0, 0.0, 0.0],
   "workout_structure_hints": [
     {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "steady", "pct_range": [25, 30]}, "intensity_balance": {"low_intensity_pct": 0.85}},
     {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "steady", "pct_range": [26, 30]}, "intensity_balance": {"low_intensity_pct": 0.82}},
     {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "steady", "pct_range": [28, 32]}, "intensity_balance": {"low_intensity_pct": 0.80}},
-    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "easy", "pct_range": [22, 26]}, "intensity_balance": {"low_intensity_pct": 0.90}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [28, 32]}, "intensity_balance": {"low_intensity_pct": 0.80}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [28, 32]}, "intensity_balance": {"low_intensity_pct": 0.78}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [30, 34]}, "intensity_balance": {"low_intensity_pct": 0.78}},
-    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "easy", "pct_range": [22, 26]}, "intensity_balance": {"low_intensity_pct": 0.90}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "race_specific"]}, "long_run": {"emphasis": "race_specific", "pct_range": [30, 34]}, "intensity_balance": {"low_intensity_pct": 0.75}},
-    {"quality": {"max_sessions": 2, "types": ["race_specific"]}, "long_run": {"emphasis": "race_specific", "pct_range": [32, 35]}, "intensity_balance": {"low_intensity_pct": 0.75}},
-    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "steady", "pct_range": [24, 28]}, "intensity_balance": {"low_intensity_pct": 0.85}},
-    {"quality": {"max_sessions": 0, "types": []}, "long_run": {"emphasis": "easy", "pct_range": [18, 22]}, "intensity_balance": {"low_intensity_pct": 0.95}}
+    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "easy", "pct_range": [22, 26]}, "intensity_balance": {"low_intensity_pct": 0.90}}
   ]
 }
 ```
 
-**Example 2: Multi-sport athlete (12-week half marathon + climbing + yoga)**
+**Example 2: Multi-sport athlete (4-week block)**
 
 ```json
 {
   "template_version": "macro_template_v1",
-  "total_weeks": 12,
-  "weekly_volumes_km": [35.0, 38.0, 40.0, 38.0, 42.0, 45.0, 48.0, 45.0, 50.0, 52.0, 45.0, 30.0],
-  "target_systemic_load_au": [85.0, 92.0, 98.0, 90.0, 105.0, 110.0, 118.0, 108.0, 125.0, 130.0, 115.0, 75.0],
+  "total_weeks": 4,
+  "weekly_volumes_km": [35.0, 38.0, 40.0, 30.0],
+  "target_systemic_load_au": [85.0, 92.0, 98.0, 75.0],
   "workout_structure_hints": [
     {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "steady", "pct_range": [25, 30]}, "intensity_balance": {"low_intensity_pct": 0.85}},
     {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "steady", "pct_range": [26, 30]}, "intensity_balance": {"low_intensity_pct": 0.82}},
     {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "steady", "pct_range": [28, 32]}, "intensity_balance": {"low_intensity_pct": 0.80}},
-    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "easy", "pct_range": [22, 26]}, "intensity_balance": {"low_intensity_pct": 0.90}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [28, 32]}, "intensity_balance": {"low_intensity_pct": 0.80}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [28, 32]}, "intensity_balance": {"low_intensity_pct": 0.78}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "intervals"]}, "long_run": {"emphasis": "progression", "pct_range": [30, 34]}, "intensity_balance": {"low_intensity_pct": 0.78}},
-    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "easy", "pct_range": [22, 26]}, "intensity_balance": {"low_intensity_pct": 0.90}},
-    {"quality": {"max_sessions": 2, "types": ["tempo", "race_specific"]}, "long_run": {"emphasis": "race_specific", "pct_range": [30, 34]}, "intensity_balance": {"low_intensity_pct": 0.75}},
-    {"quality": {"max_sessions": 2, "types": ["race_specific"]}, "long_run": {"emphasis": "race_specific", "pct_range": [32, 35]}, "intensity_balance": {"low_intensity_pct": 0.75}},
-    {"quality": {"max_sessions": 1, "types": ["strides_only"]}, "long_run": {"emphasis": "steady", "pct_range": [24, 28]}, "intensity_balance": {"low_intensity_pct": 0.85}},
     {"quality": {"max_sessions": 0, "types": []}, "long_run": {"emphasis": "easy", "pct_range": [18, 22]}, "intensity_balance": {"low_intensity_pct": 0.95}}
   ]
 }
 ```
-
 Note: In Example 2, `target_systemic_load_au` represents total aerobic load across ALL sports (running + climbing + yoga). Week 9 systemic load (125 AU) = 50 km running (50 AU) + climbing sessions (60 AU) + yoga sessions (15 AU).
 
 **Validation Rules:**
