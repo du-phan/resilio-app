@@ -88,7 +88,31 @@
 
 ---
 
-### 6. Overestimating Multi-Sport Capacity
+### 6. Forgetting Systemic Load Targets for Multi-Sport Athletes
+
+**Problem**: Setting `target_systemic_load_au: [0.0, 0.0, ...]` for multi-sport athletes when planning macro template.
+
+**Impact**: No upfront planning of total aerobic load distribution across running + cross-training + other sports. Forces weekly re-calculation of systemic load targets instead of following macro-level guidance.
+
+**Solution**:
+- **Single-sport athletes**: `target_systemic_load_au: [0.0, 0.0, ...]` is CORRECT (calculated later from running volume)
+- **Multi-sport athletes**: Calculate total systemic load targets using `sce analysis load`, then fill macro template with planned targets
+
+**Example (EQUAL priority, 12-week half marathon + climbing)**:
+```json
+{
+  "weekly_volumes_km": [35.0, 38.0, ..., 50.0, ..., 30.0],
+  "target_systemic_load_au": [85.0, 92.0, ..., 125.0, ..., 75.0]
+}
+```
+
+Week 9 systemic load (125 AU) = 50 km running (50 AU) + climbing sessions (60 AU) + yoga (15 AU).
+
+**Detection**: If athlete has `other_sports: ["climbing"]` in profile but macro template has all-zero systemic load, you likely forgot to plan multi-sport load targets.
+
+---
+
+### 7. Overestimating Multi-Sport Capacity
 
 **Problem**: Designing 65km running peak during heavy climbing season. Total systemic load = running + climbing + cycling.
 
@@ -103,7 +127,7 @@
 
 ---
 
-### 7. Designing Without Confirming Constraints
+### 8. Designing Without Confirming Constraints
 
 **Problem**: Not explicitly asking constraints before macro planning.
 
@@ -117,7 +141,7 @@ Write down, show confirmation before generating macro plan.
 
 ---
 
-### 8. Not Verifying Week Start Dates (Common LLM Error)
+### 9. Not Verifying Week Start Dates (Common LLM Error)
 
 **Problem**: Manually calculating dates ("Monday, January 20") without computational verification. LLMs frequently make date errors.
 
@@ -168,7 +192,9 @@ sce dates validate --date 2026-01-20 --must-be monday
 - [ ] Phase allocation: Base (≥4 weeks), Build (≥4 weeks), Peak (≥2 weeks), Taper (2 weeks)
 - [ ] Recovery weeks scheduled (every 4-5 weeks during base/build)
 - [ ] Weekly progression: 5-7% most weeks, 10% max
-- [ ] Multi-sport load considered (if applicable)
+- [ ] Multi-sport load planned:
+  - [ ] Single-sport: `target_systemic_load_au: [0.0, 0.0, ...]` ✓
+  - [ ] Multi-sport: Calculate systemic load targets via `sce analysis load`, fill macro template
 - [ ] Week start dates verified Monday: `sce dates validate --date <date> --must-be monday`
 - [ ] Volume targets present (`target_volume_km`), NO workout_pattern for weeks 2-16
 - [ ] Markdown presentation created: `/tmp/macro_plan_review_YYYY_MM_DD.md`

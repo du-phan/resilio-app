@@ -77,10 +77,22 @@ poetry run sce plan show
 | `start_date` | string | Week start (MUST be Monday) | `"2026-01-20"` |
 | `end_date` | string | Week end (MUST be Sunday) | `"2026-01-26"` |
 | `target_volume_km` | float | Target weekly volume | `23.0` |
-| `target_systemic_load_au` | float | Target systemic load (from M8; use 0.0 if unknown) | `0.0` |
+| `target_systemic_load_au` | float | Target systemic load from macro template (single-sport: 0.0; multi-sport: total AU target) | `0.0` |
 | `is_recovery_week` | bool | Is this a recovery week? | `false` |
 | `notes` | string | Week-level notes | `"Base Phase Week 1"` |
 | `workout_pattern` | object | Workout structure (see below) | See below |
+
+**Multi-Sport Note:**
+
+For multi-sport athletes, `target_systemic_load_au` comes from the macro template and represents the TOTAL aerobic load budget across ALL sports for that week:
+
+- Example: `target_systemic_load_au: 105.0` might be distributed as:
+  - Running: 45 km × 1.0 = 45 AU systemic
+  - Climbing: 3 sessions × 48 AU systemic
+  - Yoga: 2 sessions × 12 AU systemic
+  - Total: 105 AU (matches macro target)
+
+The weekly planner distributes this systemic budget based on actual training response. For single-sport athletes, `0.0` indicates systemic load will be calculated from running volume only.
 
 ### workout_pattern Object
 

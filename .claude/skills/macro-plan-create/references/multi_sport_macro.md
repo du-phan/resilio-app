@@ -98,10 +98,21 @@ Strategic volume planning for multi-sport athletes. Establishes running priority
 - SECONDARY: ~80-100 load units/week peak (mostly other sport)
 
 **Example (EQUAL priority, week 12)**:
-- Running: 45 km × 1.0 = 45 load units (40% of load)
-- Climbing: 3 sessions × 105 min × RPE 5 × 0.6 = 48 load units (42% of load)
-- Yoga: 2 sessions × 60 min × RPE 3 × 0.35 = 12 load units (11% of load)
-- **Total**: 105 load units (safe systemic load)
+- Running: 45 km × 1.0 = 45 AU systemic (40% of load)
+- Climbing: 3 sessions × 105 min × RPE 5 × 0.6 = 48 AU systemic (42% of load)
+- Yoga: 2 sessions × 60 min × RPE 3 × 0.35 = 12 AU systemic (11% of load)
+- **Total**: 105 AU systemic load (safe total aerobic load)
+
+**In macro template**, this becomes:
+```json
+{
+  "weekly_volumes_km": [..., 45.0, ...],          // Week 12 running volume
+  "target_systemic_load_au": [..., 105.0, ...],   // Week 12 total systemic load
+  ...
+}
+```
+
+The weekly planner then distributes the 105 AU systemic budget across running (45 AU) + climbing (48 AU) + yoga (12 AU) based on actual training response.
 
 ---
 
