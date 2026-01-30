@@ -13,7 +13,7 @@ This skill guides complete athlete onboarding from authentication to goal settin
 
 **Prerequisites**: This skill assumes your environment is ready (Python 3.11+, `sce` CLI available). If you haven't set up your environment yet, use the `complete-setup` skill first to install Python and the package.
 
-**Why historical data matters**: With 180 days synced, ask "I see you average 35km/week - should we maintain this?" instead of "How much do you run?" (no context).
+**Why historical data matters**: ask "I see you average 35km/week over the last X weeks/months - should we maintain this?" instead of "How much do you run?" (no context).
 
 ---
 
@@ -63,11 +63,21 @@ sce sync
 ```
 
 **What this provides**:
-- 180 days of activity history
+- Up to 365 days (52 weeks) of activity history (Greedy Sync)
 - CTL/ATL/TSB calculated from historical load
 - Activity patterns (training days, volume, sport distribution)
 
-**Success message**: "Imported X activities. Your CTL is Y (interpretation)."
+**Handling Greedy Sync & Rate Limits (IMPORTANT)**:
+The sync process is "greedy"—it fetches the most recent activities first and proceeds backwards until it hits the 52-week limit OR the Strava API rate limit (100 requests / 15 min). 
+
+**CRITICAL**: Since 52 weeks usually contains >100 activities, the **initial sync will almost certainly pause due to rate limits**. This is expected behavior.
+
+**If the sync pauses due to rate limits**:
+1. **Explain the behavior**: "Strava limits how much data I can fetch at once. I've imported your most recent activities (approx. X months), which is perfect for building our first plan."
+2. **Reassure the athlete**: "Don't worry—the system will naturally backfill the rest of your year over our next few sessions. We have all the important recent data ready right now."
+3. **DO NOT stall**: Proceed with the onboarding using the data that was successfully synced. Recent data (last 3-4 months) is plenty for the initial VDOT and CTL estimates.
+
+**Success message**: "Imported X activities (covering approximately Y weeks). Your CTL is Z."
 
 ---
 
@@ -118,7 +128,7 @@ sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_t
 ```
 
 **Step 4.5 - Personal Bests (Race History)**:
-- CRITICAL: Manual entry FIRST (Strava only has 180 days)
+- CRITICAL: Manual entry FIRST (Sync defaults to 365 days, but old PBs may still be missing)
 - Ask directly: "What are your PBs for 5K, 10K, half, marathon?"
 - Enter each: `sce race add --distance 10k --time 42:30 --date 2023-06-15 --source official_race`
 - Auto-import supplement: `sce race import-from-strava --since 120d`
@@ -288,7 +298,7 @@ Would you like me to create a personalized plan now?"
 ## Quick Decision Trees
 
 ### Q: Athlete has no recent Strava data
-**Scenario**: Sync returns <10 activities in 180 days
+**Scenario**: Sync returns <10 activities in 365 days / 52 weeks
 
 **Response**: "I see minimal recent Strava activity. No problem - we'll start from scratch. CTL starts at 0, building volume gradually from conservative baseline."
 
@@ -348,7 +358,7 @@ Would you like me to create a personalized plan now?"
 ❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
 ✅ **Good**: Ask directly for PBs first, then auto-import as supplement
 
-**Manual entry is primary** - Strava only has 180 days
+**Manual entry is primary** - Automatic sync targets 365 days, but doesn't replace historical context for old PBs.
 
 ---
 
@@ -356,7 +366,7 @@ Would you like me to create a personalized plan now?"
 
 **Onboarding complete when**:
 1. ✅ Authentication successful (`sce auth status` returns 0)
-2. ✅ Activities synced (180 days)
+2. ✅ Activities synced (max 365 days / 52 weeks target)
 3. ✅ Profile created (name, age, max HR, conflict policy)
 3.5. ✅ Running experience collected (years, or marked as unknown)
 4. ✅ Injury history recorded in memory system (if applicable)

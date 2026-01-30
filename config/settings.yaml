@@ -19,7 +19,7 @@ strava:
   scopes:
     - "read"
     - "activity:read_all"
-  history_import_weeks: 12  # How many weeks to import on first setup
+  history_import_weeks: 52  # How many weeks to import on first setup
 
 # Training calculation defaults
 training_defaults:

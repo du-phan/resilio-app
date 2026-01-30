@@ -87,7 +87,7 @@ STRAVA_TOKEN_URL = "https://www.strava.com/oauth/token"
 STRAVA_API_BASE = "https://www.strava.com/api/v3"
 
 # Sync window defaults
-DEFAULT_SYNC_LOOKBACK_DAYS = 180  # 6 months - captures seasonal patterns (4.29× time constant)
+DEFAULT_SYNC_LOOKBACK_DAYS = 365
 
 # Rate limits (Strava defaults)
 DEFAULT_RETRY_ATTEMPTS = 3
@@ -459,6 +459,7 @@ def fetch_athlete_profile(config: Config) -> Optional[dict]:
         raise StravaAPIError(f"HTTP error: {e}")
 
 
+
 # ============================================================
 # SYNC WORKFLOW
 # ============================================================
@@ -466,74 +467,135 @@ def fetch_athlete_profile(config: Config) -> Optional[dict]:
 
 def sync_strava(
     config: Optional[Config] = None,
-    lookback_days: int = DEFAULT_SYNC_LOOKBACK_DAYS,
+    lookback_days: Optional[int] = DEFAULT_SYNC_LOOKBACK_DAYS,
+    existing_ids: Optional[set[str]] = None,
+    since: Optional[datetime] = None,
 ) -> tuple[list[RawActivity], SyncResult]:
     """
-    Sync activities from Strava.
+    Sync activities from Strava (Greedy Reverse-Chronological).
 
-    Fetches activities from last sync (or lookback_days if first sync),
-    converts to RawActivity format, and returns for downstream processing.
+    Fetches activities starting from most recent (page 1) backwards.
+    Stops when either:
+    1. Strava Rate Limit is hit (StravaRateLimitError) -> Returns partial success
+    2. Activity date is older than lookback_days (if provided) or since (if provided)
+    3. No more activities found
+    
+    Skips detail fetching for activities present in existing_ids.
 
     Args:
         config: Configuration (loads from file if not provided)
-        lookback_days: Days to look back for first sync (default 120)
+        lookback_days: Optional days to look back.
+        existing_ids: Set of strava_{id} strings to skip.
+        since: Optional datetime to sync from (alternative to lookback_days).
 
     Returns:
         Tuple of (activities, sync_result)
 
     Raises:
         StravaAuthError: If authentication fails
-        StravaAPIError: If sync fails
+        StravaAPIError: If sync fails (other than rate limit)
     """
     if config is None:
         config_result = load_config()
         if isinstance(config_result, Exception):
             raise StravaAPIError(f"Failed to load config: {config_result}")
         config = config_result
+    
+    # Initialize logger
+    logger = logging.getLogger(__name__)
 
-    # Determine sync window
+    # Determine cutoff date
+    cutoff_date = None
+    if since:
+        cutoff_date = since.date()
+    elif lookback_days:
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=lookback_days)).date()
+    
+    if cutoff_date:
+        logger.info(f"Syncing Strava history (cutoff: {cutoff_date})...")
+    else:
+        logger.info("Syncing Strava history (no time limit)...")
+
     start_time = datetime.now(timezone.utc)
-    after_timestamp = int((start_time - timedelta(days=lookback_days)).timestamp())
-
-    # Fetch activities with pagination
-    all_activities = []
-    page = 1
-    while True:
-        activities_page = fetch_activities(
-            config,
-            page=page,
-            per_page=50,
-            after=after_timestamp,
-        )
-
-        if not activities_page:
-            break  # No more activities
-
-        all_activities.extend(activities_page)
-        page += 1
-
-        # Respect rate limits - add delay between pages
-        time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
-
-    # Convert to RawActivity
     raw_activities = []
     errors = []
+    skipped_count = 0
+    
+    # Pagination loop (Newest -> Oldest)
+    page = 1
+    stop_sync = False
+    rate_limit_hit = False
 
-    for activity_summary in all_activities:
+    while not stop_sync:
         try:
-            # Fetch full details for private notes
-            activity_detail = fetch_activity_details(
-                config, str(activity_summary["id"])
+            # Fetch page of activities
+            logger.debug(f"Fetching page {page}...")
+            activities_page = fetch_activities(
+                config,
+                page=page,
+                per_page=50,
+                # Intentionally NO 'after' param to get newest first (default)
             )
+
+            if not activities_page:
+                break  # No more activities
+
+            for activity_summary in activities_page:
+                # Check date cutoff
+                try:
+                    act_date_str = activity_summary["start_date_local"]
+                    act_date = datetime.fromisoformat(act_date_str.replace("Z", "+00:00")).date()
+                    
+                    if cutoff_date and act_date < cutoff_date:
+                        logger.info(f"Reached cutoff date {cutoff_date} (activity date: {act_date}). Stopping.")
+                        stop_sync = True
+                        break
+                except (KeyError, ValueError):
+                    pass # Skip date check malformed
+
+                # Check existence
+                strava_id = f"strava_{activity_summary['id']}"
+                if existing_ids and strava_id in existing_ids:
+                    skipped_count += 1
+                    continue
+
+                # Fetch full details
+                try:
+                    activity_detail = fetch_activity_details(
+                        config, str(activity_summary["id"])
+                    )
+                    
+                    # Respect rate limits between calls
+                    time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
+
+                    # Map to RawActivity
+                    raw_activity = map_strava_to_raw(activity_detail)
+                    raw_activities.append(raw_activity)
+                
+                except StravaRateLimitError:
+                    logger.warning(f"Strava rate limit hit during detail fetch for {activity_summary['id']}. Pausing sync.")
+                    rate_limit_hit = True
+                    stop_sync = True
+                    break
+                except Exception as e:
+                    errors.append(f"Activity {activity_summary['id']}: {str(e)}")
+                    continue
+            
+            if stop_sync:
+                break
+
+            page += 1
+            # Respect rate limits between pages
             time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
 
-            # Map to RawActivity
-            raw_activity = map_strava_to_raw(activity_detail)
-            raw_activities.append(raw_activity)
-
+        except StravaRateLimitError:
+             logger.warning(f"Strava rate limit hit during page {page} fetch. Pausing sync.")
+             rate_limit_hit = True
+             stop_sync = True
+             break
         except Exception as e:
-            errors.append(f"Activity {activity_summary['id']}: {str(e)}")
-            continue
+            errors.append(f"Page {page} fetch failed: {str(e)}")
+            break
 
     # Calculate duration
     end_time = datetime.now(timezone.utc)
@@ -541,14 +603,17 @@ def sync_strava(
 
     # Create sync result
     sync_result = SyncResult(
-        success=len(errors) == 0,  # Success if no errors
-        activities_fetched=len(all_activities),
+        success=len(errors) == 0,
+        activities_fetched=0,
         activities_new=len(raw_activities),
-        activities_updated=0,  # TODO: Implement update detection
-        activities_skipped=len(all_activities) - len(raw_activities),
+        activities_updated=0,
+        activities_skipped=skipped_count,
         errors=errors,
         sync_duration_seconds=duration,
     )
+    
+    if rate_limit_hit:
+        sync_result.errors.append("Strava API Rate Limit Reached - Sync Paused")
 
     return raw_activities, sync_result
 

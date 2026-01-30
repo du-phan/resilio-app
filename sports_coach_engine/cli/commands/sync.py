@@ -29,26 +29,32 @@ def sync_command(
     Fetches activities from Strava, normalizes sport types, calculates RPE estimates,
     computes training loads, and updates daily/weekly metrics.
 
-    By default, syncs the last 6 months (180 days) to capture seasonal training patterns.
-    Use --since to specify a custom window (not recommended to go beyond 1 year).
+    By default, syncs the last year (365 days) to capture full seasonal training patterns.
+    Use --since to specify a custom window.
 
     Examples:
-        sce sync                    # Sync last 6 months / 180 days (recommended)
-        sce sync --since 14d        # Sync last 14 days (recent activities only)
-        sce sync --since 365d       # Sync last year (not recommended - large dataset)
+        sce sync                    # Sync last year (365 days)
         sce sync --since 2026-01-01 # Sync since specific date
+        sce sync --since 14d        # Sync last 14 days (recent activities only)
 
-    Note: Avoid syncing more than 1 year of data - it may be slow and is not
-    necessary for accurate CTL/training patterns. 6 months is optimal.
+    Note: The sync is "greedy" - it fetches newest activities first and stops
+    if the Strava API rate limit is hit. This ensures you always get the
+    most recent data even if history is truncated.
     """
     # Parse since parameter
     since_dt: Optional[datetime] = None
     if since:
         # Explicit --since: use provided value
         since_dt = _parse_since_param(since)
+        typer.echo(f"Syncing activities since {since_dt.date()}...")
     else:
-        # Default: use 180-day window (captures seasonal patterns)
+        # Default: use 365-day window
+        # Note: DEFAULT_SYNC_LOOKBACK_DAYS is imported from core.strava
         since_dt = datetime.now() - timedelta(days=DEFAULT_SYNC_LOOKBACK_DAYS)
+        typer.echo(
+            f"Syncing last {DEFAULT_SYNC_LOOKBACK_DAYS} days of history (default). "
+            f"Use --since to change."
+        )
 
     # Call API
     result = sync_strava(since=since_dt)
@@ -104,15 +110,19 @@ def _build_success_message(result: any) -> str:
     """Build human-readable success message from sync result.
 
     Args:
-        result: SyncResult or SyncSummary from API
+        result: SyncResult from API
 
     Returns:
         Human-readable message
     """
-    # Handle different result types
-    if hasattr(result, 'activities_imported'):
-        count = len(result.activities_imported) if isinstance(result.activities_imported, list) else result.activities_imported
-        return f"Synced {count} activities from Strava"
+    if not hasattr(result, 'activities_new'):
+        return "Sync completed"
 
-    # Fallback
-    return "Sync completed successfully"
+    msg = f"Synced {result.activities_new} new activities from Strava."
+    
+    # Add rate limit tip if hit
+    if result.errors and any("Rate Limit" in str(e) for e in result.errors):
+        msg += "\n\nTIP: Strava rate limit hit. I've saved everything fetched so far. "
+        msg += "Wait ~15 minutes and sync again to continue backwards."
+    
+    return msg

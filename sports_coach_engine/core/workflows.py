@@ -47,6 +47,7 @@ from sports_coach_engine.core.strava import (
     fetch_activities,
     fetch_activity_details,
     fetch_athlete_profile,
+    sync_strava,
     map_strava_to_raw,
     StravaAuthError,
     StravaRateLimitError,
@@ -569,75 +570,50 @@ def run_sync_workflow(
             if profile_fields_updated:
                 result.profile_fields_updated = profile_fields_updated
 
-            # Step 1: Fetch activity summaries from Strava (M5)
-            logger.info("[Sync] Fetching activities from Strava (since=%s)...", since)
 
-            # Convert datetime to Unix timestamp for Strava API
-            after_timestamp = None
-            if since:
-                after_timestamp = int(since.timestamp())
-
-            # Fetch ALL activities with proper pagination
-            all_activities = []
-            page = 1
-            while True:
-                activities_page = fetch_activities(
-                    config,
-                    page=page,
-                    per_page=200,  # Max Strava allows
-                    after=after_timestamp
-                )
-
-                if not activities_page:
-                    break  # No more pages
-
-                all_activities.extend(activities_page)
-                page += 1
-                time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
-
-            activity_summaries = all_activities
-
-            if not activity_summaries:
-                result.success = True
-                result.warnings.append("No new activities found")
-                return result
-
-            logger.info(
-                "[Sync] Fetched %s activity summaries across %s pages",
-                len(activity_summaries),
-                page - 1,
+            # Step 1: Sync activities from Strava (Greedy/Reverse-Chronological)
+            # Build existing IDs set for skipping
+            existing_strava_ids = {id for id in existing_ids if id.startswith("strava_")}
+            
+            logger.info("[Sync] Syncing with Strava (since=%s)...", since)
+            
+            # Delegate to core sync function
+            # This handles pagination, rate limits, and detail fetching efficiently
+            raw_activities_from_sync, sync_cmd_result = sync_strava(
+                config,
+                since=since,
+                existing_ids=existing_strava_ids
             )
+            
+            # Merge errors/warnings
+            if sync_cmd_result.errors:
+                result.warnings.extend(sync_cmd_result.errors)
+            
+            # Check for rate limit pause
+            rate_limit_paused = any("Rate Limit" in str(e) for e in sync_cmd_result.errors)
+            if rate_limit_paused:
+                 logger.warning("[Sync] Paused due to Strava rate limits")
 
-            # Build index of existing activities to prevent duplicates
-            since_date = since.date() if since else None
-            existing_ids, existing_by_date = _load_existing_activity_index(
-                repo,
-                config.settings.paths.activities_dir,
-                since_date,
+            if not raw_activities_from_sync:
+                if not sync_cmd_result.errors or rate_limit_paused:
+                    # Successful (but maybe empty or paused)
+                    result.success = True
+                    if not rate_limit_paused:
+                        result.warnings.append("No new activities found")
+                    return result
+            
+            logger.info(
+                "[Sync] Fetched %s new activities",
+                len(raw_activities_from_sync),
             )
 
             # Step 2-8: Process each activity through pipeline
-            for activity_summary in activity_summaries:
-                raw_activity = None  # Initialize for error handling
+            for raw_activity in raw_activities_from_sync:
                 try:
-                    # Skip if activity already imported (idempotency by Strava ID)
-                    activity_id = f"strava_{activity_summary['id']}"
-                    if activity_id in existing_ids:
+                    # Double-check existence (idempotency)
+                    if raw_activity.id in existing_ids:
                         result.activities_skipped += 1
                         continue
-
-                    # Fetch full activity details (includes description and private_note)
-                    logger.info(
-                        "[Sync] Fetching details for activity %s...",
-                        activity_summary["id"],
-                    )
-                    activity_detail = fetch_activity_details(config, str(activity_summary["id"]))
-
-                    # Rate limiting between API calls
-                    time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
-
-                    # Map detailed activity dict to RawActivity
-                    raw_activity = map_strava_to_raw(activity_detail)
 
                     # M6: Normalize
                     normalized = normalize_activity(raw_activity, repo)
@@ -705,7 +681,7 @@ def run_sync_workflow(
 
                 except Exception as e:
                     result.activities_failed += 1
-                    activity_id = raw_activity.id if raw_activity else activity_summary.get('id', 'unknown')
+                    activity_id = raw_activity.id if raw_activity else 'unknown'
                     result.warnings.append(
                         f"Failed to process activity {activity_id}: {e}"
                     )
