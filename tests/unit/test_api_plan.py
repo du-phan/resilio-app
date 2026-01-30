@@ -13,6 +13,7 @@ from sports_coach_engine.api.plan import (
     get_current_plan,
     export_plan_structure,
     build_macro_template,
+    create_macro_plan,
     regenerate_plan,
     get_plan_weeks,
     get_pending_suggestions,
@@ -216,8 +217,316 @@ def test_build_macro_template_shape():
 
     assert template["template_version"] == "macro_template_v1"
     assert template["total_weeks"] == 3
-    assert template["volumes_km"] == [None, None, None]
+    assert template["weekly_volumes_km"] == [None, None, None]
+    assert template["target_systemic_load_au"] == [None, None, None]
     assert len(template["workout_structure_hints"]) == 3
+
+
+# ============================================================
+# CREATE_MACRO_PLAN TESTS
+# ============================================================
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_with_valid_template(mock_repo_cls, mock_persist):
+    """Test creating macro plan with valid template (single-sport, no systemic load)."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, 28.0, 30.0, 28.0]  # 4-week plan
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 4
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=4,
+        start_date=date(2026, 5, 4),  # Monday
+        current_ctl=35.0,
+        baseline_vdot=48.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    # Should return MasterPlan, not error
+    assert not isinstance(result, PlanError)
+    assert result.total_weeks == 4
+    assert len(result.weeks) == 4
+    assert result.weeks[0].target_volume_km == 25.0
+    assert result.weeks[0].target_systemic_load_au == 0.0  # Default for single-sport
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_with_systemic_load_targets(mock_repo_cls, mock_persist):
+    """Test creating macro plan with systemic load targets (multi-sport)."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [40.0, 45.0, 50.0, 45.0]
+    weekly_systemic = [95.0, 105.0, 110.0, 100.0]  # Multi-sport total load
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 2, "types": ["tempo", "intervals"]},
+            "long_run": {"emphasis": "progression", "pct_range": [28, 32]},
+            "intensity_balance": {"low_intensity_pct": 0.80}
+        }
+    ] * 4
+
+    result = create_macro_plan(
+        goal_type="half_marathon",
+        race_date=date(2026, 6, 15),
+        target_time="1:30:00",
+        total_weeks=4,
+        start_date=date(2026, 5, 18),  # Monday
+        current_ctl=44.0,
+        baseline_vdot=50.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_systemic_load_au=weekly_systemic,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert not isinstance(result, PlanError)
+    assert result.total_weeks == 4
+    assert result.weeks[0].target_systemic_load_au == 95.0
+    assert result.weeks[1].target_systemic_load_au == 105.0
+    assert result.weeks[2].target_systemic_load_au == 110.0
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_validates_volumes_positive(mock_repo_cls, mock_persist):
+    """Test that negative or zero volumes are rejected."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, -10.0, 30.0]  # Invalid: negative volume
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 3
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=3,
+        start_date=date(2026, 5, 11),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert isinstance(result, PlanError)
+    assert result.error_type == "validation"
+    assert "positive number" in result.message
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_derives_starting_peak_volumes(mock_repo_cls, mock_persist):
+    """Test that starting/peak volumes are derived from weekly_volumes_km."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [20.0, 25.0, 30.0, 35.0, 32.0]  # Peak is 35.0
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 5
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 8),
+        target_time="00:45:00",
+        total_weeks=5,
+        start_date=date(2026, 5, 4),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert not isinstance(result, PlanError)
+    # Volumes are stored in week plans, not top-level
+    assert result.weeks[0].target_volume_km == 20.0  # Starting
+    assert max(w.target_volume_km for w in result.weeks) == 35.0  # Peak
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_validates_structure_hints_schema(mock_repo_cls, mock_persist):
+    """Test that invalid structure hints are rejected."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, 28.0, 30.0]
+    weekly_hints = [
+        {
+            "quality": {"invalid_field": "bad"},  # Invalid schema
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 3
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=3,
+        start_date=date(2026, 5, 11),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert isinstance(result, PlanError)
+    assert result.error_type == "validation"
+    assert "invalid" in result.message.lower()
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_rejects_length_mismatch(mock_repo_cls, mock_persist):
+    """Test that volume/hint length mismatches are rejected."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, 28.0, 30.0]  # 3 weeks
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 4  # 4 weeks - MISMATCH
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=3,
+        start_date=date(2026, 5, 11),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert isinstance(result, PlanError)
+    assert result.error_type == "validation"
+    assert "length" in result.message
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_validates_systemic_load_length(mock_repo_cls, mock_persist):
+    """Test that systemic load length must match total_weeks."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, 28.0, 30.0]
+    weekly_systemic = [95.0, 105.0]  # Wrong length (2 instead of 3)
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 3
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=3,
+        start_date=date(2026, 5, 11),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_systemic_load_au=weekly_systemic,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert isinstance(result, PlanError)
+    assert result.error_type == "validation"
+    assert "weekly_systemic_load_au length" in result.message
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_validates_systemic_load_non_negative(mock_repo_cls, mock_persist):
+    """Test that negative systemic load values are rejected."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, 28.0, 30.0]
+    weekly_systemic = [95.0, -10.0, 110.0]  # Invalid: negative
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 3
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=3,
+        start_date=date(2026, 5, 11),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_systemic_load_au=weekly_systemic,
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert isinstance(result, PlanError)
+    assert result.error_type == "validation"
+    assert "non-negative" in result.message
+
+
+@patch("sports_coach_engine.core.plan.persist_plan")
+@patch("sports_coach_engine.core.repository.RepositoryIO")
+def test_create_macro_plan_defaults_systemic_load_to_zero(mock_repo_cls, mock_persist):
+    """Test that systemic load defaults to 0.0 when not provided (single-sport)."""
+    mock_repo = Mock()
+    mock_repo_cls.return_value = mock_repo
+
+    weekly_volumes = [25.0, 28.0, 30.0]
+    weekly_hints = [
+        {
+            "quality": {"max_sessions": 1, "types": ["strides_only"]},
+            "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
+            "intensity_balance": {"low_intensity_pct": 0.85}
+        }
+    ] * 3
+
+    result = create_macro_plan(
+        goal_type="10k",
+        race_date=date(2026, 6, 1),
+        target_time="00:45:00",
+        total_weeks=3,
+        start_date=date(2026, 5, 11),
+        current_ctl=35.0,
+        weekly_volumes_km=weekly_volumes,
+        weekly_systemic_load_au=None,  # Not provided
+        weekly_structure_hints=weekly_hints,
+    )
+
+    assert not isinstance(result, PlanError)
+    assert all(w.target_systemic_load_au == 0.0 for w in result.weeks)
 
 
 # ============================================================

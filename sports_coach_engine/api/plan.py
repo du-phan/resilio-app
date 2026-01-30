@@ -45,7 +45,6 @@ from sports_coach_engine.core.adaptation import (
 
 
 @dataclass
-@dataclass
 class PlanError:
     """Error result from plan operations."""
 
@@ -1420,7 +1419,8 @@ def build_macro_template(total_weeks: int) -> Union[dict, PlanError]:
     return {
         "template_version": "macro_template_v1",
         "total_weeks": total_weeks,
-        "volumes_km": [None] * total_weeks,
+        "weekly_volumes_km": [None] * total_weeks,
+        "target_systemic_load_au": [None] * total_weeks,
         "workout_structure_hints": [
             {
                 "quality": {"max_sessions": None, "types": None},
@@ -1639,6 +1639,7 @@ def create_macro_plan(
     current_ctl: float,
     baseline_vdot: Optional[float] = None,
     weekly_volumes_km: Optional[list[float]] = None,
+    weekly_systemic_load_au: Optional[list[float]] = None,
     weekly_structure_hints: Optional[list[dict]] = None,
 ) -> Union["MasterPlan", PlanError]:
     """
@@ -1665,6 +1666,7 @@ def create_macro_plan(
         current_ctl: CTL at plan creation
         baseline_vdot: Approved baseline VDOT (optional but recommended)
         weekly_volumes_km: Explicit weekly volume targets (AI coach computed)
+        weekly_systemic_load_au: Total systemic load targets (optional; for multi-sport athletes)
         weekly_structure_hints: Macro-level workout structure hints (AI coach computed)
 
     Returns:
@@ -1750,6 +1752,20 @@ def create_macro_plan(
         starting_volume_km = weekly_volumes_km[0]
         peak_volume_km = max(weekly_volumes_km)
 
+        # Validate weekly_systemic_load_au if provided (for multi-sport athletes)
+        if weekly_systemic_load_au is not None:
+            if len(weekly_systemic_load_au) != total_weeks:
+                return PlanError(
+                    error_type="validation",
+                    message=f"weekly_systemic_load_au length {len(weekly_systemic_load_au)} != total_weeks {total_weeks}"
+                )
+            for idx, value in enumerate(weekly_systemic_load_au, start=1):
+                if not isinstance(value, (int, float)) or value < 0:
+                    return PlanError(
+                        error_type="validation",
+                        message=f"weekly_systemic_load_au[{idx}] must be a non-negative number"
+                    )
+
         # Strict CLI-only: AI coach must supply workout structure hints
         if not weekly_structure_hints:
             return PlanError(
@@ -1792,6 +1808,9 @@ def create_macro_plan(
             target_volume = weekly_volumes_km[week_num - 1]
             structure_hints = validated_hints[week_num - 1]
 
+            # Weekly target systemic load (from template for multi-sport, 0.0 for single-sport)
+            target_systemic = weekly_systemic_load_au[week_num - 1] if weekly_systemic_load_au else 0.0
+
             # Determine phase
             phase = week_to_phase.get(week_num, "base")
 
@@ -1805,7 +1824,7 @@ def create_macro_plan(
                 start_date=week_start,
                 end_date=week_end,
                 target_volume_km=target_volume,
-                target_systemic_load_au=0.0,  # Calculated when workouts added
+                target_systemic_load_au=target_systemic,  # From template (multi-sport) or 0.0 (single-sport)
                 workout_structure_hints=structure_hints,
                 workouts=[],  # Empty - filled via populate
                 is_recovery_week=is_recovery,

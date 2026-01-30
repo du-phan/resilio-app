@@ -416,12 +416,18 @@ sce plan create-macro \
 **What it generates:**
 
 - **Periodization phases** - Divides plan into base/build/peak/taper with appropriate durations
-- **Starting/peak volume targets** - Reference values for AI coach to design weekly volumes
+- **Starting/peak volume targets** - Derived outputs (NOT inputs): starting = weekly_volumes_km[0], peak = max(weekly_volumes_km)
 - **CTL projections** - Expected CTL at key milestones (+0.75/week in base/build)
 - **Recovery week schedule** - Every 4th week for adaptation
 - **Phase focus** - Training emphasis for each phase
 
-**Note**: Weekly volumes are NOT pre-computed. AI coach designs each week's volume using guardrails based on athlete's actual training response.
+**Volume Derivation:**
+
+`starting_volume_km` and `peak_volume_km` are **derived outputs** from the `weekly_volumes_km` array in the macro template:
+- `starting_volume_km = weekly_volumes_km[0]`
+- `peak_volume_km = max(weekly_volumes_km)`
+
+These fields are **outputs**, not inputs. The AI coach fills `weekly_volumes_km` in the template using guardrails, and these summary values are automatically derived during plan creation.
 
 **When to use:**
 

@@ -1687,23 +1687,40 @@ def create_macro_command(
         output_json(envelope)
         raise typer.Exit(code=5)
 
-    def _find_placeholder_paths(value, path="root"):
-        paths = []
+    def _is_placeholder(value):
+        """Check if a value is a placeholder."""
         if value is None:
+            return True
+        if isinstance(value, str):
+            # Check for common placeholder patterns
+            placeholders = ["TODO", "FILL", "TBD", "<", ">", "XXX", "PLACEHOLDER"]
+            return any(p in value.upper() for p in placeholders)
+        if isinstance(value, (int, float)):
+            # Negative numbers are invalid for volumes/loads
+            return value < 0
+        return False
+
+    def _find_placeholder_paths(value, path="root", depth=0):
+        """Recursively find placeholder paths with max depth limit."""
+        if depth > 50:  # Prevent stack overflow on malformed data
+            return []
+
+        paths = []
+        if _is_placeholder(value):
             paths.append(path)
         elif isinstance(value, dict):
             for key, item in value.items():
-                paths.extend(_find_placeholder_paths(item, f"{path}.{key}"))
+                paths.extend(_find_placeholder_paths(item, f"{path}.{key}", depth + 1))
         elif isinstance(value, list):
             for idx, item in enumerate(value):
-                paths.extend(_find_placeholder_paths(item, f"{path}[{idx}]"))
+                paths.extend(_find_placeholder_paths(item, f"{path}[{idx}]", depth + 1))
         return paths
 
-    weekly_volumes_km = payload["volumes_km"]
+    weekly_volumes_km = payload["weekly_volumes_km"]
     if not isinstance(weekly_volumes_km, list) or len(weekly_volumes_km) == 0:
         envelope = create_error_envelope(
             error_type="validation",
-            message="'volumes_km' must be a non-empty array",
+            message="'weekly_volumes_km' must be a non-empty array",
             data={"file": macro_template_json}
         )
         output_json(envelope)
@@ -1712,13 +1729,36 @@ def create_macro_command(
     if len(weekly_volumes_km) != total_weeks:
         envelope = create_error_envelope(
             error_type="validation",
-            message=f"'volumes_km' length {len(weekly_volumes_km)} != total_weeks {total_weeks}",
+            message=f"'weekly_volumes_km' length {len(weekly_volumes_km)} != total_weeks {total_weeks}",
             data={"file": macro_template_json}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
 
-    placeholder_paths = _find_placeholder_paths(weekly_volumes_km, "volumes_km")
+    # Extract and validate target_systemic_load_au (optional for multi-sport)
+    weekly_systemic_load_au = payload.get("target_systemic_load_au")
+    if weekly_systemic_load_au is not None:
+        if not isinstance(weekly_systemic_load_au, list) or len(weekly_systemic_load_au) == 0:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message="'target_systemic_load_au' must be a non-empty array if provided",
+                data={"file": macro_template_json}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        if len(weekly_systemic_load_au) != total_weeks:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"'target_systemic_load_au' length {len(weekly_systemic_load_au)} != total_weeks {total_weeks}",
+                data={"file": macro_template_json}
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+    placeholder_paths = _find_placeholder_paths(weekly_volumes_km, "weekly_volumes_km")
+    if weekly_systemic_load_au is not None:
+        placeholder_paths.extend(_find_placeholder_paths(weekly_systemic_load_au, "target_systemic_load_au"))
     weekly_structure_hints = payload["workout_structure_hints"]
     placeholder_paths.extend(_find_placeholder_paths(weekly_structure_hints, "workout_structure_hints"))
     if placeholder_paths:
@@ -1734,11 +1774,23 @@ def create_macro_command(
         if not isinstance(value, (int, float)) or value <= 0:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"volumes_km[{idx}] must be a positive number",
+                message=f"weekly_volumes_km[{idx}] must be a positive number",
                 data={"file": macro_template_json}
             )
             output_json(envelope)
             raise typer.Exit(code=5)
+
+    # Validate systemic load values if provided
+    if weekly_systemic_load_au is not None:
+        for idx, value in enumerate(weekly_systemic_load_au, start=1):
+            if not isinstance(value, (int, float)) or value < 0:
+                envelope = create_error_envelope(
+                    error_type="validation",
+                    message=f"target_systemic_load_au[{idx}] must be a non-negative number",
+                    data={"file": macro_template_json}
+                )
+                output_json(envelope)
+                raise typer.Exit(code=5)
 
     if not isinstance(weekly_structure_hints, list) or len(weekly_structure_hints) == 0:
         envelope = create_error_envelope(
@@ -1779,6 +1831,7 @@ def create_macro_command(
         current_ctl=current_ctl,
         baseline_vdot=baseline_vdot,
         weekly_volumes_km=weekly_volumes_km,
+        weekly_systemic_load_au=weekly_systemic_load_au,
         weekly_structure_hints=weekly_structure_hints,
     )
 
