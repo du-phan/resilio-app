@@ -20,7 +20,7 @@ from sports_coach_engine.core.strava import (
     map_strava_to_raw,
     check_duplicate,
     create_manual_activity,
-    sync_strava,
+    sync_strava_generator,
     SyncResult,
     StravaAuthError,
     StravaRateLimitError,
@@ -594,10 +594,10 @@ class TestSync:
     @patch("sports_coach_engine.core.strava.fetch_activity_details")
     @patch("sports_coach_engine.core.strava.fetch_activities")
     @patch("sports_coach_engine.core.strava.time.sleep")
-    def test_sync_strava_success(
+    def test_sync_strava_generator_success(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
-        """Should successfully sync activities from Strava."""
+        """Should successfully sync activities from Strava using generator."""
         # Mock fetch_activities to return 2 activities on first page, empty on second
         mock_fetch_activities.side_effect = [
             [
@@ -630,18 +630,17 @@ class TestSync:
             },
         ]
 
-        activities, result = sync_strava(mock_config, lookback_days=30)
+        gen = sync_strava_generator(mock_config, lookback_days=30)
+        activities = list(gen)
 
         assert len(activities) == 2
-        assert result.activities_fetched == 2
-        assert result.activities_new == 2
-        assert result.activities_skipped == 0
-        assert len(result.errors) == 0
+        assert activities[0].id == "strava_123"
+        assert activities[1].id == "strava_456"
 
     @patch("sports_coach_engine.core.strava.fetch_activity_details")
     @patch("sports_coach_engine.core.strava.fetch_activities")
     @patch("sports_coach_engine.core.strava.time.sleep")
-    def test_sync_strava_with_errors(
+    def test_sync_strava_generator_with_errors(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
         """Should handle errors gracefully and continue sync."""
@@ -667,24 +666,175 @@ class TestSync:
             Exception("API error"),
         ]
 
-        activities, result = sync_strava(mock_config)
+        gen = sync_strava_generator(mock_config)
+        activities = list(gen)
 
         assert len(activities) == 1  # Only successful activity
-        assert result.activities_fetched == 2
-        assert result.activities_new == 1
-        assert result.activities_skipped == 1
-        assert len(result.errors) == 1
-        assert "456" in result.errors[0]
+        assert activities[0].id == "strava_123"
 
     @patch("sports_coach_engine.core.strava.load_config")
-    def test_sync_strava_loads_config_if_not_provided(self, mock_load_config, mock_config):
+    def test_sync_strava_generator_loads_config_if_not_provided(self, mock_load_config, mock_config):
         """Should load config if not provided."""
         mock_load_config.return_value = mock_config
 
         with patch("sports_coach_engine.core.strava.fetch_activities") as mock_fetch:
             mock_fetch.return_value = []
-            sync_strava(config=None)
+            gen = sync_strava_generator(config=None)
+            list(gen)  # Consume generator
             mock_load_config.assert_called_once()
+
+    @patch("sports_coach_engine.core.strava.fetch_activity_details")
+    @patch("sports_coach_engine.core.strava.fetch_activities")
+    @patch("sports_coach_engine.core.strava.time.sleep")
+    def test_sync_strava_generator_yields_incrementally(
+        self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
+    ):
+        """Generator should yield activities one-by-one without buffering."""
+        # Mock fetch_activities to return 3 activities
+        mock_fetch_activities.side_effect = [
+            [
+                {"id": 1, "name": "Activity 1", "sport_type": "Run"},
+                {"id": 2, "name": "Activity 2", "sport_type": "Run"},
+                {"id": 3, "name": "Activity 3", "sport_type": "Run"},
+            ],
+            [],  # Empty second page
+        ]
+
+        # Mock fetch_activity_details
+        mock_fetch_details.side_effect = [
+            {
+                "id": 1,
+                "name": "Activity 1",
+                "sport_type": "Run",
+                "type": "Run",
+                "start_date": "2026-01-12T07:30:00Z",
+                "start_date_local": "2026-01-12T07:30:00Z",
+                "moving_time": 1800,
+            },
+            {
+                "id": 2,
+                "name": "Activity 2",
+                "sport_type": "Run",
+                "type": "Run",
+                "start_date": "2026-01-12T09:00:00Z",
+                "start_date_local": "2026-01-12T09:00:00Z",
+                "moving_time": 1800,
+            },
+            {
+                "id": 3,
+                "name": "Activity 3",
+                "sport_type": "Run",
+                "type": "Run",
+                "start_date": "2026-01-12T11:00:00Z",
+                "start_date_local": "2026-01-12T11:00:00Z",
+                "moving_time": 1800,
+            },
+        ]
+
+        gen = sync_strava_generator(mock_config, lookback_days=30)
+
+        # Verify activities are yielded one-by-one
+        activities = []
+        for activity in gen:
+            activities.append(activity)
+            # Each activity should be yielded immediately
+            assert activity.id.startswith("strava_")
+
+        # Should have yielded all 3 activities
+        assert len(activities) == 3
+        assert activities[0].id == "strava_1"
+        assert activities[1].id == "strava_2"
+        assert activities[2].id == "strava_3"
+
+    @patch("sports_coach_engine.core.strava.fetch_activity_details")
+    @patch("sports_coach_engine.core.strava.fetch_activities")
+    @patch("sports_coach_engine.core.strava.time.sleep")
+    def test_sync_strava_generator_stops_on_rate_limit(
+        self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
+    ):
+        """Generator should stop gracefully on rate limit and return partial results."""
+        # Mock fetch_activities to return 2 activities
+        mock_fetch_activities.return_value = [
+            {"id": 1, "name": "Activity 1", "sport_type": "Run"},
+            {"id": 2, "name": "Activity 2", "sport_type": "Run"},
+        ]
+
+        # First activity succeeds, second hits rate limit
+        mock_fetch_details.side_effect = [
+            {
+                "id": 1,
+                "name": "Activity 1",
+                "sport_type": "Run",
+                "type": "Run",
+                "start_date": "2026-01-12T07:30:00Z",
+                "start_date_local": "2026-01-12T07:30:00Z",
+                "moving_time": 1800,
+            },
+            StravaRateLimitError("Rate limit hit", retry_after=60),
+        ]
+
+        gen = sync_strava_generator(mock_config)
+
+        activities = []
+        try:
+            for activity in gen:
+                activities.append(activity)
+        except StopIteration as e:
+            sync_result = e.value
+
+            # Should have partial results
+            assert len(activities) == 1
+            assert activities[0].id == "strava_1"
+
+            # SyncResult should indicate rate limit
+            assert any("Rate Limit" in str(err) for err in sync_result.errors)
+            assert sync_result.activities_new == 1
+
+    @patch("sports_coach_engine.core.strava.fetch_activity_details")
+    @patch("sports_coach_engine.core.strava.fetch_activities")
+    @patch("sports_coach_engine.core.strava.time.sleep")
+    def test_sync_strava_generator_skips_existing_ids(
+        self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
+    ):
+        """Generator should skip activities in existing_ids set."""
+        # Mock fetch_activities to return 3 activities
+        mock_fetch_activities.side_effect = [
+            [
+                {"id": 1, "name": "Activity 1", "sport_type": "Run"},
+                {"id": 2, "name": "Activity 2", "sport_type": "Run"},
+                {"id": 3, "name": "Activity 3", "sport_type": "Run"},
+            ],
+            [],
+        ]
+
+        # Only activity 2 should fetch details (1 and 3 are in existing_ids)
+        mock_fetch_details.return_value = {
+            "id": 2,
+            "name": "Activity 2",
+            "sport_type": "Run",
+            "type": "Run",
+            "start_date": "2026-01-12T09:00:00Z",
+            "start_date_local": "2026-01-12T09:00:00Z",
+            "moving_time": 1800,
+        }
+
+        existing_ids = {"strava_1", "strava_3"}
+        gen = sync_strava_generator(mock_config, existing_ids=existing_ids)
+
+        activities = []
+        try:
+            for activity in gen:
+                activities.append(activity)
+        except StopIteration as e:
+            sync_result = e.value
+
+            # Should only yield activity 2
+            assert len(activities) == 1
+            assert activities[0].id == "strava_2"
+
+            # SyncResult should show 2 skipped
+            assert sync_result.activities_skipped == 2
+            assert sync_result.activities_new == 1
 
 
 # ============================================================

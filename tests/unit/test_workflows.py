@@ -176,37 +176,39 @@ class TestTransactionLog:
 class TestRunSyncWorkflow:
     """Test run_sync_workflow orchestration."""
 
-    @patch("sports_coach_engine.core.workflows.fetch_activity_details")
-    @patch("sports_coach_engine.core.workflows.fetch_activities")
-    def test_sync_workflow_success(self, mock_fetch, mock_fetch_details, mock_repo, mock_config):
+    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
+    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    def test_sync_workflow_success(self, mock_profile, mock_generator, mock_repo, mock_config):
         """Test successful sync workflow."""
-        # Mock successful fetch with no activities
-        mock_fetch.return_value = []
+        # Mock successful sync with no activities (empty generator)
+        mock_generator.return_value = iter([])
+        mock_profile.return_value = []
 
         result = run_sync_workflow(mock_repo, mock_config)
 
         assert result.success
         assert result.activities_imported == []
-        mock_fetch.assert_called_once()
-        # fetch_activity_details should not be called when no activities
-        mock_fetch_details.assert_not_called()
+        mock_generator.assert_called_once()
 
-    @patch("sports_coach_engine.core.workflows.fetch_activity_details")
-    @patch("sports_coach_engine.core.workflows.fetch_activities")
-    def test_sync_workflow_fetch_failure(self, mock_fetch, mock_fetch_details, mock_repo, mock_config):
+    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
+    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    def test_sync_workflow_fetch_failure(self, mock_profile, mock_generator, mock_repo, mock_config):
         """Test sync workflow with fetch failure."""
-        mock_fetch.side_effect = Exception("API error")
+        # Generator raises exception (note: profile failures don't block sync)
+        mock_generator.side_effect = Exception("API error")
+        mock_profile.return_value = []
 
         # Fatal errors raise WorkflowError
         with pytest.raises(WorkflowError, match="API error"):
             run_sync_workflow(mock_repo, mock_config)
 
-    @patch("sports_coach_engine.core.workflows.fetch_activity_details")
-    @patch("sports_coach_engine.core.workflows.fetch_activities")
-    def test_sync_workflow_lock_required(self, mock_fetch, mock_fetch_details, mock_repo, mock_config, tmp_path):
+    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
+    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    def test_sync_workflow_lock_required(self, mock_profile, mock_generator, mock_repo, mock_config, tmp_path):
         """Test that sync workflow acquires lock."""
         mock_repo.repo_root = tmp_path
-        mock_fetch.return_value = []
+        mock_generator.return_value = iter([])
+        mock_profile.return_value = []
 
         result = run_sync_workflow(mock_repo, mock_config)
 

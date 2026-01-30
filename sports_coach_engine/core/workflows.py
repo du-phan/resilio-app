@@ -47,7 +47,7 @@ from sports_coach_engine.core.strava import (
     fetch_activities,
     fetch_activity_details,
     fetch_athlete_profile,
-    sync_strava,
+    sync_strava_generator,
     map_strava_to_raw,
     StravaAuthError,
     StravaRateLimitError,
@@ -562,130 +562,101 @@ def run_sync_workflow(
 
     # Acquire lock
     with WorkflowLock(operation="sync", repo=repo):
-        txn = TransactionLog(repo)
-
         try:
             # Step 0: Fetch and update athlete profile from Strava (best-effort)
-            profile_fields_updated = _fetch_and_update_athlete_profile(config, repo, txn)
-            if profile_fields_updated:
-                result.profile_fields_updated = profile_fields_updated
+            # Profile has its own transaction - failures don't block activity sync
+            try:
+                profile_txn = TransactionLog(repo)
+                profile_fields_updated = _fetch_and_update_athlete_profile(
+                    config, repo, profile_txn
+                )
+                if profile_fields_updated:
+                    result.profile_fields_updated = profile_fields_updated
+            except Exception as e:
+                # Profile update failures don't block activity sync
+                result.warnings.append(f"Profile update failed: {e}")
+                logger.warning("[Sync] Profile update failed, continuing with activities: %s", e)
 
+            # Load existing activities to prevent duplicates
+            since_date = since.date() if since else None
+            existing_ids, existing_by_date = _load_existing_activity_index(
+                repo,
+                "data/activities",
+                since_date
+            )
 
-            # Step 1: Sync activities from Strava (Greedy/Reverse-Chronological)
+            # Step 1: Sync activities from Strava using generator (streaming)
             # Build existing IDs set for skipping
             existing_strava_ids = {id for id in existing_ids if id.startswith("strava_")}
-            
+
             logger.info("[Sync] Syncing with Strava (since=%s)...", since)
-            
-            # Delegate to core sync function
-            # This handles pagination, rate limits, and detail fetching efficiently
-            raw_activities_from_sync, sync_cmd_result = sync_strava(
+
+            # Use generator for streaming - activities processed as they're fetched
+            gen = sync_strava_generator(
                 config,
                 since=since,
                 existing_ids=existing_strava_ids
             )
-            
-            # Merge errors/warnings
-            if sync_cmd_result.errors:
-                result.warnings.extend(sync_cmd_result.errors)
-            
-            # Check for rate limit pause
-            rate_limit_paused = any("Rate Limit" in str(e) for e in sync_cmd_result.errors)
-            if rate_limit_paused:
-                 logger.warning("[Sync] Paused due to Strava rate limits")
 
-            if not raw_activities_from_sync:
-                if not sync_cmd_result.errors or rate_limit_paused:
+            # Step 2-8: Process activities incrementally as they're fetched
+            activities_processed = 0
+            sync_cmd_result = None
+
+            try:
+                for raw_activity in gen:
+                    # Process and save immediately (no buffering)
+                    _process_and_save_activity(
+                        raw_activity,
+                        existing_ids,
+                        existing_by_date,
+                        repo,
+                        result,
+                    )
+                    activities_processed += 1
+                    # Interim metrics removed - compute once at end for efficiency
+
+            except StopIteration as e:
+                # Generator returns SyncResult via StopIteration
+                # Defensive check: e.value can be None if generator exits abnormally
+                sync_cmd_result = e.value or SyncResult(
+                    success=False,
+                    activities_fetched=0,
+                    activities_new=activities_processed,
+                    activities_updated=0,
+                    activities_skipped=0,
+                    errors=["Generator completed abnormally without returning SyncResult"],
+                    sync_duration_seconds=0.0,
+                )
+
+            # Merge errors/warnings from sync
+            if sync_cmd_result and sync_cmd_result.errors:
+                result.warnings.extend(sync_cmd_result.errors)
+
+            # Check for rate limit pause
+            rate_limit_paused = False
+            if sync_cmd_result:
+                rate_limit_paused = any(
+                    "Rate Limit" in str(e) for e in sync_cmd_result.errors
+                )
+                if rate_limit_paused:
+                    logger.warning("[Sync] Paused due to Strava rate limits")
+
+            # Handle empty sync
+            if activities_processed == 0:
+                if not sync_cmd_result or not sync_cmd_result.errors or rate_limit_paused:
                     # Successful (but maybe empty or paused)
                     result.success = True
                     if not rate_limit_paused:
                         result.warnings.append("No new activities found")
                     return result
-            
+
             logger.info(
-                "[Sync] Fetched %s new activities",
-                len(raw_activities_from_sync),
+                "[Sync] Processed %s activities (%s imported, %s failed, %s skipped)",
+                activities_processed,
+                len(result.activities_imported),
+                result.activities_failed,
+                result.activities_skipped,
             )
-
-            # Step 2-8: Process each activity through pipeline
-            for raw_activity in raw_activities_from_sync:
-                try:
-                    # Double-check existence (idempotency)
-                    if raw_activity.id in existing_ids:
-                        result.activities_skipped += 1
-                        continue
-
-                    # M6: Normalize
-                    normalized = normalize_activity(raw_activity, repo)
-
-                    # Skip fuzzy duplicates (manual logs or previously imported with different IDs)
-                    existing_on_day = existing_by_date.get(normalized.date, [])
-                    if _is_fuzzy_duplicate(normalized, existing_on_day):
-                        result.activities_skipped += 1
-                        continue
-
-                    # M7: Analyze notes & RPE
-                    profile_service = ProfileService(repo)
-                    profile = profile_service.load_profile()
-                    analysis = analyze_activity(normalized, profile)
-
-                    # Resolve RPE (use intelligent selection with confidence-based priority)
-                    estimated_rpe = select_best_rpe_estimate(analysis.rpe_estimates)
-
-                    # M8: Compute loads
-                    load_result = compute_load(normalized, estimated_rpe, repo)
-                    normalized.calculated = load_result
-
-                    # Save normalized activity
-                    activity_path = _get_activity_path(normalized)
-                    txn.record_create(activity_path)
-                    repo.write_yaml(activity_path, normalized)
-
-                    result.activities_imported.append(normalized)
-                    existing_ids.add(normalized.id)
-                    existing_by_date.setdefault(normalized.date, []).append(normalized)
-
-                    # M13: Extract memories from notes
-                    if normalized.description or normalized.private_note:
-                        memory_text = (
-                            normalized.description or normalized.private_note
-                        )
-                        # Simple memory extraction (v0: just store interesting notes)
-                        if any(
-                            keyword in memory_text.lower()
-                            for keyword in [
-                                "pain",
-                                "injury",
-                                "prefer",
-                                "like",
-                                "knee",
-                                "ankle",
-                            ]
-                        ):
-                            memory = Memory(
-                                id=str(uuid.uuid4()),
-                                type=MemoryType.INJURY_HISTORY
-                                if any(
-                                    kw in memory_text.lower()
-                                    for kw in ["pain", "injury", "knee"]
-                                )
-                                else MemoryType.PREFERENCE,
-                                content=memory_text[:200],  # First 200 chars
-                                source=MemorySource.ACTIVITY_NOTE,
-                                confidence="medium",
-                                tags=[],
-                                extracted_at=datetime.now(timezone.utc),
-                            )
-                            saved_memory, _ = save_memory(memory, repo)
-                            result.memories_extracted.append(saved_memory)
-
-                except Exception as e:
-                    result.activities_failed += 1
-                    activity_id = raw_activity.id if raw_activity else 'unknown'
-                    result.warnings.append(
-                        f"Failed to process activity {activity_id}: {e}"
-                    )
-                    continue
 
             # Step 9: Recompute all metrics (including rest days and weekly summary)
             # This is now delegated to a standalone function for better separation of concerns
@@ -721,7 +692,8 @@ def run_sync_workflow(
                 except Exception as e:
                     result.warnings.append(f"Failed to recompute metrics: {e}")
 
-            # Step 10: Update last_sync_at
+            # Step 10: Update last_sync_at (even on partial success)
+            # This allows automatic resume after rate limits
             training_history_path = athlete_training_history_path()
             if repo.file_exists(training_history_path):
                 history = repo.read_yaml(training_history_path, schema=None)
@@ -732,8 +704,9 @@ def run_sync_workflow(
                 history = {}
 
             history["last_strava_sync_at"] = datetime.now(timezone.utc).isoformat()
-            if activity_summaries:
-                history["last_strava_activity_id"] = activity_summaries[-1]['id']
+            if result.activities_imported:
+                # Store last imported activity ID for debugging
+                history["last_strava_activity_id"] = result.activities_imported[-1].id
 
             repo.write_yaml(training_history_path, history)
 
@@ -750,17 +723,14 @@ def run_sync_workflow(
             return result
 
         except (StravaAuthError, StravaRateLimitError, StravaAPIError):
-            # Don't rollback on Strava errors - preserve state
+            # Don't rollback on Strava errors - activities already persisted
+            # User should re-run sync to continue from where it stopped
             raise
 
         except Exception as e:
-            # Fatal error: rollback all changes
-            logger.error("[Sync] Fatal error, rolling back: %s", e)
-            try:
-                txn.rollback()
-            except WorkflowRollbackError as rollback_err:
-                logger.error("[Sync] Rollback had errors: %s", rollback_err)
-
+            # Fatal error: Activities already persisted (no rollback needed)
+            # Incremental architecture means partial progress is preserved
+            logger.error("[Sync] Fatal error (partial progress preserved): %s", e)
             raise WorkflowError(f"Sync workflow failed: {e}") from e
 
 
@@ -1393,6 +1363,108 @@ def _get_activity_path(activity: NormalizedActivity) -> str:
     filename = f"{date_str}_{sport_str}_{time_str}.yaml"
 
     return activity_path(year_month, filename)
+
+
+def _process_and_save_activity(
+    raw_activity: RawActivity,
+    existing_ids: set[str],
+    existing_by_date: dict[date, list[NormalizedActivity]],
+    repo: RepositoryIO,
+    result: "SyncWorkflowResult",
+) -> bool:
+    """
+    Process and save a single activity through the pipeline.
+
+    This function is idempotent via deduplication checks and does NOT use
+    transactions since activity writes are atomic at the file level.
+
+    Pipeline steps:
+    1. Check for duplicate by ID
+    2. Normalize activity (M6)
+    3. Check for fuzzy duplicate by date/time/sport
+    4. Analyze notes & RPE (M7)
+    5. Compute loads (M8)
+    6. Save activity immediately
+    7. Update in-memory indexes
+    8. Extract memories from notes (M13)
+
+    Args:
+        raw_activity: Raw activity from Strava
+        existing_ids: Set of activity IDs to check for duplicates (updated in-place)
+        existing_by_date: Dict mapping dates to activities (updated in-place)
+        repo: Repository for file operations
+        result: Workflow result to update (updated in-place)
+
+    Returns:
+        True if activity saved successfully, False if skipped or failed
+    """
+    try:
+        # Step 1: Check for exact duplicate by ID
+        if raw_activity.id in existing_ids:
+            result.activities_skipped += 1
+            return False
+
+        # Step 2: Normalize (M6)
+        normalized = normalize_activity(raw_activity, repo)
+
+        # Step 3: Check for fuzzy duplicate (manual logs or different IDs)
+        existing_on_day = existing_by_date.get(normalized.date, [])
+        if _is_fuzzy_duplicate(normalized, existing_on_day):
+            result.activities_skipped += 1
+            return False
+
+        # Step 4: Analyze notes & RPE (M7)
+        profile_service = ProfileService(repo)
+        profile = profile_service.load_profile()
+        analysis = analyze_activity(normalized, profile)
+
+        # Resolve RPE (use intelligent selection with confidence-based priority)
+        estimated_rpe = select_best_rpe_estimate(analysis.rpe_estimates)
+
+        # Step 5: Compute loads (M8)
+        load_result = compute_load(normalized, estimated_rpe, repo)
+        normalized.calculated = load_result
+
+        # Step 6: Save activity immediately (no transaction needed - idempotent)
+        activity_file_path = _get_activity_path(normalized)
+        repo.write_yaml(activity_file_path, normalized)
+
+        # Step 7: Update in-memory indexes BEFORE memory extraction
+        # This ensures consistency even if Step 8 fails
+        existing_ids.add(normalized.id)
+        existing_by_date.setdefault(normalized.date, []).append(normalized)
+        result.activities_imported.append(normalized)
+
+        # Step 8: Extract memories from notes (M13)
+        # Failures here won't corrupt existing_ids since we updated it in Step 7
+        if normalized.description or normalized.private_note:
+            memory_text = normalized.description or normalized.private_note
+            # Simple memory extraction (v0: just store interesting notes)
+            if any(
+                keyword in memory_text.lower()
+                for keyword in ["pain", "injury", "prefer", "like", "knee", "ankle"]
+            ):
+                memory = Memory(
+                    id=str(uuid.uuid4()),
+                    type=MemoryType.INJURY_HISTORY
+                    if any(kw in memory_text.lower() for kw in ["pain", "injury", "knee"])
+                    else MemoryType.PREFERENCE,
+                    content=memory_text[:200],  # First 200 chars
+                    source=MemorySource.ACTIVITY_NOTE,
+                    confidence="medium",
+                    tags=[],
+                    extracted_at=datetime.now(timezone.utc),
+                )
+                saved_memory, _ = save_memory(memory, repo)
+                result.memories_extracted.append(saved_memory)
+
+        return True
+
+    except Exception as e:
+        result.activities_failed += 1
+        activity_id = raw_activity.id if raw_activity else "unknown"
+        result.warnings.append(f"Failed to process activity {activity_id}: {e}")
+        return False
 
 
 def _get_existing_metrics_dates(repo: RepositoryIO) -> list[date]:
