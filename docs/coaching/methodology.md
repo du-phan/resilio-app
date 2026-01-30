@@ -621,7 +621,7 @@ sce analysis load
 
 ## See Also
 
-- [Methodology Expert Review](methodology_expert_review.md) - Detailed methodology, books vs metrics, and questions for coaching experts
+- [Methodology Expert Review](methodology_expert_feedback/methodology_expert_review.md) - Detailed methodology, books vs metrics, and questions for coaching experts
 - [CLI Command Index](cli/index.md) - Command documentation
 - [Coaching Scenarios](scenarios.md) - Example workflows
 - [API Layer Spec](../specs/api_layer.md) - Python API for scripting
