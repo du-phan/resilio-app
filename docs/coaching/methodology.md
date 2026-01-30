@@ -542,6 +542,50 @@ When running and other sports conflict:
 - **`ask_each_time`**: Present trade-offs, let athlete decide (recommended)
   - Example: "Long run Saturday conflicts with climbing comp - move to Sunday?"
 
+### Multi-Sport Macro Planning Workflow
+
+For multi-sport athletes, the macro template supports **two-dimensional volume planning**:
+
+1. **`weekly_volumes_km`** - Running-specific volume targets (km)
+2. **`target_systemic_load_au`** - Total systemic load across ALL sports (AU)
+
+**Why both dimensions?**
+
+The two-channel load model requires planning:
+- **Running volume** (running-specific, affects lower-body load)
+- **Total systemic load** (running + cross-training + other sports)
+
+**Single-sport workflow:**
+
+```bash
+# Calculate running volumes using guardrails
+sce guardrails safe-volume --ctl 44.0  # → 35-50 km safe range
+
+# Fill macro template:
+# weekly_volumes_km: [40.0, 42.0, 45.0, ...]
+# target_systemic_load_au: [0.0, 0.0, 0.0, ...]  # Calculated later from running
+```
+
+**Multi-sport workflow:**
+
+```bash
+# 1. Analyze current multi-sport load distribution
+sce analysis load
+
+# 2. Calculate total systemic load targets
+# Example: Week 8 target = 118 AU total systemic load
+#   - Running: 48 km × 1.0 = 48 AU systemic
+#   - Climbing: 3 sessions × 105 min × RPE 5 × 0.6 = 48 AU systemic
+#   - Yoga: 2 sessions × 60 min × RPE 3 × 0.35 = 12 AU systemic
+#   - TOTAL: 108 AU → round to 118 AU (build phase +8%)
+
+# 3. Fill macro template:
+# weekly_volumes_km: [35.0, 38.0, 40.0, ..., 48.0, ...]
+# target_systemic_load_au: [85.0, 92.0, 98.0, ..., 118.0, ...]
+```
+
+**Key insight:** Multi-sport athletes plan BOTH running volume AND total systemic load upfront. Weekly planning then distributes the systemic load budget across running + cross-training + other sports based on actual training response.
+
 ---
 
 ## Practical Application Tips

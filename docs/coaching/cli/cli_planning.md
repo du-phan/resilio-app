@@ -290,6 +290,23 @@ Generate a blank macro template with required fields and null placeholders.
 sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
 ```
 
+**Template Structure:**
+
+The generated template includes:
+- `weekly_volumes_km`: Weekly running volume targets (km)
+- `target_systemic_load_au`: Total systemic load targets across ALL sports (optional)
+- `workout_structure_hints`: Macro-level workout guidance per week
+
+**Multi-Sport Planning:**
+
+For **single-sport** athletes (running only):
+- Set `target_systemic_load_au: [0.0, 0.0, ...]` (systemic load calculated later from running volume)
+
+For **multi-sport** athletes (running + cross-training + other sports):
+- Calculate total systemic load targets using `sce analysis load`
+- Set `target_systemic_load_au: [95.0, 105.0, 110.0, ...]` (total aerobic load across all sports)
+- Example: Week with 45 km running (45 AU) + climbing (48 AU) + yoga (12 AU) = 105 AU total systemic load
+
 **Notes:**
 - Replace all `null` values before calling `sce plan create-macro`
 - Template is intentionally blank to keep planning decisions with the AI coach
