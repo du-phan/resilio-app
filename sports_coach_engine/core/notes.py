@@ -238,7 +238,10 @@ def estimate_rpe_from_hr(
        - 94-97% max HR: RPE 8 (VO2max upper)
        - > 97% max HR: RPE 9 (anaerobic/maximal)
 
-    Duration adjustment: Long sessions (>90min) at moderate+ HR → +1 RPE
+    Duration adjustment: Cumulative fatigue for long steady efforts (sport science):
+       - >90 min at RPE ≥4: +1 RPE (long session; glycogen/fatigue start to matter)
+       - >150 min (2.5h) at RPE ≥4: +2 RPE (very long; e.g. long marathon run, half-Iron bike)
+       - >240 min (4h) at RPE ≥4: +3 RPE (ultra-long; fondo, Iron bike, marathon+; recovery scales supra-linearly)
 
     Key fix: Zone 2 boundary moved from 70% to 78% max HR to match sport
     science literature (80/20, Pfitzinger). This prevents easy runs from
@@ -283,14 +286,20 @@ def estimate_rpe_from_hr(
     confidence = "medium"  # Max HR% is proxy, higher variability
     reasoning = f"HR {average_hr} = {hr_percent_max:.0f}% of max ({max_hr})"
 
-    # Duration adjustment (applies to both approaches)
+    # Duration adjustment: cumulative fatigue for long steady efforts (Foster-style session RPE,
+    # Banister load: recovery demand scales supra-linearly with duration for endurance events).
     duration_adjustment = 0
     if duration_minutes > 90 and base_rpe >= 4:
         duration_adjustment = 1
     elif duration_minutes > 150 and base_rpe >= 4:
         duration_adjustment = 2
+    elif duration_minutes > 240 and base_rpe >= 4:  # 4h+ (ultra-long, fondo, Iron bike)
+        duration_adjustment = 3
 
     final_rpe = min(10, base_rpe + duration_adjustment)
+
+    if duration_adjustment > 0:
+        reasoning += f"; duration {duration_minutes}min → +{duration_adjustment} RPE (cumulative fatigue)"
 
     return RPEEstimate(
         value=final_rpe,

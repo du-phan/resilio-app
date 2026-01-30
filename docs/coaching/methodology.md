@@ -174,11 +174,15 @@ The two-channel model prevents this by separating:
 
 ### Load Calculation
 
+Base effort uses a **TSS-equivalent** formula (Coggan/TrainingPeaks) so that loads are comparable across sports and align with common training-load standards. Intensity factor (IF) is derived from RPE (e.g. RPE 7–8 ≈ threshold = 0.95–1.0).
+
 ```
-base_effort_au = RPE × duration_minutes
+base_effort_au = hours × IF² × 100   (TSS-equivalent; IF from RPE mapping)
 systemic_load_au = base_effort_au × systemic_multiplier
 lower_body_load_au = base_effort_au × lower_body_multiplier
 ```
+
+Example: 60 min at RPE 3 (easy) ≈ 42 AU; 60 min at RPE 8 (threshold) = 100 AU.
 
 ### Sport Multipliers Table
 
@@ -196,15 +200,15 @@ lower_body_load_au = base_effort_au × lower_body_multiplier
 | Yoga (flow)          | 0.35     | 0.10       | Low intensity recovery        |
 | Yoga (restorative)   | 0.00     | 0.00       | Pure recovery                 |
 
-### Validated Examples (Real Strava Data, Jan 2026)
+### Validated Examples (TSS-equivalent formula)
 
 | Activity | Details           | Systemic Load | Lower-Body Load |
 | -------- | ----------------- | ------------- | --------------- |
-| Running  | 7km, 43min, RPE 7 | 301 AU        | 301 AU          |
-| Climbing | 105min, RPE 5     | 315 AU        | 52 AU           |
-| Yoga     | 28min, RPE 2      | 20 AU         | 6 AU            |
+| Running  | 7km, 43min, RPE 7 | ~65 AU        | ~65 AU          |
+| Climbing | 105min, RPE 5     | ~71 AU        | ~12 AU          |
+| Yoga     | 28min, RPE 2      | ~5 AU         | ~1 AU           |
 
-**Key insight**: Climbing generates 315 AU systemic load (similar to running) but only 52 AU lower-body load. This allows easy running the next day without triggering lower-body fatigue warnings.
+**Key insight**: Climbing generates similar systemic load to a moderate run but much less lower-body load. This allows easy running the next day without triggering lower-body fatigue warnings.
 
 ---
 
@@ -280,6 +284,7 @@ Evidence-based training rules provided as **validation tools**. Claude Code deci
 Minimum workout durations prevent unrealistic short workouts when weekly volume is low.
 
 **Defaults (unless profile-aware values are available):**
+
 - Easy runs: 30 minutes / 5 km (or 80% of athlete's typical easy run)
 - Long runs: 60 minutes / 8 km (or 80% of athlete's typical long run)
 - Tempo runs: 40 minutes total (including warmup/cooldown)
@@ -552,6 +557,7 @@ For multi-sport athletes, the macro template supports **two-dimensional volume p
 **Why both dimensions?**
 
 The two-channel load model requires planning:
+
 - **Running volume** (running-specific, affects lower-body load)
 - **Total systemic load** (running + cross-training + other sports)
 
@@ -615,6 +621,7 @@ sce analysis load
 
 ## See Also
 
+- [Methodology Expert Review](methodology_expert_review.md) - Detailed methodology, books vs metrics, and questions for coaching experts
 - [CLI Command Index](cli/index.md) - Command documentation
 - [Coaching Scenarios](scenarios.md) - Example workflows
 - [API Layer Spec](../specs/api_layer.md) - Python API for scripting
