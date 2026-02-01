@@ -540,237 +540,123 @@ def _calculate_date(start_date_str: str, day_of_week: int) -> str:
     return workout_date.isoformat()
 
 
-def _distribute_evenly(total_km: float, num_runs: int) -> list[float]:
-    """Distribute volume evenly across runs, rounding intelligently.
+# Removed _distribute_evenly() - violates CLI-first philosophy
+# AI Coach designs exact workout distances; system only validates
+
+
+# Removed _create_workout_prescription() and _generate_workouts_from_pattern()
+# These functions implement rule-based workout generation, violating the
+# CLI-first philosophy. AI Coach now designs exact workouts using LLM
+# capabilities; Python engine only validates and persists.
+
+
+@dataclass
+class ValidationResult:
+    """Result from validation operations."""
+    ok: bool
+    errors: list[dict]
+    warnings: list[dict]
+
+
+def _validate_explicit_workouts(
+    week_data: dict,
+    tolerance_km: float = 0.5
+) -> ValidationResult:
+    """
+    Validate explicit workout format.
+
+    Detection-only: Returns violations, never auto-fixes.
+
+    Checks:
+    - Required fields on each workout
+    - Date alignment (within week boundaries)
+    - Sum-to-target (workouts sum to target_volume_km ± tolerance)
+    - No duplicate days
 
     Args:
-        total_km: Total distance to distribute
-        num_runs: Number of runs to distribute across
+        week_data: Week dictionary with explicit workouts
+        tolerance_km: Tolerance for sum-to-target check (default 0.5km)
 
     Returns:
-        List of distances that sum exactly to total_km
-
-    Example:
-        >>> _distribute_evenly(12.5, 3)
-        [4.0, 4.5, 4.0]  # Sums to 12.5
+        ValidationResult with ok, errors, warnings
     """
-    per_run = total_km / num_runs
+    from datetime import datetime
 
-    # Round all but last to nearest 0.5km
-    distances = []
-    for i in range(num_runs - 1):
-        rounded = round(per_run * 2) / 2
-        distances.append(rounded)
+    errors = []
+    warnings = []
 
-    # Last run adjusts to hit total exactly
-    last = total_km - sum(distances)
-    distances.append(round(last * 2) / 2)
+    # Required field check
+    required_fields = ["date", "day_of_week", "workout_type", "distance_km", "target_rpe"]
+    for i, workout in enumerate(week_data.get("workouts", [])):
+        missing = [f for f in required_fields if f not in workout]
+        if missing:
+            errors.append({
+                "type": "missing_fields",
+                "workout_index": i,
+                "fields": missing,
+                "message": f"Workout {i}: Missing required fields {missing}"
+            })
 
-    return distances
+    # Date alignment check
+    try:
+        start = datetime.fromisoformat(week_data["start_date"]).date()
+        end = datetime.fromisoformat(week_data["end_date"]).date()
+        for i, workout in enumerate(week_data.get("workouts", [])):
+            if "date" in workout:
+                workout_date = datetime.fromisoformat(workout["date"]).date()
+                if not (start <= workout_date <= end):
+                    errors.append({
+                        "type": "date_out_of_range",
+                        "workout_index": i,
+                        "date": str(workout_date),
+                        "message": f"Workout {i}: date {workout_date} not in week {start} to {end}"
+                    })
+    except (ValueError, KeyError) as e:
+        errors.append({
+            "type": "date_parse_error",
+            "message": f"Failed to parse dates: {str(e)}"
+        })
 
+    # Sum-to-target check (CRITICAL)
+    actual = sum(w.get("distance_km", 0) for w in week_data.get("workouts", []))
+    target = week_data.get("target_volume_km", 0)
+    diff = abs(actual - target)
 
-def _create_workout_prescription(
-    week_number: int,
-    date_str: str,
-    day_of_week: int,
-    distance_km: float,
-    workout_type: str,
-    phase: str,
-    pace_range: str,
-    max_hr: int = 189  # Default, can be overridden
-) -> dict:
-    """Create complete WorkoutPrescription dict with all required fields.
+    if diff > tolerance_km:
+        errors.append({
+            "type": "sum_mismatch",
+            "severity": "danger",
+            "actual_km": actual,
+            "target_km": target,
+            "diff_km": diff,
+            "message": f"Workouts sum to {actual:.1f}km but target is {target:.1f}km (diff: {diff:.1f}km exceeds tolerance {tolerance_km}km)",
+            "suggestion": "Adjust workout distances or update target_volume_km to match"
+        })
+    elif diff > 0.2:
+        # Warning for noticeable differences (>200m) that are within tolerance
+        warnings.append({
+            "type": "sum_mismatch_minor",
+            "actual_km": actual,
+            "target_km": target,
+            "diff_km": diff,
+            "message": f"Workouts sum to {actual:.1f}km, target is {target:.1f}km (diff: {diff:.1f}km, within tolerance but noticeable)"
+        })
 
-    Args:
-        week_number: Week number in plan
-        date_str: Workout date (ISO format)
-        day_of_week: Weekday index (0=Mon, 6=Sun)
-        distance_km: Workout distance
-        workout_type: "easy", "long_run", "tempo", etc.
-        phase: Training phase
-        pace_range: "6:30-6:50" format
-        max_hr: Athlete max heart rate
+    # Duplicate day check
+    days_used = [w.get("day_of_week") for w in week_data.get("workouts", []) if "day_of_week" in w]
+    duplicates = [d for d in set(days_used) if days_used.count(d) > 1]
+    if duplicates:
+        errors.append({
+            "type": "duplicate_days",
+            "days": duplicates,
+            "message": f"Multiple workouts scheduled on same day(s): {duplicates}"
+        })
 
-    Returns:
-        Complete workout prescription dict
-    """
-    # Parse pace range
-    pace_parts = pace_range.split("-")
-    pace_min = pace_parts[0].strip()
-    pace_max = pace_parts[1].strip() if len(pace_parts) > 1 else pace_min
-
-    # Estimate duration from distance and pace
-    # Assume middle of pace range for estimation
-    # Convert "6:30" to minutes per km
-    pace_min_parts = pace_min.split(":")
-    minutes_per_km = int(pace_min_parts[0]) + int(pace_min_parts[1]) / 60
-    duration_minutes = int(distance_km * minutes_per_km)
-
-    # HR zones based on workout type (using % of max HR)
-    hr_zones = {
-        "easy": (0.65, 0.75),        # Zone 2
-        "long_run": (0.70, 0.78),    # Zone 2-3
-        "tempo": (0.85, 0.90),       # Zone 4
-        "intervals": (0.90, 0.95),   # Zone 5
-        "recovery": (0.55, 0.65),    # Zone 1
-    }
-
-    hr_low_pct, hr_high_pct = hr_zones.get(workout_type, (0.65, 0.75))
-    hr_range_low = int(max_hr * hr_low_pct)
-    hr_range_high = int(max_hr * hr_high_pct)
-
-    # RPE based on workout type
-    rpe_map = {
-        "easy": 4,
-        "long_run": 5,
-        "tempo": 7,
-        "intervals": 8,
-        "recovery": 3,
-    }
-    target_rpe = rpe_map.get(workout_type, 4)
-
-    # Intensity zone
-    intensity_map = {
-        "easy": "zone_2",
-        "long_run": "zone_2",
-        "tempo": "zone_4",
-        "intervals": "zone_5",
-        "recovery": "zone_1",
-    }
-    intensity_zone = intensity_map.get(workout_type, "zone_2")
-
-    # Purpose based on workout type
-    purpose_map = {
-        "easy": "Build aerobic endurance and maintain base fitness",
-        "long_run": "Develop endurance and mental toughness for sustained efforts",
-        "tempo": "Improve lactate threshold and race pace efficiency",
-        "intervals": "Boost VO2max and running economy at high speeds",
-        "recovery": "Active recovery to promote blood flow and adaptation",
-    }
-    purpose = purpose_map.get(workout_type, "Build aerobic endurance")
-
-    return {
-        "id": f"w_{date_str}_{workout_type}_{uuid.uuid4().hex[:6]}",
-        "week_number": week_number,
-        "day_of_week": day_of_week,
-        "date": date_str,
-        "workout_type": workout_type,
-        "phase": phase,
-        "duration_minutes": duration_minutes,
-        "distance_km": distance_km,
-        "intensity_zone": intensity_zone,
-        "target_rpe": target_rpe,
-        "pace_range_min_km": pace_min,
-        "pace_range_max_km": pace_max,
-        "hr_range_low": hr_range_low,
-        "hr_range_high": hr_range_high,
-        "intervals": None,
-        "warmup_minutes": 0,
-        "cooldown_minutes": 0,
-        "purpose": purpose,
-        "notes": f"{workout_type.replace('_', ' ').title()} at controlled pace",
-        "key_workout": workout_type == "long_run",
-        "status": "scheduled",
-        "execution": None,
-    }
-
-
-def _generate_workouts_from_pattern(
-    week_number: int,
-    target_volume_km: float,
-    pattern: dict,
-    start_date: str,
-    phase: str,
-    max_hr: int = 189
-) -> list[dict]:
-    """Generate workout prescriptions from intent-based pattern.
-
-    This function handles the arithmetic so AI Coach doesn't have to.
-
-    Args:
-        week_number: Week number in plan
-        target_volume_km: Total weekly volume target
-        pattern: Intent pattern dict with:
-            - structure: "3 easy + 1 long" (descriptive)
-            - run_days: [0, 2, 4, 5] (0=Mon .. 6=Sun)
-            - long_run_day: 5 (weekday index for long run)
-            - long_run_pct: 0.45 (percentage of weekly volume)
-            - easy_run_paces: "6:30-6:50"
-            - long_run_pace: "6:30-6:50"
-        start_date: Week start date (Monday, ISO format)
-        phase: Training phase
-        max_hr: Athlete max heart rate
-
-    Returns:
-        List of complete WorkoutPrescription dicts
-
-    Raises:
-        AssertionError: If calculated distances don't sum to target
-    """
-    # 1. Calculate long run distance
-    long_run_km = round(target_volume_km * pattern["long_run_pct"] * 2) / 2
-
-    # 2. Calculate remaining for easy runs
-    num_easy_runs = len(pattern["run_days"]) - 1  # Subtract long run
-    remaining_km = target_volume_km - long_run_km
-
-    # VALIDATION: Warn if easy runs will be too short
-    num_runs = len(pattern["run_days"])
-    avg_easy = remaining_km / num_easy_runs if num_easy_runs > 0 else 0
-
-    if avg_easy < 5.0 and num_easy_runs > 0:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(
-            f"Week {week_number}: {num_runs} runs with {target_volume_km}km results in "
-            f"{avg_easy:.1f}km average easy runs (below 5km minimum). "
-            f"Consider reducing to {num_runs - 1} runs for more substantial sessions."
-        )
-
-    # 3. Distribute evenly, round intelligently
-    easy_distances = _distribute_evenly(remaining_km, num_easy_runs)
-
-    # 4. Validate sum (critical - this ensures no arithmetic errors)
-    total = sum(easy_distances) + long_run_km
-    assert abs(total - target_volume_km) < 0.01, \
-        f"Calculated distances sum to {total}km ≠ target {target_volume_km}km"
-
-    # 5. Create workout objects
-    workouts = []
-    easy_idx = 0
-
-    for day_of_week in pattern["run_days"]:
-        workout_date = _calculate_date(start_date, day_of_week)
-
-        if day_of_week == pattern["long_run_day"]:
-            # Long run
-            workout = _create_workout_prescription(
-                week_number=week_number,
-                date_str=workout_date,
-                day_of_week=day_of_week,
-                distance_km=long_run_km,
-                workout_type="long_run",
-                phase=phase,
-                pace_range=pattern["long_run_pace"],
-                max_hr=max_hr
-            )
-        else:
-            # Easy run
-            workout = _create_workout_prescription(
-                week_number=week_number,
-                date_str=workout_date,
-                day_of_week=day_of_week,
-                distance_km=easy_distances[easy_idx],
-                workout_type="easy",
-                phase=phase,
-                pace_range=pattern["easy_run_paces"],
-                max_hr=max_hr
-            )
-            easy_idx += 1
-
-        workouts.append(workout)
-
-    return workouts
+    return ValidationResult(
+        ok=len(errors) == 0,
+        errors=errors,
+        warnings=warnings
+    )
 
 
 def validate_plan_json_structure(
@@ -853,36 +739,19 @@ def validate_plan_json_structure(
             except ValueError as e:
                 errors.append(f"Week {week_num}: Invalid end_date: {e}")
 
-        # Check for intent-based format (required)
-        if "workout_pattern" not in week:
+        # Check for explicit workouts (required)
+        if "workouts" not in week:
             errors.append(
-                f"Week {week_num}: Missing required field 'workout_pattern'. "
-                f"Only intent-based format is supported."
+                f"Week {week_num}: Missing required field 'workouts'. "
+                f"Provide explicit workout array (AI Coach designs all workouts)."
             )
         else:
-            # Validate intent-based format
-            pattern = week["workout_pattern"]
-            required_pattern = ["run_days", "long_run_day", "long_run_pct"]
-            for field in required_pattern:
-                if field not in pattern:
-                    errors.append(
-                        f"Week {week_num}: workout_pattern missing '{field}'"
-                    )
-
-            # Warning if long_run_pct > 50%
-            if "long_run_pct" in pattern and pattern["long_run_pct"] > 0.5:
-                warnings.append(
-                    f"Week {week_num}: long_run_pct is {pattern['long_run_pct']:.0%} "
-                    f"(>50% of weekly volume, consider 0.45-0.50)"
-                )
-
-            # Validate run_days are valid weekdays (0-6)
-            if "run_days" in pattern:
-                for day in pattern["run_days"]:
-                    if not isinstance(day, int) or day < 0 or day > 6:
-                        errors.append(
-                            f"Week {week_num}: Invalid run_day {day}, must be 0-6 (Mon=0 .. Sun=6)"
-                        )
+            # Validate explicit format using helper
+            validation_result = _validate_explicit_workouts(week)
+            for error in validation_result.errors:
+                errors.append(f"Week {week_num}: {error['message']}")
+            for warning in validation_result.warnings:
+                warnings.append(f"Week {week_num}: {warning['message']}")
 
         # Validate phase is valid enum value
         if "phase" in week:
@@ -949,63 +818,38 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     plan = result
 
-    # 2. Process weeks_data - generate workouts from intent-based patterns
+    # 2. Validate explicit workout format
     processed_weeks_data = []
     week_hint_map = {w.week_number: w.workout_structure_hints for w in plan.weeks}
     for week_data in weeks_data:
-        # Check if using intent-based format (workout_pattern required)
-        if "workout_pattern" not in week_data:
+        # Expect explicit workouts only
+        if "workouts" not in week_data:
             return PlanError(
                 error_type="validation",
-                message=f"Week {week_data.get('week_number', '?')}: Missing required field 'workout_pattern'. "
-                        f"Only intent-based format is supported. See docs for JSON structure.",
+                message=f"Week {week_data.get('week_number', '?')}: Missing 'workouts' field. "
+                        f"Provide explicit workout array (AI Coach designs all workouts)."
             )
 
-        # Generate workouts from pattern
-        try:
-            # Get athlete profile for max_hr
-            profile_result = get_profile()
-            max_hr = 189  # Default
-            if not isinstance(profile_result, ProfileError):
-                max_hr = getattr(profile_result, 'max_hr', 189)
-
-            # Generate workouts from pattern
-            workouts = _generate_workouts_from_pattern(
-                week_number=week_data["week_number"],
-                target_volume_km=week_data["target_volume_km"],
-                pattern=week_data["workout_pattern"],
-                start_date=week_data["start_date"],
-                phase=week_data["phase"],
-                max_hr=max_hr
+        # Validate explicit format
+        validation_result = _validate_explicit_workouts(week_data)
+        if not validation_result.ok:
+            error_messages = "\n".join([f"  - {e['message']}" for e in validation_result.errors])
+            return PlanError(
+                error_type="validation",
+                message=f"Week {week_data.get('week_number', '?')} validation failed:\n{error_messages}"
             )
 
-            # Add generated workouts to week data
-            week_data_copy = week_data.copy()
-            week_data_copy["workouts"] = workouts
-            if "workout_structure_hints" not in week_data_copy:
-                hints = week_hint_map.get(week_data_copy["week_number"])
-                if hints is None:
-                    return PlanError(
-                        error_type="validation",
-                        message=f"Week {week_data_copy.get('week_number', '?')}: Missing workout_structure_hints and no macro hints found"
-                    )
-                week_data_copy["workout_structure_hints"] = hints.model_dump()
-            processed_weeks_data.append(week_data_copy)
-        except KeyError as e:
-            return PlanError(
-                error_type="validation",
-                message=f"Week {week_data.get('week_number', '?')}: Missing required field in workout_pattern: {str(e)}",
-            )
-        except AssertionError as e:
-            return PlanError(
-                error_type="validation",
-                message=f"Week {week_data.get('week_number', '?')}: Arithmetic error in workout generation: {str(e)}",
-            )
-        except Exception as e:
-            return PlanError(
-                error_type="validation",
-                message=f"Week {week_data.get('week_number', '?')}: Failed to generate workouts from pattern: {str(e)}",
-            )
+        # Workouts already in week_data, just add hints if missing
+        week_data_copy = week_data.copy()
+        if "workout_structure_hints" not in week_data_copy:
+            hints = week_hint_map.get(week_data_copy["week_number"])
+            if hints is None:
+                return PlanError(
+                    error_type="validation",
+                    message=f"Week {week_data_copy.get('week_number', '?')}: Missing workout_structure_hints and no macro hints found"
+                )
+            week_data_copy["workout_structure_hints"] = hints.model_dump()
+        processed_weeks_data.append(week_data_copy)
 
     # 3. Validate weeks_data structure
     try:
@@ -2502,32 +2346,16 @@ def validate_week_plan(
         if field not in week:
             errors.append(f"Missing required field: '{field}'")
 
-    # Check for workout_pattern (intent-based format)
-    if "workout_pattern" not in week:
+    # Check for explicit workouts (required)
+    if "workouts" not in week:
         errors.append(
-            "Missing 'workout_pattern' field. Only intent-based format is supported for weekly plans."
+            "Missing 'workouts' field. Provide explicit workout array (AI Coach designs all workouts)."
         )
     else:
-        # Validate workout_pattern structure
-        pattern = week["workout_pattern"]
-        required_pattern_fields = ["run_days", "long_run_day", "long_run_pct"]
-        for field in required_pattern_fields:
-            if field not in pattern:
-                errors.append(f"workout_pattern missing required field: '{field}'")
-
-        # Check long_run_pct is reasonable
-        if "long_run_pct" in pattern:
-            long_pct = pattern["long_run_pct"]
-            if long_pct > 0.55:
-                warnings.append(
-                    f"long_run_pct is {long_pct:.0%} (>55% of weekly volume, consider 0.45-0.50)"
-                )
-
-        # Validate run_days are weekdays (0-6)
-        if "run_days" in pattern:
-            for day in pattern["run_days"]:
-                if not isinstance(day, int) or day < 0 or day > 6:
-                    errors.append(f"Invalid run_day {day}, must be 0-6 (Mon=0 .. Sun=6)")
+        # Validate explicit format using helper
+        validation_result = _validate_explicit_workouts(week)
+        errors.extend([e["message"] for e in validation_result.errors])
+        warnings.extend([w["message"] for w in validation_result.warnings])
 
     # Check date alignment
     if "start_date" in week and "end_date" in week:

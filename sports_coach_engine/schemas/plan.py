@@ -242,11 +242,16 @@ class WorkoutStructureHints(BaseModel):
 
 class WeekPlan(BaseModel):
     """
-    Single week's training plan with volume targets and workouts.
+    Single week's training plan with explicit workout specifications.
 
-    Represents one week within a master plan, including target volume,
-    all scheduled workouts, and metadata about recovery weeks or phase
-    transitions. Weeks are the atomic unit of plan refinement.
+    Represents one week within a master plan, including:
+    - Strategic guidance (workout_structure_hints from macro planning)
+    - Target volume (target_volume_km from macro planning)
+    - Exact workout prescriptions (designed by AI Coach using hints + athlete state)
+
+    The workout_structure_hints provide macro-level strategic guidance
+    (e.g., "max 2 quality sessions", "long run 25-30%"). AI Coach uses these
+    hints plus current athlete state to design exact workouts for each week.
     """
 
     week_number: int = Field(..., ge=1, description="Week number (1-indexed)")
@@ -257,13 +262,18 @@ class WeekPlan(BaseModel):
     # Weekly targets
     target_volume_km: float = Field(..., ge=0, description="Target run volume for week")
     target_systemic_load_au: float = Field(..., ge=0, description="Target systemic load (from M8)")
+
+    # Strategic guidance from macro planning (REQUIRED)
     workout_structure_hints: WorkoutStructureHints = Field(
         ...,
         description="Macro-level workout structure hints to guide weekly planning"
     )
 
-    # Workouts
-    workouts: list[WorkoutPrescription] = Field(..., description="All workouts for this week")
+    # Workouts (explicit specification - REQUIRED)
+    workouts: list[WorkoutPrescription] = Field(
+        ...,
+        description="Explicit workouts designed by AI Coach using hints + athlete state"
+    )
 
     # Metadata
     is_recovery_week: bool = Field(False, description="Is this a scheduled recovery week?")

@@ -2610,11 +2610,11 @@ def generate_monthly_plan(
         "weeks": weeks,
         "paces": {
             "vdot": current_vdot,
-            "e_pace": f"{paces['easy_min_pace']}-{paces['easy_max_pace']} /km",
-            "m_pace": f"{paces['marathon_min_pace']}-{paces['marathon_max_pace']} /km",
-            "t_pace": f"{paces['threshold_min_pace']}-{paces['threshold_max_pace']} /km",
-            "i_pace": f"{paces['interval_min_pace']}-{paces['interval_max_pace']} /km",
-            "r_pace": f"{paces['repetition_min_pace']}-{paces['repetition_max_pace']} /km",
+            "e_pace": f"{paces.format_range(paces.easy_pace_range)} /km",
+            "m_pace": f"{paces.format_range(paces.marathon_pace_range)} /km",
+            "t_pace": f"{paces.format_range(paces.threshold_pace_range)} /km",
+            "i_pace": f"{paces.format_range(paces.interval_pace_range)} /km",
+            "r_pace": f"{paces.format_range(paces.repetition_pace_range)} /km",
         },
         "generation_context": {
             "volume_adjustment": volume_adjustment,

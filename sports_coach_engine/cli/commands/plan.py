@@ -412,209 +412,10 @@ def plan_validate_macro_command(ctx: typer.Context) -> None:
     raise typer.Exit(code=1)
 
 
-@app.command(name="generate-week")
-def plan_generate_week_command(
-    ctx: typer.Context,
-    week: Optional[int] = typer.Option(
-        None,
-        "--week",
-        help="Week number to generate (defaults to next unpopulated week)"
-    ),
-    run_days: str = typer.Option(
-        ...,
-        "--run-days",
-        help="Comma-separated weekday indices to run (0=Mon..6=Sun), e.g., '0,2,6'"
-    ),
-    long_run_day: int = typer.Option(
-        ...,
-        "--long-run-day",
-        help="Weekday index for long run (0=Mon..6=Sun)"
-    ),
-    long_run_pct: float = typer.Option(
-        ...,
-        "--long-run-pct",
-        help="Long run fraction of weekly volume (e.g., 0.45)"
-    ),
-    easy_run_paces: str = typer.Option(
-        ...,
-        "--easy-run-paces",
-        help="Easy run pace range (e.g., '6:30-6:50')"
-    ),
-    long_run_pace: str = typer.Option(
-        ...,
-        "--long-run-pace",
-        help="Long run pace range (e.g., '6:30-6:50')"
-    ),
-    structure: Optional[str] = typer.Option(
-        None,
-        "--structure",
-        help="Optional descriptive structure string (e.g., '3 easy + 1 long')"
-    ),
-    out: Optional[str] = typer.Option(
-        None,
-        "--out",
-        help="Output path for weekly JSON (defaults to /tmp/weekly_plan_w<week>.json)"
-    ),
-    allow_populated: bool = typer.Option(
-        False,
-        "--allow-populated",
-        help="Allow generating for a week that already has workouts"
-    ),
-) -> None:
-    """Generate a single week's intent-based plan JSON (no apply)."""
-    from datetime import date as dt_date
-
-    def parse_run_days(value: str) -> list[int]:
-        value = value.strip()
-        if value.startswith("["):
-            try:
-                parsed = json.loads(value)
-            except json.JSONDecodeError as e:
-                raise ValueError(f"Invalid JSON array for run_days: {e}") from e
-            if not isinstance(parsed, list):
-                raise ValueError("run_days JSON must be an array of integers")
-            return parsed
-        parts = [p.strip() for p in value.split(",") if p.strip()]
-        if not parts:
-            raise ValueError("run_days must include at least one day")
-        return [int(p) for p in parts]
-
-    plan_result = get_current_plan()
-    if isinstance(plan_result, PlanError):
-        envelope = api_result_to_envelope(plan_result, success_message="")
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    plan = plan_result
-
-    target_week = None
-    if week is not None:
-        for w in plan.weeks:
-            if w.week_number == week:
-                target_week = w
-                break
-        if target_week is None:
-            envelope = create_error_envelope(
-                error_type="not_found",
-                message=f"Week {week} not found in current plan",
-            )
-            output_json(envelope)
-            raise typer.Exit(code=2)
-    else:
-        for w in plan.weeks:
-            if not w.workouts:
-                target_week = w
-                break
-        if target_week is None:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message="All weeks already populated; specify --week to regenerate",
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-    if target_week.workouts and not allow_populated:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Week {target_week.week_number} already has workouts. Use --allow-populated to proceed.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    try:
-        run_days_list = parse_run_days(run_days)
-    except ValueError as e:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=str(e),
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    if not all(isinstance(d, int) for d in run_days_list):
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="run_days must be integers (0=Mon..6=Sun)",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    if any(d < 0 or d > 6 for d in run_days_list):
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="run_days must be within 0-6 (Mon=0 .. Sun=6)",
-            data={"run_days": run_days_list},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    run_days_list = sorted(set(run_days_list))
-    if long_run_day not in run_days_list:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="long_run_day must be included in run_days",
-            data={"long_run_day": long_run_day, "run_days": run_days_list},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    if long_run_pct <= 0 or long_run_pct >= 1:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="long_run_pct must be between 0 and 1",
-            data={"long_run_pct": long_run_pct},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    structure_text = structure
-    if structure_text is None:
-        structure_text = f"{max(len(run_days_list) - 1, 0)} easy + 1 long"
-
-    weekly_payload = {
-        "weeks": [
-            {
-                "week_number": target_week.week_number,
-                "phase": target_week.phase,
-                "start_date": target_week.start_date.isoformat()
-                if isinstance(target_week.start_date, dt_date)
-                else str(target_week.start_date),
-                "end_date": target_week.end_date.isoformat()
-                if isinstance(target_week.end_date, dt_date)
-                else str(target_week.end_date),
-                "target_volume_km": target_week.target_volume_km,
-                "target_systemic_load_au": getattr(target_week, "target_systemic_load_au", 0.0),
-                "workout_pattern": {
-                    "structure": structure_text,
-                    "run_days": run_days_list,
-                    "long_run_day": long_run_day,
-                    "long_run_pct": long_run_pct,
-                    "easy_run_paces": easy_run_paces,
-                    "long_run_pace": long_run_pace,
-                },
-            }
-        ]
-    }
-
-    out_path = out or f"/tmp/weekly_plan_w{target_week.week_number}.json"
-    out_file = Path(out_path)
-    out_file.parent.mkdir(parents=True, exist_ok=True)
-    out_file.write_text(json.dumps(weekly_payload, indent=2))
-
-    envelope = create_success_envelope(
-        message=f"Weekly plan JSON generated for week {target_week.week_number}",
-        data={
-            "week_number": target_week.week_number,
-            "file": str(out_file),
-            "phase": target_week.phase,
-            "target_volume_km": target_week.target_volume_km,
-            "run_days": run_days_list,
-            "long_run_day": long_run_day,
-            "long_run_pct": long_run_pct,
-        },
-    )
-    output_json(envelope)
-    raise typer.Exit(code=0)
+# REMOVED: generate-week command
+# Violated CLI-first philosophy by using rule-based workout generation.
+# AI Coach now designs exact workouts using LLM capabilities.
+# See weekly-plan-generate skill for data retrieval workflow.
 
 
 @app.command(name="populate")
@@ -911,6 +712,102 @@ def plan_validate_week_command(
         }
         print(json_module.dumps(result, indent=2))
         raise typer.Exit(code=1)
+
+
+@app.command(name="export-week")
+def plan_export_week_command(
+    ctx: typer.Context,
+    week: int = typer.Option(..., "--week", help="Week number to export (1-indexed)"),
+    out: str = typer.Option(..., "--out", help="Output JSON file path"),
+) -> None:
+    """Export existing week to JSON for modification.
+
+    Useful for:
+    - Modifying an existing week's workouts
+    - Creating a template based on a similar week
+    - Copying structure to a new week
+
+    The exported JSON contains the complete week structure with all workouts
+    in explicit format, ready for AI Coach to modify and re-apply.
+
+    Examples:
+        sce plan export-week --week 1 --out /tmp/week1.json
+        sce plan export-week --week 3 --out /tmp/week3_modified.json
+    """
+    from datetime import date as dt_date
+
+    # Load current plan
+    plan_result = get_current_plan()
+    if isinstance(plan_result, PlanError):
+        envelope = api_result_to_envelope(plan_result, success_message="")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    plan = plan_result
+
+    # Find target week
+    target_week = None
+    for w in plan.weeks:
+        if w.week_number == week:
+            target_week = w
+            break
+
+    if target_week is None:
+        envelope = create_error_envelope(
+            error_type="not_found",
+            message=f"Week {week} not found in current plan",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=2)
+
+    # Build export payload (explicit format)
+    week_export = {
+        "weeks": [
+            {
+                "week_number": target_week.week_number,
+                "phase": target_week.phase,
+                "start_date": target_week.start_date.isoformat()
+                if isinstance(target_week.start_date, dt_date)
+                else str(target_week.start_date),
+                "end_date": target_week.end_date.isoformat()
+                if isinstance(target_week.end_date, dt_date)
+                else str(target_week.end_date),
+                "target_volume_km": target_week.target_volume_km,
+                "target_systemic_load_au": target_week.target_systemic_load_au,
+                "workouts": [
+                    {
+                        "date": w.date.isoformat() if isinstance(w.date, dt_date) else str(w.date),
+                        "day_of_week": w.day_of_week,
+                        "workout_type": w.workout_type,
+                        "distance_km": w.distance_km,
+                        "pace_range": f"{w.pace_range_min_km}-{w.pace_range_max_km}" if w.pace_range_min_km else None,
+                        "target_rpe": w.target_rpe,
+                        "notes": w.notes,
+                    }
+                    for w in target_week.workouts
+                ],
+                "is_recovery_week": target_week.is_recovery_week,
+                "notes": target_week.notes,
+            }
+        ]
+    }
+
+    # Write to file
+    out_file = Path(out)
+    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file.write_text(json.dumps(week_export, indent=2))
+
+    envelope = create_success_envelope(
+        message=f"Week {week} exported to {out}",
+        data={
+            "week_number": week,
+            "file": str(out_file.absolute()),
+            "workouts_count": len(target_week.workouts),
+            "target_volume_km": target_week.target_volume_km,
+        },
+    )
+    output_json(envelope)
+    raise typer.Exit(code=0)
 
 
 @app.command(name="update-from")
