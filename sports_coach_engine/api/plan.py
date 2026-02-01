@@ -818,7 +818,13 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     plan = result
 
-    # 2. Validate explicit workout format
+    # 2. Get athlete profile for HR zone calculation
+    profile_result = get_profile()
+    max_hr = 189  # default fallback
+    if not isinstance(profile_result, ProfileError):
+        max_hr = profile_result.vital_signs.max_hr
+
+    # 3. Validate explicit workout format and enrich
     processed_weeks_data = []
     week_hint_map = {w.week_number: w.workout_structure_hints for w in plan.weeks}
     for week_data in weeks_data:
@@ -839,8 +845,31 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
                 message=f"Week {week_data.get('week_number', '?')} validation failed:\n{error_messages}"
             )
 
-        # Workouts already in week_data, just add hints if missing
+        # Enrich workouts with HR zones and parent context
         week_data_copy = week_data.copy()
+        for workout in week_data_copy["workouts"]:
+            # Copy parent phase (used by enrichment.py for phase-specific guidance)
+            if "phase" not in workout and "phase" in week_data_copy:
+                workout["phase"] = week_data_copy["phase"]
+
+            # Calculate HR zones if not provided
+            if "hr_range_low" not in workout and "workout_type" in workout:
+                workout_type = workout["workout_type"]
+                hr_zones = {
+                    "easy": (0.65, 0.75),
+                    "long_run": (0.70, 0.78),
+                    "tempo": (0.85, 0.90),
+                    "intervals": (0.90, 0.95),
+                    "fartlek": (0.75, 0.85),
+                    "strides": (0.90, 0.95),
+                    "race": (0.90, 0.98),
+                    "rest": (0.50, 0.65),
+                }
+                low_pct, high_pct = hr_zones.get(workout_type, (0.65, 0.75))
+                workout["hr_range_low"] = int(max_hr * low_pct)
+                workout["hr_range_high"] = int(max_hr * high_pct)
+
+        # Add hints if missing
         if "workout_structure_hints" not in week_data_copy:
             hints = week_hint_map.get(week_data_copy["week_number"])
             if hints is None:

@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator, model_valida
 from typing import Optional, List, Literal
 from datetime import date
 from enum import Enum
+import uuid
 
 
 # ============================================================
@@ -93,51 +94,138 @@ class WorkoutPrescription(BaseModel):
     """
     Complete workout specification with intensity targets and structure.
 
+    **Usage**: AI Coach provides minimal input (date, type, distance, RPE, pace).
+    System auto-enriches with calculated/derived fields during validation.
+
     Represents a single prescribed workout with all details needed for
     execution: type, duration/distance, intensity guidance (RPE, pace, HR),
     and purpose. Used by athletes to understand what to do and why.
     """
 
-    # Identity
-    id: str = Field(..., description="Unique workout identifier")
-    week_number: int = Field(..., ge=1, description="Week number in plan (1-indexed)")
-    day_of_week: int = Field(..., ge=0, le=6, description="Day of week (0=Monday, 6=Sunday)")
+    # ============================================================
+    # REQUIRED: AI Coach Must Provide (Core Coaching Decisions)
+    # ============================================================
+
     date: date
-
-    # Type and phase
+    day_of_week: int = Field(..., ge=0, le=6, description="Day of week (0=Monday, 6=Sunday)")
     workout_type: WorkoutType = Field(..., description="Workout classification")
-    phase: PlanPhase = Field(..., description="Periodization phase")
-
-    # Duration/distance
-    duration_minutes: int = Field(..., gt=0, description="Target duration in minutes")
-    distance_km: Optional[float] = Field(None, ge=0, description="Target distance (if distance-based)")
-
-    # Intensity guidance
-    intensity_zone: IntensityZone = Field(..., description="Training intensity zone")
+    distance_km: float = Field(..., ge=0, description="Target distance (km)")
     target_rpe: int = Field(..., ge=1, le=10, description="Target RPE on 1-10 scale")
 
-    # Pace/HR ranges (optional, based on profile data)
-    pace_range_min_km: Optional[str] = Field(None, description="Minimum pace per km (e.g., '5:30')")
-    pace_range_max_km: Optional[str] = Field(None, description="Maximum pace per km (e.g., '5:45')")
+    # Pacing (coaching decision - simple format)
+    pace_range: Optional[str] = Field(None, description="Simple format: '6:00-6:30' (auto-splits)")
+
+    # ============================================================
+    # REQUIRED FOR QUALITY WORKOUTS: AI Coach Designs Structure
+    # ============================================================
+
+    # Structured workouts (required for tempo/intervals, null for easy/long)
+    intervals: Optional[list[dict]] = Field(
+        None,
+        description="For tempo/intervals: [{'distance': '800m', 'reps': 4, 'recovery': '2:00'}]"
+    )
+
+    # Warmup/cooldown (coaching decision - varies by workout type)
+    warmup_minutes: int = Field(default=0, ge=0, description="Coach designs based on workout intensity")
+    cooldown_minutes: int = Field(default=0, ge=0, description="Coach designs based on workout intensity")
+
+    # Priority designation (coaching decision)
+    key_workout: bool = Field(default=False, description="Coach marks week's critical session(s)")
+
+    # Coach notes (highly encouraged)
+    notes: Optional[str] = Field(None, description="Additional guidance or cues")
+
+    # ============================================================
+    # AUTO-FILLED: System Generates/Derives (No Coach Input Needed)
+    # ============================================================
+
+    # Identity (auto-generated)
+    id: str = Field(default_factory=lambda: f"w_{uuid.uuid4().hex[:8]}")
+
+    # Context (copied from parent week - used by enrichment.py for phase-specific guidance)
+    phase: Optional[PlanPhase] = None
+
+    # Intensity (derived from workout_type)
+    intensity_zone: Optional[IntensityZone] = None
+    purpose: Optional[str] = None
+
+    # Pacing details (auto-split from pace_range if provided)
+    pace_range_min_km: Optional[str] = None
+    pace_range_max_km: Optional[str] = None
+
+    # Heart rate (calculated from profile.max_hr + workout_type)
     hr_range_low: Optional[int] = Field(None, ge=30, le=220, description="Lower HR bound (bpm)")
     hr_range_high: Optional[int] = Field(None, ge=30, le=220, description="Upper HR bound (bpm)")
 
-    # Structure (for intervals/tempo)
-    intervals: Optional[list[dict]] = Field(
-        None,
-        description="Interval structure (e.g., [{'distance': '800m', 'reps': 4}])"
-    )
-    warmup_minutes: int = Field(10, ge=0, description="Warmup duration")
-    cooldown_minutes: int = Field(10, ge=0, description="Cooldown duration")
+    # Duration (calculated from distance + pace, needed for validation/enrichment)
+    duration_minutes: Optional[int] = Field(None, gt=0, description="Auto-calculated from distance + pace")
 
-    # Purpose and metadata
-    purpose: str = Field(..., description="Why this workout (training stimulus)")
-    notes: Optional[str] = Field(None, description="Additional guidance or cues")
-    key_workout: bool = Field(False, description="Is this a key session for the week?")
+    @model_validator(mode='after')
+    def enrich_workout(self) -> 'WorkoutPrescription':
+        """Auto-fill derived/calculated fields from minimal input."""
 
-    # Status tracking
-    status: str = Field("scheduled", description="scheduled | completed | skipped | adapted")
-    execution: Optional[dict] = Field(None, description="Actual execution data (filled post-workout)")
+        # 1. Split pace_range if provided
+        if self.pace_range and not self.pace_range_min_km:
+            parts = self.pace_range.split("-")
+            self.pace_range_min_km = parts[0].strip()
+            self.pace_range_max_km = parts[1].strip() if len(parts) > 1 else parts[0].strip()
+
+        # 2. Calculate duration from distance + pace
+        if self.duration_minutes is None and self.distance_km and self.pace_range_min_km:
+            # Parse pace (format: "6:00" means 6 minutes per km)
+            try:
+                pace_parts = self.pace_range_min_km.split(":")
+                pace_min_per_km = int(pace_parts[0]) + (int(pace_parts[1]) / 60.0 if len(pace_parts) > 1 else 0)
+                workout_duration = int(self.distance_km * pace_min_per_km)
+                # Add warmup/cooldown to total duration
+                self.duration_minutes = workout_duration + self.warmup_minutes + self.cooldown_minutes
+            except (ValueError, IndexError):
+                # If pace parsing fails, estimate based on workout type
+                type_to_pace = {
+                    WorkoutType.EASY: 6.0,
+                    WorkoutType.LONG_RUN: 6.5,
+                    WorkoutType.TEMPO: 5.5,
+                    WorkoutType.INTERVALS: 5.0,
+                    WorkoutType.FARTLEK: 5.75,
+                    WorkoutType.STRIDES: 6.0,
+                    WorkoutType.RACE: 5.0,
+                }
+                pace_min_per_km = type_to_pace.get(self.workout_type, 6.0)
+                workout_duration = int(self.distance_km * pace_min_per_km)
+                self.duration_minutes = workout_duration + self.warmup_minutes + self.cooldown_minutes
+
+        # 3. Derive intensity zone from workout type
+        if self.intensity_zone is None:
+            type_to_zone = {
+                WorkoutType.EASY: IntensityZone.ZONE_2,
+                WorkoutType.LONG_RUN: IntensityZone.ZONE_2,
+                WorkoutType.TEMPO: IntensityZone.ZONE_4,
+                WorkoutType.INTERVALS: IntensityZone.ZONE_5,
+                WorkoutType.REST: IntensityZone.ZONE_1,
+                WorkoutType.FARTLEK: IntensityZone.ZONE_3,
+                WorkoutType.STRIDES: IntensityZone.ZONE_5,
+                WorkoutType.RACE: IntensityZone.ZONE_5,
+            }
+            self.intensity_zone = type_to_zone.get(self.workout_type, IntensityZone.ZONE_2)
+
+        # 4. Generate purpose from workout type
+        if self.purpose is None:
+            type_to_purpose = {
+                WorkoutType.EASY: "Build aerobic endurance and maintain base fitness",
+                WorkoutType.LONG_RUN: "Develop endurance and mental toughness for sustained efforts",
+                WorkoutType.TEMPO: "Improve lactate threshold and race pace efficiency",
+                WorkoutType.INTERVALS: "Boost VO2max and running economy at high speeds",
+                WorkoutType.FARTLEK: "Develop speed and aerobic capacity through unstructured efforts",
+                WorkoutType.STRIDES: "Improve running form and neuromuscular coordination",
+                WorkoutType.RACE: "Execute race strategy and test fitness",
+                WorkoutType.REST: "Recovery and adaptation",
+            }
+            self.purpose = type_to_purpose.get(self.workout_type, "Aerobic development")
+
+        # NOTE: intervals, warmup_minutes, cooldown_minutes, key_workout are coaching decisions
+        # DO NOT auto-set them - coach must explicitly design these for athlete execution
+
+        return self
 
     model_config = ConfigDict(
         use_enum_values=True,

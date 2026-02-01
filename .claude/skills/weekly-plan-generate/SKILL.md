@@ -110,13 +110,19 @@ Create explicit workout JSON manually with exact distances. Example structure:
           "notes": "Pre-travel run, bank volume"
         },
         {
-          "date": "2026-02-07",
-          "day_of_week": 4,
-          "workout_type": "easy",
-          "distance_km": 7.0,
-          "pace_range": "6:00-6:30",
-          "target_rpe": 4,
-          "notes": "Post-travel shake-out"
+          "date": "2026-02-05",
+          "day_of_week": 2,
+          "workout_type": "tempo",
+          "distance_km": 10.0,
+          "pace_range": "5:20-5:35",
+          "target_rpe": 7,
+          "intervals": [
+            {"duration_minutes": 20, "pace": "5:25-5:30", "type": "threshold", "recovery": "0"}
+          ],
+          "warmup_minutes": 15,
+          "cooldown_minutes": 10,
+          "key_workout": true,
+          "notes": "First quality session of build phase"
         },
         {
           "date": "2026-02-09",
@@ -125,7 +131,9 @@ Create explicit workout JSON manually with exact distances. Example structure:
           "distance_km": 12.0,
           "pace_range": "6:20-6:40",
           "target_rpe": 5,
-          "notes": "Priority workout, key aerobic session"
+          "warmup_minutes": 5,
+          "key_workout": true,
+          "notes": "Priority aerobic session - key workout of the week"
         }
       ],
       "is_recovery_week": false
@@ -136,7 +144,12 @@ Create explicit workout JSON manually with exact distances. Example structure:
 
 **CRITICAL REQUIREMENTS**:
 - Workouts MUST sum exactly to target_volume_km (±0.1km tolerance)
-- Each workout needs: date, day_of_week, workout_type, distance_km, pace_range, target_rpe
+- **Required fields (all workouts)**: date, day_of_week, workout_type, distance_km, pace_range, target_rpe
+- **Structure fields (YOU must design these - critical for athlete execution)**:
+  - `intervals`: For tempo/interval workouts, define exact structure (e.g., `[{"duration_minutes": 20, "pace": "5:30-5:40", "type": "threshold", "recovery": "0"}]`). Omit for easy/long runs.
+  - `warmup_minutes`: Design based on workout intensity (0-5min for easy, 10-20min for quality, 5-10min for long runs)
+  - `cooldown_minutes`: Design based on workout intensity (0-5min for easy, 10-15min for quality, 0-5min for long runs)
+  - `key_workout`: Mark 1-2 priority sessions per week that athlete shouldn't skip (typically long run + one quality session)
 - Use day_of_week numbering: 0=Monday, 6=Sunday
 - Follow workout_structure_hints constraints (max quality sessions, long run %, etc.)
 - Apply 80/20 principle (80% easy, 20% quality)
