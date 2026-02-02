@@ -1,0 +1,195 @@
+# CLI: Sync Command
+
+## Overview
+
+The `sce sync` command imports activities from Strava and updates all training metrics (CTL, ATL, TSB, ACWR, readiness).
+
+**Smart sync detection** (default):
+- **First-time sync**: Fetches 365 days to establish CTL baseline
+- **Subsequent syncs**: Incremental (only new activities since last sync)
+
+**Explicit override** with `--since` flag for specific windows.
+
+---
+
+## Usage
+
+### Automatic Smart Sync (Recommended)
+
+```bash
+sce sync              # Smart detection
+```
+
+**How it works:**
+- Scans existing activity files
+- If no activities exist → 365 days (first-time)
+- If activities exist → incremental sync from latest activity date + 1-day buffer
+- Buffer catches activities uploaded late to Strava
+
+**Benefits:**
+- Fast weekly syncs (5-10 seconds vs 20-30 seconds)
+- Automatic - no manual window calculation needed
+- Truly incremental - works whether it's been 1 day or 60 days since last sync
+
+---
+
+## Explicit Sync Windows
+
+Override smart detection with `--since` flag:
+
+### Relative Windows
+
+```bash
+sce sync --since 7d   # Last 7 days (weekly analysis)
+sce sync --since 14d  # Last 2 weeks
+sce sync --since 30d  # Last month
+sce sync --since 365d # Full year (explicit)
+```
+
+### Absolute Dates
+
+```bash
+sce sync --since 2026-01-01              # Since specific date
+sce sync --since 2026-01-01T00:00:00     # With time (ISO 8601)
+```
+
+---
+
+## Common Workflows
+
+### Weekly Coaching Session
+
+```bash
+sce auth status
+sce sync              # Smart sync (incremental, ~5-10 seconds)
+sce status
+sce week
+```
+
+**Optional explicit recent sync:**
+```bash
+sce sync --since 7d   # Force last week only (faster for weekly analysis)
+```
+
+### First-Time Setup
+
+```bash
+sce sync              # Automatic 365-day sync
+```
+
+Expects rate limit hit (~100 activities). If you want full year history:
+```bash
+# Wait 15 minutes for rate limit reset
+sce sync              # Resumes automatically from where it left off
+```
+
+### After Long Break (30-60 days)
+
+```bash
+sce sync              # Smart sync catches up automatically
+```
+
+No manual calculation needed - automatically syncs all missing days.
+
+---
+
+## Rate Limit Handling
+
+**Strava API limits**: 100 requests per 15 minutes
+
+**Greedy sync**: Fetches newest activities first, stops at rate limit
+
+**If rate limit hit:**
+1. All fetched data is saved successfully
+2. Wait 15 minutes for rate limit reset
+3. Run `sce sync` again (automatically resumes)
+
+**Success message includes tip:**
+```
+Synced 95 new activities from Strava.
+
+Strava rate limit hit. Data saved successfully.
+Wait 15 minutes and run 'sce sync' again to continue.
+```
+
+---
+
+## Technical Details
+
+### Smart Sync Detection Logic
+
+1. **Scan activity files**: `data/activities/**/*.yaml`
+2. **Extract dates from filenames**: `YYYY-MM-DD_sport_duration.yaml`
+3. **Find latest activity date**
+4. **Calculate lookback**:
+   - No activities → 365 days
+   - Activities exist → `max(days_since_latest + 1, 1)`
+5. **1-day buffer**: Catches late-uploaded activities
+
+**Performance:**
+- Filename parsing (not file reading) → ~50-100ms for 1000 files
+- No impact on sync performance
+
+### Idempotency
+
+Safe to run multiple times:
+- Duplicate activities are skipped (by ID)
+- Metrics are recalculated from scratch
+- No data loss on repeated syncs
+
+---
+
+## Examples
+
+### Smart sync (first-time)
+```bash
+$ sce sync
+First-time sync: fetching last 365 days to establish training baseline...
+Synced 127 new activities from Strava.
+```
+
+### Smart sync (incremental, 2 days since last sync)
+```bash
+$ sce sync
+Incremental sync: fetching activities since 2026-01-31 (3 days)...
+Synced 2 new activities from Strava.
+```
+
+### Explicit weekly window
+```bash
+$ sce sync --since 7d
+Syncing activities since 2026-01-26...
+Synced 5 new activities from Strava.
+```
+
+### Rate limit handling
+```bash
+$ sce sync
+First-time sync: fetching last 365 days to establish training baseline...
+Synced 95 new activities from Strava.
+
+Strava rate limit hit. Data saved successfully.
+Wait 15 minutes and run 'sce sync' again to continue.
+
+# 15 minutes later...
+$ sce sync
+Incremental sync: fetching activities since 2025-06-01 (245 days)...
+Synced 32 new activities from Strava.
+```
+
+---
+
+## Related Commands
+
+- `sce auth status` - Check Strava authentication
+- `sce status` - View current metrics (CTL/ATL/TSB)
+- `sce week` - View weekly summary
+- `sce profile analyze` - Analyze synced activity patterns
+
+---
+
+## See Also
+
+- [CLI Index](index.md)
+- [Core Concepts](core_concepts.md)
+- [Authentication](cli_auth.md)

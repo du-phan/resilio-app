@@ -8,7 +8,7 @@ Complete reference for Sports Coach Engine command-line interface, optimized for
 
 ```bash
 sce auth status          # Check auth → [Auth Commands](cli_auth.md)
-sce sync                 # Import activities → [Data Commands](cli_data.md)
+sce sync                 # Import activities (smart sync) → [Sync Commands](cli_sync.md)
 sce status               # Current metrics → [Metrics Commands](cli_metrics.md)
 sce dates today          # Date context → [Date Commands](cli_dates.md)
 sce today                # Today's workout → [Metrics Commands](cli_metrics.md)
@@ -21,7 +21,8 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 
 ### Session Initialization
 - [**Authentication**](cli_auth.md) - OAuth flow, token management (`sce auth`)
-- [**Data Management**](cli_data.md) - Init, sync, activity import (`sce init`, `sce sync`)
+- [**Sync**](cli_sync.md) - Smart sync, Strava activity import (`sce sync`)
+- [**Data Management**](cli_data.md) - Init, activity import (`sce init`)
 - [**Dates**](cli_dates.md) - Date utilities for planning (`sce dates`)
 
 ### Daily Coaching
@@ -52,7 +53,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 |---------|----------|------|
 | `sce auth {url\|exchange\|status}` | Auth | [cli_auth.md](cli_auth.md) |
 | `sce init` | Data | [cli_data.md](cli_data.md) |
-| `sce sync [--since]` | Data | [cli_data.md](cli_data.md) |
+| `sce sync [--since]` | Sync | [cli_sync.md](cli_sync.md) |
 | `sce status` | Metrics | [cli_metrics.md](cli_metrics.md) |
 | `sce today [--date]` | Metrics | [cli_metrics.md](cli_metrics.md) |
 | `sce week` | Metrics | [cli_metrics.md](cli_metrics.md) |

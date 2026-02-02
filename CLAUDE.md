@@ -70,8 +70,13 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 
 ```bash
 sce auth status
-sce sync
+sce sync              # Smart sync: 365 days first-time, incremental after
 sce status
+```
+
+**Weekly coaching workflow** - For explicit recent sync:
+```bash
+sce sync --since 7d   # Last week only (faster for weekly analysis)
 ```
 
 **Common coaching commands**:

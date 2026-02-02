@@ -21,6 +21,16 @@ This skill provides complete weekly training analysis by:
 
 ## Workflow
 
+### Step 0: Optional Quick Sync (for faster weekly analysis)
+
+For faster weekly analysis, optionally sync only last week's data:
+
+```bash
+sce sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
+```
+
+**Note**: Without `--since`, `sce sync` uses smart detection (incremental sync from last activity).
+
 ### Step 1: Get Weekly Summary
 
 ```bash

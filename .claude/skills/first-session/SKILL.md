@@ -62,17 +62,17 @@ sce auth status
 ### Step 2: Sync Activities
 
 ```bash
-sce sync
+sce sync  # First-time: fetches 365 days automatically
 ```
 
-**Post-sync overview (MANDATORY)**  
+**Post-sync overview (MANDATORY)**
 After every `sce sync`, give the athlete a brief overview. Use the sync command output (JSON envelope or success message); optionally run `sce profile analyze` to get exact date range.
 
 Include:
 
 1. **Number of activities synced** (from sync result: `activities_imported` or success message).
 2. **Time span covered** (weeks or months). From sync result if evident; otherwise from `sce profile analyze` → `data_window_days`, `synced_data_start`, `synced_data_end`.
-3. **Rate limit** (if hit): state that Strava’s limit was reached, how much data was imported (e.g. “most recent X weeks/months”), and that more history will backfill on later syncs.
+3. **Rate limit status** (if hit): Explain that the athlete has imported sufficient data for baseline metrics.
 
 Keep the overview to 2–4 sentences. Do not skip this step.
 
@@ -86,6 +86,23 @@ Keep the overview to 2–4 sentences. Do not skip this step.
 The sync process is "greedy"—it fetches the most recent activities first and proceeds backwards until it hits the 52-week limit OR the Strava API rate limit (100 requests / 15 min).
 
 **CRITICAL**: Since 52 weeks usually contains >100 activities, the **initial sync will almost certainly pause due to rate limits**. This is expected behavior.
+
+**If rate limit hit (~100 activities):**
+
+Present this choice with coaching expertise:
+
+"I've imported your last [X] activities (about [Y] months). This is typically enough to compute reliable training metrics like CTL and establish your fitness baseline.
+
+**Options:**
+1. **Continue with current data (recommended)** - 100 activities provides solid baseline
+2. **Wait 15 minutes and sync more** - If you want more exhaustive history from the past year
+
+What would you prefer?"
+
+**If athlete chooses option 2:**
+- Wait 15 minutes for rate limit reset
+- Run `sce sync` again (will automatically resume from where it left off)
+- Repeat until athlete is satisfied or full year is synced
 
 **Success message**: "Imported X activities (covering approximately Y weeks). Your CTL is Z."
 

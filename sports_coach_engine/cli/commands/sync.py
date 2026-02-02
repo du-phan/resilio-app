@@ -5,7 +5,7 @@ Syncs activities from Strava, normalizes data, calculates loads and metrics.
 Idempotent - safe to run multiple times.
 """
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 import typer
@@ -13,7 +13,64 @@ import typer
 from sports_coach_engine.api import sync_strava
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import output_json
+from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
+from sports_coach_engine.schemas.activity import NormalizedActivity
+from sports_coach_engine.schemas.repository import ReadOptions, RepoError
+
+
+def _determine_sync_window(repo: RepositoryIO) -> int:
+    """
+    Determine optimal sync window based on existing data.
+
+    Implements smart sync detection:
+    - If no activities exist → 365 days (first-time sync)
+    - If activities exist → days since latest activity + 1 (incremental with buffer)
+
+    The 1-day buffer ensures we catch activities uploaded late to Strava.
+
+    Args:
+        repo: Repository instance for accessing activity files
+
+    Returns:
+        int: Number of days to look back
+    """
+    # Find latest activity date by scanning activity files
+    activities_pattern = "data/activities/**/*.yaml"
+    latest_date = None
+
+    try:
+        for file_path in repo.list_files(activities_pattern):
+            # Quick parse: extract date from filename (faster than reading file)
+            # Filename format: data/activities/YYYY-MM/YYYY-MM-DD_sport_duration.yaml
+            filename = file_path.name
+            if filename.startswith('.'):
+                continue  # Skip hidden files like .DS_Store
+
+            try:
+                # Extract date from filename (first 10 chars: YYYY-MM-DD)
+                date_str = filename[:10]
+                activity_date = date.fromisoformat(date_str)
+
+                if latest_date is None or activity_date > latest_date:
+                    latest_date = activity_date
+            except (ValueError, IndexError):
+                # If filename doesn't match expected format, skip it
+                # (Could be a malformed file or non-activity file)
+                continue
+
+    except Exception:
+        # If anything goes wrong during scan, fall back to first-time sync
+        return DEFAULT_SYNC_LOOKBACK_DAYS
+
+    # First-time sync: no activities exist
+    if latest_date is None:
+        return DEFAULT_SYNC_LOOKBACK_DAYS  # 365 days
+
+    # Incremental sync: calculate days since latest + 1-day buffer
+    # Buffer catches activities uploaded late to Strava
+    days_since = (date.today() - latest_date).days
+    return max(days_since + 1, 1)  # Minimum 1 day
 
 
 def sync_command(
@@ -29,13 +86,16 @@ def sync_command(
     Fetches activities from Strava, normalizes sport types, calculates RPE estimates,
     computes training loads, and updates daily/weekly metrics.
 
-    By default, syncs the last year (365 days) to capture full seasonal training patterns.
-    Use --since to specify a custom window.
+    By default, uses smart sync detection:
+    - First-time sync: 365 days (establishes CTL baseline)
+    - Subsequent syncs: Incremental (only new activities since last sync)
+
+    Use --since to override smart detection with explicit window.
 
     Examples:
-        sce sync                    # Sync last year (365 days)
+        sce sync                    # Smart sync (365 days first-time, incremental after)
         sce sync --since 2026-01-01 # Sync since specific date
-        sce sync --since 14d        # Sync last 14 days (recent activities only)
+        sce sync --since 7d         # Sync last 7 days (explicit override)
 
     Note: The sync is "greedy" - it fetches newest activities first and stops
     if the Strava API rate limit is hit. This ensures you always get the
@@ -48,13 +108,20 @@ def sync_command(
         since_dt = _parse_since_param(since)
         typer.echo(f"Syncing activities since {since_dt.date()}...")
     else:
-        # Default: use 365-day window
-        # Note: DEFAULT_SYNC_LOOKBACK_DAYS is imported from core.strava
-        since_dt = datetime.now() - timedelta(days=DEFAULT_SYNC_LOOKBACK_DAYS)
-        typer.echo(
-            f"Syncing last {DEFAULT_SYNC_LOOKBACK_DAYS} days of history (default). "
-            f"Use --since to change."
-        )
+        # Smart detection: first-time vs. incremental
+        repo = RepositoryIO()
+        lookback_days = _determine_sync_window(repo)
+        since_dt = datetime.now() - timedelta(days=lookback_days)
+
+        if lookback_days == DEFAULT_SYNC_LOOKBACK_DAYS:
+            typer.echo(
+                "First-time sync: fetching last 365 days to establish training baseline..."
+            )
+        else:
+            typer.echo(
+                f"Incremental sync: fetching activities since {since_dt.date()} "
+                f"({lookback_days} days)..."
+            )
 
     # Call API
     result = sync_strava(since=since_dt)
@@ -119,10 +186,12 @@ def _build_success_message(result: any) -> str:
         return "Sync completed"
 
     msg = f"Synced {result.activities_new} new activities from Strava."
-    
+
     # Add rate limit tip if hit
     if result.errors and any("Rate Limit" in str(e) for e in result.errors):
-        msg += "\n\nTIP: Strava rate limit hit. I've saved everything fetched so far. "
-        msg += "Wait ~15 minutes and sync again to continue backwards."
-    
+        msg += (
+            "\n\nStrava rate limit hit. Data saved successfully. "
+            "Wait 15 minutes and run 'sce sync' again to continue."
+        )
+
     return msg
