@@ -155,7 +155,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce analysis gaps`** | Detect gaps | [Analysis](cli_analysis.md#sce-analysis-gaps) |
 | **`sce analysis load`** | Multi-sport breakdown | [Analysis](cli_analysis.md#sce-analysis-load) |
 | **`sce analysis capacity`** | Check capacity | [Analysis](cli_analysis.md#sce-analysis-capacity) |
-| **`sce risk assess`** | Assess injury risk | [Risk](cli_risk.md#sce-risk-assess) |
+| **`sce risk assess`** | Assess training risk | [Risk](cli_risk.md#sce-risk-assess) |
 | **`sce risk recovery-window`** | Estimate recovery | [Risk](cli_risk.md#sce-risk-recovery-window) |
 | **`sce risk forecast`** | Forecast stress | [Risk](cli_risk.md#sce-risk-forecast) |
 | **`sce risk taper-status`** | Verify taper | [Risk](cli_risk.md#sce-risk-taper-status) |

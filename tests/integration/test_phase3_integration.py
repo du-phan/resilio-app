@@ -151,7 +151,7 @@ class TestPhase3Integration:
         assert day29_metrics.acwr_available is True
         assert day29_metrics.acwr is not None
         assert day29_metrics.acwr.zone in [ACWRZone.SAFE, ACWRZone.UNDERTRAINED, ACWRZone.CAUTION]
-        assert day29_metrics.readiness.confidence in [ConfidenceLevel.MEDIUM, ConfidenceLevel.HIGH]
+        assert day29_metrics.readiness.confidence == ConfidenceLevel.LOW
 
         # Day 30: End of cycle
         day30_metrics = batch_results[29]
@@ -254,7 +254,7 @@ class TestPhase3Integration:
         assert metrics2.readiness.score == metrics1.readiness.score
 
     def test_acwr_injury_risk_detection(self, tmp_path, monkeypatch):
-        """Test that ACWR correctly identifies injury risk from load spikes."""
+        """Test that ACWR correctly identifies load spikes."""
         (tmp_path / ".git").mkdir()
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()

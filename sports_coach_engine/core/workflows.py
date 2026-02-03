@@ -529,7 +529,7 @@ def run_sync_workflow(
     This workflow orchestrates the complete activity import process:
     1. Fetch activities from Strava (M5)
     2. Normalize sport types and units (M6)
-    3. Extract RPE and wellness signals (M7)
+    3. Extract RPE and injury/illness flags (M7)
     4. Calculate systemic and lower-body loads (M8)
     5. Compute CTL/ATL/TSB/ACWR metrics (M9)
     6. Check for adaptation triggers (M11)
@@ -1025,7 +1025,6 @@ def run_plan_generation(
 def run_adaptation_check(
     repo: RepositoryIO,
     target_date: Optional[date] = None,
-    wellness_override: Optional[dict] = None,
 ) -> AdaptationCheckResult:
     """
     Check if adaptations are needed for a specific workout.
@@ -1039,8 +1038,6 @@ def run_adaptation_check(
     Args:
         repo: Repository for file operations
         target_date: Date to check adaptations for (default: today)
-        wellness_override: Manual wellness signals (fatigue, illness)
-
     Returns:
         AdaptationCheckResult with triggers, risk assessment, and auto-overrides
 

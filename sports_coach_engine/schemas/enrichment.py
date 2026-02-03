@@ -52,6 +52,46 @@ class MetricInterpretation(BaseModel):
     )
 
 
+class ReadinessSummary(BaseModel):
+    """Primary readiness signal for quick decision-making."""
+
+    score: int
+    level: str
+    confidence: Optional[str] = None
+    data_coverage: Optional[str] = None
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        populate_by_name=True,
+    )
+
+
+class LoadSpikeSummary(BaseModel):
+    """Primary load spike signal based on ACWR."""
+
+    acwr: Optional[float] = None
+    zone: Optional[str] = None
+    available: bool = False
+    caveat: Optional[str] = None
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        populate_by_name=True,
+    )
+
+
+class PrimarySignals(BaseModel):
+    """Primary signals summary for the AI Coach."""
+
+    readiness: ReadinessSummary
+    load_spike: LoadSpikeSummary
+
+    model_config = ConfigDict(
+        use_enum_values=True,
+        populate_by_name=True,
+    )
+
+
 class EnrichedMetrics(BaseModel):
     """Complete metrics snapshot with interpretations."""
 
@@ -62,6 +102,7 @@ class EnrichedMetrics(BaseModel):
     acwr: Optional[MetricInterpretation] = None  # Requires 28+ days
     readiness: MetricInterpretation
     disclosure_level: DisclosureLevel
+    primary_signals: Optional[PrimarySignals] = None
 
     # Intensity distribution (always included)
     low_intensity_percent: float     # Percent in zone 1-2

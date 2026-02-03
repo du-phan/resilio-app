@@ -262,7 +262,6 @@ def run_plan_generation(
 def run_adaptation_check(
     repo: "RepositoryIO",
     target_date: Optional[date] = None,
-    wellness_override: Optional[dict] = None,
 ) -> AdaptationCheckResult:
     """
     Check if adaptations are needed for a workout.
@@ -272,8 +271,6 @@ def run_adaptation_check(
     Args:
         repo: Repository for file operations
         target_date: Date to check adaptations for (default: today)
-        wellness_override: Manual wellness signals (fatigue, illness, etc.)
-
     Returns:
         AdaptationCheckResult with suggestions and any auto-applied changes
     """
@@ -403,7 +400,7 @@ def run_sync_workflow(
             _save_activity(normalized, loads, repo)
 
             # M13: Extract memories if relevant signals found
-            if analysis.injury_flags or analysis.illness_flags or analysis.wellness_signals:
+            if analysis.injury_flags or analysis.illness_flags:
                 memories = extract_memories_from_activity(normalized, analysis, repo)
                 memories_extracted.extend(memories)
 
@@ -582,7 +579,6 @@ def run_plan_generation(
 def run_adaptation_check(
     repo: RepositoryIO,
     target_date: Optional[date] = None,
-    wellness_override: Optional[dict] = None,
 ) -> AdaptationCheckResult:
     """Check if adaptations are needed for a workout."""
 
@@ -605,27 +601,9 @@ def run_adaptation_check(
             )],
         )
 
-    # Check for safety overrides (illness, very low readiness, high ACWR)
-    if wellness_override and wellness_override.get('illness'):
-        # Automatic safety override - apply immediately
-        override_result = apply_safety_override('illness', repo)
-        auto_applied.append(AppliedAdaptation(
-            reason="illness",
-            description=override_result.description,
-            original_workout=override_result.original,
-            adapted_workout=override_result.adapted,
-        ))
-
-        return AdaptationCheckResult(
-            success=True,
-            suggestions=[],  # No suggestions needed - safety override applied
-            auto_applied=auto_applied,
-            readiness=readiness,
-            errors=errors,
-        )
-
+    # Check for safety overrides (very low readiness + high ACWR)
     if metrics.acwr and metrics.acwr > 1.5:
-        # High injury risk - automatic reduction
+        # High load spike - automatic reduction
         override_result = apply_safety_override('high_acwr', repo)
         auto_applied.append(AppliedAdaptation(
             reason="high_acwr",
@@ -639,7 +617,6 @@ def run_adaptation_check(
         suggestions = evaluate_adaptations(
             repo,
             target_date=target,
-            wellness_override=wellness_override,
         )
     except Exception as e:
         errors.append(WorkflowError(
@@ -941,14 +918,12 @@ def test_adaptation_check_auto_applies_safety():
     """Critical conditions trigger automatic safety overrides."""
     repo = MockRepositoryIO()
 
-    result = run_adaptation_check(
-        repo,
-        wellness_override={"illness": True}
-    )
+    # Assume metrics already indicate ACWR > 1.5 and very low readiness
+    result = run_adaptation_check(repo)
 
     assert result.success
     assert len(result.auto_applied) == 1
-    assert result.auto_applied[0].reason == "illness"
+    assert result.auto_applied[0].reason == "high_acwr"
     assert len(result.suggestions) == 0  # No suggestions when safety applied
 ```
 

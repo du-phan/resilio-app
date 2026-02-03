@@ -74,7 +74,7 @@ sce activity list --since 2026-01-01
 **Use cases:**
 
 - Review recent training notes for patterns
-- Find activities with injury/wellness mentions
+- Find activities with injury/illness mentions
 - Get context for coaching decisions
 
 ---
@@ -138,7 +138,7 @@ sce activity search --query "pain" --sport run --since 60d
 **Use cases:**
 
 - Find injury/pain mentions across activities
-- Search for fatigue/wellness signals
+- Search for fatigue/illness signals
 - Identify recurring patterns
 - Gather evidence for memory creation
 

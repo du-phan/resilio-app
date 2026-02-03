@@ -5,12 +5,12 @@ Provides computational toolkit functions for adaptation detection and risk asses
 
 Toolkit Functions (Return Data, Not Decisions):
 - Trigger detection: Detect physiological thresholds breached (ACWR, readiness, TSB, load)
-- Risk assessment: Calculate injury probability if athlete overrides triggers
+- Risk assessment: Calculate heuristic risk index if athlete overrides triggers
 - Recovery estimation: Estimate days needed to recover from triggered state
 
 Claude Code Responsibilities (Uses Context to Decide):
 - Adaptation decisions: "ACWR 1.45 + climbed yesterday → downgrade, move, or proceed?"
-- Risk interpretation: "15% injury risk + knee history → what does this mean for THIS athlete?"
+- Risk interpretation: "Elevated risk index + knee history → what does this mean for THIS athlete?"
 - Option presentation: Present trade-offs and let athlete decide
 - Pattern learning: Track athlete preferences (prefers moving vs downgrading)
 
@@ -270,9 +270,9 @@ def assess_override_risk(
     athlete_history: Optional[list] = None,
 ) -> OverrideRiskAssessment:
     """
-    Assess injury risk if athlete ignores triggers (Toolkit Paradigm).
+    Assess risk if athlete ignores triggers (Toolkit Paradigm).
 
-    Calculates quantitative risk probability based on:
+    Calculates quantitative risk index based on:
     1. Number and severity of triggers
     2. Workout type and intensity
     3. Athlete injury history (from M13 memories)
@@ -288,27 +288,27 @@ def assess_override_risk(
         athlete_history: Optional M13 memories (for injury history)
 
     Returns:
-        OverrideRiskAssessment with risk level, injury probability, evidence
+        OverrideRiskAssessment with risk level, heuristic risk index, evidence
 
     Example:
         >>> triggers = [AdaptationTrigger(type="acwr_elevated", value=1.45, ...)]
         >>> risk = assess_override_risk(triggers, workout, athlete_history)
         >>> risk.risk_level
         'moderate'
-        >>> risk.injury_probability
-        0.15
+        >>> risk.risk_index
+        0.15  # heuristic risk index (0.0-1.0)
     """
     if not triggers:
         # No triggers = minimal risk
         return OverrideRiskAssessment(
             risk_level=RiskLevel.LOW,
-            injury_probability=0.05,
+            risk_index=0.05,
             risk_factors=[],
             recommendation="No significant risk factors detected",
             evidence=[],
         )
 
-    # Base risk (5% baseline for any training)
+    # Base risk index (5% baseline for any training)
     base_risk = 0.05
 
     # Add risk per trigger
@@ -343,16 +343,16 @@ def assess_override_risk(
             risk_factors.append("Previous injury history")
 
     # Cap at 1.0 (100%)
-    injury_probability = min(base_risk, 1.0)
+    risk_index = min(base_risk, 1.0)
 
     # Determine risk level
-    if injury_probability < 0.10:
+    if risk_index < 0.10:
         risk_level = RiskLevel.LOW
         recommendation = "Low risk - proceed with caution if feeling good"
-    elif injury_probability < 0.20:
+    elif risk_index < 0.20:
         risk_level = RiskLevel.MODERATE
         recommendation = "Moderate risk - consider easier workout or moving to different day"
-    elif injury_probability < 0.40:
+    elif risk_index < 0.40:
         risk_level = RiskLevel.HIGH
         recommendation = "High risk - strongly recommend adaptation (downgrade or rest)"
     else:
@@ -363,9 +363,9 @@ def assess_override_risk(
     evidence = []
     for trigger in triggers:
         if trigger.trigger_type == TriggerType.ACWR_ELEVATED:
-            evidence.append("ACWR 1.3-1.5 linked to increased injury risk (Gabbett, 2016)")
+            evidence.append("ACWR 1.3-1.5 linked to elevated load spike risk (Gabbett, 2016)")
         elif trigger.trigger_type == TriggerType.ACWR_HIGH_RISK:
-            evidence.append("ACWR >1.5 associated with 2-4x injury risk (Hulin et al., 2016)")
+            evidence.append("ACWR >1.5 associated with higher load spike risk (Hulin et al., 2016)")
         elif trigger.trigger_type == TriggerType.READINESS_VERY_LOW:
             evidence.append("Very low readiness increases injury susceptibility (Saw et al., 2016)")
         elif trigger.trigger_type == TriggerType.TSB_OVERREACHED:
@@ -373,7 +373,7 @@ def assess_override_risk(
 
     return OverrideRiskAssessment(
         risk_level=risk_level,
-        injury_probability=injury_probability,
+        risk_index=risk_index,
         risk_factors=risk_factors,
         recommendation=recommendation,
         evidence=evidence,
@@ -455,5 +455,3 @@ def estimate_recovery_time(
         confidence=confidence,
         factors=factors,
     )
-
-

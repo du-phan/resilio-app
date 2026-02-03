@@ -854,7 +854,7 @@ def api_assess_current_risk(
     recent_activities: List[Dict[str, Any]],
     planned_workout: Optional[Dict[str, Any]] = None,
 ) -> Union[CurrentRiskAssessment, AnalysisError]:
-    """Multi-factor injury risk combining ACWR, readiness, TSB, recent load."""
+    """Multi-factor training risk combining ACWR, readiness, TSB, recent load."""
     ...
 
 def api_estimate_recovery_window(
@@ -887,7 +887,7 @@ def api_assess_taper_status(
 - **Gap Detection:** CTL impact analysis, cause inference from notes (injury/illness keywords)
 - **Multi-Sport Load:** Systemic + lower-body breakdown by sport, priority adherence, fatigue flags
 - **Capacity Checks:** Validates planned volume against historical max, prevents untested loads
-- **Risk Assessment:** Multi-factor scoring (ACWR, readiness, TSB, recent load), injury probability
+- **Risk Assessment:** Multi-factor scoring (ACWR, readiness, TSB, recent load), heuristic risk index
 - **Recovery Windows:** Day-by-day checklist for returning to safe zones
 - **Stress Forecasting:** Projects metrics 1-4 weeks ahead, identifies risk windows
 - **Taper Verification:** Volume reduction, TSB trajectory, readiness trend tracking

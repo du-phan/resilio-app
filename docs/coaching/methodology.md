@@ -72,13 +72,14 @@ ATL_today = ATL_yesterday + (today_load - ATL_yesterday) / 7
 
 **Represents**: "Form" - the balance between fitness and fatigue
 
-| TSB Range  | State       | Interpretation              | When to Use               |
-| ---------- | ----------- | --------------------------- | ------------------------- |
-| < -25      | Overreached | High fatigue, need recovery | Consider rest week        |
-| -25 to -10 | Productive  | Optimal training zone       | Continue building         |
-| -10 to +5  | Fresh       | Good for quality work       | Schedule quality sessions |
-| +5 to +15  | Race Ready  | Peaked, ready to race       | Race week                 |
-| > +15      | Detraining  | Fitness declining           | Increase training         |
+| TSB Range   | State            | Interpretation                     | When to Use                         |
+| ---------- | ---------------- | ---------------------------------- | ----------------------------------- |
+| < -25      | Overreached      | High fatigue, need recovery        | Consider rest week                  |
+| -25 to -10 | Productive       | Optimal training zone              | Continue building                   |
+| -10 to +5  | Optimal          | Balanced for normal training       | Regular training                    |
+| +5 to +15  | Fresh            | Quality-ready                       | Schedule quality sessions           |
+| +15 to +25 | Race Ready       | Peak freshness for A-priority races | Race week / key event               |
+| > +25      | Detraining Risk  | Very fresh; risk of lost fitness   | Resume training if sustained        |
 
 **Use for**:
 
@@ -95,22 +96,21 @@ ATL_today = ATL_yesterday + (today_load - ATL_yesterday) / 7
 
 **Definition**: (7-day total load) / (28-day average daily load × 7)
 
-**Represents**: Injury risk from training load changes
+**Represents**: Load spike indicator from training load changes (relative signal)
 
-| ACWR Range | Zone    | Injury Risk       | When to Use               |
-| ---------- | ------- | ----------------- | ------------------------- |
-| 0.8-1.3    | Safe    | Normal (baseline) | Continue current training |
-| 1.3-1.5    | Caution | Elevated (1.5-2x) | Consider modification     |
-| > 1.5      | Danger  | High (2-4x)       | Reduce load immediately   |
+| ACWR Range | Zone    | Load Spike Signal     | When to Use               |
+| ---------- | ------- | --------------------- | ------------------------- |
+| 0.8-1.3    | Safe    | Stable load           | Continue current training |
+| 1.3-1.5    | Caution | Elevated recent load  | Consider modification     |
+| > 1.5      | Danger  | Significant load spike | Reduce load if needed     |
 
 **Use for**:
 
-- Evaluate injury risk from load spikes
+- Evaluate load spikes from recent training
 - Guide adaptation decisions
-- Prevent overtraining injuries
 - Manage training progressions safely
 
-**Evidence**: Research shows ACWR > 1.5 increases injury risk 2-4x compared to baseline. This is the single most important metric for injury prevention.
+**Note**: ACWR is a useful *relative* signal but does not predict injury. Use it with readiness, context, and athlete feedback.
 
 **Calculation**:
 
@@ -124,14 +124,12 @@ ACWR = acute_load / chronic_load
 
 ### Readiness Score (0-100)
 
-**Definition**: Weighted combination of multiple factors
+**Definition**: Weighted combination of objective factors
 
-**Components**:
-
-- TSB (20%): Current form
-- Recent trend (25%): Training trajectory (building vs declining)
-- Sleep (25%): Sleep quality/duration from activity notes
-- Wellness (30%): Subjective wellness signals from notes
+**Current implementation (objective-only, v0)**:
+- Uses TSB (40%) + load trend (40%) only
+- Score cap: **max 65**
+- Confidence: **LOW** (no subjective inputs in v0)
 
 | Score | Level     | Interpretation              | When to Use          |
 | ----- | --------- | --------------------------- | -------------------- |
@@ -147,7 +145,7 @@ ACWR = acute_load / chronic_load
 - Overall training readiness assessment
 - Balancing metrics with subjective feel
 
-**Key insight**: Readiness synthesizes objective metrics (TSB) with subjective signals (sleep, wellness) to provide a holistic view of training state.
+**Key insight**: Readiness synthesizes objective freshness signals (TSB + recent load trend) to guide day-to-day decisions in v0.
 
 ---
 
@@ -218,7 +216,7 @@ M11 (Adaptation Engine) detects physiological triggers that warrant coaching att
 
 | Trigger              | Threshold           | Severity    | Typical Response                    | Use Case                    |
 | -------------------- | ------------------- | ----------- | ----------------------------------- | --------------------------- |
-| ACWR_HIGH_RISK       | > 1.5               | 🔴 HIGH     | Downgrade or skip workout           | Injury prevention           |
+| ACWR_HIGH_RISK       | > 1.5               | 🔴 HIGH     | Downgrade or skip workout           | Load spike caution          |
 | ACWR_ELEVATED        | > 1.3               | 🟡 MODERATE | Consider downgrade, discuss options | Cautionary signal           |
 | READINESS_VERY_LOW   | < 35                | 🔴 HIGH     | Force rest or easy recovery         | Severe fatigue/illness      |
 | READINESS_LOW        | < 50                | 🟡 LOW      | Downgrade quality workouts          | Moderate fatigue            |
@@ -248,7 +246,7 @@ Your ACWR is 1.35 (slightly elevated - caution zone) and readiness is 45 (low).
 Tempo run scheduled today. What would you prefer?
 
 A) Easy 30min run (safest)
-   - Lower injury risk, maintains aerobic base
+   - Lower risk, maintains aerobic base
    - ACWR stays manageable
 
 B) Move tempo to Thursday
@@ -256,7 +254,7 @@ B) Move tempo to Thursday
    - You climbed yesterday (elevated lower-body load)
 
 C) Proceed with tempo as planned
-   - Moderate risk (~15% injury probability)
+   - Moderate risk (heuristic)
    - Your form is good (TSB -8)
 
 I'm leaning toward A or B given your readiness.
@@ -271,7 +269,7 @@ Evidence-based training rules provided as **validation tools**. Claude Code deci
 | Guardrail                    | Rule                                          | Rationale                                       | Enforcement                  |
 | ---------------------------- | --------------------------------------------- | ----------------------------------------------- | ---------------------------- |
 | 80/20 intensity distribution | ~80% low intensity, ≤20% moderate+high        | Maximizes aerobic development, minimizes injury | ≥3 run days/week             |
-| ACWR safety                  | ACWR > 1.5 = high injury risk                 | 2-4x increased injury probability               | M11 detects → Claude decides |
+| ACWR safety                  | ACWR > 1.5 = significant load spike           | Load spike indicator (not a prediction)         | M11 detects → Claude decides |
 | Long run caps                | ≤25-30% of weekly run volume, ≤2.5 hours      | Prevents overuse injuries                       | Weekly validation            |
 | Hard/easy separation         | No back-to-back high-intensity (RPE ≥7)       | Recovery between quality sessions               | Across all sports            |
 | T/I/R volume limits          | Threshold ≤10%, Intervals ≤8%, Repetition ≤5% | Prevents excessive intensity                    | Of weekly mileage            |
@@ -503,7 +501,7 @@ Claude Code: reasons with full context
     - Metrics show: CTL 44 (solid fitness), TSB -8 (productive zone), ACWR 1.3 (caution)
     - Triggers: ACWR elevated, lower-body load high yesterday (climbing)
     - Memories: "Athlete climbs Tuesdays", "Knee history: sensitive after 18km+"
-    - Risk: Moderate (15% injury probability)
+    - Risk: Moderate (heuristic index)
     │
     ▼
 Claude Code: presents coaching decision with reasoning
@@ -540,7 +538,7 @@ When running and other sports conflict:
 
   - Example: Climbing is primary → move Friday run if Wednesday climbing was hard
 
-- **`running_goal_wins`**: Keep key runs unless injury risk
+- **`running_goal_wins`**: Keep key runs unless risk signals are high
 
   - Example: Race in 6 weeks → protect Saturday long run, adjust climbing
 
@@ -613,7 +611,7 @@ sce analysis load
 ### For Adaptation Decisions
 
 1. **Collect context**: metrics + triggers + memories + conversation
-2. **Assess risk**: Use `assess_override_risk()` for injury probability
+2. **Assess risk**: Use `assess_override_risk()` for heuristic risk index
 3. **Present options**: Give athlete choices with trade-offs
 4. **Explain reasoning**: Link to CTL, ACWR, readiness, or phase
 

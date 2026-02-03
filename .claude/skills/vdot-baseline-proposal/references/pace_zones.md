@@ -217,7 +217,7 @@ sce vdot adjust --pace 5:00 --condition altitude --severity 7000
 
 **Weekly pattern**: 2-3 easy runs + 1 short quality session + 1 short long run
 
-**Purpose**: Reduce fatigue, maintain fitness, peak for race day (TSB target: +5 to +15)
+**Purpose**: Reduce fatigue, maintain fitness, peak for race day (TSB target: +15 to +25 for A-race; +5 to +15 for quality-ready)
 
 ---
 

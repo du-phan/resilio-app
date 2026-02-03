@@ -278,7 +278,7 @@ Tempo run scheduled today. What would you prefer?
 
 A) Easy 30min run (safest) - maintains aerobic base, ACWR stays manageable
 B) Move tempo to Thursday - 2 extra recovery days
-C) Proceed as planned - moderate risk (~15% injury probability)
+C) Proceed as planned - moderate risk (~15% risk index)
 ```
 
 ## Scenario 7: Plan Regeneration After Injury
@@ -302,7 +302,7 @@ sce goal set --type [same_goal] --date [adjusted_date]
 - CTL will have dropped during recovery - use new CTL as baseline
 - Volume restart: 50-70% of pre-injury volume
 - Gradual ramp: slower progression than initial plan
-- Monitor triggers closely: ACWR, readiness, wellness signals
+- Monitor triggers closely: ACWR, readiness, injury/illness flags
 
 ## Scenario 8: Multi-Sport Conflict Resolution
 
@@ -362,7 +362,7 @@ sce status  # TSB will be very negative
 # - Half: 7-10 days easy
 # - Marathon: 14-21 days easy + full recovery week
 
-# Monitor readiness and wellness signals
+# Monitor readiness and injury/illness flags
 sce week  # Track recovery progression
 ```
 
@@ -514,7 +514,7 @@ sce status
 # ✓ Completion: 4/4 runs completed - excellent
 # ✓ Intensity: 82% easy, 18% hard - good 80/20 discipline
 # ✓ CTL progression: +2.2 points (target was +2.0) - on track
-# ✓ ACWR: 1.05 (safe zone) - no injury risk spike
+# ✓ ACWR: 1.05 (safe zone) - no load spike
 # ✓ Readiness: 72 (good) - ready for next week's progression
 # ✓ Activity notes: No pain/injury keywords detected
 
@@ -548,7 +548,7 @@ sce plan show --format json | jq '.weeks[] | select(.week_number == 2)'
 
 # Decision logic:
 # - Adherence 100% → no downgrade needed
-# - ACWR 1.05 (safe) → no injury risk
+# - ACWR 1.05 (safe) → no load spike
 # - Readiness 72 (good) → can handle progression
 # - No illness/injury signals → proceed as planned
 # → Use volume_adjustment = 1.0 (no change from macro target)
@@ -706,7 +706,7 @@ sce today  # Will show Monday's workout (4.5 km easy run)
 ```bash
 # After Week 2 analysis:
 # - Completion: 75% (3/4 runs completed)
-# - ACWR: 1.42 (elevated risk)
+# - ACWR: 1.42 (elevated load spike)
 # - Readiness: 48 (low)
 # - Activity notes: "felt tired all week"
 
@@ -726,7 +726,7 @@ sce plan generate-week \
 **Coach explains**:
 ```
 "I noticed Week 2 was tough - you missed one run and noted feeling tired.
-Your ACWR jumped to 1.42 (elevated injury risk) and readiness is 48 (low).
+Your ACWR jumped to 1.42 (elevated load spike) and readiness is 48 (low).
 
 Let's reduce Week 3 volume by 10% to let your body catch up. Instead of
 30 km, we'll do 27 km - still progressing, but more conservatively.

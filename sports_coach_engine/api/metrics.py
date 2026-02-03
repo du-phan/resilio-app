@@ -124,12 +124,10 @@ def get_readiness() -> Union[ReadinessScore, MetricsError]:
         ReadinessScore with:
         - score: 0-100 overall readiness
         - level: "rest_recommended", "easy_only", "reduce_intensity", "ready", "primed"
-        - confidence: "low", "medium", "high" based on data availability
+        - confidence: "low" in v0 (objective-only readiness)
         - components: Breakdown of contributing factors
           - tsb_contribution: Form contribution
           - load_trend_contribution: Recent load trend
-          - sleep_contribution: Sleep quality (if available)
-          - wellness_contribution: Subjective wellness (if available)
         - recommendation: Suggested workout intensity
         - injury_flag_override: Whether injury flag forced low readiness
         - illness_flag_override: Whether illness flag forced low readiness

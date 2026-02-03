@@ -2,7 +2,7 @@
 Metrics schemas - Training metrics data models.
 
 This module defines all Pydantic schemas for training metrics computation,
-including CTL/ATL/TSB (fitness/fatigue/form), ACWR (injury risk), and
+including CTL/ATL/TSB (fitness/fatigue/form), ACWR (load spike indicator), and
 readiness scores. These schemas support the M9 Metrics Engine.
 """
 
@@ -22,16 +22,17 @@ class TSBZone(str, Enum):
     OVERREACHED = "overreached"      # < -25 (excessive fatigue)
     PRODUCTIVE = "productive"         # -25 to -10 (building fitness)
     OPTIMAL = "optimal"              # -10 to +5 (ready for quality)
-    FRESH = "fresh"                  # +5 to +15 (good for racing)
-    PEAKED = "peaked"                # > +15 (possibly detrained)
+    FRESH = "fresh"                  # +5 to +15 (quality-ready)
+    RACE_READY = "race_ready"        # +15 to +25 (peak for A-priority races)
+    DETRAINING_RISK = "detraining_risk"  # > +25 (if sustained)
 
 
 class ACWRZone(str, Enum):
-    """Acute:Chronic Workload Ratio zones for injury risk."""
+    """Acute:Chronic Workload Ratio zones (load spike indicator)."""
     UNDERTRAINED = "undertrained"    # < 0.8 (fitness declining)
-    SAFE = "safe"                    # 0.8-1.3 (optimal adaptation)
-    CAUTION = "caution"              # 1.3-1.5 (elevated injury risk)
-    HIGH_RISK = "high_risk"          # > 1.5 (2-4x injury probability)
+    SAFE = "safe"                    # 0.8-1.3 (stable load)
+    CAUTION = "caution"              # 1.3-1.5 (elevated load)
+    HIGH_RISK = "high_risk"          # > 1.5 (significant spike)
 
 
 class ReadinessLevel(str, Enum):
@@ -45,9 +46,9 @@ class ReadinessLevel(str, Enum):
 
 class ConfidenceLevel(str, Enum):
     """Confidence level for computed metrics."""
-    LOW = "low"          # < 14 days data or missing subjective inputs
-    MEDIUM = "medium"    # 14-42 days data or partial inputs
-    HIGH = "high"        # 42+ days data with complete inputs
+    LOW = "low"          # Insufficient history or missing subjective inputs
+    MEDIUM = "medium"    # Adequate history with partial inputs
+    HIGH = "high"        # Adequate history with complete inputs
 
 
 class CTLZone(str, Enum):
@@ -111,8 +112,8 @@ class ACWRMetrics(BaseModel):
     acute_load_7d: float            # Sum of last 7 days
     chronic_load_28d: float         # Average of last 28 days
 
-    # Safety flag
-    injury_risk_elevated: bool      # True if > 1.3
+    # Load spike flag
+    load_spike_elevated: bool       # True if > 1.3
 
     model_config = ConfigDict(
         use_enum_values=True,
@@ -123,12 +124,10 @@ class ACWRMetrics(BaseModel):
 class ReadinessComponents(BaseModel):
     """Breakdown of readiness score components."""
 
-    tsb_contribution: float                    # 0-100, weighted by 20%
-    load_trend_contribution: float             # 0-100, weighted by 25%
-    sleep_contribution: Optional[float] = None      # 0-100, weighted by 25%
-    wellness_contribution: Optional[float] = None   # 0-100, weighted by 30%
+    tsb_contribution: float                    # 0-100 component value
+    load_trend_contribution: float             # 0-100 component value
 
-    # Actual weights used (sum to 100%, redistributed if components missing)
+    # Actual weights used (objective-only in v0)
     weights_used: dict = Field(default_factory=dict)
 
     model_config = ConfigDict(
@@ -143,6 +142,7 @@ class ReadinessScore(BaseModel):
     score: int  # 0-100
     level: ReadinessLevel
     confidence: ConfidenceLevel
+    data_coverage: Optional[str] = None  # "objective_only"
 
     # Components breakdown
     components: ReadinessComponents

@@ -56,7 +56,7 @@ Periodization structures training into distinct phases, each with specific adapt
 - Week 1: 70% volume, maintain intensity
 - Week 2: 50% volume, shorter quality sessions
 - Race week: 40% volume, easy runs + race-pace strides
-- TSB target: +5 to +15 (race ready)
+- TSB target: +15 to +25 for A-priority race day; +5 to +15 for quality-ready
 
 **CTL targets**: Slight decline (-2 to -4 points total) acceptable for freshness
 

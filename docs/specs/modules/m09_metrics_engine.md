@@ -13,7 +13,7 @@
 
 ## 2. Purpose
 
-Aggregate activity loads into meaningful training metrics. Computes CTL (fitness), ATL (fatigue), TSB (form), ACWR (injury risk), and readiness scores that drive plan generation and adaptation decisions.
+Aggregate activity loads into meaningful training metrics. Computes CTL (fitness), ATL (fatigue), TSB (form), ACWR (load spike indicator), and readiness scores that drive plan generation and adaptation decisions.
 
 ### 2.1 Scope Boundaries
 
@@ -70,7 +70,7 @@ class ReadinessLevel(str, Enum):
 
 
 class ACWRZone(str, Enum):
-    """ACWR risk classification"""
+    """ACWR load spike classification"""
     SAFE = "safe"             # 0.8 - 1.3
     CAUTION = "caution"       # 1.3 - 1.5
     HIGH_RISK = "high_risk"   # > 1.5
@@ -79,11 +79,12 @@ class ACWRZone(str, Enum):
 
 class TSBZone(str, Enum):
     """TSB training status"""
-    PEAKED = "peaked"                 # > +15
-    FRESH = "fresh"                   # +5 to +15
-    OPTIMAL = "optimal"               # -10 to +5
-    PRODUCTIVE = "productive"         # -25 to -10
-    OVERREACHED = "overreached"       # < -25
+    DETRAINING_RISK = "detraining_risk"  # > +25
+    RACE_READY = "race_ready"            # +15 to +25
+    FRESH = "fresh"                      # +5 to +15
+    OPTIMAL = "optimal"                  # -10 to +5
+    PRODUCTIVE = "productive"            # -25 to -10
+    OVERREACHED = "overreached"          # < -25
 
 
 class DailyLoad(BaseModel):
@@ -110,15 +111,23 @@ class ACWRMetrics(BaseModel):
     zone: ACWRZone
     acute_load_7d: float    # Sum of last 7 days
     chronic_load_28d: float # Average of last 28 days
-    days_of_data: int       # For confidence
+    load_spike_elevated: bool  # True if > 1.3
 
 
 class ReadinessScore(BaseModel):
     """Overall readiness assessment"""
     score: int              # 0-100
     level: ReadinessLevel
-    confidence: str         # "high" | "medium" | "low"
-    components: dict = Field(default_factory=dict)  # Breakdown of contributing factors
+    confidence: str         # "low" (objective-only in v0)
+    data_coverage: Optional[str] = None  # "objective_only"
+    components: "ReadinessComponents"
+
+
+class ReadinessComponents(BaseModel):
+    """Breakdown of readiness score components (objective-only)"""
+    tsb_contribution: float
+    load_trend_contribution: float
+    weights_used: dict = Field(default_factory=dict)
 
 
 class IntensityDistribution(BaseModel):
@@ -260,26 +269,22 @@ def compute_acwr(
 
 def compute_readiness(
     tsb: float,
-    acwr: Optional[float],
-    recent_load_trend: float,
-    wellness_signals: Optional[dict],
-    flags: Optional[dict],
+    load_trend: float,
+    injury_flags: Optional[list[str]],
+    illness_flags: Optional[list[str]],
 ) -> ReadinessScore:
     """
     Compute overall readiness score (0-100).
 
-    Weighted components:
-    - TSB (20%): Higher TSB = more fresh
-    - Recent load trend (25%): Declining load = recovering
-    - Sleep quality (25%): If available
-    - Subjective wellness (30%): If available
+    Weighted components (objective-only in v0):
+    - TSB (40%): Higher TSB = more fresh
+    - Load trend (40%): Declining load = recovering
 
     Args:
         tsb: Training Stress Balance
-        acwr: ACWR (may be None)
-        recent_load_trend: Change in 3-day load vs 7-day average
-        wellness_signals: Sleep, soreness from M7
-        flags: Active injury/illness flags
+        load_trend: 0-100 load trend score
+        injury_flags: Active injury keywords
+        illness_flags: Active illness keywords
 
     Returns:
         Readiness score with confidence level
@@ -465,10 +470,12 @@ def compute_ctl_atl(
 
 def _classify_tsb_zone(tsb: float) -> TSBZone:
     """Classify TSB into training zones"""
-    if tsb > 15:
-        return TSBZone.PEAKED      # Very fresh, possibly detrained
+    if tsb > 25:
+        return TSBZone.DETRAINING_RISK  # Very fresh, risk of detraining if sustained
+    elif tsb > 15:
+        return TSBZone.RACE_READY  # Peak freshness for A-priority races
     elif tsb > 5:
-        return TSBZone.FRESH       # Ready for racing/quality
+        return TSBZone.FRESH       # Quality-ready
     elif tsb > -10:
         return TSBZone.OPTIMAL     # Ideal for quality work
     elif tsb > -25:
@@ -492,11 +499,11 @@ def compute_acwr(
         Acute = Sum of last 7 days
         Chronic = Average daily load over last 28 days
 
-    ACWR Zones (evidence-based):
+    ACWR Zones (load spike indicator):
         < 0.8: Undertrained (fitness declining)
-        0.8 - 1.3: Safe zone (optimal adaptation)
-        1.3 - 1.5: Caution (elevated injury risk)
-        > 1.5: High risk (2-4x injury probability)
+        0.8 - 1.3: Safe zone (stable load)
+        1.3 - 1.5: Caution (elevated load)
+        > 1.5: High risk (significant spike)
     """
     # Build date -> load map
     load_map = {d: load for d, load in daily_loads}
@@ -516,31 +523,14 @@ def compute_acwr(
             chronic_total += load_map[day]
             chronic_days += 1
 
-    # Count days of data
-    days_of_data = len([d for d, _ in daily_loads if d <= target_date])
-
-    # Compute ACWR (with zero-division protection)
-    if chronic_days < 21:  # Require at least 21 of 28 days
-        # Not enough data for reliable ACWR
-        return ACWRMetrics(
-            acwr=None,
-            zone=ACWRZone.SAFE,  # Default to safe
-            acute_load_7d=acute_total,
-            chronic_load_28d=0.0,
-            days_of_data=days_of_data,
-        )
+    # Require full 28 days for reliable ACWR
+    if chronic_days < 28:
+        return None
 
     chronic_avg = chronic_total / 28  # Use 28-day window, not actual days
 
     if chronic_avg == 0:
-        # No chronic load = new user, ACWR undefined
-        return ACWRMetrics(
-            acwr=None,
-            zone=ACWRZone.UNDERTRAINED,
-            acute_load_7d=acute_total,
-            chronic_load_28d=0.0,
-            days_of_data=days_of_data,
-        )
+        return None
 
     acwr = acute_total / (chronic_avg * 7)  # Normalize to weekly
 
@@ -551,20 +541,16 @@ def compute_acwr(
     # Correct formula from literature:
     acute_weekly_avg = acute_total / 7
     chronic_weekly_avg = chronic_total / 28
-    acwr = acute_weekly_avg / chronic_weekly_avg if chronic_weekly_avg > 0 else None
 
-    # Classify zone
-    zone = _classify_acwr_zone(acwr) if acwr else ACWRZone.SAFE
+    load_spike_elevated = acwr > 1.3
 
     return ACWRMetrics(
-        acwr=round(acwr, 2) if acwr else None,
-        zone=zone,
+        acwr=round(acwr, 2),
+        zone=_classify_acwr_zone(acwr),
         acute_load_7d=round(acute_total, 1),
-        chronic_load_28d=round(chronic_total / 28, 1) if chronic_days > 0 else 0.0,
-        days_of_data=days_of_data,
+        chronic_load_28d=round(chronic_avg, 1),
+        load_spike_elevated=load_spike_elevated,
     )
-
-
 def _classify_acwr_zone(acwr: float) -> ACWRZone:
     """Classify ACWR into risk zones"""
     if acwr < 0.8:
@@ -579,130 +565,34 @@ def _classify_acwr_zone(acwr: float) -> ACWRZone:
 
 ### 5.3 Readiness Score Computation
 
+**Implementation (v0, objective-only)**:
+- Inputs: TSB and load trend only.
+- Weights: TSB 40%, load trend 40%.
+- Score capped at **65** to avoid false precision.
+- Confidence: **LOW** (objective-only).
+- `data_coverage`: `"objective_only"`.
+
 ```python
 def compute_readiness(
     tsb: float,
-    acwr: Optional[float],
-    recent_load_trend: float,
-    wellness_signals: Optional[dict],
-    flags: Optional[dict],
+    load_trend: float,
+    injury_flags: Optional[list[str]] = None,
+    illness_flags: Optional[list[str]] = None,
 ) -> ReadinessScore:
     """
-    Compute overall readiness score (0-100).
-
-    Component weights:
-    - TSB contribution (20%): Maps TSB to 0-100 scale
-    - Load trend (25%): Recovering = higher, accumulating = lower
-    - Sleep quality (25%): Good = 80+, poor = 40-
-    - Subjective wellness (30%): From notes analysis
-
-    Score interpretation:
-    - 80-100: Fresh, ready for hard effort
-    - 60-79: Ready for normal training
-    - 40-59: Tired, reduce intensity
-    - 0-39: Exhausted, rest recommended
+    Compute overall readiness score (0-100) using objective signals only.
     """
-    components = {}
-    total_weight = 0.0
-    weighted_sum = 0.0
+    tsb_score = clamp((tsb + 30) * 2.5, 0, 100)
+    score = min(tsb_score * 0.40 + load_trend * 0.40, 65)
 
-    # 1. TSB component (20%)
-    # Map TSB to 0-100: TSB +20 = 100, TSB -30 = 0
-    tsb_score = max(0, min(100, (tsb + 30) * 2))
-    components["tsb"] = {"score": round(tsb_score, 1), "weight": 0.20}
-    weighted_sum += tsb_score * 0.20
-    total_weight += 0.20
+    # Safety overrides
+    if injury_flags:
+        score = min(score, 25)
+    elif illness_flags:
+        score = min(score, 35)
 
-    # 2. Load trend component (25%)
-    # recent_load_trend: negative = recovering, positive = accumulating
-    if recent_load_trend < -0.2:
-        trend_score = 80  # Recovering
-    elif recent_load_trend < 0.1:
-        trend_score = 65  # Stable
-    elif recent_load_trend < 0.3:
-        trend_score = 50  # Moderate increase
-    else:
-        trend_score = 30  # High accumulation
-    components["load_trend"] = {"score": trend_score, "weight": 0.25}
-    weighted_sum += trend_score * 0.25
-    total_weight += 0.25
-
-    # 3. Sleep quality (25%) - if available
-    if wellness_signals and "sleep_quality" in wellness_signals:
-        sleep_map = {"good": 85, "normal": 70, "poor": 40, "disrupted": 30}
-        sleep_score = sleep_map.get(wellness_signals["sleep_quality"], 60)
-        components["sleep"] = {"score": sleep_score, "weight": 0.25}
-        weighted_sum += sleep_score * 0.25
-        total_weight += 0.25
-    else:
-        # No sleep data - redistribute weight
-        components["sleep"] = {"score": None, "weight": 0, "note": "No data"}
-
-    # 4. Subjective wellness (30%) - if available
-    if wellness_signals and "soreness_level" in wellness_signals:
-        # Soreness 1-10 maps to score: 1 = 90, 10 = 20
-        soreness = wellness_signals["soreness_level"]
-        wellness_score = max(20, 100 - (soreness * 8))
-        components["wellness"] = {"score": wellness_score, "weight": 0.30}
-        weighted_sum += wellness_score * 0.30
-        total_weight += 0.30
-    else:
-        components["wellness"] = {"score": None, "weight": 0, "note": "No data"}
-
-    # Calculate base score
-    if total_weight > 0:
-        base_score = weighted_sum / total_weight
-    else:
-        base_score = 50  # Default if no data
-
-    # Apply flag modifiers
-    score = base_score
-    if flags:
-        if flags.get("injury", {}).get("active"):
-            score = min(score, 25)  # Cap at 25 if injured
-            components["injury_cap"] = 25
-        if flags.get("illness", {}).get("active"):
-            severity = flags["illness"].get("severity", "mild")
-            if severity == "severe":
-                score = min(score, 20)  # Force rest
-            else:
-                score = min(score, 35)
-            components["illness_cap"] = score
-
-    # ACWR modifier
-    if acwr and acwr > 1.5:
-        score = min(score, 35)  # High injury risk = rest
-        components["acwr_cap"] = 35
-
-    # Determine confidence
-    available_components = sum(
-        1 for k, v in components.items()
-        if isinstance(v, dict) and v.get("score") is not None
-    )
-    if available_components >= 3:
-        confidence = "high"
-    elif available_components >= 2:
-        confidence = "medium"
-    else:
-        confidence = "low"
-
-    # Determine level
-    final_score = round(score)
-    if final_score >= 80:
-        level = ReadinessLevel.FRESH
-    elif final_score >= 60:
-        level = ReadinessLevel.READY
-    elif final_score >= 40:
-        level = ReadinessLevel.TIRED
-    else:
-        level = ReadinessLevel.EXHAUSTED
-
-    return ReadinessScore(
-        score=final_score,
-        level=level,
-        confidence=confidence,
-        components=components,
-    )
+    confidence = "low"
+    data_coverage = "objective_only"
 ```
 
 ### 5.4 Intensity Distribution
@@ -874,16 +764,15 @@ def compute_daily_metrics(
     # 5. Compute load trend (3-day vs 7-day average)
     recent_load_trend = _compute_load_trend(daily_loads, target_date)
 
-    # 6. Extract wellness signals (from flags or activities)
-    wellness_signals = _extract_wellness_signals(flags, activities)
+    # 6. Extract injury/illness flags (from activities)
+    injury_flags, illness_flags = _extract_activity_flags(activities)
 
-    # 7. Compute readiness
+    # 7. Compute readiness (objective-only)
     readiness = compute_readiness(
         tsb=ctl_atl.tsb,
-        acwr=acwr.acwr,
-        recent_load_trend=recent_load_trend,
-        wellness_signals=wellness_signals,
-        flags=flags,
+        load_trend=recent_load_trend,
+        injury_flags=injury_flags,
+        illness_flags=illness_flags,
     )
 
     # 8. Determine if baseline established (14+ days)
@@ -978,12 +867,14 @@ chronic_load_28d: 2080.0
 readiness:
   score: 62
   level: "ready"
-  confidence: "medium"
+  confidence: "low"
+  data_coverage: "objective_only"
   components:
-    tsb: { score: 45, weight: 0.20 }
-    load_trend: { score: 65, weight: 0.25 }
-    sleep: { score: 70, weight: 0.25 }
-    wellness: { score: null, weight: 0, note: "No data" }
+    tsb_contribution: 45.0
+    load_trend_contribution: 65.0
+    weights_used:
+      tsb: 0.4
+      load_trend: 0.4
 
 # Flags
 flags:
@@ -1076,7 +967,7 @@ def handle_cold_start(target_date: date) -> DailyMetrics:
             zone=ACWRZone.SAFE,
             acute_load_7d=0.0,
             chronic_load_28d=0.0,
-            days_of_data=0,
+            load_spike_elevated=False,
         ),
         readiness=ReadinessScore(
             score=60,
@@ -1216,7 +1107,7 @@ def test_ctl_atl_consistent_training():
 
 def test_tsb_zones():
     """TSB zones classify correctly"""
-    assert _classify_tsb_zone(20) == TSBZone.PEAKED
+    assert _classify_tsb_zone(20) == TSBZone.RACE_READY
     assert _classify_tsb_zone(10) == TSBZone.FRESH
     assert _classify_tsb_zone(0) == TSBZone.OPTIMAL
     assert _classify_tsb_zone(-15) == TSBZone.PRODUCTIVE
@@ -1263,41 +1154,34 @@ def test_acwr_spike_high_risk():
 
 ```python
 def test_readiness_fresh():
-    """High TSB + low ACWR = fresh"""
+    """High TSB + low recent load trend = ready (objective-only)"""
     result = compute_readiness(
         tsb=15.0,
-        acwr=1.0,
-        recent_load_trend=-0.3,  # Recovering
-        wellness_signals={"sleep_quality": "good"},
-        flags=None,
+        load_trend=90.0,
     )
 
-    assert result.score >= 75
-    assert result.level == ReadinessLevel.FRESH
+    assert result.score <= 65  # capped
+    assert result.level == ReadinessLevel.READY
 
 
 def test_readiness_injured_cap():
     """Injury caps readiness at 25"""
     result = compute_readiness(
         tsb=15.0,
-        acwr=1.0,
-        recent_load_trend=-0.3,
-        wellness_signals={"sleep_quality": "good"},
-        flags={"injury": {"active": True}},
+        load_trend=90.0,
+        injury_flags=["knee"],
     )
 
     assert result.score <= 25
-    assert result.level == ReadinessLevel.EXHAUSTED
+    assert result.level == ReadinessLevel.REST_RECOMMENDED
 
 
-def test_readiness_high_acwr_cap():
-    """ACWR > 1.5 caps readiness at 35"""
+def test_readiness_illness_cap():
+    """Illness caps readiness at 35"""
     result = compute_readiness(
         tsb=10.0,
-        acwr=1.6,
-        recent_load_trend=0.0,
-        wellness_signals=None,
-        flags=None,
+        load_trend=80.0,
+        illness_flags=["cold"],
     )
 
     assert result.score <= 35
@@ -1363,6 +1247,13 @@ Base_score = (TSB_score × 0.20) + (Trend_score × 0.25) +
 Final_score = min(Base_score, Flag_caps)
 ```
 
+**Objective-only fallback (current implementation)**:
+
+```
+Base_score = (TSB_score × 0.40) + (Trend_score × 0.40)
+Final_score = min(Base_score, 65)  # cap in objective-only v0
+```
+
 ## 11. Performance Notes
 
 - CTL/ATL computation: O(n) where n = days of history
@@ -1375,5 +1266,5 @@ Final_score = min(Base_score, Flag_caps)
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0.2 | 2026-01-12 | Added code module path (`core/metrics.py`) and API layer integration notes. Updated M12 reference to "Data Enrichment". |
-| 1.0.1 | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (DailyLoad, CTLATLMetrics, ACWRMetrics, ReadinessScore, IntensityDistribution, DailyMetrics, WeeklySummary - 7 types converted). Removed `dataclass` and `field` imports, added `Field` for default factories. Algorithms were already complete and correct (CTL/ATL formulas: τ=42d/7d, ACWR formula: 7d avg / 28d avg, readiness weights: TSB 20%, trend 25%, sleep 25%, wellness 30%). |
+| 1.0.1 | 2026-01-12 | **Fixed type consistency**: Converted all `@dataclass` types to `BaseModel` for Pydantic consistency (DailyLoad, CTLATLMetrics, ACWRMetrics, ReadinessScore, IntensityDistribution, DailyMetrics, WeeklySummary - 7 types converted). Removed `dataclass` and `field` imports, added `Field` for default factories. Algorithms were already complete and correct (CTL/ATL formulas: τ=42d/7d, ACWR formula: 7d avg / 28d avg, readiness weights: TSB 40%, trend 40%, cap 65). |
 | 1.0.0 | 2026-01-12 | Initial specification |

@@ -3,7 +3,7 @@ M9 - Metrics Engine
 
 Compute training metrics from activity loads:
 - CTL/ATL/TSB (Chronic/Acute Training Load, Training Stress Balance)
-- ACWR (Acute:Chronic Workload Ratio for injury risk assessment)
+- ACWR (Acute:Chronic Workload Ratio as load spike indicator)
 - Readiness scores with confidence levels
 - Weekly intensity distribution for 80/20 tracking
 
@@ -87,21 +87,14 @@ ATL_ALPHA = 1 - ATL_DECAY  # 0.1429 (1/7)
 BASELINE_DAYS_THRESHOLD = 14  # Days before baseline_established = True
 ACWR_MINIMUM_DAYS = 28  # Minimum days before ACWR can be calculated
 
-# Readiness component weights (default)
-READINESS_WEIGHTS_DEFAULT = {
-    "tsb": 0.20,
-    "load_trend": 0.25,
-    "sleep": 0.25,
-    "wellness": 0.30,
+# Readiness weights (objective-only in v0)
+READINESS_WEIGHTS_OBJECTIVE_ONLY = {
+    "tsb": 0.40,
+    "load_trend": 0.40,
 }
 
-# Readiness weights when subjective data missing
-READINESS_WEIGHTS_OBJECTIVE_ONLY = {
-    "tsb": 0.30,
-    "load_trend": 0.35,
-    "sleep": 0.0,
-    "wellness": 0.0,
-}
+# Readiness cap (objective-only)
+READINESS_MAX_OBJECTIVE_ONLY = 65
 
 # Running sport types (for intensity distribution)
 RUNNING_SPORT_TYPES = {
@@ -221,7 +214,11 @@ def compute_daily_metrics(
     acwr_available = acwr is not None
 
     # Step 5: Compute readiness score
-    load_trend = compute_load_trend(target_date, repo)
+    load_trend = compute_load_trend(
+        target_date,
+        repo,
+        today_load=daily_load.systemic_load_au,
+    )
     data_days = _count_historical_days(target_date, repo)
 
     # Extract injury/illness flags from today's activities
@@ -233,8 +230,6 @@ def compute_daily_metrics(
         load_trend=load_trend,
         injury_flags=injury_flags,
         illness_flags=illness_flags,
-        acwr_available=acwr_available,
-        data_days=data_days,
     )
 
     # Step 6: Build DailyMetrics object
@@ -587,15 +582,15 @@ def calculate_acwr(
     # Classify zone
     zone = _classify_acwr_zone(acwr)
 
-    # Set injury risk flag
-    injury_risk_elevated = acwr > 1.3
+    # Set load spike flag (ACWR > 1.3)
+    load_spike_elevated = acwr > 1.3
 
     return ACWRMetrics(
         acwr=round(acwr, 2),
         zone=zone,
         acute_load_7d=round(acute_7d, 1),
         chronic_load_28d=round(chronic_28d_avg, 1),
-        injury_risk_elevated=injury_risk_elevated,
+        load_spike_elevated=load_spike_elevated,
     )
 
 
@@ -604,15 +599,14 @@ def compute_readiness(
     load_trend: float,
     injury_flags: list[str] = None,
     illness_flags: list[str] = None,
-    acwr_available: bool = True,
-    data_days: int = 42,
 ) -> ReadinessScore:
     """
     Compute readiness score from objective training metrics.
 
-    Weights:
-        - TSB: 30%
-        - Load trend: 35%
+    Weights (objective-only in v0):
+        - TSB: 40%
+        - Load trend: 40%
+        - Score capped at 65
 
     Safety overrides:
         - Injury flags → cap at 25
@@ -623,9 +617,6 @@ def compute_readiness(
         load_trend: 0-100 scale (100 = fresh, 0 = accumulating)
         injury_flags: List of injury keywords found
         illness_flags: List of illness keywords found
-        acwr_available: Whether ACWR is available (affects confidence)
-        data_days: Total days of historical data (affects confidence)
-
     Returns:
         ReadinessScore with final score, level, and components
     """
@@ -638,14 +629,17 @@ def compute_readiness(
     # TSB -25 → 0, TSB -10 → 40, TSB 0 → 65, TSB +5 → 80, TSB +15 → 100
     tsb_score = max(0, min(100, (tsb + 30) * 2.5))
 
-    # Use objective-only weights (no subjective data)
+    # Use objective-only weights (no subjective data available in Phase 1)
     weights = READINESS_WEIGHTS_OBJECTIVE_ONLY.copy()
 
-    # Calculate weighted sum using only objective metrics
+    # Calculate weighted sum using objective metrics
     score = (
         tsb_score * weights["tsb"] +
         load_trend * weights["load_trend"]
     )
+
+    # Cap objective-only readiness to avoid false precision
+    score = min(score, READINESS_MAX_OBJECTIVE_ONLY)
 
     # Apply safety overrides
     injury_flag_override = False
@@ -673,11 +667,9 @@ def compute_readiness(
     # Classify level
     level = _classify_readiness_level(score)
 
-    # Determine confidence (always HIGH for objective data since we have all available metrics)
-    if data_days < BASELINE_DAYS_THRESHOLD:
-        confidence = ConfidenceLevel.LOW
-    else:
-        confidence = ConfidenceLevel.HIGH
+    # Objective-only readiness (no sleep/wellness in v0)
+    confidence = ConfidenceLevel.LOW
+    data_coverage = "objective_only"
 
     # Generate recommendation
     recommendation = _generate_readiness_recommendation(level, score)
@@ -686,8 +678,6 @@ def compute_readiness(
     components = ReadinessComponents(
         tsb_contribution=round(tsb_score, 1),
         load_trend_contribution=round(load_trend, 1),
-        sleep_contribution=None,
-        wellness_contribution=None,
         weights_used=weights,
     )
 
@@ -695,6 +685,7 @@ def compute_readiness(
         score=score,
         level=level,
         confidence=confidence,
+        data_coverage=data_coverage,
         components=components,
         recommendation=recommendation,
         injury_flag_override=injury_flag_override,
@@ -768,6 +759,7 @@ def compute_intensity_distribution(
 def compute_load_trend(
     target_date: date,
     repo: RepositoryIO,
+    today_load: Optional[float] = None,
 ) -> float:
     """
     Compute recent load trend for readiness calculation.
@@ -778,20 +770,30 @@ def compute_load_trend(
     Args:
         target_date: Date to compute trend for
         repo: Repository I/O instance
+        today_load: Optional systemic load for target_date (avoids missing metrics bias)
 
     Returns:
-        Load trend score 0-100 (100 = freshest)
+        Load trend score 0-100 (100 = freshest). Returns neutral (65) if history is incomplete.
     """
     # Read last 7 days of metrics
     loads_7d = []
+    missing_data = False
     for i in range(7):
         check_date = target_date - timedelta(days=i)
-        metrics = _read_previous_metrics(check_date, repo)
+        if i == 0 and today_load is not None:
+            loads_7d.append(today_load)
+            continue
 
+        metrics = _read_previous_metrics(check_date, repo)
         if metrics:
             loads_7d.append(metrics.daily_load.systemic_load_au)
         else:
-            loads_7d.append(0.0)
+            loads_7d.append(None)
+            missing_data = True
+
+    # If we have missing history data, return neutral to avoid false freshness
+    if missing_data:
+        return 65.0
 
     if len(loads_7d) < 3:
         # Not enough data, return neutral
@@ -1090,12 +1092,14 @@ def _classify_tsb_zone(tsb: float) -> TSBZone:
         return TSBZone.OPTIMAL
     elif tsb < 15:
         return TSBZone.FRESH
+    elif tsb < 25:
+        return TSBZone.RACE_READY
     else:
-        return TSBZone.PEAKED
+        return TSBZone.DETRAINING_RISK
 
 
 def _classify_acwr_zone(acwr: float) -> ACWRZone:
-    """Classify ACWR into injury risk zones."""
+    """Classify ACWR into load spike zones."""
     if acwr < 0.8:
         return ACWRZone.UNDERTRAINED
     elif acwr < 1.3:

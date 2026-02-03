@@ -364,16 +364,6 @@ class IllnessFlag(BaseModel):
     rest_days_recommended: int
 
 
-class WellnessIndicators(BaseModel):
-    """Extracted wellness signals."""
-
-    sleep_hours: Optional[float] = None
-    soreness_level: Optional[int] = None  # 1-10
-    stress_level: Optional[str] = None  # "low" | "moderate" | "high"
-    fatigue_mentioned: bool = False
-    energy_level: Optional[str] = None  # "low" | "normal" | "high"
-
-
 class ContextualFactors(BaseModel):
     """Environmental or situational factors."""
 
@@ -392,7 +382,7 @@ class AnalysisResult(BaseModel):
 
     Returns multiple RPE estimates from quantitative sources.
     Claude Code uses these estimates with conversation context to
-    determine final RPE. Wellness, injury, and illness extraction
+    determine final RPE. Injury and illness extraction
     are handled by Claude Code via natural conversation.
     """
 

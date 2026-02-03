@@ -13,14 +13,14 @@
 
 ## 2. Purpose
 
-Provides computational tools for adaptation detection and risk assessment. Detects physiological triggers (ACWR, readiness, load spikes) that warrant coaching attention and assesses injury risk. Claude Code uses these tools with athlete context to decide adaptations.
+Provides computational tools for adaptation detection and risk assessment. Detects physiological triggers (ACWR, readiness, load spikes) that warrant coaching attention and assesses a **heuristic risk index**. Claude Code uses these tools with athlete context to decide adaptations.
 
 ### 2.1 Scope Boundaries
 
 **In Scope:**
 
 - Trigger detection (ACWR, readiness, load patterns, session density)
-- Risk assessment (injury probability, severity levels)
+- Risk assessment (heuristic risk index, severity levels)
 - Recovery time estimation (how long to recover from trigger)
 - Workout modification helpers (downgrade, shorten, reschedule)
 - Threshold management (athlete-specific thresholds in profile)
@@ -73,7 +73,7 @@ class TriggerType(str, Enum):
 
 
 class RiskLevel(str, Enum):
-    """Risk levels for injury"""
+    """Risk levels for training risk (heuristic index)"""
     LOW = "low"
     MODERATE = "moderate"
     HIGH = "high"
@@ -93,7 +93,7 @@ class AdaptationTrigger(BaseModel):
 class OverrideRiskAssessment(BaseModel):
     """Risk assessment if athlete ignores triggers"""
     risk_level: RiskLevel
-    injury_probability: float  # 0.0-1.0
+    risk_index: float  # 0.0-1.0 (heuristic index)
     risk_factors: list[str]
     recommendation: str
     evidence: list[str]  # Citations from training science
@@ -167,7 +167,7 @@ Detects physiological signals that warrant coaching attention.
 **Triggers Detected**:
 
 1. **ACWR Elevated** (1.3-1.5): Caution zone, monitor closely
-2. **ACWR High Risk** (>1.5): High injury risk (2-4x increased)
+2. **ACWR High Risk** (>1.5): Significant load spike (strong caution)
 3. **Readiness Low** (<50): Reduce intensity recommended
 4. **Readiness Very Low** (<35): Rest strongly recommended
 5. **TSB Overreached** (<-25): Deep fatigue, recovery needed
@@ -180,7 +180,7 @@ Claude Code interprets triggers with athlete context (M13 memories, conversation
 
 ### 5.2 Risk Assessment
 
-Assesses injury probability if athlete ignores triggers.
+Assesses heuristic risk index if athlete ignores triggers.
 
 **Factors Considered**:
 
@@ -192,10 +192,10 @@ Assesses injury probability if athlete ignores triggers.
 
 **Risk Levels**:
 
-- **Low** (<10% injury probability): Proceed with caution
+- **Low** (<10% risk index): Proceed with caution
 - **Moderate** (10-20%): Recommend adjustment
 - **High** (20-40%): Strongly recommend rest or downgrade
-- **Severe** (>40%): Rest required, high injury risk
+- **Severe** (>40%): Rest required, high risk index
 
 **Example**:
 
@@ -206,9 +206,9 @@ History: Knee injury 3 months ago
 
 Risk Assessment:
 - risk_level: "moderate"
-- injury_probability: 0.15
+- risk_index: 0.15 (risk index)
 - recommendation: "Consider easier workout or rest"
-- evidence: ["ACWR 1.3-1.5 linked to increased injury (Gabbett, 2016)",
+- evidence: ["ACWR 1.3-1.5 linked to elevated load spike risk (Gabbett, 2016)",
              "Recent knee history increases risk"]
 ```
 
@@ -273,7 +273,7 @@ Claude Code uses these when athlete agrees to adjust workout.
     │   Returns: [ACWR_ELEVATED(1.45), LOWER_BODY_LOAD_HIGH(340 AU)]
     │
     ├─> assess_override_risk(triggers, workout, memories)
-    │   Returns: OverrideRiskAssessment(risk="moderate", probability=0.15)
+    │   Returns: OverrideRiskAssessment(risk="moderate", risk_index=0.15)
     │
     ├─> load_memories(tags=["injury", "body:knee"])
     │   Returns: [Memory("Knee history: tightness after 18km+")]
@@ -286,7 +286,7 @@ Claude Code uses these when athlete agrees to adjust workout.
 
      A) Easy run today (safest)
      B) Move tempo to Thursday (gives 2 days recovery)
-     C) Proceed with tempo (moderate risk ~15%)
+     C) Proceed with tempo (moderate risk ~15% risk index)
 
      What sounds best?"
 ```
@@ -300,8 +300,8 @@ Claude Code uses these when athlete agrees to adjust workout.
 | Trigger: ACWR elevated  | ACWR=1.35              | TriggerType.ACWR_ELEVATED, zone="caution" |
 | Trigger: ACWR high risk | ACWR=1.6               | TriggerType.ACWR_HIGH_RISK, zone="danger" |
 | Trigger: Readiness low  | readiness=45           | TriggerType.READINESS_LOW                 |
-| Risk: Single trigger    | ACWR=1.35, no history  | risk="low", probability<0.10              |
-| Risk: Multiple triggers | ACWR=1.5, readiness=40 | risk="high", probability>0.20             |
+| Risk: Single trigger    | ACWR=1.35, no history  | risk="low", risk_index<0.10               |
+| Risk: Multiple triggers | ACWR=1.5, readiness=40 | risk="high", risk_index>0.20              |
 | Recovery: ACWR spike    | ACWR=1.5               | days=2-3, confidence="high"               |
 | Downgrade workout       | Tempo run              | Easy run, RPE=4                           |
 
@@ -318,7 +318,7 @@ Claude Code uses these when athlete agrees to adjust workout.
 | Test Case         | Input                      | Expected Behavior             |
 | ----------------- | -------------------------- | ----------------------------- |
 | No triggers       | All metrics normal         | Empty trigger list            |
-| Extreme ACWR      | ACWR=2.0                   | Severe risk, probability>0.40 |
+| Extreme ACWR      | ACWR=2.0                   | Severe risk, risk_index>0.40 |
 | Custom thresholds | acwr_high_risk=1.7 (elite) | Uses custom threshold         |
 
 ## 8. Performance Considerations

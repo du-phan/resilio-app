@@ -2,7 +2,7 @@
 Unit tests for M9 - Metrics Engine module.
 
 Tests training metrics computation including CTL/ATL/TSB (EWMA calculations),
-ACWR (injury risk), readiness scoring, intensity distribution, and edge cases.
+ACWR (load spike indicator), readiness scoring, intensity distribution, and edge cases.
 """
 
 import pytest
@@ -155,7 +155,7 @@ def cold_start_scenario(tmp_path, monkeypatch, sample_run_activity):
 
 @pytest.fixture
 def full_history_scenario(tmp_path, monkeypatch, sample_run_activity):
-    """Create scenario with 50 days of data (42+ days, high confidence)."""
+    """Create scenario with 50 days of data (sufficient history)."""
     (tmp_path / ".git").mkdir()
     monkeypatch.chdir(tmp_path)
     repo = RepositoryIO()
@@ -287,10 +287,15 @@ class TestCTLATLCalculation:
         result = calculate_ctl_atl(0, previous_ctl=50, previous_atl=42)
         assert result.tsb_zone == TSBZone.FRESH
 
-        # Test peaked: TSB > +15
+        # Test race-ready: TSB +15 to +25
         # Use previous_ctl=50, previous_atl=30 → tsb = 48.8 - 26.0 = 22.8
         result = calculate_ctl_atl(0, previous_ctl=50, previous_atl=30)
-        assert result.tsb_zone == TSBZone.PEAKED
+        assert result.tsb_zone == TSBZone.RACE_READY
+
+        # Test detraining risk: TSB > +25
+        # Use previous_ctl=50, previous_atl=20 → tsb = 48.8 - 17.0 = 31.8
+        result = calculate_ctl_atl(0, previous_ctl=50, previous_atl=20)
+        assert result.tsb_zone == TSBZone.DETRAINING_RISK
 
     def test_ctl_trend_detection(self, temp_repo):
         """Should detect building/maintaining/declining trend."""
@@ -329,11 +334,11 @@ class TestCTLATLCalculation:
                 readiness=ReadinessScore(
                     score=70,
                     level=ReadinessLevel.READY,
-                    confidence=ConfidenceLevel.MEDIUM,
+                    confidence=ConfidenceLevel.LOW,
                     components=ReadinessComponents(
                         tsb_contribution=60.0,
                         load_trend_contribution=70.0,
-                        weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
                     ),
                     recommendation="Execute as planned.",
                 ),
@@ -344,6 +349,67 @@ class TestCTLATLCalculation:
             )
 
             temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+
+    def test_load_trend_uses_today_load(self, temp_repo):
+        """Load trend should use today's load instead of missing metrics."""
+        from sports_coach_engine.schemas.metrics import (
+            DailyMetrics,
+            DailyLoad,
+            CTLATLMetrics,
+            ReadinessScore,
+            ReadinessComponents,
+            ReadinessLevel,
+            ConfidenceLevel,
+            TSBZone,
+            CTLZone,
+        )
+
+        target_date = date(2026, 1, 8)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+
+        # Create metrics for the previous 6 days with steady load
+        for i in range(1, 7):
+            day = target_date - timedelta(days=i)
+            daily_metrics = DailyMetrics(
+                date=day,
+                calculated_at=datetime.now(),
+                daily_load=DailyLoad(
+                    date=day,
+                    systemic_load_au=100.0,
+                    lower_body_load_au=90.0,
+                    activity_count=1,
+                    activities=[],
+                ),
+                ctl_atl=CTLATLMetrics(
+                    ctl=40.0,
+                    atl=38.0,
+                    tsb=2.0,
+                    ctl_zone=CTLZone.RECREATIONAL,
+                    tsb_zone=TSBZone.OPTIMAL,
+                ),
+                readiness=ReadinessScore(
+                    score=50,
+                    level=ReadinessLevel.REDUCE_INTENSITY,
+                    confidence=ConfidenceLevel.LOW,
+                    components=ReadinessComponents(
+                        tsb_contribution=50.0,
+                        load_trend_contribution=50.0,
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
+                    ),
+                    recommendation="Consider reduced intensity.",
+                ),
+                baseline_established=True,
+                acwr_available=True,
+                data_days_available=20,
+                flags=[],
+            )
+            temp_repo.write_yaml(f"data/metrics/daily/{day.isoformat()}.yaml", daily_metrics)
+
+        # Provide today's load directly (avoid missing metrics bias)
+        trend = compute_load_trend(target_date, temp_repo, today_load=100.0)
+
+        # avg_3d == avg_7d == 100 -> ratio 0 -> trend score 50
+        assert trend == pytest.approx(50.0, abs=0.1)
 
         # On day 8, should detect building trend
         assert ctl_atl.ctl_trend == "building"
@@ -389,11 +455,11 @@ class TestACWRCalculation:
                 readiness=ReadinessScore(
                     score=70,
                     level=ReadinessLevel.READY,
-                    confidence=ConfidenceLevel.MEDIUM,
+                    confidence=ConfidenceLevel.LOW,
                     components=ReadinessComponents(
                         tsb_contribution=60.0,
                         load_trend_contribution=70.0,
-                        weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
                     ),
                     recommendation="Execute as planned.",
                 ),
@@ -446,11 +512,11 @@ class TestACWRCalculation:
                 readiness=ReadinessScore(
                     score=70,
                     level=ReadinessLevel.READY,
-                    confidence=ConfidenceLevel.MEDIUM,
+                    confidence=ConfidenceLevel.LOW,
                     components=ReadinessComponents(
                         tsb_contribution=60.0,
                         load_trend_contribution=70.0,
-                        weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
                     ),
                     recommendation="Execute as planned.",
                 ),
@@ -471,7 +537,7 @@ class TestACWRCalculation:
         # With consistent load, ACWR should be ~1.0
         assert acwr.acwr == pytest.approx(1.0, abs=0.1)
         assert acwr.zone == ACWRZone.SAFE
-        assert acwr.injury_risk_elevated is False
+        assert acwr.load_spike_elevated is False
 
     def test_acwr_zone_classification(self, temp_repo):
         """Should classify safe/caution/high_risk correctly."""
@@ -511,11 +577,11 @@ class TestACWRCalculation:
                 readiness=ReadinessScore(
                     score=70,
                     level=ReadinessLevel.READY,
-                    confidence=ConfidenceLevel.MEDIUM,
+                    confidence=ConfidenceLevel.LOW,
                     components=ReadinessComponents(
                         tsb_contribution=60.0,
                         load_trend_contribution=70.0,
-                        weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
                     ),
                     recommendation="Execute as planned.",
                 ),
@@ -539,10 +605,10 @@ class TestACWRCalculation:
         # ACWR = (4200/7) / 300 = 600 / 300 = 2.0
         assert acwr.acwr > 1.5  # Should be HIGH_RISK
         assert acwr.zone == ACWRZone.HIGH_RISK
-        assert acwr.injury_risk_elevated is True
+        assert acwr.load_spike_elevated is True
 
-    def test_acwr_sets_injury_risk_elevated_when_above_1_3(self, temp_repo):
-        """Should set injury_risk_elevated when > 1.3."""
+    def test_acwr_sets_load_spike_elevated_when_above_1_3(self, temp_repo):
+        """Should set load_spike_elevated when > 1.3."""
         # Create scenario with ACWR = 1.4 (caution zone)
         start_date = date(2026, 1, 1)
         (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
@@ -579,11 +645,11 @@ class TestACWRCalculation:
                 readiness=ReadinessScore(
                     score=70,
                     level=ReadinessLevel.READY,
-                    confidence=ConfidenceLevel.MEDIUM,
+                    confidence=ConfidenceLevel.LOW,
                     components=ReadinessComponents(
                         tsb_contribution=60.0,
                         load_trend_contribution=70.0,
-                        weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
                     ),
                     recommendation="Execute as planned.",
                 ),
@@ -600,7 +666,7 @@ class TestACWRCalculation:
 
         assert acwr is not None
         assert acwr.acwr > 1.3
-        assert acwr.injury_risk_elevated is True
+        assert acwr.load_spike_elevated is True
 
     def test_acwr_handles_zero_chronic_load(self, temp_repo):
         """Should handle divide-by-zero gracefully."""
@@ -638,7 +704,7 @@ class TestACWRCalculation:
                     components=ReadinessComponents(
                         tsb_contribution=60.0,
                         load_trend_contribution=70.0,
-                        weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
                     ),
                     recommendation="Execute as planned.",
                 ),
@@ -673,13 +739,13 @@ class TestReadinessScore:
         )
 
         # TSB 0 → tsb_score ≈ 75
-        # Weighted: 75*0.30 + 70*0.35 = 22.5 + 24.5 = 47
-        assert readiness.score == pytest.approx(47, abs=5)
-        assert readiness.confidence == ConfidenceLevel.HIGH  # Objective data available
+        # Weighted: 75*0.40 + 70*0.40 = 30 + 28 = 58
+        assert readiness.score == pytest.approx(58, abs=5)
+        assert readiness.confidence == ConfidenceLevel.LOW  # Objective-only path
 
         # Should use objective-only weights
-        assert readiness.components.weights_used["tsb"] == 0.30
-        assert readiness.components.weights_used["load_trend"] == 0.35
+        assert readiness.components.weights_used["tsb"] == 0.40
+        assert readiness.components.weights_used["load_trend"] == 0.40
 
     def test_readiness_with_objective_only_data(self):
         """Should use objective-only weights (no subjective data)."""
@@ -688,63 +754,51 @@ class TestReadinessScore:
             load_trend=70.0,
         )
 
-        # Should use objective-only weights: TSB 30%, trend 35%
-        assert readiness.components.weights_used["tsb"] == 0.30
-        assert readiness.components.weights_used["load_trend"] == 0.35
-        assert readiness.components.weights_used["sleep"] == 0.0
-        assert readiness.components.weights_used["wellness"] == 0.0
+        # Should use objective-only weights: TSB 40%, trend 40%
+        assert readiness.components.weights_used["tsb"] == 0.40
+        assert readiness.components.weights_used["load_trend"] == 0.40
 
-        # Confidence should be high since we have objective data
-        assert readiness.confidence == ConfidenceLevel.HIGH
+        # Confidence should be low without subjective inputs
+        assert readiness.confidence == ConfidenceLevel.LOW
 
     def test_readiness_level_classification(self):
         """Should classify rest/easy/ready/primed correctly."""
         # Note: TSB score = (tsb + 30) * 2.5
-        # Weights: TSB 30%, trend 35% (objective only)
-        # Score = tsb_score * 0.30 + load_trend * 0.35
+        # Weights: TSB 40%, trend 40% (objective only)
+        # Score = tsb_score * 0.40 + load_trend * 0.40 (cap at 65)
 
         # Test REST_RECOMMENDED (< 35)
         # TSB=-40 → tsb_score=(-40+30)*2.5=-25 (clamped to 0)
-        # Score = 0*0.30 + 20*0.35 = 7
+        # Score = 0*0.40 + 20*0.40 = 8
         readiness = compute_readiness(tsb=-40, load_trend=20.0)
         assert readiness.level == ReadinessLevel.REST_RECOMMENDED
 
         # Test EASY_ONLY (35-49)
         # Need score 35-49. TSB=-5 → tsb_score=(−5+30)*2.5=62.5
-        # Score = 62.5*0.30 + 20*0.35 = 18.75 + 7 = 25.75 (still too low)
-        # Try TSB=0 → tsb_score=75, load_trend=30
-        # Score = 75*0.30 + 30*0.35 = 22.5 + 10.5 = 33 (still too low!)
-        # Try TSB=0 → tsb_score=75, load_trend=50
-        # Score = 75*0.30 + 50*0.35 = 22.5 + 17.5 = 40
-        readiness = compute_readiness(tsb=0, load_trend=50.0)
+        # Score = 62.5*0.40 + 20*0.40 = 25 + 8 = 33 (still too low)
+        # Try TSB=0 → tsb_score=75, load_trend=25
+        # Score = 75*0.40 + 25*0.40 = 30 + 10 = 40
+        readiness = compute_readiness(tsb=0, load_trend=25.0)
         assert readiness.level == ReadinessLevel.EASY_ONLY
 
         # Test REDUCE_INTENSITY (50-64)
-        # TSB=5 → tsb_score=87.5, load_trend=60
-        # Score = 87.5*0.30 + 60*0.35 = 26.25 + 21 = 47.25 (still EASY)
-        # Try TSB=10 → tsb_score=100, load_trend=50
-        # Score = 100*0.30 + 50*0.35 = 30 + 17.5 = 47.5 (still EASY!)
-        # Try TSB=10 → tsb_score=100, load_trend=70
-        # Score = 100*0.30 + 70*0.35 = 30 + 24.5 = 54.5
-        readiness = compute_readiness(tsb=10, load_trend=70.0)
+        # TSB=0 → tsb_score=75, load_trend=50
+        # Score = 75*0.40 + 50*0.40 = 30 + 20 = 50
+        readiness = compute_readiness(tsb=0, load_trend=50.0)
         assert readiness.level == ReadinessLevel.REDUCE_INTENSITY
 
         # Test READY (65-79)
         # TSB=10 → tsb_score=100, load_trend=100
-        # Score = 100*0.30 + 100*0.35 = 30 + 35 = 65
+        # Raw score = 80, capped to 65
         readiness = compute_readiness(tsb=10, load_trend=100.0)
         assert readiness.level == ReadinessLevel.READY
 
         # Test PRIMED (80-100)
-        # With objective-only data, maximum score is 100*0.30 + 100*0.35 = 65
-        # This means PRIMED level is not achievable with objective data only
-        # This is expected behavior - PRIMED requires subjective wellness data
-        # For now, test that we get REDUCE_INTENSITY level with excellent objective metrics
-        readiness = compute_readiness(
-            tsb=15, load_trend=90.0
-        )
-        # Score = 100*0.30 + 90*0.35 = 30 + 31.5 = 61.5 (REDUCE_INTENSITY: 50-64)
-        assert readiness.level == ReadinessLevel.REDUCE_INTENSITY
+        # With objective-only data, maximum score is capped at 65
+        # This means PRIMED level is not achievable in v0
+        # For now, test that we get READY level with excellent objective metrics
+        readiness = compute_readiness(tsb=15, load_trend=90.0)
+        assert readiness.level == ReadinessLevel.READY
 
     def test_injury_flags_cap_readiness(self):
         """Injury flags should cap readiness at 25."""
@@ -781,25 +835,9 @@ class TestReadinessScore:
         assert readiness.score <= 35
 
     def test_readiness_confidence_levels(self):
-        """Should set confidence based on data availability."""
-        # LOW: < 14 days
-        readiness = compute_readiness(
-            tsb=0, load_trend=70.0, data_days=10
-        )
+        """Objective-only readiness should report low confidence in v0."""
+        readiness = compute_readiness(tsb=0, load_trend=70.0)
         assert readiness.confidence == ConfidenceLevel.LOW
-
-        # HIGH: 14+ days with objective data (no subjective data concept anymore)
-        readiness = compute_readiness(
-            tsb=0, load_trend=70.0, data_days=20
-        )
-        assert readiness.confidence == ConfidenceLevel.HIGH
-
-        # HIGH: 42+ days with objective data
-        readiness = compute_readiness(
-            tsb=0, load_trend=70.0,
-            data_days=50
-        )
-        assert readiness.confidence == ConfidenceLevel.HIGH
 
 
 # ============================================================
@@ -1208,16 +1246,16 @@ class TestEdgeCases:
                 zone=ACWRZone.HIGH_RISK,
                 acute_load_7d=10000.0,
                 chronic_load_28d=2500.0,
-                injury_risk_elevated=True,
+                load_spike_elevated=True,
             ),
             readiness=ReadinessScore(
                 score=150,  # Out of range (> 100)
                 level=ReadinessLevel.PRIMED,
-                confidence=ConfidenceLevel.HIGH,
+                confidence=ConfidenceLevel.LOW,
                 components=ReadinessComponents(
                     tsb_contribution=100.0,
                     load_trend_contribution=100.0,
-                    weights_used={"tsb": 0.3, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0},
+                    weights_used={"tsb": 0.4, "load_trend": 0.4},
                 ),
                 recommendation="Extreme values detected",
             ),

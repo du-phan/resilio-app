@@ -1,7 +1,7 @@
 """
 sce status - Get current training metrics.
 
-Shows CTL (fitness), ATL (fatigue), TSB (form), ACWR (injury risk), and readiness
+Shows CTL (fitness), ATL (fatigue), TSB (form), ACWR (load spike), and readiness
 with interpretations and trends.
 """
 
@@ -19,7 +19,7 @@ def status_command(ctx: typer.Context) -> None:
     - CTL (Chronic Training Load): 42-day weighted average, represents fitness
     - ATL (Acute Training Load): 7-day weighted average, represents fatigue
     - TSB (Training Stress Balance): CTL - ATL, represents form/freshness
-    - ACWR (Acute:Chronic Workload Ratio): Injury risk indicator
+    - ACWR (Acute:Chronic Workload Ratio): Load spike indicator
     - Readiness: Overall readiness score (0-100) with breakdown
 
     Each metric includes:

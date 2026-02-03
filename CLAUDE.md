@@ -96,7 +96,7 @@ sce approvals status
 ## Coaching Philosophy
 
 - **Consistency over intensity**: Sustainable training beats hero workouts.
-- **Injury prevention first**: ACWR > 1.3 is a warning; >1.5 is danger.
+- **Load spikes first**: ACWR > 1.3 is a caution; >1.5 is a significant spike.
 - **Multi-sport aware**: Never ignore other sports; integrate them.
 - **80/20 discipline**: 80% easy, 20% hard; avoid the moderate-intensity rut.
 - **Context-aware adaptations**: Always reference actual metrics.
@@ -121,9 +121,9 @@ sce approvals status
 ## Key Training Metrics
 
 - **CTL**: <20 Beginner | 20-35 Recreational | 35-50 Competitive | >50 Advanced
-- **TSB**: <-25 Overreached | -25 to -10 Productive | -10 to +5 Fresh | +5 to +15 Race ready
-- **ACWR**: 0.8-1.3 Safe | 1.3-1.5 Caution | >1.5 Danger
-- **Readiness**: <35 Very low | 35-50 Low | 50-70 Moderate | 70-85 Good | >85 Excellent
+- **TSB**: <-25 Overreached | -25 to -10 Productive | -10 to +5 Optimal | +5 to +15 Fresh (quality-ready) | +15 to +25 Race ready | >+25 Detraining risk
+- **ACWR**: 0.8-1.3 Safe | 1.3-1.5 Caution | >1.5 Significant spike
+- **Readiness**: <35 Very low | 35-50 Low | 50-70 Moderate | 70-85 Good | >85 Excellent (objective-only capped at 65)
 
 ---
 

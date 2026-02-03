@@ -62,8 +62,8 @@ Those concepts come from the Banister fitness–fatigue model and its populariza
 **Zone boundaries (as implemented in code):**
 
 - **CTL zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_ctl_zone`): &lt;20 Beginner, &lt;40 Developing, &lt;60 Recreational, &lt;80 Trained, &lt;100 Competitive, ≥100 Elite.
-- **TSB zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_tsb_zone`): &lt;−25 Overreached, −25 to &lt;−10 Productive, −10 to &lt;+5 Optimal, +5 to &lt;+15 Fresh, ≥+15 Peaked.
-- **ACWR zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_acwr_zone`): &lt;0.8 Undertrained, 0.8–&lt;1.3 Safe, 1.3–&lt;1.5 Caution, ≥1.5 High risk. Internal flag `injury_risk_elevated = True` when ACWR &gt; 1.3.
+- **TSB zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_tsb_zone`): &lt;−25 Overreached, −25 to &lt;−10 Productive, −10 to &lt;+5 Optimal, +5 to &lt;+15 Fresh, +15 to &lt;+25 Race Ready, ≥+25 Detraining Risk.
+- **ACWR zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_acwr_zone`): &lt;0.8 Undertrained, 0.8–&lt;1.3 Safe, 1.3–&lt;1.5 Caution, ≥1.5 High risk. Internal flag `load_spike_elevated = True` when ACWR &gt; 1.3.
 
 ### 3.3 How We Use These Metrics
 
@@ -91,7 +91,7 @@ All formulas and constants below are taken from [sports_coach_engine/core/metric
 - **Condition**: ACWR is **not** computed if fewer than 28 days of historical daily metrics exist (including day *t*−1 through *t*−28). Source: `ACWR_MINIMUM_DAYS = 28`; `calculate_acwr` returns `None` if any of those 28 days is missing.
 - **Data used**: For day _t_, we use metrics from days *t*−1 to *t*−28 (not including _t_). `acute_7d = sum(systemic_load_au)` for days *t*−1…*t*−7. `chronic_28d_total = sum(systemic_load_au)` for days *t*−1…*t*−28.
 - **Formula**: `chronic_28d_avg = chronic_28d_total / 28`, `acute_7d_avg = acute_7d / 7`, **ACWR = acute_7d_avg / chronic_28d_avg**. (Rolling 7-day and 28-day windows; not EWMA.)
-- **Injury flag**: `injury_risk_elevated = (acwr > 1.3)`.
+- **Load spike flag**: `load_spike_elevated = (acwr > 1.3)`.
 
 **Baseline and data sufficiency**
 
@@ -209,32 +209,27 @@ No maximum is defined; longer history improves stability of rolling metrics. EWM
 
 ## 6. Readiness Score
 
-### 6.1 Intended Design (Methodology Doc)
+### 6.1 Current Design (v0)
 
-When all inputs are available:
-
-- TSB: 20%
-- Recent load trend: 25%
-- Sleep quality: 25%
-- Subjective wellness (e.g. soreness): 30%
+Readiness is **objective-only** in v0. Subjective inputs (sleep, wellness) are not collected or computed yet.
 
 Readiness is on a 0–100 scale; <35 "very low" (force rest), 35–50 "low" (downgrade quality), 50–70 "moderate," 70–85 "good," >85 "excellent."
 
 ### 6.2 Implementation (Code-Accurate)
 
-**Current implementation** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_readiness`): The package **always** uses the **objective-only** path. Sleep and wellness contributions are not computed; weights used are:
+**Current implementation** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_readiness`): The package **always** uses the **objective-only** path. Weights used are:
 
-- **Weights**: `READINESS_WEIGHTS_OBJECTIVE_ONLY = {"tsb": 0.30, "load_trend": 0.35, "sleep": 0.0, "wellness": 0.0}`. So effective formula: `score = tsb_score × 0.30 + load_trend × 0.35` (before overrides).
+- **Weights**: `READINESS_WEIGHTS_OBJECTIVE_ONLY = {"tsb": 0.40, "load_trend": 0.40}`. So effective formula: `score = tsb_score × 0.40 + load_trend × 0.40` (before overrides), then capped at **65**.
 
 **TSB → 0–100 score**: `tsb_score = max(0, min(100, (tsb + 30) × 2.5))`. So TSB −30 → 0, TSB 0 → 75, TSB +10 → 100 (capped).
 
-**Load trend** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_load_trend`): Uses last 7 days of daily systemic load (including today). `avg_3d = mean(loads[0:3])`, `avg_7d = mean(loads[0:7])`. `ratio = 1 − (avg_3d / avg_7d)`. `trend_score = 50 + (ratio × 50)`, clamped to 0–100. Higher score = fresher (recent load lower than 7-day baseline). If fewer than 3 days of data, returns 65.0 (neutral).
+**Load trend** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_load_trend`): Uses last 7 days of daily systemic load (including today). `avg_3d = mean(loads[0:3])`, `avg_7d = mean(loads[0:7])`. `ratio = 1 − (avg_3d / avg_7d)`. `trend_score = 50 + (ratio × 50)`, clamped to 0–100. Higher score = fresher (recent load lower than 7-day baseline). If any of the last 7 days are missing, returns 65.0 (neutral).
 
 **Safety overrides** (applied in order): (1) If any **injury** flags from activity notes → `score = min(score, 25)`, `injury_flag_override = True`. (2) If any **illness** flags: if keywords "severe", "fever", "flu" in flags → `score = min(score, 15)`; else → `score = min(score, 35)`; `illness_flag_override = True`. Final score clamped to 0–100.
 
 **Readiness level boundaries** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_readiness_level`): &lt;35 → REST_RECOMMENDED, &lt;50 → EASY_ONLY, &lt;65 → REDUCE_INTENSITY, &lt;80 → READY, ≥80 → PRIMED.
 
-**Confidence**: `LOW` if `data_days < BASELINE_DAYS_THRESHOLD` (14); else `HIGH`. No separate demotion when subjective data is missing (since subjective is not used).
+**Confidence**: Always `LOW` in v0 (objective-only readiness).
 
 **Injury/illness flags** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_extract_activity_flags`): Scans activity `description` and `private_note` for keywords. Injury: pain, ache, hurt, sore, injury, strain, sprain, tear, limp, sharp, stabbing, shooting, tight, swollen, inflamed, etc. Illness: sick, ill, fever, flu, cold, covid, virus, nauseous, vomiting, diarrhea, congestion, cough, chills, headache, migraine. Returns lists of descriptive strings (e.g. "run activity: pain, sore").
 
@@ -246,7 +241,7 @@ Readiness is on a 0–100 scale; <35 "very low" (force rest), 35–50 "low" (dow
 
 **80/20 intensity distribution** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_intensity_distribution`): Activities bucketed by session_type: EASY → low, MODERATE → moderate, QUALITY/RACE → high. Percentages = (low_minutes, moderate_minutes, high_minutes) / total_minutes × 100. **Compliance**: `is_compliant = (low_percent >= 75.0)`. Target low = 80% (`target_low_percent = 80.0`). No explicit "only when ≥3 run days" in this function; that condition is methodology/UI.
 
-**ACWR safety**: ACWR >1.5 → high risk (zone HIGH_RISK); >1.3 → caution (zone CAUTION), `injury_risk_elevated = True`. Enforcement is contextual (AI + athlete).
+**ACWR safety**: ACWR >1.5 → high risk (zone HIGH_RISK); >1.3 → caution (zone CAUTION), `load_spike_elevated = True`. Enforcement is contextual (AI + athlete).
 
 **Long run limits** ([guardrails/volume.py](../../../sports_coach_engine/core/guardrails/volume.py) `validate_long_run_limits`): Default `pct_limit = 30.0`, `duration_limit_minutes = 150`. Violations: (1) `long_run_km / weekly_volume_km × 100 > pct_limit` → LONG_RUN_EXCEEDS_WEEKLY_PCT; (2) `long_run_duration_minutes > duration_limit_minutes` → LONG_RUN_EXCEEDS_DURATION.
 
@@ -267,14 +262,14 @@ Trigger types and thresholds are defined in [schemas/adaptation.py](../../../spo
 | Trigger              | Condition / threshold (source)                         | Notes                                                                                                                              |
 | -------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
 | ACWR_HIGH_RISK       | ACWR > 1.5                                             | risk.py: ACWR_DANGER weight 0.40                                                                                                   |
-| ACWR_ELEVATED        | ACWR > 1.3                                             | risk.py: ACWR_ELEVATED weight 0.30; metrics: injury_risk_elevated                                                                  |
+| ACWR_ELEVATED        | ACWR > 1.3                                             | risk.py: ACWR_ELEVATED weight 0.30; metrics: load_spike_elevated                                                                   |
 | READINESS_VERY_LOW   | Readiness &lt; 35                                      | risk.py: weight 0.25; schema default readiness_very_low = 35                                                                       |
 | READINESS_LOW        | Readiness &lt; 50                                      | risk.py: weight 0.20; schema default readiness_low = 50                                                                            |
 | TSB_OVERREACHED      | TSB &lt; −25                                           | risk.py: weight 0.20                                                                                                               |
 | LOWER_BODY_LOAD_HIGH | Last **2 days** lower-body load sum &gt; **CTL × 2.5** | risk.py: `recent_lower_body = sum(activities[-2:].lower_body_load_au)`, `safe_daily_lower = ctl * 2.5`; weight 0.25 when triggered |
 | SESSION_DENSITY_HIGH | ≥ 2 hard (quality/race) sessions in last 7 days        | Schema: session_density_max = 2                                                                                                    |
 
-**Risk aggregation** ([risk.py](../../../sports_coach_engine/core/analysis/risk.py) `assess_current_risk`): `injury_probability_pct = min(100, risk_score × 100)`. Risk level: risk_score ≥ 0.60 → DANGER, ≥ 0.40 → HIGH, ≥ 0.20 → MODERATE, else LOW. Safety override (force rest): typically ACWR > 1.5 and Readiness &lt; 35 (documented in Q8).
+**Risk aggregation** ([risk.py](../../../sports_coach_engine/core/analysis/risk.py) `assess_current_risk`): `risk_index_pct = min(100, risk_score × 100)`. Risk level: risk_score ≥ 0.60 → DANGER, ≥ 0.40 → HIGH, ≥ 0.20 → MODERATE, else LOW. Safety override (force rest): typically ACWR > 1.5 and Readiness &lt; 35 (documented in Q8).
 
 The system returns triggers and risk level; the AI reasons with athlete context and presents options rather than applying automatic workout changes (except for the documented safety override).
 
@@ -340,17 +335,17 @@ This section states **what we do today**, the **source of uncertainty or tension
 
 ### 9.3 Readiness Score: Weights and Fallback When Subjective Data Is Missing
 
-**What we do**: When sleep and wellness are available: TSB 20%, load trend 25%, sleep 25%, wellness 30%. When they are **not** available (common for many users), we use **objective-only** weights: TSB 30%, load trend 35%. Readiness confidence is set to "low" when `data_days < 14`, otherwise "high" (for the objective-only path we do not currently demote confidence when subjective data is missing).
+**What we do (v0)**: Readiness is **objective-only** (no sleep/wellness). We use **TSB 40%** + **load trend 40%**, then cap the score at **65**. Confidence is always `LOW` and `data_coverage = "objective_only"`. With the cap, **PRIMED** is not reachable in v0.
 
-**Tension**: Redistributing to TSB 30% and trend 35% when sleep/wellness are absent may over-weight TSB relative to the intended design. We do not know whether we should: (a) keep this redistribution and document it, (b) label readiness as "low confidence" whenever subjective data is missing and avoid increasing TSB weight, or (c) use a different rule (e.g. cap readiness at a lower max when subjective data is missing).
+**Tension**: Is the **40/40 weighting + 65 cap** the right objective-only readiness formula? Is the cap too conservative or too permissive? Should the readiness scale be remapped (e.g. max 60) when only objective signals are available?
 
-**What we need**: Whether the objective-only fallback (30% TSB, 35% trend) is appropriate, and whether we should explicitly lower confidence or cap the score when sleep/wellness are unavailable.
+**What we need**: Expert guidance on the objective-only readiness formula (weights + cap) and whether we should add additional objective inputs (e.g. recent quality-session density, lower-body load) before we introduce subjective data in a later phase.
 
 ---
 
 ### 9.4 ACWR: Two Thresholds (1.3 vs 1.5), Rolling vs EWMA, and Messaging
 
-**What we do**: We use **rolling** 7-day acute and 28-day chronic load (sum and average). We expose two thresholds: **1.3** (caution / "elevated"; we set an internal `injury_risk_elevated` flag at ACWR > 1.3) and **1.5** (danger / "high risk"; used for safety overrides and strong messaging). Literature often cites ACWR > 1.5 for elevated injury risk; some work uses EWMA for acute/chronic instead of rolling windows.
+**What we do**: We use **rolling** 7-day acute and 28-day chronic load (sum and average). We expose two thresholds: **1.3** (caution / "elevated"; we set an internal `load_spike_elevated` flag at ACWR > 1.3) and **1.5** (danger / "high risk"; used for safety overrides and strong messaging). Literature often cites ACWR > 1.5 for elevated injury risk; some work uses EWMA for acute/chronic instead of rolling windows.
 
 **Tension**: (1) Is it correct to use **1.3** as a caution threshold (e.g. for triggers and internal flags) and **1.5** for danger, or should both messaging and logic use a single cutoff? (2) Are rolling 7/28-day windows the right choice for our use case, or should we use an EWMA-based ACWR for consistency with CTL/ATL? (3) What exact wording (e.g. "elevated injury risk" vs "increased load spike") should we use at 1.3 vs 1.5 to avoid over-medicalising or under-playing risk?
 
@@ -370,7 +365,7 @@ This section states **what we do today**, the **source of uncertainty or tension
 
 ### 9.6 TSB Zones and "Race Ready" Wording
 
-**What we do**: We use TSB **+5 to +15** as the "Race Ready" zone (peaked, ready to race). Other sources (e.g. Joe Friel via TrainingPeaks) have been cited for **+15 to +25** as ideal for peak race performance. We do not currently distinguish "good for quality training" (e.g. −10 to +5 "Fresh") from "optimal for race day" in our zone labels.
+**What we do**: We distinguish **+5 to +15** as "Fresh / quality-ready" and **+15 to +25** as "Race Ready." We treat **> +25** as detraining risk if sustained.
 
 **Tension**: If +15 to +25 is the evidence-based range for peak performance, our "Race Ready" band (+5 to +15) may be misleading for taper/race planning. We need to know whether to: (a) rename our zone (e.g. "Fresh / good for quality") and add a separate "Peak race" band at +15 to +25, (b) keep +5 to +15 as "Race Ready" and document the Friel range as an alternative view, or (c) adjust the numeric bands and labels on evidence.
 
@@ -410,7 +405,7 @@ This section states **what we do today**, the **source of uncertainty or tension
 
 ### 9.10 Metric Proliferation and AI Coach Cognitive Load
 
-**What we do**: We expose a large set of metrics and flags for the AI coach (and, where relevant, the athlete) to consider when making daily and weekly decisions. These include: **CTL, ATL, TSB** (with zone labels and CTL trend); **ACWR** (with zone and `injury_risk_elevated`); **Readiness** (0–100 score, level, components, confidence, injury/illness overrides); **baseline_established** and **acwr_available**; **intensity distribution** (80/20 compliance, low/moderate/high minutes and percentages); **guardrails** (T/I/R limits, long run %, 10% rule, safe volume range from CTL); **adaptation triggers** (ACWR elevated/high risk, readiness low/very low, TSB overreached, lower-body load high, session density); and **risk assessment** (contributing factors, risk score, injury probability %, options with pros/cons). The AI is expected to weigh these together with conversation context, memories, and athlete preferences to produce a single, coherent recommendation.
+**What we do**: We expose a large set of metrics and flags for the AI coach (and, where relevant, the athlete) to consider when making daily and weekly decisions. These include: **CTL, ATL, TSB** (with zone labels and CTL trend); **ACWR** (with zone and `load_spike_elevated`); **Readiness** (0–100 score, level, components, confidence, injury/illness overrides); **baseline_established** and **acwr_available**; **intensity distribution** (80/20 compliance, low/moderate/high minutes and percentages); **guardrails** (T/I/R limits, long run %, 10% rule, safe volume range from CTL); **adaptation triggers** (ACWR elevated/high risk, readiness low/very low, TSB overreached, lower-body load high, session density); and **risk assessment** (contributing factors, risk score, risk index %, options with pros/cons). The AI is expected to weigh these together with conversation context, memories, and athlete preferences to produce a single, coherent recommendation.
 
 **Tension**: We are unsure whether this **volume of indicators** is helpful or counter-productive. On one hand, each metric serves a distinct purpose (fitness vs fatigue vs form vs injury risk vs readiness vs intensity mix vs guardrails). On the other hand, (a) **conflicting signals** are common (e.g. CTL says "build," ACWR says "caution," readiness says "moderate") and the AI must arbitrate without a formal hierarchy; (b) **redundancy** may exist (e.g. TSB and Readiness both reflect freshness; ACWR and load trend both reflect recent load); (c) **cognitive load** on the AI (and, if we surface many numbers to the athlete, on the user) may lead to diluted or inconsistent messaging ("your CTL is building but ACWR is elevated and readiness is moderate—consider an easy day" can feel like noise); (d) human coaches often rely on a **small set of key levers** (e.g. "how did the last two days feel?" + "what’s the plan today?") rather than a dashboard of derived metrics. We do not know whether we should **simplify** (e.g. collapse to a smaller set of "primary" indicators and treat the rest as optional context), **prioritise** (e.g. a clear decision hierarchy: safety overrides first, then readiness, then CTL/volume), or **keep the full set** but improve how we present and prioritise them in prompts and UI.
 
@@ -466,7 +461,7 @@ The following questions are designed to yield **precise, actionable guidance**. 
 
 ### Q5. ACWR: Thresholds (1.3 vs 1.5), Rolling vs EWMA, and Wording
 
-**Context**: We use **rolling** 7-day and 28-day load: ACWR = (7-day average daily systemic load) / (28-day average daily systemic load), with acute = days *t*−1…*t*−7 and chronic = days *t*−1…*t*−28 (§3.4). No EWMA. We have two cutoffs: **1.3** (caution; we set `injury_risk_elevated = True` and may suggest modifications) and **1.5** (danger; we may force rest when combined with very low readiness).
+**Context**: We use **rolling** 7-day and 28-day load: ACWR = (7-day average daily systemic load) / (28-day average daily systemic load), with acute = days *t*−1…*t*−7 and chronic = days *t*−1…*t*−28 (§3.4). No EWMA. We have two cutoffs: **1.3** (caution; we set `load_spike_elevated = True` and may suggest modifications) and **1.5** (danger; we may force rest when combined with very low readiness).
 
 **Current choice**: Two thresholds as above. Rolling windows only. We message "caution" at 1.3 and "high injury risk" at 1.5.
 
@@ -476,21 +471,21 @@ The following questions are designed to yield **precise, actionable guidance**. 
 
 ### Q6. TSB Ranges for Training vs Race Readiness
 
-**Context**: Our code classifies TSB zones as: &lt;−25 Overreached, −25 to &lt;−10 Productive, −10 to &lt;+5 Optimal, +5 to &lt;+15 Fresh, ≥+15 Peaked (§3.2). We use the +5 to +15 band as "ready for quality / race" in messaging; some sources (e.g. Friel) cite +15 to +25 for peak race performance. We want to avoid misleading athletes in taper/race planning.
+**Context**: Our code classifies TSB zones as: &lt;−25 Overreached, −25 to &lt;−10 Productive, −10 to &lt;+5 Optimal, +5 to &lt;+15 Fresh (quality-ready), +15 to &lt;+25 Race Ready, ≥+25 Detraining Risk (§3.2). We want to avoid misleading athletes in taper/race planning.
 
-**Current choice**: Zone boundaries as above. We treat +5 to +15 as the "race ready" band for daily messaging; &gt;+15 as "peaked" (or "detraining" if sustained).
+**Current choice**: Zone boundaries as above. We use +5 to +15 for quality readiness and +15 to +25 for race readiness.
 
 **Ask**: (a) What TSB **ranges** would you use for: (i) "productive training" (building), (ii) "fresh enough for key workouts," and (iii) "peak race readiness"? (b) Should we **rename** our +5 to +15 zone (e.g. "Fresh / good for quality" or "Approaching race ready") and add a separate "Peak race" band (e.g. +15 to +25)? (c) Any **sources** (e.g. Friel, TrainingPeaks) we should cite or align with? Please give numeric ranges and preferred labels.
 
 ---
 
-### Q7. Readiness Score: Design and Fallback When Subjective Data Is Missing
+### Q7. Readiness Score: Objective-Only Design (v0) and Future Expansion
 
-**Context**: Readiness is **designed** as 0–100 from TSB (20%), load trend (25%), sleep (25%), wellness (30%) when all are present. **In current implementation** we only compute the objective path: TSB 30%, load trend 35%; sleep and wellness are not yet used (§6.2). So effectively readiness = 0.30×tsb_score + 0.35×load_trend (plus injury/illness overrides). Confidence is "low" only when `data_days < 14`.
+**Context**: In v0 we compute readiness **only** from TSB and load trend: `score = 0.40×tsb_score + 0.40×load_trend`, capped at **65**. Confidence is always `LOW`. Subjective inputs (sleep, wellness) are not collected yet (§6.2).
 
-**Current choice**: Implementation is objective-only (30% TSB, 35% load trend). The 20/25/25/30 design is documented for when we add sleep/wellness.
+**Current choice**: Objective-only readiness with 40/40 weights and a hard cap at 65.
 
-**Ask**: (a) Is a **single** 0–100 Readiness score (TSB + load trend, and eventually sleep + wellness) **useful** for daily prescription (go/no-go, downgrade quality)? (b) Is the **intended** 20/25/25/30 split reasonable when all data are present? (c) For the **current objective-only** path (30% TSB, 35% trend), is that weighting appropriate, or should we (i) label confidence "low" when subjective data is missing and/or (ii) cap the score (e.g. max 70) to reflect uncertainty? Please be specific.
+**Ask**: (a) Is a **single** 0–100 objective-only readiness score (TSB + load trend) **useful** for daily prescription? (b) Are 40/40 weights and cap 65 reasonable, or would you recommend a different cap/weighting? (c) When we eventually add subjective inputs, would you advocate rebalancing the weights or keeping the cap logic?
 
 ---
 
@@ -526,7 +521,7 @@ The following questions are designed to yield **precise, actionable guidance**. 
 
 ### Q11. Too Many Metrics? Cognitive Load and Decision Quality for the AI Coach
 
-**Context**: We surface many metrics and flags for the AI coach to consider when making daily and weekly recommendations: CTL, ATL, TSB (and zones, trend), ACWR (and zone, injury_risk_elevated), Readiness (score, level, components, confidence), baseline/acwr availability, 80/20 intensity distribution, guardrails (T/I/R, long run, 10% rule, safe volume), adaptation triggers (ACWR elevated/high, readiness low/very low, TSB overreached, lower-body load high, session density), and risk assessment (factors, probability, options). The AI must weigh these—often with conflicting signals—alongside conversation context and athlete preferences to produce one coherent recommendation. We are unsure whether this **proliferation of indicators** helps or hinders decision quality and athlete experience.
+**Context**: We surface many metrics and flags for the AI coach to consider when making daily and weekly recommendations: CTL, ATL, TSB (and zones, trend), ACWR (and zone, load_spike_elevated), Readiness (score, level, components, confidence), baseline/acwr availability, 80/20 intensity distribution, guardrails (T/I/R, long run, 10% rule, safe volume), adaptation triggers (ACWR elevated/high, readiness low/very low, TSB overreached, lower-body load high, session density), and risk assessment (factors, risk index, options). The AI must weigh these—often with conflicting signals—alongside conversation context and athlete preferences to produce one coherent recommendation. We are unsure whether this **proliferation of indicators** helps or hinders decision quality and athlete experience.
 
 **Current choice**: We expose the full set and rely on the AI to prioritise and explain. We have one hard safety override (ACWR >1.5 and Readiness <35 → force rest); everything else is advisory.
 
@@ -536,7 +531,7 @@ The following questions are designed to yield **precise, actionable guidance**. 
 
 ### Q12. Risk Aggregation: Additive Weights and Bands
 
-**Context**: We combine multiple risk factors into one overall risk level for the AI and (optionally) the athlete (§7.2). Each factor contributes a **weight** to a risk score: e.g. ACWR &gt;1.5 adds 0.40, ACWR &gt;1.3 adds 0.20, Readiness &lt;35 adds 0.25, Readiness &lt;50 adds 0.15, TSB &lt;−25 adds 0.20, lower-body load over threshold adds 0.15. The score is then mapped to risk level: ≥0.60 DANGER, ≥0.40 HIGH, ≥0.20 MODERATE, else LOW. Injury probability % = min(100, score×100).
+**Context**: We combine multiple risk factors into one overall risk level for the AI and (optionally) the athlete (§7.2). Each factor contributes a **weight** to a risk score: e.g. ACWR &gt;1.5 adds 0.40, ACWR &gt;1.3 adds 0.20, Readiness &lt;35 adds 0.25, Readiness &lt;50 adds 0.15, TSB &lt;−25 adds 0.20, lower-body load over threshold adds 0.15. The score is then mapped to risk level: ≥0.60 DANGER, ≥0.40 HIGH, ≥0.20 MODERATE, else LOW. Risk index % = min(100, score×100).
 
 **Current choice**: Additive model with fixed weights and four bands; used to prioritise options (e.g. "Option 1 or 2 recommended") and messaging.
 

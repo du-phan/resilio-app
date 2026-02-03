@@ -40,7 +40,7 @@ def assess_current_risk(
     Holistic risk assessment combining all factors.
 
     Analyzes current metrics, recent training load, and planned workout
-    to provide multi-factor injury risk assessment with actionable options.
+    to provide multi-factor risk assessment with actionable options.
 
     Args:
         current_metrics: Dict with ctl, atl, tsb, acwr, readiness
@@ -53,7 +53,7 @@ def assess_current_risk(
     Example:
         >>> metrics = {"acwr": 1.35, "readiness": 45, "tsb": -15}
         >>> risk = assess_current_risk(metrics, recent_activities, planned_workout)
-        >>> print(f"Risk: {risk.overall_risk_level}, probability: {risk.injury_probability_pct}%")
+        >>> print(f"Risk: {risk.overall_risk_level}, index: {risk.risk_index_pct}%")
     """
     # Extract metrics
     acwr = current_metrics.get("acwr", 1.0)
@@ -63,7 +63,7 @@ def assess_current_risk(
 
     # Analyze contributing factors
     contributing_factors = []
-    risk_score = 0.0  # Base score
+    risk_score = 0.0  # Base score (heuristic index, not medical probability)
 
     # ACWR factor
     if acwr > 1.5:
@@ -81,7 +81,7 @@ def assess_current_risk(
             value=acwr,
             threshold=1.3,
             severity="moderate",
-            weight=0.30,
+            weight=0.20,
         ))
         risk_score += 0.20
 
@@ -101,7 +101,7 @@ def assess_current_risk(
             value=readiness,
             threshold=50,
             severity="moderate",
-            weight=0.20,
+            weight=0.15,
         ))
         risk_score += 0.15
 
@@ -123,19 +123,19 @@ def assess_current_risk(
             recent_lower_body += activity.get("lower_body_load_au", 0)
 
         # Dynamic threshold based on CTL
-        safe_daily_lower = ctl * 2.5  # Rough heuristic
-        if recent_lower_body > safe_daily_lower:
+        safe_2day_lower = ctl * 2.5  # Rough heuristic (2-day sum)
+        if recent_lower_body > safe_2day_lower:
             contributing_factors.append(RiskFactor(
                 name="RECENT_LOWER_BODY_LOAD",
                 value=recent_lower_body,
-                threshold=safe_daily_lower,
+                threshold=safe_2day_lower,
                 severity="moderate",
-                weight=0.25,
+                weight=0.15,
             ))
             risk_score += 0.15
 
     # Determine overall risk level
-    injury_probability = min(100, risk_score * 100)  # Convert to percentage
+    risk_index_pct = min(100, risk_score * 100)  # Heuristic index (0-100)
 
     if risk_score >= 0.60:
         overall_risk = RiskLevel.DANGER
@@ -156,7 +156,7 @@ def assess_current_risk(
             action="easy_run_30min",
             risk_reduction_pct=easy_risk_reduction,
             description="Easy 30min run (safest)",
-            pros=["Maintains aerobic stimulus", "ACWR stays manageable", "Lower injury risk"],
+            pros=["Maintains aerobic stimulus", "ACWR stays manageable", "Lower risk"],
             cons=["Misses threshold/interval stimulus"],
         ))
 
@@ -176,7 +176,7 @@ def assess_current_risk(
             risk_reduction_pct=0,
             description="Proceed with planned workout",
             pros=["Stays on schedule", f"Form is {'good' if tsb > -10 else 'moderate'} (TSB {tsb:.0f})"],
-            cons=[f"{injury_probability:.0f}% injury risk"],
+            cons=[f"Risk index ~{risk_index_pct:.0f}%"],
         ))
     else:
         # No planned workout
@@ -217,7 +217,7 @@ def assess_current_risk(
 
     return CurrentRiskAssessment(
         overall_risk_level=overall_risk,
-        injury_probability_pct=round(injury_probability, 1),
+        risk_index_pct=round(risk_index_pct, 1),
         contributing_factors=contributing_factors,
         recommended_action=recommended_action,
         options=options,

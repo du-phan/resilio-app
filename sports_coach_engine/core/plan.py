@@ -1725,11 +1725,11 @@ def _explain_acwr(acwr_value: float) -> str:
     if acwr_value < 0.8:
         return f"Training load is light - safe to increase volume (load ratio: {acwr_value:.2f})"
     elif acwr_value <= 1.3:
-        return f"Training load is in the sweet spot - low injury risk (load ratio: {acwr_value:.2f})"
+        return f"Training load is in a stable range (load ratio: {acwr_value:.2f})"
     elif acwr_value <= 1.5:
         return f"Training load is elevated - monitor how you feel (load ratio: {acwr_value:.2f})"
     else:
-        return f"⚠️ Training load spike detected - injury risk is elevated (load ratio: {acwr_value:.2f})"
+        return f"⚠️ Training load spike detected - consider reducing stress (load ratio: {acwr_value:.2f})"
 
 
 def _generate_approval_block(

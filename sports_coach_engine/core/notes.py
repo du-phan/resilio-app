@@ -88,7 +88,7 @@ def analyze_activity(
     Analyze activity using quantitative toolkit functions (Toolkit Paradigm).
 
     Returns multiple RPE estimates from quantitative sources and treadmill
-    detection. Claude Code handles qualitative extraction (wellness, injury,
+    detection. Claude Code handles qualitative extraction (injury,
     illness) naturally through conversation.
 
     Args:
@@ -568,5 +568,4 @@ def detect_treadmill(
         confidence=confidence,
         signals=signals if signals else ["No treadmill signals detected"],
     )
-
 

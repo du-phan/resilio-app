@@ -2,10 +2,10 @@
 
 > **Quick Links**: [Back to Index](index.md) | [Core Concepts](core_concepts.md)
 
-Holistic injury risk analysis and training stress forecasting.
+Holistic risk analysis and training stress forecasting.
 
 **Commands in this category:**
-- `sce risk assess` - Multi-factor injury risk assessment
+- `sce risk assess` - Multi-factor risk assessment
 - `sce risk recovery-window` - Estimate recovery timeline
 - `sce risk forecast` - Project CTL/ATL/TSB 1-4 weeks ahead
 - `sce risk taper-status` - Verify taper progression
@@ -14,7 +14,7 @@ Holistic injury risk analysis and training stress forecasting.
 
 ## sce risk assess
 
-Multi-factor injury risk assessment combining ACWR, readiness, TSB, and recent load.
+Multi-factor risk assessment combining ACWR, readiness, TSB, and recent load.
 
 **Usage:**
 
@@ -65,7 +65,7 @@ sce risk assess --metrics current_metrics.json \
 }
 ```
 
-**Returns:** Overall risk level (low/moderate/high/danger), injury probability (%), contributing factors with weights, recommended action, risk mitigation options, rationale.
+**Returns:** Overall risk level (low/moderate/high/danger), risk index (%), contributing factors with weights, recommended action, risk mitigation options, rationale.
 
 ---
 

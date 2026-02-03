@@ -361,7 +361,7 @@ def api_assess_current_risk(
     planned_workout: Optional[Dict[str, Any]] = None,
 ) -> Union[CurrentRiskAssessment, AnalysisError]:
     """
-    Holistic injury risk assessment.
+    Holistic risk assessment.
 
     Args:
         current_metrics: Dict with keys:

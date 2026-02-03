@@ -255,7 +255,9 @@ class CurrentRiskAssessment(BaseModel):
     """Holistic risk assessment combining all factors."""
 
     overall_risk_level: RiskLevel = Field(..., description="Overall risk level")
-    injury_probability_pct: float = Field(..., ge=0.0, le=100.0, description="Injury probability percentage")
+    risk_index_pct: float = Field(
+        ..., ge=0.0, le=100.0, description="Heuristic risk index (0-100), not a medical probability"
+    )
 
     contributing_factors: List[RiskFactor] = Field(
         ..., description="Factors contributing to current risk"

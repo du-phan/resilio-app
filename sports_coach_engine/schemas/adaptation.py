@@ -34,7 +34,7 @@ class TriggerType(str, Enum):
 
     # ACWR-based triggers
     ACWR_ELEVATED = "acwr_elevated"           # 1.3-1.5 (caution zone)
-    ACWR_HIGH_RISK = "acwr_high_risk"         # >1.5 (high injury risk)
+    ACWR_HIGH_RISK = "acwr_high_risk"         # >1.5 (significant load spike)
 
     # Readiness-based triggers
     READINESS_LOW = "readiness_low"           # 35-50 (reduce intensity)
@@ -86,10 +86,10 @@ class OverrideRisk(str, Enum):
 class RiskLevel(str, Enum):
     """Risk levels for injury if athlete overrides triggers."""
 
-    LOW = "low"           # <10% injury probability
-    MODERATE = "moderate" # 10-20% injury probability
-    HIGH = "high"         # 20-40% injury probability
-    SEVERE = "severe"     # >40% injury probability
+    LOW = "low"           # Low risk index
+    MODERATE = "moderate" # Moderate risk index
+    HIGH = "high"         # High risk index
+    SEVERE = "severe"     # Severe risk index
 
 
 class AdaptationTrigger(BaseModel):
@@ -119,15 +119,17 @@ class AdaptationTrigger(BaseModel):
 
 class OverrideRiskAssessment(BaseModel):
     """
-    Injury risk assessment if athlete ignores triggers (Toolkit Paradigm).
+    Risk assessment if athlete ignores triggers (Toolkit Paradigm).
 
     Returned by assess_override_risk() toolkit function. Provides quantitative
-    risk probability based on triggers, workout intensity, and injury history.
+    risk index based on triggers, workout intensity, and injury history.
     Claude Code presents this to athlete when discussing adaptation options.
     """
 
     risk_level: RiskLevel = Field(..., description="Overall risk level")
-    injury_probability: float = Field(..., ge=0.0, le=1.0, description="Probability of injury (0.0-1.0)")
+    risk_index: float = Field(
+        ..., ge=0.0, le=1.0, description="Heuristic risk index (0.0-1.0), not a medical probability"
+    )
     risk_factors: list[str] = Field(
         default_factory=list,
         description="Contributing risk factors (e.g., 'ACWR 1.45', 'Knee history')"

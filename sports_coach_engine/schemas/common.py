@@ -44,7 +44,8 @@ class MetricZone(str, Enum):
     PRODUCTIVE = "productive"
     OPTIMAL = "optimal"
     FRESH = "fresh"
-    PEAKED = "peaked"
+    RACE_READY = "race_ready"
+    DETRAINING_RISK = "detraining_risk"
 
     # ACWR zones
     UNDERTRAINED = "undertrained"

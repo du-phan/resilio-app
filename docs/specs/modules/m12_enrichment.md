@@ -100,7 +100,8 @@ class MetricZone(str, Enum):
     PRODUCTIVE = "productive"
     OPTIMAL = "optimal"
     FRESH = "fresh"
-    PEAKED = "peaked"
+    RACE_READY = "race_ready"
+    DETRAINING_RISK = "detraining_risk"
 
     # ACWR zones
     UNDERTRAINED = "undertrained"
@@ -134,6 +135,28 @@ class MetricInterpretation(BaseModel):
     explanation: Optional[str] = None  # Educational text for the metric
 
 
+class ReadinessSummary(BaseModel):
+    """Primary readiness signal for quick decisions."""
+    score: int
+    level: str
+    confidence: Optional[str] = None
+    data_coverage: Optional[str] = None
+
+
+class LoadSpikeSummary(BaseModel):
+    """Primary load spike signal based on ACWR."""
+    acwr: Optional[float] = None
+    zone: Optional[str] = None
+    available: bool = False
+    caveat: Optional[str] = None
+
+
+class PrimarySignals(BaseModel):
+    """Primary signals summary for the AI Coach."""
+    readiness: ReadinessSummary
+    load_spike: LoadSpikeSummary
+
+
 class EnrichedMetrics(BaseModel):
     """Complete metrics snapshot with interpretations."""
     date: date
@@ -143,6 +166,7 @@ class EnrichedMetrics(BaseModel):
     acwr: Optional[MetricInterpretation] = None  # Requires 28+ days
     readiness: MetricInterpretation
     disclosure_level: DisclosureLevel  # What level of detail to show
+    primary_signals: Optional[PrimarySignals] = None  # Readiness + load spike summary
 
     # Intensity distribution (always included)
     low_intensity_percent: float       # Percent in zone 1-2
@@ -408,16 +432,17 @@ TSB_CONTEXT: list[tuple[float, float, str, MetricZone]] = [
     (-100, -25, "overreached - recovery needed", MetricZone.OVERREACHED),
     (-25, -10, "productive training zone", MetricZone.PRODUCTIVE),
     (-10, 5, "optimal for quality work", MetricZone.OPTIMAL),
-    (5, 15, "fresh - good for racing", MetricZone.FRESH),
-    (15, 100, "peaked - may be detraining", MetricZone.PEAKED),
+    (5, 15, "fresh - quality-ready", MetricZone.FRESH),
+    (15, 25, "race-ready - peak freshness", MetricZone.RACE_READY),
+    (25, 100, "very fresh - detraining risk if sustained", MetricZone.DETRAINING_RISK),
 ]
 
 # ACWR (Acute:Chronic Workload Ratio) interpretation
 ACWR_CONTEXT: list[tuple[float, float, str, MetricZone]] = [
     (0, 0.8, "undertrained - fitness declining", MetricZone.UNDERTRAINED),
-    (0.8, 1.3, "safe training zone", MetricZone.SAFE),
-    (1.3, 1.5, "caution - monitor closely", MetricZone.CAUTION),
-    (1.5, 3.0, "high injury risk", MetricZone.HIGH_RISK),
+    (0.8, 1.3, "stable training load", MetricZone.SAFE),
+    (1.3, 1.5, "caution - recent load elevated", MetricZone.CAUTION),
+    (1.5, 3.0, "significant load spike - reduce stress if needed", MetricZone.HIGH_RISK),
 ]
 
 # Readiness interpretation
@@ -491,7 +516,7 @@ def interpret_metric(
         "ctl": "Long-term fitness level based on 42-day training load average",
         "atl": "Short-term fatigue based on 7-day training load average",
         "tsb": "Balance between fitness and fatigue - higher means fresher",
-        "acwr": "Ratio of recent load to chronic load - monitors injury risk",
+        "acwr": "Ratio of recent load to chronic load - load spike indicator",
         "readiness": "Overall readiness score combining form and recent trends",
     }
 

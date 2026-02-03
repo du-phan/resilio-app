@@ -318,7 +318,7 @@ class TestRiskAssessment:
         risk = assess_override_risk([], {"workout_type": "easy", "target_rpe": 4})
 
         assert risk.risk_level == RiskLevel.LOW
-        assert risk.injury_probability < 0.10
+        assert risk.risk_index < 0.10
         assert len(risk.risk_factors) == 0
 
     def test_single_caution_trigger_moderate_risk(self):
@@ -339,7 +339,7 @@ class TestRiskAssessment:
 
         # Caution (0.05) + base (0.05) * RPE 7 multiplier (1.2) = 0.12 = moderate
         assert risk.risk_level == RiskLevel.MODERATE
-        assert 0.10 <= risk.injury_probability < 0.20
+        assert 0.10 <= risk.risk_index < 0.20
         assert len(risk.risk_factors) >= 1
 
     def test_danger_trigger_high_risk(self):
@@ -359,7 +359,7 @@ class TestRiskAssessment:
         risk = assess_override_risk(triggers, workout)
 
         assert risk.risk_level in [RiskLevel.HIGH, RiskLevel.MODERATE]
-        assert risk.injury_probability >= 0.15
+        assert risk.risk_index >= 0.15
         assert len(risk.evidence) > 0
 
     def test_high_intensity_multiplies_risk(self):
@@ -383,7 +383,7 @@ class TestRiskAssessment:
         risk_hard = assess_override_risk(triggers, hard_workout)
 
         # Hard workout should have higher risk
-        assert risk_hard.injury_probability > risk_easy.injury_probability
+        assert risk_hard.risk_index > risk_easy.risk_index
 
 
 class TestRecoveryEstimation:
@@ -437,5 +437,4 @@ class TestRecoveryEstimation:
 
         assert recovery.days == 4
         assert recovery.confidence == "high"
-
 

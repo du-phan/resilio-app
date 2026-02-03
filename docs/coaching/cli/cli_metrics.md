@@ -49,16 +49,14 @@ sce status
       "value": 1.18,
       "formatted_value": "1.18",
       "zone": "safe",
-      "interpretation": "normal injury risk"
+      "interpretation": "stable training load"
     },
     "readiness": {
       "score": 68,
       "level": "moderate",
       "breakdown": {
         "tsb_contribution": 15,
-        "recent_trend_contribution": 20,
-        "sleep_contribution": 17,
-        "wellness_contribution": 16
+        "load_trend_contribution": 20
       }
     }
   }
@@ -70,7 +68,7 @@ sce status
 - **CTL** (Chronic Training Load): 42-day fitness
 - **ATL** (Acute Training Load): 7-day fatigue
 - **TSB** (Training Stress Balance): CTL - ATL, represents form
-- **ACWR** (Acute:Chronic Workload Ratio): Injury risk indicator
+- **ACWR** (Acute:Chronic Workload Ratio): Load spike indicator
 - **Readiness**: 0-100 composite score
 
 ---

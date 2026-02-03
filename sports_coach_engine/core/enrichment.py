@@ -24,8 +24,11 @@ from sports_coach_engine.schemas.enrichment import (
     EnrichedWorkout,
     HRGuidance,
     LoadInterpretation,
+    LoadSpikeSummary,
     MetricInterpretation,
     PaceGuidance,
+    PrimarySignals,
+    ReadinessSummary,
     SyncSummary,
     WorkoutRationale,
 )
@@ -72,22 +75,23 @@ CTL_CONTEXT: list[tuple[float, float, str, str]] = [
 TSB_CONTEXT: list[tuple[float, float, str, str]] = [
     (-100, -25, "overreached - recovery needed", "overreached"),
     (-25, -10, "productive training zone", "productive"),
-    (-10, 5, "optimal for quality work", "optimal"),
-    (5, 15, "fresh - good for racing", "fresh"),
-    (15, 100, "peaked - may be detraining", "peaked"),
+    (-10, 5, "balanced for normal training", "optimal"),
+    (5, 15, "fresh - good for quality work", "fresh"),
+    (15, 25, "race-ready freshness", "race_ready"),
+    (25, 100, "very fresh - detraining risk if sustained", "detraining_risk"),
 ]
 
 # ACWR (Acute:Chronic Workload Ratio) interpretation
-# Based on injury risk research (Gabbett et al.)
+# Load spike indicator (not a medical prediction)
 ACWR_CONTEXT: list[tuple[float, float, str, str]] = [
     (0, 0.8, "undertrained - fitness declining", "undertrained"),
-    (0.8, 1.3, "safe training zone", "safe"),
-    (1.3, 1.5, "caution - monitor closely", "caution"),
-    (1.5, 3.0, "high injury risk", "high_risk"),
+    (0.8, 1.3, "stable training load", "safe"),
+    (1.3, 1.5, "caution - recent load elevated", "caution"),
+    (1.5, 3.0, "significant load spike - reduce stress if needed", "high_risk"),
 ]
 
 # Readiness interpretation
-# 0-100 scale combining form, load trend, and wellness
+# 0-100 scale combining form and recent load trend
 READINESS_CONTEXT: list[tuple[float, float, str, str]] = [
     (0, 35, "rest recommended", "rest_recommended"),
     (35, 50, "easy activity only", "easy_only"),
@@ -181,7 +185,7 @@ def interpret_metric(
         "ctl": "Long-term fitness level based on 42-day training load average",
         "atl": "Short-term fatigue based on 7-day training load average",
         "tsb": "Balance between fitness and fatigue - higher means fresher",
-        "acwr": "Ratio of recent load to chronic load - monitors injury risk",
+        "acwr": "Ratio of recent load to chronic load - load spike indicator",
         "readiness": "Overall readiness score combining form and recent trends",
     }
 
@@ -304,6 +308,29 @@ def enrich_metrics(
         else:
             trend = "stable"
 
+    # Primary signals summary (additive, non-breaking)
+    readiness_summary = ReadinessSummary(
+        score=metrics.readiness.score,
+        level=metrics.readiness.level,
+        confidence=getattr(metrics.readiness, "confidence", None),
+        data_coverage=getattr(metrics.readiness, "data_coverage", None),
+    )
+
+    if metrics.acwr and metrics.acwr.acwr is not None:
+        load_spike_summary = LoadSpikeSummary(
+            acwr=metrics.acwr.acwr,
+            zone=metrics.acwr.zone,
+            available=True,
+            caveat="ACWR is a relative load spike indicator; interpret with context.",
+        )
+    else:
+        load_spike_summary = LoadSpikeSummary(
+            acwr=None,
+            zone=None,
+            available=False,
+            caveat="ACWR requires ~28 days of data to compute reliably.",
+        )
+
     return EnrichedMetrics(
         date=metrics.date,
         ctl=ctl,
@@ -312,6 +339,10 @@ def enrich_metrics(
         acwr=acwr,
         readiness=readiness,
         disclosure_level=disclosure,
+        primary_signals=PrimarySignals(
+            readiness=readiness_summary,
+            load_spike=load_spike_summary,
+        ),
         low_intensity_percent=low_pct,
         intensity_on_target=on_target,
         ctl_weekly_change=ctl_change,
@@ -548,7 +579,7 @@ def _generate_rationale(
     """
     Generate context-aware rationale for a workout.
 
-    Rationale adapts based on TSB (form), ACWR (injury risk), and workout type.
+    Rationale adapts based on TSB (form), ACWR (load spike indicator), and workout type.
     """
     # TSB-based primary reason
     tsb = metrics.ctl_atl.tsb

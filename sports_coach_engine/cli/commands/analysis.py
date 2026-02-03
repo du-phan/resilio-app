@@ -6,7 +6,7 @@ Commands:
     sce analysis gaps           - Detect activity gaps
     sce analysis load           - Analyze multi-sport load
     sce analysis capacity       - Check weekly capacity
-    sce risk assess             - Assess current injury risk
+    sce risk assess             - Assess current training risk
     sce risk recovery-window    - Estimate recovery timeline
     sce risk forecast           - Forecast training stress
     sce risk taper-status       - Verify taper progression
@@ -264,10 +264,10 @@ def risk_assess_command(
     workout_json: Optional[str] = typer.Option(None, "--planned", help="JSON file with planned workout (optional)"),
 ) -> None:
     """
-    Assess current injury risk holistically.
+    Assess current training risk holistically.
 
-    Combines ACWR, readiness, TSB, and recent load to calculate injury
-    probability and provide actionable risk mitigation options.
+    Combines ACWR, readiness, TSB, and recent load to calculate a heuristic
+    risk index and provide actionable risk mitigation options.
 
     Example:
         sce risk assess --metrics current_metrics.json \\

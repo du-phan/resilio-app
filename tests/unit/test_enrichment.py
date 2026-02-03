@@ -97,17 +97,17 @@ def sample_metrics():
             zone=ACWRZone.SAFE,
             acute_load_7d=1890.0,
             chronic_load_28d=257.14,  # 7200/28
-            injury_risk_elevated=False,
+            load_spike_elevated=False,
         ),
         readiness=ReadinessScore(
             score=72,
             level=ReadinessLevel.READY,
-            confidence=ConfidenceLevel.HIGH,
+            confidence=ConfidenceLevel.LOW,
+            data_coverage="objective_only",
             components=ReadinessComponents(
                 tsb_contribution=15,
                 load_trend_contribution=18,
-                wellness_contribution=19,
-                subjective_contribution=20,
+                weights_used={"tsb": 0.4, "load_trend": 0.4},
             ),
             recommendation="Execute as planned",
         ),
@@ -152,17 +152,17 @@ def sample_historical_metrics(sample_metrics):
                 zone=ACWRZone.SAFE,
                 acute_load_7d=1800.0,
                 chronic_load_28d=250.0,
-                injury_risk_elevated=False,
+                load_spike_elevated=False,
             ),
             readiness=ReadinessScore(
                 score=70,
                 level=ReadinessLevel.READY,
-                confidence=ConfidenceLevel.HIGH,
+                confidence=ConfidenceLevel.LOW,
+                data_coverage="objective_only",
                 components=ReadinessComponents(
                     tsb_contribution=14,
                     load_trend_contribution=18,
-                    wellness_contribution=18,
-                    subjective_contribution=20,
+                    weights_used={"tsb": 0.4, "load_trend": 0.4},
                 ),
                 recommendation="Execute as planned",
             ),
@@ -271,18 +271,18 @@ class TestMetricInterpretation:
         # Safe zone
         result = interpret_metric("acwr", 1.10)
         assert result.zone == "safe"
-        assert result.interpretation == "safe training zone"
+        assert result.interpretation == "stable training load"
         assert result.formatted_value == "1.10"
 
         # Caution zone
         result = interpret_metric("acwr", 1.40)
         assert result.zone == "caution"
-        assert result.interpretation == "caution - monitor closely"
+        assert result.interpretation == "caution - recent load elevated"
 
         # High risk zone
         result = interpret_metric("acwr", 1.65)
         assert result.zone == "high_risk"
-        assert result.interpretation == "high injury risk"
+        assert result.interpretation == "significant load spike - reduce stress if needed"
 
     def test_readiness_levels(self):
         """Readiness score should map to correct levels."""
@@ -458,12 +458,12 @@ class TestEnrichMetrics:
             readiness=ReadinessScore(
                 score=60,
                 level=ReadinessLevel.READY,
-                confidence=ConfidenceLevel.MEDIUM,
+                confidence=ConfidenceLevel.LOW,
+                data_coverage="objective_only",
                 components=ReadinessComponents(
                     tsb_contribution=12,
                     load_trend_contribution=15,
-                    wellness_contribution=18,
-                    subjective_contribution=15,
+                    weights_used={"tsb": 0.4, "load_trend": 0.4},
                 ),
                 recommendation="Execute as planned",
             ),
@@ -573,17 +573,17 @@ class TestEnrichWorkout:
                 zone=ACWRZone.CAUTION,
                 acute_load_7d=2000.0,
                 chronic_load_28d=285.7,
-                injury_risk_elevated=True,
+                load_spike_elevated=True,
             ),
             readiness=ReadinessScore(
                 score=55,
                 level=ReadinessLevel.READY,
-                confidence=ConfidenceLevel.MEDIUM,
+                confidence=ConfidenceLevel.LOW,
+                data_coverage="objective_only",
                 components=ReadinessComponents(
                     tsb_contribution=10,
                     load_trend_contribution=15,
-                    wellness_contribution=15,
-                    subjective_contribution=15,
+                    weights_used={"tsb": 0.4, "load_trend": 0.4},
                 ),
                 recommendation="Consider easy effort",
             ),
@@ -597,7 +597,7 @@ class TestEnrichWorkout:
 
         assert enriched.rationale.safety_notes is not None
         assert len(enriched.rationale.safety_notes) > 0
-        # Should mention ACWR or injury risk
+        # Should mention ACWR or caution signal
         safety_text = " ".join(enriched.rationale.safety_notes).lower()
         assert "acwr" in safety_text or "risk" in safety_text or "caution" in safety_text
 
