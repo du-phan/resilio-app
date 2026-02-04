@@ -308,8 +308,7 @@ sce vdot estimate-current
 
 # 3. Interpret trend
 # VDOT 48 → 45 = 3-point regression over 18 months
-# Coach: "You've regressed 3 VDOT points since your PB. Normal after 18 months
-# without racing. We'll rebuild gradually from VDOT 45 toward your peak of 48."
+# Coach: "You've regressed 3 VDOT points since your PB. VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports. Normal after 18 months without racing. We'll rebuild gradually from VDOT 45 toward your peak of 48."
 ```
 
 **Requirements:**

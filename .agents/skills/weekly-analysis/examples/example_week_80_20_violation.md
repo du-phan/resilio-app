@@ -159,6 +159,7 @@ Compare prescribed vs actual paces:
 ### Weekly Review: Week 3 (Jan 13-19)
 
 Solid week, Jordan! You completed all 42 km as planned (100% adherence) and hit your interval workout. Let's talk about one important adjustment for next week.
+Quick defs (first mention only): RPE is your perceived effort from 1–10.
 
 **Adherence**:
 - ✅ Completed all 4 workouts (42 km total)
@@ -182,6 +183,7 @@ Here's what happened:
 **Your easy runs are actually tempo pace.** This is super common - most runners make this mistake. The fix is simple but will feel uncomfortable at first.
 
 **VDOT Pace Zones** (based on your VDOT 48):
+VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports.
 - **Easy**: 6:45-7:15/km ← Target this
 - **Tempo/LT**: 5:15-5:30/km
 - **Intervals**: 4:25-4:35/km
@@ -189,6 +191,7 @@ Here's what happened:
 You're running easy at 5:50-6:05/km - that's between easy and tempo (the gray zone).
 
 **Metrics**:
+Quick defs (first mention only): CTL is your long-term training load—think of it as your 6-week fitness trend. ACWR compares this week to your recent average; high values mean a sudden spike. Readiness is a recovery score—higher usually means you can handle harder work. For multi-sport athletes, these reflect total work across running + other sports.
 - CTL: 36 → 38 (+2, steady)
 - ACWR: 1.18 → 1.25 (+0.07, approaching caution zone)
 - Readiness: 68 → 52 (-16, concerning drop)

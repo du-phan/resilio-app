@@ -179,6 +179,7 @@ Good week overall, Sam! You completed all 38 km as planned and added a climbing 
 - Total: 1520 AU (38% increase from last week)
 
 **What Happened on Saturday**:
+Quick defs (first mention only): RPE is your perceived effort from 1–10. CTL is your long-term training load—think of it as your 6-week fitness trend. ACWR compares this week to your recent average; high values mean a sudden spike. TSB is freshness (long-term fitness minus short-term fatigue). Readiness is a recovery score—higher usually means you can handle harder work. For multi-sport athletes, these reflect total work across running + other sports.
 Your long run felt harder than expected (RPE 6-7 instead of 4). Here's why:
 
 Friday's climbing comp generated **600 AU systemic load** (very high). Even though your legs weren't sore (climbing doesn't stress legs much), your cardiovascular system was fatigued. This is called **systemic fatigue** - whole-body tiredness that affects endurance efforts.

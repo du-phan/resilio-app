@@ -216,6 +216,7 @@ sce memory add --type TRAINING_RESPONSE \
 ### Weekly Review: Week 5 (Jan 27 - Feb 2)
 
 Great week, Alex! You completed all 6 planned workouts (100% adherence) and hit 36 km exactly. Your CTL increased from 42 → 44, showing steady fitness gains.
+Quick defs (first mention only): CTL is your long-term training load—think of it as your 6-week fitness trend. RPE is your perceived effort from 1–10. For multi-sport athletes, these reflect total work across running + other sports.
 
 **Adherence**:
 - ✅ Completed all running workouts (easy, tempo, long)
@@ -241,6 +242,7 @@ Great week, Alex! You completed all 6 planned workouts (100% adherence) and hit 
 - ✅ No pain/discomfort signals - body adapting well
 
 **Metrics (Week-over-week changes)**:
+Quick defs (first mention only): TSB is freshness (long-term fitness minus short-term fatigue). ACWR compares this week to your recent average; high values mean a sudden spike. For multi-sport athletes, these reflect total work across running + other sports.
 - CTL: 42 → 44 (+2, steady progression)
 - ATL: 124 → 132 (+8, load absorbed well)
 - TSB: -12 → -15 (-3, productive training zone)

@@ -161,6 +161,7 @@ sce week    # Review recent activity density
 # 2. If gap detected, ask context-aware question
 Coach: "I noticed your CTL dropped from 44 to 22 in mid-November.
        Was that a planned break or due to injury?"
+Coach: "Quick note: CTL is your long-term training load—think of it as your 6-week fitness trend. For multi-sport athletes, it reflects total work across running + other sports."
 
 Athlete: "Actually, I had some left knee pain. Took a few weeks off."
 
@@ -200,6 +201,7 @@ sce today
 - Reference actual metrics when explaining recommendations
 - If triggers detected, use AskUserQuestion to present options
 - Explain trade-offs: "ACWR 1.35 (caution) + yesterday's climbing (340 AU) → easy run, move tempo, or proceed?"
+- Quick defs (first mention only): ACWR compares this week to your recent average; high values mean a sudden spike. Readiness is a recovery score—higher usually means you can handle harder work. For multi-sport athletes, these reflect total work across running + other sports.
 
 ## Scenario 3: Weekly Review
 
@@ -273,6 +275,7 @@ triggers=$(echo "$result" | jq -r '.data.adaptation_triggers')
 **Response Pattern:**
 
 ```
+Quick defs (first mention only): ACWR compares this week to your recent average; high values mean a sudden spike. Readiness is a recovery score—higher usually means you can handle harder work. For multi-sport athletes, these reflect total work across running + other sports.
 Your ACWR is 1.35 (slightly elevated) and readiness is 45 (low).
 Tempo run scheduled today. What would you prefer?
 
@@ -635,6 +638,7 @@ sce plan validate-week --file /tmp/weekly_plan_w2.json
 ```
 "Great week! You completed all 4 runs and maintained excellent 80/20 intensity
 distribution. Your CTL increased by 2.2 points to 46.2 - right on target.
+Quick defs (first mention only): CTL is your long-term training load—think of it as your 6-week fitness trend. ACWR compares this week to your recent average; high values mean a sudden spike. Readiness is a recovery score—higher usually means you can handle harder work. For multi-sport athletes, these reflect total work across running + other sports.
 ACWR is 1.05 (safe zone) and your readiness score is 72 (good), so you're
 ready for Week 2's progression.
 
@@ -760,6 +764,7 @@ sce plan generate-week \
 **Coach explains**:
 ```
 "Congratulations on that 10K! 42:00 is a significant breakthrough - your
+VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports.
 VDOT is now 49 (up from 48). This means your training paces will be about
 5 seconds per km faster going forward.
 
@@ -891,6 +896,7 @@ sce status
 **Step 6: Explain impact**:
 ```
 Coach: "Now I see the full picture. Your true CTL is 56 (not 34), and ACWR is 1.38
+Quick defs (first mention only): CTL is your long-term training load—think of it as your 6-week fitness trend. ACWR compares this week to your recent average; high values mean a sudden spike. For multi-sport athletes, these reflect total work across running + other sports.
 (caution zone). This explains the fatigue. Let's adjust this week's plan to account
 for your Monday climbing session - I'll move the tempo run to Wednesday instead."
 ```

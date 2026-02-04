@@ -17,6 +17,20 @@ This skill guides complete athlete onboarding from authentication to goal settin
 
 **Why historical data matters**: ask "I see you average 35km/week over the last X weeks/months - should we maintain this?" instead of "How much do you run?" (no context).
 
+**Metric explainer rule (athlete-facing)**:
+On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
+
+Use this exact VDOT explainer on first mention:
+"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
+
+One-line definitions for other metrics:
+- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
+- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
+- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
+- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
+- RPE: "RPE is your perceived effort from 1–10."
+
 ---
 
 ## Workflow
@@ -64,19 +78,25 @@ sce auth status
 ### Step 2: Sync Activities
 
 ```bash
-sce sync  # First-time: fetches 365 days automatically
+sce sync  # First-time: targets up to 365 days automatically
 ```
 
 **Post-sync overview (MANDATORY)**
-After every `sce sync`, give the athlete a brief overview. Use the sync command output (JSON envelope or success message); optionally run `sce profile analyze` to get exact date range.
+After every `sce sync`, give the athlete a brief overview. Use the sync command output (JSON envelope or success message); run `sce profile analyze` to get the exact date range.
 
 Include:
 
 1. **Number of activities synced** (from sync result: `activities_imported` or success message).
-2. **Time span covered** (weeks or months). From sync result if evident; otherwise from `sce profile analyze` → `data_window_days`, `synced_data_start`, `synced_data_end`.
+2. **Time span covered** (weeks or months). Always compute from `sce profile analyze` → `data_window_days`, `synced_data_start`, `synced_data_end`.
 3. **Rate limit status** (if hit): Explain that the athlete has imported sufficient data for baseline metrics.
 
 Keep the overview to 2–4 sentences. Do not skip this step.
+
+**Never claim** "last 365 days" unless `data_window_days >= 360` and no rate-limit error occurred.
+If a rate limit was hit, the summary must explicitly say the history is partial and can be resumed later.
+
+**Required summary pattern** (adapt wording, keep facts):
+"Imported X activities spanning N days (YYYY-MM-DD to YYYY-MM-DD). If rate limited: 'Sync paused due to Strava rate limits, so this is a partial year. We can resume in ~15 minutes.'"
 
 **Note**: Activities are stored in monthly folders (`data/activities/YYYY-MM/*.yaml`). See [cli_data_structure.md](../../../docs/coaching/cli/cli_data_structure.md) for details on data organization.
 
@@ -89,13 +109,13 @@ Keep the overview to 2–4 sentences. Do not skip this step.
 **Handling Greedy Sync & Rate Limits (IMPORTANT)**:
 The sync process is "greedy"—it fetches the most recent activities first and proceeds backwards until it hits the 52-week limit OR the Strava API rate limit (100 requests / 15 min).
 
-**EXPECTED**: The initial sync WILL hit rate limits for most athletes with regular training. This is normal, designed behavior.
+**EXPECTED**: The initial sync may hit rate limits for many athletes with regular training. This is normal, designed behavior.
 
 **Why**: Fetching 365 days typically requires 200-400 API requests. Strava limits apps to 100 requests per 15 minutes. The system handles this gracefully by pausing and resuming.
 
 **Reference**: See [Strava Rate Limits](https://developers.strava.com/docs/rate-limits/) - 100 requests/15min, 1000 requests/day.
 
-**If rate limit hit (~100 activities):**
+**If rate limit hit (~100 requests):**
 
 Present this choice with coaching expertise:
 

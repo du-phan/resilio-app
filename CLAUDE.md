@@ -78,7 +78,8 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 
 ```bash
 sce auth status
-sce sync              # Smart sync: 365 days first-time, incremental after
+sce sync              # Smart sync: targets up to 365 days first-time, incremental after
+sce profile analyze   # Required after sync: report actual span; never assume 365 days
 sce status
 ```
 
@@ -122,6 +123,7 @@ sce approvals status
 - Describe what you'll do: "Let me analyze your training week"
 - Describe capabilities: "I can help you set up your profile and sync your Strava data"
 - Use natural language: "Let's get started with your onboarding"
+- Explain metrics on first mention in plain language (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE). If multiple metrics appear together, use one short "Quick defs" line. Do not repeat unless the athlete asks. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling).
 
 **DON'T:**
 - Mention slash commands: ~~"I can run `/first-session` for you"~~
@@ -173,6 +175,9 @@ sce approvals status
    - Note: Activities stored in `data/activities/YYYY-MM/*.yaml` (monthly folders)
    - Count files, not directories: `find data/activities -name "*.yaml" | wc -l`
    - See `docs/coaching/cli/cli_data_structure.md` for details
+   - Immediately run `sce profile analyze` and report actual span using `data_window_days`, `synced_data_start`, `synced_data_end`
+   - Never claim "last 365 days" unless `data_window_days >= 360` and no rate-limit error occurred
+   - If rate limit hit, say the history is partial and offer to resume later
 3. **Verify date context**: `sce dates today`
 4. **Assess state**: `sce status`
 5. **Review memories**: `sce memory list --type INJURY_HISTORY` (and other relevant types)

@@ -231,6 +231,7 @@ M1 (parse intent) → M5 (fetch since last_sync) → M6 (normalize) → M7 (anal
 
 ```
 Synced 3 activities since Monday, January 13th:
+Quick defs (first mention only): RPE is your perceived effort from 1–10. CTL is your long-term training load—think of it as your 6-week fitness trend. TSB is freshness (long-term fitness minus short-term fatigue). ACWR compares this week to your recent average; high values mean a sudden spike. For multi-sport athletes, these reflect total work across running + other sports.
 
 Running:
 - Tue Jan 14: Tempo run 48min, RPE 7
@@ -295,6 +296,7 @@ Running Progress: 2/4 complete
 Total Week Load: 1,106 AU systemic | 581 AU lower-body (so far)
 
 Current Status:
+Quick defs (first mention only): CTL is your long-term training load—think of it as your 6-week fitness trend. TSB is freshness (long-term fitness minus short-term fatigue). ACWR compares this week to your recent average; high values mean a sudden spike. For multi-sport athletes, these reflect total work across running + other sports.
 - Fitness (CTL): 44 (+2 this week) — solid recreational level
 - Form (TSB): -8 (productive training zone)
 - ACWR: 1.15 (safe)

@@ -109,6 +109,7 @@ Look for:
 - Lack of true hard efforts
 
 **Step 2: Explain to athlete**
+Quick defs (first mention only): RPE is your perceived effort from 1–10. VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports.
 ```
 Your intensity distribution this week was 65/35 (should be ~80/20). This means too much moderate-intensity work (RPE 5-6) - the "gray zone".
 

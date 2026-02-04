@@ -154,7 +154,7 @@ sce vdot calculate --race-type 10k --time 41:15
 # VDOT: 51.2
 ```
 
-**Coach**: "Your current VDOT is 51.2. To run sub-40 (3:59/km pace), you'd need a VDOT of 53.5 - a 2.3 point improvement over 12 weeks. That's realistic with focused training."
+**Coach**: "Your current VDOT is 51.2. VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports. To run sub-40 (3:59/km pace), you'd need a VDOT of 53.5 - a 2.3 point improvement over 12 weeks. That's realistic with focused training."
 
 ```bash
 sce goal --type 10k --date 2026-03-15 --time "39:59"
@@ -204,6 +204,7 @@ sce profile add-sport --sport cycling --days "wednesday,friday" --duration 60 --
 **Coach**: "Excellent! Here's what I have:
 
 **Your Profile**:
+Quick defs (first mention only): CTL is your long-term training load—think of it as your 6-week fitness trend. For multi-sport athletes, it reflects total work across running + other sports.
 - Jordan, 28M, max HR 194 bpm
 - Running primary, cycling for recovery
 - CTL 52 (competitive fitness)

@@ -101,6 +101,7 @@ sce activity list --since 90d --has-notes --sport run      # Context
 
 ```
 Coach: "I noticed a 2-week gap in November (CTL dropped 44→28). Was that injury-related?"
+Coach: "Quick note: CTL is your long-term training load—think of it as your 6-week fitness trend. For multi-sport athletes, it reflects total work across running + other sports."
 Athlete: "Yeah, left knee tendonitis. Healed now but I watch mileage."
 ```
 
@@ -292,7 +293,7 @@ sce race list
 
 **Review with athlete**:
 ```
-Coach: "I have your 10K PB at 42:30 (Jun 2023, VDOT 48), 5K at 18:45 (May 2022, VDOT 51). Anything missing?"
+Coach: "I have your 10K PB at 42:30 (Jun 2023, VDOT 48), 5K at 18:45 (May 2022, VDOT 51). VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports. Anything missing?"
 ```
 
 #### Step 5: Store Key PBs in Memory System
@@ -487,7 +488,7 @@ Athlete: "Direct - just tell me what to do"
 
 **Intensity metric**:
 ```
-Coach: "For workouts, do you prefer pace targets, heart rate zones, or RPE (perceived effort)?"
+Coach: "For workouts, do you prefer pace targets, heart rate zones, or RPE (perceived effort, 1–10 scale)?"
 Athlete: "Pace - I like tangible numbers"
 # Store: intensity_metric = "pace"
 ```

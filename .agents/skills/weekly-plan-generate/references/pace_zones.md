@@ -8,6 +8,20 @@ Based on Jack Daniels' _Running Formula_. VDOT represents current running fitnes
 **Range**: 30 (beginner) to 85+ (world-class)
 **Use**: Calculates personalized training pace zones (E/M/T/I/R)
 
+### Metric Explainers (First Mention Only)
+Use in athlete-facing outputs. Do not repeat unless the athlete asks. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling).
+
+**VDOT explainer (use verbatim)**:
+"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
+
+**Quick defs (when multiple metrics appear)**:
+- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
+- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
+- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
+- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
+- RPE: "RPE is your perceived effort from 1–10."
+
 ### Calculating VDOT
 ```bash
 sce vdot calculate --race-type 10k --time 42:30
