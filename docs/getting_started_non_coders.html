@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Getting Started - Sports Coach Engine</title>
   <style>
+    :root {
+      --bg: #f4efe6;
+      --bg-2: #efe5d6;
+      --card: #fffaf2;
+      --ink: #1f2a24;
+      --muted: #4d5b52;
+      --accent: #c4612c;
+      --accent-2: #2f5d4e;
+      --border: #e2d5c2;
+      --shadow: 0 16px 40px rgba(31, 42, 36, 0.12);
+      --radius: 16px;
+    }
+
     * {
       margin: 0;
       padding: 0;
@@ -12,390 +25,250 @@
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-family: "Avenir Next", "Gill Sans", "Noto Sans", "Helvetica Neue", sans-serif;
       line-height: 1.6;
-      color: #333;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: var(--ink);
+      background: radial-gradient(circle at top left, var(--bg-2), var(--bg));
       min-height: 100vh;
-      padding: 2rem;
+      padding: 32px 20px 48px;
     }
 
-    .container {
-      max-width: 800px;
+    .page {
+      max-width: 900px;
       margin: 0 auto;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      overflow: hidden;
+      display: grid;
+      gap: 20px;
     }
 
     header {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      padding: 3rem 2rem;
-      text-align: center;
+      background: linear-gradient(135deg, #fff6e7 0%, #f6e7d2 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 28px 22px;
+      box-shadow: var(--shadow);
     }
 
     h1 {
-      font-size: 2.5rem;
-      margin-bottom: 0.5rem;
-      font-weight: 700;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-size: clamp(2rem, 1.4rem + 2vw, 3rem);
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      margin-bottom: 8px;
     }
 
-    .tagline {
+    .subtitle {
       font-size: 1.1rem;
-      opacity: 0.95;
+      color: var(--muted);
+      max-width: 42rem;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      background: #ffffffd9;
+      color: var(--accent-2);
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.3px;
     }
 
     section {
-      padding: 2rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px 26px;
+      box-shadow: var(--shadow);
     }
 
     h2 {
-      color: #667eea;
-      font-size: 1.8rem;
-      margin-bottom: 1rem;
-      border-bottom: 2px solid #667eea;
-      padding-bottom: 0.5rem;
-    }
-
-    h3 {
-      color: #764ba2;
-      font-size: 1.3rem;
-      margin: 1.5rem 0 0.8rem 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      font-size: clamp(1.4rem, 1.1rem + 1vw, 2rem);
+      margin-bottom: 10px;
     }
 
     p {
-      margin-bottom: 1rem;
-      font-size: 1.05rem;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 1.02rem;
     }
 
     ul, ol {
-      margin-left: 2rem;
-      margin-bottom: 1rem;
+      margin-left: 1.2rem;
+      margin-bottom: 12px;
+      color: var(--muted);
     }
 
     li {
-      margin-bottom: 0.5rem;
-      font-size: 1.05rem;
+      margin-bottom: 6px;
     }
 
-    code {
-      background: #f5f5f5;
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      font-family: "Courier New", monospace;
-      font-size: 0.9em;
-      color: #d63384;
+    .callout {
+      background: #fff1dc;
+      border-left: 4px solid var(--accent);
+      padding: 14px 16px;
+      border-radius: 10px;
+      margin: 14px 0;
+      color: #4a3a2e;
     }
 
-    pre {
-      background: #2d2d2d;
-      color: #f8f8f2;
-      padding: 1rem;
-      border-radius: 6px;
-      overflow-x: auto;
-      margin-bottom: 1rem;
-      font-family: "Courier New", monospace;
-      font-size: 0.9rem;
+    .grid {
+      display: grid;
+      gap: 16px;
     }
 
-    .highlight-box {
-      background: #e8f4f8;
-      border-left: 4px solid #667eea;
-      padding: 1.5rem;
-      margin: 1.5rem 0;
-      border-radius: 4px;
-    }
-
-    .highlight-box strong {
-      color: #667eea;
-      font-size: 1.1rem;
+    @media (min-width: 720px) {
+      .grid-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
     }
 
     details {
-      margin: 1.5rem 0;
-      border: 1px solid #ddd;
-      border-radius: 6px;
-      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      background: #fffdfa;
     }
 
     summary {
       cursor: pointer;
       font-weight: 600;
-      color: #764ba2;
-      font-size: 1.1rem;
-      user-select: none;
+      color: var(--accent-2);
     }
 
     summary:hover {
-      color: #667eea;
+      color: var(--accent);
     }
 
-    details[open] summary {
-      margin-bottom: 1rem;
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid #ddd;
+    pre {
+      background: #222724;
+      color: #f7f3eb;
+      padding: 12px 14px;
+      border-radius: 10px;
+      overflow-x: auto;
+      margin-bottom: 12px;
+      font-size: 0.92rem;
+    }
+
+    code {
+      background: #efe7da;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-family: "SFMono-Regular", "Courier New", monospace;
+      font-size: 0.95em;
+      color: #7a2f14;
     }
 
     a {
-      color: #667eea;
+      color: var(--accent-2);
       text-decoration: none;
-      font-weight: 500;
+      font-weight: 600;
     }
 
     a:hover {
+      color: var(--accent);
       text-decoration: underline;
-      color: #764ba2;
-    }
-
-    .step-number {
-      display: inline-block;
-      background: #667eea;
-      color: white;
-      width: 30px;
-      height: 30px;
-      border-radius: 50%;
-      text-align: center;
-      line-height: 30px;
-      font-weight: bold;
-      margin-right: 0.5rem;
     }
 
     footer {
       text-align: center;
-      padding: 2rem;
-      background: #f8f9fa;
-      color: #666;
+      color: var(--muted);
       font-size: 0.9rem;
-    }
-
-    .emoji {
-      font-size: 1.5rem;
-      margin-right: 0.5rem;
+      padding: 8px 0 0;
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="page">
     <header>
-      <h1>🏃‍♂️ Getting Started</h1>
-      <p class="tagline">Your AI-Powered Adaptive Running Coach</p>
+      <h1>Getting Started</h1>
+      <p class="subtitle">Your AI coach runs inside Claude Code or Codex and guides every step. You don’t need to know the terminal.</p>
+      <div class="pill-row">
+        <span class="pill">15–25 minutes</span>
+        <span class="pill">Local data only</span>
+        <span class="pill">Beginner friendly</span>
+      </div>
     </header>
 
     <section id="quick-start">
-      <h2><span class="emoji">⚡</span>Quick Start (Recommended)</h2>
-
-      <div class="highlight-box">
-        <strong>The easiest way: Talk to Claude Code</strong>
-        <p style="margin-top: 0.5rem;">No need to read documentation or run commands manually. Just have a conversation!</p>
-      </div>
-
-      <h3>How It Works</h3>
+      <h2>Quick Start</h2>
       <ol>
-        <li><strong>Open Claude Code terminal</strong> in this project directory</li>
-        <li><strong>Say one of these phrases:</strong>
-          <ul style="margin-top: 0.5rem;">
-            <li>"Help me set up the Sports Coach Engine"</li>
-            <li>"I'm not technical, help me get started"</li>
-            <li>"Set up from scratch"</li>
-          </ul>
-        </li>
-        <li><strong>Claude will guide you</strong> through every step conversationally</li>
+        <li>Open Claude Code or Codex.</li>
+        <li>Open this project folder inside the app.</li>
+        <li>Send any message like: <code>Help me get started</code> or <code>I’m not technical, please guide me</code></li>
       </ol>
-
-      <h3>What Claude Will Help You With</h3>
-      <ul>
-        <li>✓ Checking if Python 3.11+ is installed (and helping you install it if needed)</li>
-        <li>✓ Installing the coaching engine package</li>
-        <li>✓ Connecting to your Strava account</li>
-        <li>✓ Setting up your athlete profile</li>
-        <li>✓ Defining your race goals</li>
-      </ul>
-
-      <p><strong>Time estimate:</strong> 15-25 minutes for complete setup (including Python installation on fresh systems)</p>
+      <p>If you are unsure how to open the folder, just say so. The coach will walk you through it.</p>
     </section>
 
-    <section id="what-claude-does">
-      <h2><span class="emoji">🤖</span>What Makes This Different</h2>
-
-      <p>Traditional setup guides require you to:</p>
+    <section id="what-you-need">
+      <h2>What You Need</h2>
       <ul>
-        <li>Read documentation</li>
-        <li>Switch between terminal and browser</li>
-        <li>Copy/paste commands</li>
-        <li>Troubleshoot errors alone</li>
+        <li>A Strava account (free is fine).</li>
+        <li>15–25 minutes for first-time setup.</li>
+        <li>Internet access for Strava connection.</li>
       </ul>
+      <p>You will create a Strava app one time and copy two values. The coach will explain exactly how.</p>
+    </section>
 
-      <p><strong>With Claude Code's complete-setup skill:</strong></p>
+    <section id="coach-does">
+      <h2>What the Coach Will Do</h2>
       <ul>
-        <li>✓ <strong>Adaptive workflow</strong> - Skips steps you've already completed</li>
-        <li>✓ <strong>Platform-aware</strong> - Detects macOS vs Linux and adjusts commands</li>
-        <li>✓ <strong>Error recovery</strong> - Catches issues and guides you through fixes</li>
-        <li>✓ <strong>Conversational</strong> - Ask questions anytime, get immediate answers</li>
-        <li>✓ <strong>No context switching</strong> - Everything happens in the terminal conversation</li>
+        <li>Check your setup and install anything missing.</li>
+        <li>Connect your Strava account.</li>
+        <li>Sync your recent activities.</li>
+        <li>Create your profile and goals.</li>
+        <li>Propose a training plan and adapt it weekly.</li>
       </ul>
+    </section>
 
-      <div class="highlight-box">
-        <strong>Example conversation:</strong>
-        <p style="margin-top: 0.5rem;"><em>You:</em> "Help me get started"</p>
-        <p><em>Claude:</em> "I see you're on macOS with no Python installed. Let me guide you through installing Homebrew first..."</p>
-        <p style="margin-top: 0.5rem;"><em>[15 minutes later]</em></p>
-        <p><em>Claude:</em> "✓ Environment ready! Now let's connect to Strava..."</p>
+    <section id="strava">
+      <h2>Strava Authorization (What to Expect)</h2>
+      <p>You will be asked to log in to Strava and approve access. Strava will show a link that includes a short <strong>code</strong>. You paste that code back to the coach.</p>
+      <div class="callout">
+        This is normal and safe. The code simply lets the coach read your activities.
       </div>
+      <p>Keep your Strava Client Secret private. Do not share it with anyone except the local coach.</p>
     </section>
 
-    <section id="platforms">
-      <h2><span class="emoji">💻</span>Supported Platforms</h2>
-
-      <h3>macOS</h3>
-      <ul>
-        <li>macOS 10.15+ (Catalina or newer)</li>
-        <li>Both Apple Silicon (M1/M2/M3) and Intel Macs supported</li>
-        <li>Claude installs Python via Homebrew (or guides Python.org installer)</li>
-      </ul>
-
-      <h3>Linux</h3>
-      <ul>
-        <li>Ubuntu 20.04+, Debian 11+</li>
-        <li>CentOS 8+, RHEL 8+, Fedora 38+</li>
-        <li>Claude installs Python via system package manager (apt/yum/dnf)</li>
-      </ul>
-
-      <p><strong>Note:</strong> Windows is not currently supported.</p>
-    </section>
-
-    <section id="requirements">
-      <h2><span class="emoji">📋</span>What You Need</h2>
-
-      <h3>Before Starting</h3>
-      <ul>
-        <li><strong>A Strava account</strong> - Free account is fine</li>
-        <li><strong>Claude Code CLI</strong> - <a href="https://claude.com/code" target="_blank">Download here</a></li>
-        <li><strong>15-25 minutes</strong> - First-time setup (faster if Python already installed)</li>
-      </ul>
-
-      <h3>During Setup (Claude will help with these)</h3>
-      <ul>
-        <li>Strava API credentials (Claude guides you through creating them)</li>
-        <li>Administrator/sudo password (for installing Python on some systems)</li>
-      </ul>
-    </section>
-
-    <section id="manual-setup">
-      <h2><span class="emoji">⚙️</span>Manual Setup (Advanced Users)</h2>
-
-      <details>
-        <summary>Show manual installation steps</summary>
-
-        <p>If you prefer to set up manually without conversational guidance:</p>
-
-        <h3>Step 1: Install Python 3.11+</h3>
-        <p><strong>macOS:</strong></p>
-        <pre>brew install python@3.11</pre>
-
-        <p><strong>Ubuntu/Debian:</strong></p>
-        <pre>sudo add-apt-repository ppa:deadsnakes/ppa
-sudo apt update
-sudo apt install python3.11 python3.11-venv python3.11-dev</pre>
-
-        <h3>Step 2: Install the Package</h3>
-        <p><strong>Option A: Using Poetry</strong></p>
-        <pre>poetry install</pre>
-
-        <p><strong>Option B: Using venv</strong></p>
-        <pre>python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .</pre>
-
-        <h3>Step 3: Initialize Configuration</h3>
-        <pre>sce init</pre>
-
-        <h3>Step 4: Configure Strava Credentials</h3>
-        <p>Edit <code>config/secrets.local.yaml</code> with your Strava API credentials from <a href="https://www.strava.com/settings/api" target="_blank">https://www.strava.com/settings/api</a></p>
-
-        <h3>Step 5: Authenticate</h3>
-        <pre>sce auth url</pre>
-
-        <p>Follow the authorization URL, approve access, and enter the callback code.</p>
-
-        <h3>Step 6: Sync Activities</h3>
-        <pre>sce sync</pre>
-
-        <h3>Step 7: Create Profile</h3>
-        <pre>sce profile create --name "Your Name" --age 30 --max-hr 190</pre>
-
-        <p>See <a href="../coaching/cli/index.md">CLI documentation</a> for complete profile setup options.</p>
-      </details>
+    <section id="privacy">
+      <h2>Your Data Stays Local</h2>
+      <p>Your data lives on your computer. The only external service used is Strava for syncing activities.</p>
     </section>
 
     <section id="troubleshooting">
-      <h2><span class="emoji">🔧</span>Troubleshooting</h2>
-
-      <p>Having issues? Try these approaches:</p>
-
-      <h3>Talk to Claude First</h3>
-      <p>The <code>complete-setup</code> skill includes comprehensive error recovery. Just describe your issue:</p>
-      <ul>
-        <li>"I'm getting a permission denied error"</li>
-        <li>"Python installation failed"</li>
-        <li>"The sce command isn't working"</li>
-      </ul>
-
-      <h3>Reference Documentation</h3>
-      <p>For deeper troubleshooting, see:</p>
-      <ul>
-        <li><code>.claude/skills/complete-setup/references/troubleshooting.md</code> - Comprehensive error resolution</li>
-        <li><code>.claude/skills/complete-setup/references/environment_checks.md</code> - Validation commands</li>
-        <li><code>.claude/skills/complete-setup/references/python_setup.md</code> - Platform-specific installation</li>
-      </ul>
-
-      <h3>Common Issues</h3>
-      <details style="margin-top: 1rem;">
-        <summary>"command not found: sce"</summary>
-        <p style="margin-top: 1rem;"><strong>Cause:</strong> Virtual environment not activated (if using venv) or package not installed</p>
-        <p><strong>Fix:</strong> Ask Claude: "The sce command isn't working" - Claude will diagnose and fix</p>
-      </details>
-
-      <details>
-        <summary>"python3: command not found"</summary>
-        <p style="margin-top: 1rem;"><strong>Cause:</strong> Python not installed or not in PATH</p>
-        <p><strong>Fix:</strong> Say: "Help me install Python" - Claude guides platform-specific installation</p>
-      </details>
-
-      <details>
-        <summary>"Permission denied" during installation</summary>
-        <p style="margin-top: 1rem;"><strong>Cause:</strong> Virtual environment not activated (trying to install to system Python)</p>
-        <p><strong>Fix:</strong> Claude will detect this and guide you to activate the virtual environment</p>
-      </details>
+      <h2>Troubleshooting</h2>
+      <p>Tell the coach what you see. It will diagnose the problem and guide you through a fix.</p>
+      <div class="grid grid-2">
+        <div>
+          <p><strong>“I don’t see my activities.”</strong></p>
+          <p>Ask the coach to re-sync your recent activities.</p>
+        </div>
+        <div>
+          <p><strong>“I get a Strava error.”</strong></p>
+          <p>Ask the coach to walk you through the Strava connection again.</p>
+        </div>
+      </div>
     </section>
 
-    <section id="next-steps">
-      <h2><span class="emoji">🎯</span>After Setup</h2>
-
-      <p>Once your environment is ready and you've completed the first session (profile + goals), you can:</p>
-
-      <h3>Weekly Coaching Sessions</h3>
-      <p>Say: "How was my week?" - Claude analyzes your training, checks adherence to plan, and helps you plan the next week</p>
-
-      <h3>View Your Metrics</h3>
-      <pre>sce status  # See current CTL/ATL/TSB/ACWR/readiness
-sce week    # Weekly summary</pre>
-
-      <h3>Training Plans</h3>
-      <p>Claude will guide you through creating a complete training plan based on your goal, using proven methodologies from Pfitzinger, Daniels, and 80/20 Running.</p>
-
-      <h3>Learn More</h3>
+    <section id="after-setup">
+      <h2>After Setup</h2>
+      <p>Just chat with the coach. Example prompts:</p>
       <ul>
-        <li><a href="README.md">README.md</a> - Project overview and system architecture</li>
-        <li><a href="CLAUDE.md">CLAUDE.md</a> - Complete coaching guide for Claude</li>
-        <li><a href="../coaching/cli/index.md">CLI documentation</a> - All available commands</li>
+        <li>“How was my week?”</li>
+        <li>“What’s my workout today?”</li>
+        <li>“Adjust next week.”</li>
       </ul>
     </section>
 
     <footer>
-      <p><strong>Sports Coach Engine</strong> - AI-Powered Adaptive Running Coach</p>
-      <p style="margin-top: 0.5rem;">Built with ❤️ for multi-sport athletes</p>
+      Sports Coach Engine — AI‑Powered Adaptive Running Coach
     </footer>
   </div>
 </body>

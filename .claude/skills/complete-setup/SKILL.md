@@ -12,6 +12,7 @@ argument-hint: ""
 **Purpose**: Conversational environment setup for non-technical users.
 
 **What this skill does**:
+
 - Verifies Python 3.11+ (guides install if needed)
 - Installs Sports Coach Engine package (Poetry or venv)
 - Initializes config structure (`sce init`)
@@ -75,6 +76,7 @@ Environment Check:
 ### Install Python 3.11+
 
 **macOS**:
+
 - **Recommended**: Use Homebrew for Python installation
   - Check availability: `which brew` (exit 0 = available)
   - If missing: Install Homebrew first → [python_setup.md#macos-installation](references/python_setup.md#macos-installation)
@@ -83,6 +85,7 @@ Environment Check:
 - **Alternative**: Python.org official installer (simpler but less flexible)
 
 **Linux**:
+
 - **Ubuntu/Debian**: deadsnakes PPA → `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.11 python3.11-venv`
   - See [python_setup.md#linux-installation](references/python_setup.md#linux-installation) for full commands
 - **CentOS/RHEL**: `sudo yum install python311 python311-devel`
@@ -96,6 +99,7 @@ python3 -m pip --version  # Verify pip available
 ```
 
 **If fails - see specific sections**:
+
 - Python not found: [troubleshooting.md#python-installed-but-not-in-path](references/troubleshooting.md#python-installed-but-not-in-path)
 - Wrong version: [troubleshooting.md#wrong-python-version-installed](references/troubleshooting.md#wrong-python-version-installed)
 - Multiple versions: [troubleshooting.md#multiple-python-installations-causing-conflicts](references/troubleshooting.md#multiple-python-installations-causing-conflicts)
@@ -123,6 +127,7 @@ sce --version   # Verify (or: poetry run sce --version)
 **Success**: Output shows "Installing dependencies", no errors, `sce --version` works (exit 0)
 
 **Common issues**: See [package_installation.md#path-a-poetry-installation](references/package_installation.md#path-a-poetry-installation)
+
 - poetry.lock out of sync → `poetry lock --no-update && poetry install`
 - Dependency conflicts → Check Python ≥3.11, update Poetry
 - sce not found → Try `poetry run sce --version` or restart terminal
@@ -138,12 +143,14 @@ sce --version                    # Verify
 ```
 
 **CRITICAL**: `source .venv/bin/activate` is essential. Without it:
+
 - sce not found (exit 127)
 - Permission errors during pip install
 
 **Teaching moment**: "The (.venv) prefix means the virtual environment is active - like a sandbox for dependencies. Activate each time you open a new terminal: `source .venv/bin/activate`"
 
 **Common issues**: See [package_installation.md#path-b-venv-installation](references/package_installation.md#path-b-venv-installation)
+
 - Permission denied → venv not activated (check prompt for (.venv) prefix)
 - sce not found → Check `echo $VIRTUAL_ENV` shows path, retry activation
 - No module named venv (Linux) → `sudo apt install python3.11-venv`
@@ -162,12 +169,14 @@ sce --version  # MUST return exit 0 and show version string
 ```
 
 **Diagnostic commands**:
+
 ```bash
 which sce         # Check if sce in PATH
 echo $VIRTUAL_ENV # Check venv active (venv path only)
 ```
 
 **If validation fails - see specific sections**:
+
 - sce not found: [package_installation.md#troubleshooting-command-not-found](references/package_installation.md#troubleshooting-command-not-found)
 - Permission errors: [package_installation.md#issue-1-permission-errors-during-pip-install](references/package_installation.md#issue-1-permission-errors-during-pip-install)
 - Dependency conflicts: [package_installation.md#issue-2-dependency-conflicts](references/package_installation.md#issue-2-dependency-conflicts)
@@ -196,6 +205,7 @@ cat config/secrets.local.yaml  # Should have placeholder credentials
 **If secrets.local.yaml has real credentials** (not placeholders): Skip this phase (don't overwrite)
 
 **If validation fails - see specific sections**:
+
 - Config init failed: [troubleshooting.md#config-directory-not-created](references/troubleshooting.md#config-directory-not-created)
 - YAML malformed: [troubleshooting.md#secretslocalyaml-malformed](references/troubleshooting.md#secretslocalyaml-malformed)
 
@@ -213,6 +223,7 @@ echo $VIRTUAL_ENV      # ✓ venv active (if using venv path)
 ```
 
 **Success message**:
+
 ```
 ✓ Environment Setup Complete!
 
@@ -231,6 +242,7 @@ Next: Let's connect to Strava and set up your athlete profile...
 **If no**: Guide to https://www.strava.com/settings/api → Create application → Copy Client ID/Secret
 
 **What first-session handles**:
+
 1. Credential collection and save to config/secrets.local.yaml
 2. OAuth flow (`sce auth url`)
 3. Activity sync (`sce sync`) — then a brief overview: activities synced, time span (weeks/months), and whether rate limit was hit
@@ -242,6 +254,7 @@ Next: Let's connect to Strava and set up your athlete profile...
 ## Adaptive Workflow Logic
 
 Phase 1 detection determines which phases run:
+
 - **Python ≥3.11** → Skip Phase 2
 - **sce works (exit 0/2)** → Skip Phase 3
 - **config/ exists** → Skip Phase 4
