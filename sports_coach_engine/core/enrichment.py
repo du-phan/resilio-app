@@ -36,7 +36,7 @@ from sports_coach_engine.schemas.metrics import DailyMetrics, WeeklySummary
 from sports_coach_engine.schemas.plan import WorkoutPrescription
 from sports_coach_engine.schemas.profile import AthleteProfile
 from sports_coach_engine.schemas.adaptation import Suggestion
-from sports_coach_engine.schemas.repository import ReadOptions
+from sports_coach_engine.schemas.repository import ReadOptions, RepoError
 
 
 # ============================================================
@@ -253,7 +253,7 @@ def enrich_metrics(
     week_ago_path = daily_metrics_path(target_date)
     week_ago_result = repo.read_yaml(week_ago_path, DailyMetrics, ReadOptions(allow_missing=True, should_validate=True))
 
-    if not isinstance(week_ago_result, Exception) and week_ago_result is not None:
+    if not isinstance(week_ago_result, (Exception, RepoError)) and week_ago_result is not None:
         prev_ctl = week_ago_result.ctl_atl.ctl
         prev_tsb = week_ago_result.ctl_atl.tsb
 

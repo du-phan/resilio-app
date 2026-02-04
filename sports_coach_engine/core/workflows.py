@@ -276,7 +276,7 @@ class WorkflowLock:
                 lock_data = self.repo.read_json(self.lock_file)
 
                 # Handle read errors
-                if isinstance(lock_data, Exception):
+                if isinstance(lock_data, (Exception, RepoError)):
                     # Corrupted lock file, delete it
                     self.repo.delete_file(self.lock_file)
                 elif self._is_stale(lock_data):
@@ -320,7 +320,7 @@ class WorkflowLock:
             try:
                 # Verify we own the lock
                 lock_data = self.repo.read_json(self.lock_file)
-                if not isinstance(lock_data, Exception) and lock_data.get("pid") == os.getpid():
+                if not isinstance(lock_data, (Exception, RepoError)) and lock_data.get("pid") == os.getpid():
                     self.repo.delete_file(self.lock_file)
                     self._acquired = False
             except Exception as e:
@@ -1441,6 +1441,7 @@ def _process_and_save_activity(
                 keyword in memory_text.lower()
                 for keyword in ["pain", "injury", "prefer", "like", "knee", "ankle"]
             ):
+                now = datetime.now(timezone.utc)
                 memory = Memory(
                     id=str(uuid.uuid4()),
                     type=MemoryType.INJURY_HISTORY
@@ -1450,7 +1451,8 @@ def _process_and_save_activity(
                     source=MemorySource.ACTIVITY_NOTE,
                     confidence="medium",
                     tags=[],
-                    extracted_at=datetime.now(timezone.utc),
+                    created_at=now,
+                    updated_at=now,
                 )
                 saved_memory, _ = save_memory(memory, repo)
                 result.memories_extracted.append(saved_memory)

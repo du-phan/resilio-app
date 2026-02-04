@@ -20,6 +20,7 @@ The two-channel model enables proper multi-sport training:
 from typing import Optional
 
 from sports_coach_engine.core.repository import RepositoryIO
+from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.schemas.activity import (
     LoadCalculation,
     NormalizedActivity,
@@ -479,7 +480,7 @@ def persist_load_to_activity(
     """
     # Read existing activity
     activity = repo.read_yaml(activity_path, NormalizedActivity)
-    if isinstance(activity, Exception):
+    if isinstance(activity, (Exception, RepoError)):
         raise LoadCalculationError(f"Failed to read activity: {activity}")
 
     # Create updated activity with calculated fields

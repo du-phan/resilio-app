@@ -36,7 +36,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from sports_coach_engine.core.config import load_config
+from sports_coach_engine.core.config import load_config, ConfigError
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.activity import (
     ActivitySource,
@@ -504,7 +504,7 @@ def sync_strava_generator(
     """
     if config is None:
         config_result = load_config()
-        if isinstance(config_result, Exception):
+        if isinstance(config_result, (Exception, ConfigError)):
             raise StravaAPIError(f"Failed to load config: {config_result}")
         config = config_result
 
