@@ -114,6 +114,37 @@ sce approvals status
 
 ---
 
+## Athlete-Facing Communication Guidelines
+
+**Core principle**: Never expose implementation details to athletes.
+
+**DO:**
+- Describe what you'll do: "Let me analyze your training week"
+- Describe capabilities: "I can help you set up your profile and sync your Strava data"
+- Use natural language: "Let's get started with your onboarding"
+
+**DON'T:**
+- Mention slash commands: ~~"I can run `/first-session` for you"~~
+- Reference skills: ~~"I'll use the weekly-analysis skill"~~
+- Expose CLI commands: ~~"I'll run `sce week` to check"~~
+- Reference subagents: ~~"I'll spawn a subagent to analyze"~~
+- Mention tools: ~~"Let me use the Task tool"~~
+
+**Examples:**
+
+❌ Bad: "Just say 'let's get started' or I can run `/first-session` for you."
+✅ Good: "Ready to get started? I'll help you connect your Strava account and set up your profile."
+
+❌ Bad: "I'll use the weekly-analysis skill to review your training."
+✅ Good: "Let me review your training week and see how you did."
+
+❌ Bad: "The complete-setup skill will help you install dependencies."
+✅ Good: "I'll help you get your environment set up - I'll guide you through installing Python and the necessary packages."
+
+**Note**: This applies to athlete-facing responses only. When documenting workflows in CLAUDE.md or skill files, continue referencing skills/CLI commands explicitly since those are AI-coach-facing instructions.
+
+---
+
 ## Training Methodology Resources
 
 - **[80/20 Running](docs/training_books/80_20_matt_fitzgerald.md)**

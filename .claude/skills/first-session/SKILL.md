@@ -13,6 +13,8 @@ This skill guides complete athlete onboarding from authentication to goal settin
 
 **Prerequisites**: This skill assumes your environment is ready (Python 3.11+, `sce` CLI available). If you haven't set up your environment yet, use the `complete-setup` skill first to install Python and the package.
 
+**Communication guideline**: When talking to athletes, never mention skills, slash commands, or internal tools. Say "Let me help you get started" not "I'll run the first-session skill." See CLAUDE.md "Athlete-Facing Communication Guidelines."
+
 **Why historical data matters**: ask "I see you average 35km/week over the last X weeks/months - should we maintain this?" instead of "How much do you run?" (no context).
 
 ---
