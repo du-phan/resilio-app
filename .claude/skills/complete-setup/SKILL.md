@@ -42,20 +42,32 @@ if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ] || [ -d /mnt/c ] && grep -qiE '(mi
 fi
 ```
 
-### Detection Commands (run in parallel after WSL check)
+### Repo Root Check (Required)
+
+```bash
+# Ensure we're in the repo root before running setup
+if [ ! -f pyproject.toml ] || [ ! -d sports_coach_engine ]; then
+  echo "❌ Not in repo root (pyproject.toml not found)"
+  echo "Please cd into the sports-coach-engine repo and retry"
+  exit 1
+fi
+```
+
+### Detection Commands (run after WSL + repo checks)
 
 ```bash
 uname                  # Platform: "Darwin" (macOS) or "Linux"
 python3 --version      # Exit 0 + ≥3.11 → skip Phase 2 | Exit 127 → run Phase 2
-sce --version          # Exit 0 → skip Phase 3 | Exit 127 → run Phase 3 | Exit 2 → skip to Phase 4
-ls -la config/         # Exit 0 → skip Phase 4 | Exit 2 → run Phase 4
+command -v sce         # Exit 0 → sce available | Exit 1 → run Phase 3
+sce status             # Exit 0 → config present | Exit 2 → config missing (run Phase 4)
+ls -la config/         # Optional: confirm config files if needed
 ```
 
 ### Decision Logic
 
 - **Python**: Exit 0 + ≥3.11 → skip Phase 2 | Otherwise → run Phase 2
-- **Package**: Exit 0 → skip Phase 3 | Exit 2 → skip to Phase 4 | Exit 127 → run Phase 3
-- **Config**: Exit 0 → skip Phase 4 | Exit 2 → run Phase 4
+- **Package**: `command -v sce` exit 0 → skip Phase 3 | exit 1 → run Phase 3
+- **Config**: `sce status` exit 0 → skip Phase 4 | exit 2 → run Phase 4
 
 ### Output Summary
 
@@ -108,7 +120,7 @@ python3 -m pip --version  # Verify pip available
 
 ## Workflow - Phase 3: Package Installation
 
-**Conditional**: Skip if `sce --version` works (exit 0 or 2).
+**Conditional**: Skip if `command -v sce` returns exit 0.
 
 ### Determine Installation Method
 
@@ -121,16 +133,16 @@ poetry --version
 
 ```bash
 poetry install  # Creates venv, installs dependencies, installs sce
-sce --version   # Verify (or: poetry run sce --version)
+poetry run sce --help  # Verify (exit 0)
 ```
 
-**Success**: Output shows "Installing dependencies", no errors, `sce --version` works (exit 0)
+**Success**: Output shows "Installing dependencies", no errors, `poetry run sce --help` works (exit 0)
 
 **Common issues**: See [package_installation.md#path-a-poetry-installation](references/package_installation.md#path-a-poetry-installation)
 
 - poetry.lock out of sync → `poetry lock --no-update && poetry install`
 - Dependency conflicts → Check Python ≥3.11, update Poetry
-- sce not found → Try `poetry run sce --version` or restart terminal
+- sce not found → Try `poetry run sce --help` or restart terminal
 
 ### Path B: venv
 
@@ -139,7 +151,7 @@ python3 -m venv .venv            # Create virtual environment
 source .venv/bin/activate        # Activate (CRITICAL - check for (.venv) prefix in prompt)
 pip install --upgrade pip        # Upgrade pip
 pip install -e .                 # Install package in editable mode
-sce --version                    # Verify
+sce --help                       # Verify (exit 0)
 ```
 
 **CRITICAL**: `source .venv/bin/activate` is essential. Without it:
@@ -159,7 +171,11 @@ sce --version                    # Verify
 
 ```bash
 # Validate installation
-sce --version  # MUST return exit 0 and show version string
+# If using Poetry path:
+poetry run sce --help  # MUST return exit 0
+
+# If using venv path:
+sce --help  # MUST return exit 0
 
 # If validation fails (exit ≠ 0):
 # 1. Identify issue (see diagnostic commands in package_installation.md)
@@ -185,7 +201,7 @@ echo $VIRTUAL_ENV # Check venv active (venv path only)
 
 ## Workflow - Phase 4: Configuration Initialization
 
-**Conditional**: Skip if `config/` directory exists.
+**Conditional**: Skip if `config/settings.yaml` and `config/secrets.local.yaml` exist.
 
 ### Run sce init
 
@@ -193,13 +209,13 @@ echo $VIRTUAL_ENV # Check venv active (venv path only)
 sce init  # Creates config/, data/ directories and YAML templates
 ```
 
-**Expected output**: Confirmation message showing created files (secrets.local.yaml, athlete_profile.yaml, training_plan.yaml)
+**Expected output**: Confirmation message showing created files (secrets.local.yaml, settings.yaml)
 
 ### Verification
 
 ```bash
-ls -la config/  # Should show YAML files
-cat config/secrets.local.yaml  # Should have placeholder credentials
+ls -la config/  # Should show settings.yaml and secrets.local.yaml
+grep -q "YOUR_CLIENT_ID" config/secrets.local.yaml && echo "Placeholders present" || echo "Credentials set"
 ```
 
 **If secrets.local.yaml has real credentials** (not placeholders): Skip this phase (don't overwrite)
@@ -217,7 +233,7 @@ cat config/secrets.local.yaml  # Should have placeholder credentials
 
 ```bash
 python3 --version      # ✓ Python 3.11+
-sce --version          # ✓ Package installed
+sce status             # ✓ Package installed + config present (exit 0)
 ls -la config/         # ✓ Config directory exists
 echo $VIRTUAL_ENV      # ✓ venv active (if using venv path)
 ```
@@ -256,8 +272,8 @@ Next: Let's connect to Strava and set up your athlete profile...
 Phase 1 detection determines which phases run:
 
 - **Python ≥3.11** → Skip Phase 2
-- **sce works (exit 0/2)** → Skip Phase 3
-- **config/ exists** → Skip Phase 4
+- **sce available** → Skip Phase 3
+- **config files exist / sce status exit 0** → Skip Phase 4
 - **All ready** → Direct to Phase 5 handoff
 
 ---
@@ -273,8 +289,8 @@ For troubleshooting, see [Quick Fixes](references/troubleshooting.md#quick-fixes
 **Environment is ready when all these are true**:
 
 1. ✓ Python 3.11+ responds to `python3 --version` (exit code 0)
-2. ✓ `sce --version` returns version string (exit code 0)
-3. ✓ `config/` directory exists with secrets.local.yaml
+2. ✓ `sce status` returns exit code 0
+3. ✓ `config/` directory exists with settings.yaml and secrets.local.yaml
 4. ✓ Virtual environment active (if using venv path) - prompt shows `(.venv)`
 5. ✓ User understands next steps (Strava credentials)
 

@@ -140,8 +140,8 @@ Takes about 30-60 seconds. You'll see a progress bar and lots of package names s
 
 Installation complete! Let me verify the `sce` command works:
 ```bash
-sce --version
-# Returns: sports-coach-engine, version 0.4.0
+sce --help
+# Returns: exit code 0
 ```
 
 ✓ Package installed successfully!
@@ -157,8 +157,7 @@ Configuration initialized successfully!
 
 Created:
   ✓ config/secrets.local.yaml
-  ✓ config/athlete_profile.yaml
-  ✓ config/training_plan.yaml
+  ✓ config/settings.yaml
   ✓ data/ directory
 
 Next steps:
@@ -172,8 +171,8 @@ Perfect! Let me run a final check to make sure everything is ready:
 ```bash
 # Environment verification
 python3 --version  # ✓ Python 3.11.8
-sce --version      # ✓ sports-coach-engine, version 0.4.0
-ls config/         # ✓ Shows: secrets.local.yaml, athlete_profile.yaml, training_plan.yaml
+sce --help         # ✓ exit code 0
+ls config/         # ✓ Shows: secrets.local.yaml, settings.yaml
 ```
 
 **Coach**:
@@ -270,7 +269,7 @@ sce init
 **Phase 5: Verification**
 ```bash
 python3 --version
-sce --version
+sce --help
 ls config/
 ```
 

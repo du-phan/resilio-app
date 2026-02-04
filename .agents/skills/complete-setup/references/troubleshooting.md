@@ -19,7 +19,7 @@ Comprehensive troubleshooting guide for Sports Coach Engine environment setup is
 Top 5 most common issues and their solutions:
 
 **1. sce not found after install** → Virtual environment not activated
-- **Symptom**: `sce --version` returns "command not found" (exit 127)
+- **Symptom**: `sce --help` returns "command not found" (exit 127)
 - **Cause**: Using venv path but forgot to activate
 - **Fix**: `source .venv/bin/activate`
 - **Verify**: Prompt shows `(.venv)` prefix
@@ -327,7 +327,7 @@ poetry --version
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-sce --version  # Should work
+sce --help  # Should work
 ```
 
 ---
@@ -351,7 +351,7 @@ source .venv/bin/activate
 
 # Now install works without sudo
 pip install -e .
-sce --version  # Works
+sce --help  # Works
 ```
 
 **WRONG Fix**: Using sudo with pip
@@ -386,7 +386,7 @@ pip install -e .
 
 **Symptom**:
 - `poetry install` or `pip install -e .` succeeded
-- `sce --version` returns "command not found" (exit 127)
+- `sce --help` returns "command not found" (exit 127)
 
 **Diagnosis Steps**:
 
@@ -422,7 +422,7 @@ source .venv/bin/activate
 
 # Verify
 echo $VIRTUAL_ENV  # Should show path
-sce --version  # Should work now
+sce --help  # Should work now
 ```
 
 **Cause 2: Wrong virtual environment activated**
@@ -441,7 +441,7 @@ find . -name sce -type f
 # Example: ./.venv/bin/sce
 
 # Test with absolute path
-./.venv/bin/sce --version
+./.venv/bin/sce --help
 # If works: PATH issue
 
 # Fix: Ensure venv is activated
@@ -452,7 +452,7 @@ source .venv/bin/activate
 **Cause 4: Poetry path not in shell PATH**
 ```bash
 # If using Poetry, try explicit invocation
-poetry run sce --version
+poetry run sce --help
 # If this works: Poetry venv exists, shell PATH issue
 
 # Fix: Use poetry run prefix, or add Poetry venv to PATH
@@ -570,14 +570,13 @@ sce init
 ls -la config/
 # Should show:
 #   secrets.local.yaml
-#   athlete_profile.yaml
-#   training_plan.yaml
+#   settings.yaml
 ```
 
 **If `sce init` fails**:
 ```bash
 # Check package installed
-sce --version
+sce --help
 # If "command not found": See "sce Command Not Found" section above
 
 # Check permissions
@@ -655,7 +654,7 @@ python3 -c "import yaml; yaml.safe_load(open('config/secrets.local.yaml'))" && e
 ls -la config/
 # Example output:
 #   -rw------- 1 user user 123 Jan 20 secrets.local.yaml (owner-only read/write)
-#   -rw-r--r-- 1 user user 456 Jan 20 athlete_profile.yaml (owner read/write, others read)
+#   -rw-r--r-- 1 user user 456 Jan 20 settings.yaml (owner read/write, others read)
 
 # Check directory permissions
 ls -la . | grep config
@@ -932,7 +931,7 @@ cd ~/sports-coach-engine
 source .venv/bin/activate
 
 # Now sce works
-sce --version
+sce --help
 ```
 
 **Option 2: Create shell alias** (convenience)
@@ -1006,7 +1005,7 @@ echo $VIRTUAL_ENV
 # Should show: /home/user/sports-coach-engine/.venv
 
 # Test sce
-sce --version  # Should work now
+sce --help  # Should work now
 ```
 
 ---
@@ -1048,11 +1047,11 @@ rm -rf .venv
 
 # Use Poetry for everything
 poetry install
-poetry run sce --version
+poetry run sce --help
 
 # Or use Poetry shell (activates venv)
 poetry shell
-sce --version
+sce --help
 ```
 
 **Option B: Use venv exclusively**
@@ -1061,7 +1060,7 @@ sce --version
 # Use venv approach
 source .venv/bin/activate
 pip install -e .
-sce --version
+sce --help
 ```
 
 **Key Point**: Don't mix `poetry install` and `pip install -e .` in same project
@@ -1085,12 +1084,12 @@ echo $VIRTUAL_ENV  # Active? Correct path?
 ls -la .venv/  # Exists?
 
 echo "=== Package ==="
-sce --version  # Works? (exit 0)
+sce --help  # Works? (exit 0)
 which sce  # Where is it?
 
 echo "=== Config ==="
 ls -la config/  # Exists?
-cat config/secrets.local.yaml | head -n 5  # Valid YAML?
+grep -q "YOUR_CLIENT_ID" config/secrets.local.yaml && echo "Placeholders present" || echo "Credentials set"
 
 echo "=== PATH ==="
 echo $PATH | tr ':' '\n' | grep -E '(homebrew|\.venv)'  # Includes required paths?

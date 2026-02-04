@@ -14,7 +14,7 @@
     "Detects Poetry availability using poetry --version",
     "Uses Poetry for package installation (poetry install)",
     "Explains what Poetry does (dependency management, virtual environment)",
-    "Verifies sce command is available (sce --version returns exit 0)",
+    "Verifies sce command is available (command -v sce returns exit 0, sce --help returns exit 0)",
     "Runs sce init to create configuration structure",
     "Validates environment (all checks pass: Python ≥3.11, sce works, config exists)",
     "Provides clear success message listing what was accomplished",

@@ -7,7 +7,7 @@
     "Detects platform (macOS or Linux)",
     "Checks Python version (python3 --version)",
     "Finds Python 3.11+ already present (exit 0, version ≥3.11)",
-    "Checks sce command availability (sce --version)",
+    "Checks sce command availability (command -v sce, sce --help)",
     "Finds sce not installed (exit 127 - command not found)",
     "Checks config directory (ls -la config/)",
     "Provides summary showing Python ✓, Package ✗, Config ✗",

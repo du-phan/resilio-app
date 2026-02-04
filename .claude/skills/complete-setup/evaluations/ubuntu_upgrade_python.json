@@ -20,7 +20,7 @@
     "Upgrades pip inside venv (pip install --upgrade pip)",
     "Installs package via pip install -e . with explanation of -e flag",
     "Handles potential build tools requirement (apt install build-essential)",
-    "Verifies sce command (sce --version returns exit 0)",
+    "Verifies sce command (command -v sce returns exit 0, sce --help returns exit 0)",
     "Runs sce init to create config structure",
     "Validates complete environment (all checks pass)",
     "Teaches user how to activate venv in future sessions",

@@ -62,12 +62,11 @@ poetry install
 # - Takes 30-60 seconds typically
 
 # Step 3: Verify sce command is available
-sce --version
-# Expected output: "sports-coach-engine, version X.X.X"
+sce --help
 # Expected exit code: 0
 
 # Alternative verification (if sce not in PATH yet)
-poetry run sce --version
+poetry run sce --help
 # This explicitly runs sce inside Poetry's virtual environment
 ```
 
@@ -95,8 +94,8 @@ After `poetry install` completes successfully, you should see:
 
 3. **Command Verification**:
    ```bash
-   sce --version
-   # Returns: sports-coach-engine, version X.X.X (exit code 0)
+   sce --help
+   # Returns exit code 0
    ```
 
 ### Common Poetry Issues
@@ -156,14 +155,14 @@ SolverProblemError
 
 #### Issue 3: sce not found after install
 
-**Symptom**: `sce --version` returns "command not found" (exit code 127)
+**Symptom**: `sce --help` returns "command not found" (exit code 127)
 
 **Possible Causes & Fixes**:
 
 **Cause A: PATH not updated** (shell needs restart)
 ```bash
 # Try explicit invocation first
-poetry run sce --version
+poetry run sce --help
 # If this works, PATH is the issue
 
 # Fix: Restart terminal
@@ -244,8 +243,7 @@ pip install -e .
 # Takes 30-60 seconds typically
 
 # Step 6: Verify sce command is available
-sce --version
-# Expected output: "sports-coach-engine, version X.X.X"
+sce --help
 # Expected exit code: 0
 ```
 
@@ -320,7 +318,7 @@ pip install -e .
 
 #### Issue 2: sce not found after install
 
-**Symptom**: `sce --version` returns "command not found" (exit code 127)
+**Symptom**: `sce --help` returns "command not found" (exit code 127)
 
 **Possible Causes & Fixes**:
 
@@ -337,7 +335,7 @@ echo $VIRTUAL_ENV
 source .venv/bin/activate
 
 # Retry command
-sce --version
+sce --help
 ```
 
 **Cause B: Wrong venv activated**
@@ -505,7 +503,7 @@ rm -rf .venv
 
 # Use Poetry exclusively
 poetry install
-sce --version  # Or: poetry run sce --version
+sce --help  # Or: poetry run sce --help
 ```
 
 **Option 2: Keep Manual venv** (if Poetry not needed)
@@ -515,7 +513,7 @@ poetry env remove python
 
 # Activate manual venv
 source .venv/bin/activate
-sce --version
+sce --help
 ```
 
 **Why This Matters**:
@@ -534,9 +532,8 @@ Run these checks to confirm successful installation:
 
 ```bash
 # Check 1: sce command works
-sce --version
+sce --help
 # MUST return exit code 0
-# MUST show version string: "sports-coach-engine, version X.X.X"
 
 # Check 2: sce is in PATH
 which sce
@@ -562,8 +559,7 @@ echo $VIRTUAL_ENV
 
 Before proceeding to Phase 4 (Configuration), verify:
 
-- [ ] `sce --version` returns exit code 0
-- [ ] Version string displays correctly
+- [ ] `sce --help` returns exit code 0
 - [ ] `which sce` shows path inside virtual environment (not system)
 - [ ] `which python` shows venv Python (not system)
 - [ ] If using venv path: `echo $VIRTUAL_ENV` shows .venv path
@@ -574,7 +570,6 @@ Before proceeding to Phase 4 (Configuration), verify:
 **Exit code meanings**:
 - **0**: Success - command worked
 - **127**: Command not found - sce not installed or venv not activated
-- **2**: Config error - sce installed but missing configuration (skip to Phase 4)
 - **Other**: Unexpected error - see troubleshooting.md
 
 **Next steps**:
@@ -631,7 +626,7 @@ echo ""
 echo "sce Command:"
 if command -v sce >/dev/null 2>&1; then
   echo "  Found: Yes ($(which sce))"
-  echo "  Version: $(sce --version 2>&1)"
+  echo "  Help: $(sce --help 2>&1 | head -n 1)"
 else
   echo "  Found: No"
 
@@ -687,7 +682,7 @@ This reference covers both Poetry and venv installation paths in depth. Key take
 1. **Choose method based on Poetry availability** - don't install Poetry mid-setup
 2. **Virtual environment activation is critical** for venv path
 3. **Mixed states cause conflicts** - choose one method and stick with it
-4. **Validation confirms success** - don't proceed until `sce --version` works
+4. **Validation confirms success** - don't proceed until `sce --help` works
 5. **Common issues are predictable** - most failures due to activation or PATH
 
 For troubleshooting specific error messages, see `troubleshooting.md`.

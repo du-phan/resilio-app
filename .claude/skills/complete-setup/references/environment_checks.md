@@ -161,13 +161,16 @@ ls -la .venv/bin/sce
 ### Package Installation Check
 
 ```bash
-# Primary check: Can sce command run?
-sce --version
-# Expected: "sports-coach-engine, version X.X.X"
+# Primary check: Is sce available?
+command -v sce
 # Exit codes:
-#   0 = Installed and working
-#   2 = Installed but config missing (proceed to sce init)
-#   127 = Command not found (not installed or venv not activated)
+#   0 = Command found in PATH
+#   1 = Command not found (not installed or venv not activated)
+
+# Verify command runs (no config required)
+sce --help
+# Exit code:
+#   0 = Command runs successfully
 
 # If sce not found, check installation location
 which sce
@@ -176,7 +179,7 @@ which sce
 # Not found: (no output, exit 1)
 
 # Alternative: Try running via Poetry explicitly (if using Poetry)
-poetry run sce --version
+poetry run sce --help
 # This works even if sce not in PATH
 
 # Check if package is installed in Python environment
@@ -187,9 +190,9 @@ python3 -m pip list | grep sports-coach-engine
 ```
 
 **Exit Code Interpretation**:
-- **0 (success)**: Package working correctly, proceed to config check
-- **2 (config missing)**: Package installed but `sce init` not run yet
-- **127 (not found)**: Either:
+- **command -v sce = 0**: Package command is available
+- **sce --help = 0**: CLI runs (installation likely OK)
+- **command -v sce = 1**: Either:
   - Package not installed yet (need Poetry install or pip install -e .)
   - venv not activated (need source .venv/bin/activate)
   - PATH issue (package installed but shell can't find it)
@@ -203,26 +206,29 @@ python3 -m pip list | grep sports-coach-engine
 ls -la config/
 # Expected files:
 #   secrets.local.yaml
-#   athlete_profile.yaml
-#   training_plan.yaml
+#   settings.yaml
 # Exit code:
 #   0 = Config directory exists
 #   2 = Not found (need to run sce init)
 
-# Check if secrets file has placeholder or real credentials
-cat config/secrets.local.yaml | grep -v "YOUR_"
-# If output is minimal: Still has placeholders (need first-session)
-# If output has values: Real credentials already configured
+# Check config via CLI
+sce status
+# Exit code:
+#   0 = Config present and valid
+#   2 = Config missing (run sce init)
+
+# Check if secrets file has placeholder or real credentials (avoid printing secrets)
+grep -q "YOUR_CLIENT_ID" config/secrets.local.yaml && echo "Placeholders present" || echo "Credentials set"
 
 # Check if secrets file is readable
 test -r config/secrets.local.yaml && echo "Readable" || echo "Not readable"
 # "Readable" = Good
 # "Not readable" = Permission issue (need chmod 644)
 
-# Check if athlete profile exists
-test -f config/athlete_profile.yaml && echo "Exists" || echo "Not found"
-# "Exists" = Profile may be configured
-# "Not found" = Need to create profile (first-session)
+# Check if settings file exists
+test -f config/settings.yaml && echo "Exists" || echo "Not found"
+# "Exists" = Settings present
+# "Not found" = Run sce init
 ```
 
 **Common Config Issues**:
@@ -257,7 +263,7 @@ python3 --version && echo "✓ Python OK" || echo "✗ Python issue"
 echo "Python location: $(which python3)"
 
 # 4. Package installation check
-sce --version && echo "✓ Package OK" || echo "✗ Package issue (exit code: $?)"
+sce --help && echo "✓ Package OK" || echo "✗ Package issue (exit code: $?)"
 
 # 5. Config check
 ls config/ >/dev/null 2>&1 && echo "✓ Config exists" || echo "✗ Config missing"
@@ -269,7 +275,7 @@ ls config/ >/dev/null 2>&1 && echo "✓ Config exists" || echo "✗ Config missi
 echo "---"
 echo "Environment Status:"
 python3 --version
-sce --version
+sce --help
 ls -la config/ 2>/dev/null | head -n 5
 ```
 
@@ -305,7 +311,7 @@ echo ""
 
 # Package
 echo -n "Package: "
-if sce --version 2>/dev/null; then
+if sce --help 2>/dev/null; then
     echo "✓ Installed and working"
 elif [ $? -eq 2 ]; then
     echo "○ Installed but config missing (run: sce init)"
@@ -333,7 +339,7 @@ fi
 echo ""
 
 echo "=== Summary ==="
-if python3 --version 2>/dev/null && [ $(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null) \> "3.10" ] && sce --version 2>/dev/null; then
+if python3 --version 2>/dev/null && [ $(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' 2>/dev/null) \> "3.10" ] && sce --help 2>/dev/null; then
     echo "✓ Environment ready for first-session"
 else
     echo "✗ Environment needs setup (use complete-setup skill)"
@@ -377,7 +383,7 @@ bash /tmp/check_env.sh
 
 ### Error: "command not found: sce"
 
-**Symptom**: Running `sce --version` returns exit code 127
+**Symptom**: Running `sce --help` returns exit code 127
 
 **Causes** (in order of likelihood):
 1. Package not installed yet
@@ -413,7 +419,7 @@ echo $VIRTUAL_ENV
 2. **venv not activated**:
    ```bash
    source .venv/bin/activate
-   sce --version  # Should work now
+   sce --help  # Should work now
    ```
 
 3. **PATH issue**:
@@ -427,7 +433,7 @@ echo $VIRTUAL_ENV
 
 4. **Try Poetry explicit invocation** (if using Poetry):
    ```bash
-   poetry run sce --version
+   poetry run sce --help
    # If this works: PATH issue, not installation issue
    ```
 
@@ -478,7 +484,7 @@ sce init
 
 # Verify
 ls -la config/
-# Should show: secrets.local.yaml, athlete_profile.yaml, training_plan.yaml
+# Should show: secrets.local.yaml, settings.yaml
 ```
 
 ---
@@ -576,7 +582,7 @@ Use this quick checklist for environment validation:
 - [ ] Python in PATH (`which python3` shows location)
 - [ ] pip available (`python3 -m pip --version` works)
 - [ ] Package manager available (Poetry or venv capability)
-- [ ] sce command works (`sce --version` returns exit 0)
+- [ ] sce command works (`sce --help` returns exit 0)
 - [ ] Config directory exists (`ls config/` returns exit 0)
 - [ ] Virtual environment active if using venv (`echo $VIRTUAL_ENV` shows path)
 

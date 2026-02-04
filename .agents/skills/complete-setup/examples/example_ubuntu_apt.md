@@ -21,7 +21,7 @@ Complete conversational transcript showing the `complete-setup` skill guiding a 
 ```bash
 uname  # Returns: Linux
 python3 --version  # Returns: Python 3.10.12
-sce --version  # Returns: exit code 127 (not found)
+sce --help  # Returns: exit code 127 (not found)
 poetry --version  # Returns: exit code 127 (not found)
 ```
 
@@ -184,8 +184,8 @@ Takes 30-60 seconds. You'll see package names scroll by with progress bars.
 
 Installation complete! Let me verify the `sce` command works:
 ```bash
-sce --version
-# Returns: sports-coach-engine, version 0.4.0
+sce --help
+# Returns: exit code 0
 ```
 
 ✓ Package installed successfully!
@@ -201,8 +201,7 @@ Configuration initialized successfully!
 
 Created:
   ✓ config/secrets.local.yaml
-  ✓ config/athlete_profile.yaml
-  ✓ config/training_plan.yaml
+  ✓ config/settings.yaml
   ✓ data/ directory
 
 Next steps:
@@ -216,9 +215,9 @@ Perfect! Let me run a final check to make sure everything is ready:
 ```bash
 # Environment verification
 python3 --version      # ✓ Python 3.11.8
-sce --version          # ✓ sports-coach-engine, version 0.4.0
+sce --help             # ✓ exit code 0
 echo $VIRTUAL_ENV      # ✓ Shows: /home/user/sports-coach-engine/.venv
-ls config/             # ✓ Shows: secrets.local.yaml, athlete_profile.yaml, training_plan.yaml
+ls config/             # ✓ Shows: secrets.local.yaml, settings.yaml
 ```
 
 **Coach**:
@@ -328,7 +327,7 @@ Steps:
 ```bash
 uname
 python3 --version
-sce --version
+sce --help
 poetry --version
 ```
 
@@ -356,7 +355,7 @@ sce init
 **Phase 5: Verification**
 ```bash
 python3 --version
-sce --version
+sce --help
 echo $VIRTUAL_ENV
 ls config/
 ```
@@ -426,7 +425,7 @@ source .venv/bin/activate
 
 Now check:
 ```bash
-sce --version
+sce --help
 ```
 
 Should work now! You'll see the `(.venv)` prefix in your prompt when the environment is active."
@@ -476,7 +475,7 @@ python3.11 -m venv .venv
 
 ### Scenario: Package Already Installed
 
-**Detection Output**: `sce --version` returns exit code 0
+**Detection Output**: `sce --help` returns exit code 0
 
 **Coach Response**:
 "I see the Sports Coach Engine package is already installed! Let me just verify the configuration:
@@ -618,7 +617,7 @@ pip install -e .
 **User (in new terminal)**:
 ```bash
 cd ~/sports-coach-engine
-sce --version
+sce --help
 ```
 
 **Error Output**: `sce: command not found`
@@ -633,7 +632,7 @@ source .venv/bin/activate
 
 Now try again:
 ```bash
-sce --version
+sce --help
 ```
 
 **User**: "It works now!"
