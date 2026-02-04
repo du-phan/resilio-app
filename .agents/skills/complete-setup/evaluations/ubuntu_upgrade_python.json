@@ -1,0 +1,52 @@
+{
+  "skills": ["complete-setup"],
+  "query": "I'm on Ubuntu 22.04 and want to set up the coaching system. I'm not familiar with Python.",
+  "files": [],
+  "expected_behavior": [
+    "Detects Linux platform using uname (returns Linux)",
+    "Checks for WSL using grep -qi microsoft /proc/version (should not match on native Linux)",
+    "Checks Python version and finds 3.10.x (too old, Ubuntu 22.04 default)",
+    "Explains need for Python 3.11+ upgrade in clear terms",
+    "Explains what sudo is and why it's safe (run as administrator, from official sources)",
+    "Guides through deadsnakes PPA installation step-by-step",
+    "Installs Python 3.11 with venv support (python3.11-venv package)",
+    "Explains why python3.11-venv is needed (virtual environment support)",
+    "Verifies Python 3.11 installation (python3.11 --version shows 3.11.x)",
+    "Handles symlink management (update-alternatives) or recommends using python3.11 explicitly",
+    "Creates virtual environment using python3.11 -m venv .venv",
+    "Explains what a virtual environment is using non-technical analogy",
+    "Activates virtual environment with source .venv/bin/activate",
+    "Points out (.venv) prompt indicator as visual confirmation",
+    "Upgrades pip inside venv (pip install --upgrade pip)",
+    "Installs package via pip install -e . with explanation of -e flag",
+    "Handles potential build tools requirement (apt install build-essential)",
+    "Verifies sce command (sce --version returns exit 0)",
+    "Runs sce init to create config structure",
+    "Validates complete environment (all checks pass)",
+    "Teaches user how to activate venv in future sessions",
+    "Provides optional tip about auto-activation in shell startup",
+    "Transitions to first-session for Strava auth"
+  ],
+  "quality_criteria": {
+    "sudo_explanation": "Explains sudo clearly for non-technical users without security jargon",
+    "venv_teaching": "User understands what virtual environments are and why they're needed",
+    "activation_retention": "User knows they must activate venv in new terminals",
+    "error_recovery": "Handles externally-managed-environment error (Ubuntu 22.04+)",
+    "symlink_clarity": "Explains difference between python3 and python3.11 commands"
+  },
+  "common_errors_to_handle": [
+    "externally-managed-environment error (forgot to activate venv)",
+    "python3 still points to 3.10 after installing 3.11 (symlink issue)",
+    "gcc not found during package compilation (build-essential missing)",
+    "No module named venv (python3.11-venv not installed)",
+    "Permission denied without sudo (system package install)",
+    "Forgetting to activate venv in new terminal session"
+  ],
+  "anti_patterns_to_avoid": [
+    "Using sudo with pip inside venv (dangerous pattern)",
+    "Not explaining why each package is being installed",
+    "Assuming user understands Linux package managers",
+    "Proceeding without confirming venv activation (check for (.venv) prefix)",
+    "Not teaching venv activation for future sessions"
+  ]
+}

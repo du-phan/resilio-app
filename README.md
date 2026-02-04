@@ -1,6 +1,6 @@
 # Sports Coach Engine
 
-AI-powered adaptive running coach for multi-sport athletes, running entirely in Claude Code terminal.
+AI-powered adaptive running coach for multi-sport athletes, running entirely in Codex or Claude Code terminal sessions.
 
 **Current Status**: Phase 7 Complete (M1-M14). System ready for coaching sessions.
 
@@ -94,6 +94,13 @@ poetry run ruff sports_coach_engine
 - `docs/specs/api_layer.md` - API documentation
 - `docs/specs/modules/` - Individual module specs (M1-M14)
 - `CLAUDE.md` - Guide for Claude Code integration
+- `AGENTS.md` - Guide for Codex integration
+
+## Codex Support
+
+- Skills location: `.agents/skills`
+- Codex guidance: `AGENTS.md`
+- Claude Code skills remain in `.claude/skills` with guidance in `CLAUDE.md`
 
 ## License
 
