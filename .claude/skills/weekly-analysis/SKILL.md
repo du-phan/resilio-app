@@ -18,6 +18,8 @@ This skill provides complete weekly training analysis by:
 
 **Key principle**: Use computational tools to calculate metrics; apply coaching judgment to interpret patterns.
 
+**Conversational flow**: See CLAUDE.md "Conversational Pacing" for guidance on when to wait for athlete responses vs. batching questions.
+
 ---
 
 ## Workflow

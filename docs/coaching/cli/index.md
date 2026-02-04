@@ -23,6 +23,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 - [**Authentication**](cli_auth.md) - OAuth flow, token management (`sce auth`)
 - [**Sync**](cli_sync.md) - Smart sync, Strava activity import (`sce sync`)
 - [**Data Management**](cli_data.md) - Init, activity import (`sce init`)
+- [**Data Structure**](cli_data_structure.md) - Understanding activity storage organization
 - [**Dates**](cli_dates.md) - Date utilities for planning (`sce dates`)
 
 ### Daily Coaching

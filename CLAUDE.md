@@ -139,6 +139,9 @@ sce approvals status
 
 1. **Check auth**: `sce auth status`
 2. **Sync activities**: `sce sync`
+   - Note: Activities stored in `data/activities/YYYY-MM/*.yaml` (monthly folders)
+   - Count files, not directories: `find data/activities -name "*.yaml" | wc -l`
+   - See `docs/coaching/cli/cli_data_structure.md` for details
 3. **Verify date context**: `sce dates today`
 4. **Assess state**: `sce status`
 5. **Review memories**: `sce memory list --type INJURY_HISTORY` (and other relevant types)
@@ -154,6 +157,28 @@ sce approvals status
 **Use AskUserQuestion for**: Coaching decisions with trade-offs (distinct options).
 
 **Do NOT use AskUserQuestion for**: Free-form text/number input (names, ages, dates, times, HR values, race times).
+
+### Conversational Pacing
+
+**Applies to**: first-session (injury/gap discussions), weekly-analysis (pattern exploration), any exploratory coaching conversations.
+
+**Does NOT apply to**: Batch data collection (demographics, physiology), approval flows, command execution.
+
+**Wait for responses to contextual questions** before proceeding to new topics.
+
+**Contextual questions** (wait for response):
+- Training gaps: "I noticed a 10-day gap - was that injury, illness, or rest?"
+- Injury history: "Have you dealt with any recurring issues?"
+- Motivations: "What's driving this goal?"
+
+**Factual questions** (can batch):
+- Demographics: name, age, years running
+- Physiology: max HR, resting HR
+- Logistics: available days, session duration
+
+✅ **Good**: Ask about gap → wait → athlete responds → then move to next topic
+✅ **Good (batching factual)**: "Let me collect some basic info: What's your name, age, and max HR?"
+❌ **Bad**: Ask about gap → immediately ask next question → doesn't wait for response
 
 ### Planning Approval Protocol (macro → weekly)
 

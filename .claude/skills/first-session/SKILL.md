@@ -76,6 +76,8 @@ Include:
 
 Keep the overview to 2–4 sentences. Do not skip this step.
 
+**Note**: Activities are stored in monthly folders (`data/activities/YYYY-MM/*.yaml`). See [cli_data_structure.md](../../../docs/coaching/cli/cli_data_structure.md) for details on data organization.
+
 **What this provides**:
 
 - Up to 365 days (52 weeks) of activity history (Greedy Sync)
