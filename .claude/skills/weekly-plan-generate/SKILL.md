@@ -10,7 +10,7 @@ argument-hint: "[optional-notes]"
 
 # Weekly Plan Generate (Workout Designer)
 
-Non-interactive. Designs exact workouts using AI coaching judgment. Do not apply/save the plan.
+Designs exact workouts using AI coaching judgment. Do not apply/save the plan.
 
 ## Preconditions (block if missing)
 - Macro plan exists
@@ -18,6 +18,13 @@ Non-interactive. Designs exact workouts using AI coaching judgment. Do not apply
 - Profile constraints present
 
 If missing, return a blocking checklist and stop.
+
+## Interactivity & Feedback
+
+- Non-interactive: do not ask the athlete questions or call approval commands.
+- Return an `athlete_prompt` for the main agent to ask and capture approval.
+- If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new week JSON (do not edit the prior file in place).
+- If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
 
 ## Philosophy
 
@@ -288,3 +295,4 @@ Return:
 - `weekly_json_path`
 - `week_number`
 - `athlete_prompt` (single yes/no + adjustment question)
+- If blocked: `blocking_checklist`

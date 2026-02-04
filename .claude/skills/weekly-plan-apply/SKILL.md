@@ -10,13 +10,19 @@ argument-hint: "approved_file=<path>"
 
 # Weekly Plan Apply (Executor)
 
-Non-interactive. Applies a previously approved weekly JSON payload.
+Applies a previously approved weekly JSON payload.
 
 ## Preconditions (block if missing)
 - Approved weekly JSON file path provided in arguments
 - Approval recorded in approvals state (week number + file path)
 
 If missing, return a blocking checklist and stop.
+
+## Interactivity & Feedback
+
+- Non-interactive: do not ask the athlete questions or call approval commands.
+- Apply only when approvals state matches the provided file.
+- If the athlete requests changes, the main agent must re-run weekly-plan-generate and record a new approval before applying.
 
 ## Workflow
 
@@ -48,3 +54,4 @@ sce plan week --week <WEEK_NUMBER>
 Return:
 - `applied_file`
 - `week_number`
+- If blocked: `blocking_checklist`

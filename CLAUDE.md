@@ -60,6 +60,14 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 
 **Rule**: All athlete-facing questions and approvals happen in the main agent. Executor skills must not ask questions.
 
+### Subagent Interactivity Protocol
+
+- Main agent owns all athlete interaction, approvals, and feedback loops.
+- Subagents are non-interactive: never ask questions, never call AskUserQuestion, never run approval commands.
+- Proposal/generation subagents return `athlete_prompt`; apply-only subagents do not.
+- If the athlete requests changes or declines, the main agent gathers feedback, updates profile/memory if needed, and re-runs the skill with notes. Treat every revision as a new proposal (no in-place edits).
+- If required info is missing, subagent returns a blocking checklist; main agent collects missing inputs and re-runs.
+
 ---
 
 ## CLI Essentials
@@ -120,10 +128,10 @@ sce approvals status
 
 ## Key Training Metrics
 
-- **CTL**: <20 Beginner | 20-35 Recreational | 35-50 Competitive | >50 Advanced
+- **CTL**: <30 Beginner | 30-45 Recreational | 45-60 Competitive | 60-75 Advanced | >75 Elite
 - **TSB**: <-25 Overreached | -25 to -10 Productive | -10 to +5 Optimal | +5 to +15 Fresh (quality-ready) | +15 to +25 Race ready | >+25 Detraining risk
 - **ACWR**: 0.8-1.3 Safe | 1.3-1.5 Caution | >1.5 Significant spike
-- **Readiness**: <35 Very low | 35-50 Low | 50-70 Moderate | 70-85 Good | >85 Excellent (objective-only capped at 65)
+- **Readiness**: <=25 Very low | 25-40 Low | 40-55 Moderate | 55-65 Good | >65 Excellent (objective-only capped at 65)
 
 ---
 

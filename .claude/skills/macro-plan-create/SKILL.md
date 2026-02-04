@@ -1,6 +1,6 @@
 ---
 name: macro-plan-create
-description: Creates a macro plan skeleton from an approved baseline VDOT and writes a review doc. Use after baseline VDOT approval.
+description: Creates a macro plan skeleton from an approved baseline VDOT and writes a review doc with an approval prompt for the main agent. Use after baseline VDOT approval.
 disable-model-invocation: true
 context: fork
 agent: macro-planner
@@ -10,7 +10,7 @@ argument-hint: "baseline_vdot=<number>"
 
 # Macro Plan Create (Executor)
 
-Non-interactive. Use CLI only. Do not ask the athlete questions.
+Use CLI only.
 
 ## Preconditions (block if missing)
 
@@ -20,6 +20,13 @@ Non-interactive. Use CLI only. Do not ask the athlete questions.
 - Metrics available (`sce status`)
 
 If missing, return a blocking checklist and stop.
+
+## Interactivity & Feedback
+
+- Non-interactive: do not ask the athlete questions or call approval commands.
+- Include an `athlete_prompt` for the main agent to ask and capture approval.
+- If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new plan + review doc.
+- If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
 
 ## Workflow
 
@@ -155,3 +162,5 @@ Return:
 
 - `review_path`
 - `macro_summary` (start/peak volumes, phases)
+- `athlete_prompt` (single yes/no + adjustment question)
+- If blocked: `blocking_checklist`

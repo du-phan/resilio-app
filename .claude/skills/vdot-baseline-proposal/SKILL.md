@@ -1,6 +1,6 @@
 ---
 name: vdot-baseline-proposal
-description: Proposes a baseline VDOT and presents evidence and a single approval prompt directly in chat. Use when a macro plan needs an approved baseline VDOT.
+description: Proposes a baseline VDOT and returns evidence plus a single approval prompt for the main agent. Use when a macro plan needs an approved baseline VDOT.
 disable-model-invocation: true
 context: fork
 agent: vdot-analyst
@@ -10,13 +10,20 @@ argument-hint: "[notes]"
 
 # VDOT Baseline Proposal (Executor)
 
-Non-interactive. Use CLI only. Present the review directly in chat for the main agent to use.
+Use CLI only. Present the review directly in chat for the main agent to use.
 
 ## Preconditions (block if missing)
 - Goal exists (race type/date) and profile exists
 - Metrics available (`sce status`)
 
 If missing, return a blocking checklist and stop.
+
+## Interactivity & Feedback
+
+- Non-interactive: do not ask the athlete questions or call approval commands.
+- Return an `athlete_prompt` for the main agent to ask and capture approval.
+- If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new proposal.
+- If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
 
 ## Workflow
 
@@ -55,3 +62,4 @@ sce vdot paces --vdot <VDOT>
 Return:
 - `proposed_vdot`
 - `athlete_prompt` (single yes/no + adjustment question)
+- If blocked: `blocking_checklist`
