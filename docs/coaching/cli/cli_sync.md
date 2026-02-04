@@ -93,16 +93,30 @@ No manual calculation needed - automatically syncs all missing days.
 
 ---
 
-## Rate Limit Handling
+## Rate Limit Handling (Expected During First Sync)
 
-**Strava API limits**: 100 requests per 15 minutes
+**Strava API limits**:
+- **15-minute**: 100 requests (resets at :00, :15, :30, :45 past hour)
+- **Daily**: 1,000 requests (resets midnight UTC)
+- **Source**: [Strava Rate Limits Documentation](https://developers.strava.com/docs/rate-limits/)
 
-**Greedy sync**: Fetches newest activities first, stops at rate limit
+**First-time sync (365 days)**: WILL hit rate limits for most athletes with regular training.
 
-**If rate limit hit:**
-1. All fetched data is saved successfully
-2. Wait 15 minutes for rate limit reset
-3. Run `sce sync` again (automatically resumes)
+**Why**: Fetching 365 days for an athlete with 3-4 activities/week requires ~180 activities × 2 API requests = 360+ requests. This exceeds the 15-minute limit (100 requests) multiple times.
+
+**This is normal, expected behavior** - not an error. The sync system is designed to handle this gracefully.
+
+**When rate limit hit:**
+1. All fetched data is saved successfully (no data loss)
+2. Sync pauses and displays rate limit message
+3. Wait 15 minutes for limit reset (or longer for daily limit)
+4. Run `sce sync` again - automatically resumes from where it stopped
+5. Repeat as needed until full history is synced
+
+**For very active athletes** (7+ activities/week over 365 days):
+- May need multiple 15-minute waits
+- In rare cases, could approach daily limit (1,000 requests)
+- Each resume automatically continues from last successful fetch
 
 **Success message includes tip:**
 ```
@@ -111,6 +125,23 @@ Synced 95 new activities from Strava.
 Strava rate limit hit. Data saved successfully.
 Wait 15 minutes and run 'sce sync' again to continue.
 ```
+
+---
+
+## First-Time Sync Expectations
+
+**Typical scenarios**:
+
+| Athlete Activity Level | Activities/Year | Expected Rate Limits |
+|------------------------|-----------------|----------------------|
+| Light (1-2/week) | ~75 | Likely none or 1 wait |
+| Moderate (3-4/week) | ~180 | 2-3 waits (15 min each) |
+| Active (5-6/week) | ~280 | 3-4 waits (15 min each) |
+| Very Active (7+/week) | ~365+ | 4-5 waits, may approach daily limit |
+
+**Total time estimate**: 15-60 minutes for first sync (including wait periods), depending on activity level.
+
+**Recommendation**: Start the first sync, let it run, then return after 15-30 minutes to resume.
 
 ---
 

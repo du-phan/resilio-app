@@ -87,24 +87,37 @@ Keep the overview to 2–4 sentences. Do not skip this step.
 **Handling Greedy Sync & Rate Limits (IMPORTANT)**:
 The sync process is "greedy"—it fetches the most recent activities first and proceeds backwards until it hits the 52-week limit OR the Strava API rate limit (100 requests / 15 min).
 
-**CRITICAL**: Since 52 weeks usually contains >100 activities, the **initial sync will almost certainly pause due to rate limits**. This is expected behavior.
+**EXPECTED**: The initial sync WILL hit rate limits for most athletes with regular training. This is normal, designed behavior.
+
+**Why**: Fetching 365 days typically requires 200-400 API requests. Strava limits apps to 100 requests per 15 minutes. The system handles this gracefully by pausing and resuming.
+
+**Reference**: See [Strava Rate Limits](https://developers.strava.com/docs/rate-limits/) - 100 requests/15min, 1000 requests/day.
 
 **If rate limit hit (~100 activities):**
 
 Present this choice with coaching expertise:
 
-"I've imported your last [X] activities (about [Y] months). This is typically enough to compute reliable training metrics like CTL and establish your fitness baseline.
+"I've imported your last [X] activities (about [Y] months). The sync paused due to Strava's rate limit (100 requests per 15 minutes) - this is expected for initial syncs.
+
+Your current data is sufficient to establish baseline metrics (CTL, fitness level), so you have two options:
 
 **Options:**
-1. **Continue with current data (recommended)** - 100 activities provides solid baseline
-2. **Wait 15 minutes and sync more** - If you want more exhaustive history from the past year
+1. **Continue with current data (recommended for getting started)** - Enough for reliable baseline
+2. **Wait 15 minutes and sync more** - To get complete year of history
 
-What would you prefer?"
+We can always sync more history later. What would you prefer?"
 
 **If athlete chooses option 2:**
 - Wait 15 minutes for rate limit reset
 - Run `sce sync` again (will automatically resume from where it left off)
 - Repeat until athlete is satisfied or full year is synced
+
+**For very active athletes** (7+ activities/week):
+- Multiple 15-minute waits expected (3-5 pauses typical)
+- Total sync time: 45-60 minutes including waits
+- Rare edge case: May approach daily limit (1,000 requests) - if so, continue next day
+
+**Coaching tip**: For very active athletes, set expectation upfront: "Your training volume means the initial sync will take 45-60 minutes with several 15-minute pauses. Totally normal - Strava limits how fast we can fetch data."
 
 **Success message**: "Imported X activities (covering approximately Y weeks). Your CTL is Z."
 

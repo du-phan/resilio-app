@@ -83,11 +83,20 @@ This is why subsequent syncs are fast: the system knows what it has by reading f
 
 ## Sync Monitoring Best Practices
 
+### Rate Limit Awareness
+
+**Expected during first sync**: Strava rate limits (100 requests/15min) WILL be hit for most athletes fetching 365 days of history.
+
+This is normal behavior. Syncs pause and resume automatically. See [cli_sync.md Rate Limit Handling](cli_sync.md#rate-limit-handling-expected-during-first-sync) for details.
+
 ### During First Sync (Greedy Sync)
 
-The initial `sce sync` fetches up to 365 days of history. Progress messages show:
+The initial `sce sync` fetches up to 365 days of history. **Rate limits are expected** - the sync will pause one or more times.
+
+Progress messages show:
 - **"Fetching recent activities..."** → API requests in progress
-- **"Imported X activities"** → Final count of YAML files created
+- **"Strava rate limit hit. Wait 15 minutes..."** → Normal pause (not an error)
+- **"Imported X activities"** → Successfully saved, ready to resume
 
 **To monitor in real-time** (separate terminal):
 ```bash
