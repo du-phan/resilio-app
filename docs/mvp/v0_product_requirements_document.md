@@ -167,7 +167,7 @@ running-coach/
 ├── athlete/
 │   ├── profile.yaml               # Athlete info, constraints, goals
 │   ├── training_history.yaml      # Historical summary stats
-│   └── memories.yaml              # AI-extracted facts from conversations
+│   └── memories.yaml              # AI-extracted facts from interactions
 │
 ├── activities/
 │   ├── 2025-11/                   # Organized by month
@@ -194,10 +194,6 @@ running-coach/
 │       │   └── sat_long.yaml
 │       └── week_02/
 │           └── ...
-│
-├── conversations/
-│   ├── 2025-11-15_session.md      # Conversation logs
-│   └── ...
 │
 └── README.md                      # Usage instructions
 ```
@@ -767,7 +763,7 @@ v0 treats **planned** and **executed** as distinct layers:
 
 ```yaml
 # AI-Extracted Facts About Athlete
-# These persist across conversations to provide continuity
+# These persist across sessions to provide continuity
 
 memories:
   - id: "mem_001"

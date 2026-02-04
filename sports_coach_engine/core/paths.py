@@ -69,11 +69,6 @@ def get_state_dir() -> str:
     return _get_paths().state_dir
 
 
-def get_backup_dir() -> str:
-    """Get backup data directory path."""
-    return _get_paths().backup_dir
-
-
 # ==========================================================================
 # ATHLETE PATHS
 # ==========================================================================
@@ -218,4 +213,3 @@ def current_training_log_path() -> str:
         Path to current_training_log.md (e.g., "data/plans/current_training_log.md")
     """
     return f"{get_plans_dir()}/current_training_log.md"
-

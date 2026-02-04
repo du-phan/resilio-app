@@ -13,6 +13,7 @@ argument-hint: "[optional-notes]"
 Designs exact workouts using AI coaching judgment. Do not apply/save the plan.
 
 ## Preconditions (block if missing)
+
 - Macro plan exists
 - Target week identified (next unpopulated OR current week for update)
 - Profile constraints present
@@ -29,6 +30,7 @@ If missing, return a blocking checklist and stop.
 ## Philosophy
 
 You are the weekly planning specialist. Use your AI coaching judgment to design exact workouts based on:
+
 - Workout structure hints from macro plan (strategic guidance)
 - Current athlete state (CTL, TSB, readiness, ACWR)
 - Training methodology (Pfitzinger, Daniels, Fitzgerald)
@@ -39,13 +41,15 @@ You provide qualitative coaching decisions (exact distances, workout types, paci
 
 ## Workflow
 
-1) Identify target week:
+1. Identify target week:
+
 ```bash
 sce plan next-unpopulated
 sce plan status
 sce plan week           # current week (use when updating current week)
 sce plan week --week <N>
 ```
+
 If the parent agent requests a current-week update, use `sce plan week` to set
 `week_number`, `start_date`, `end_date`, and `phase`. Otherwise default to
 the next unpopulated week.
@@ -53,7 +57,8 @@ the next unpopulated week.
 **Extract `workout_structure_hints`** from the macro plan week - these are strategic
 guidelines (e.g., "max 2 quality sessions", "long run 25-30%", "80% easy intensity").
 
-2) Load current metrics and recent response:
+2. Load current metrics and recent response:
+
 ```bash
 sce status
 sce week
@@ -62,6 +67,7 @@ sce profile get  # Load athlete profile including other_sports
 ```
 
 **Multi-sport athletes**: Check `other_sports` field in profile to identify:
+
 - What other sports they do (climbing, cycling, surfing, etc.)
 - Expected frequency/volume for each sport
 - Running priority (PRIMARY/EQUAL/SECONDARY)
@@ -70,7 +76,8 @@ sce profile get  # Load athlete profile including other_sports
 If you already have an activities JSON file for the last 28 days, you may run:
 `sce analysis intensity --activities <FILE> --days 28`
 
-3) Analyze progression safety:
+3. Analyze progression safety:
+
 ```bash
 sce guardrails analyze-progression \
   --previous <PREV_ACTUAL_KM> \
@@ -80,15 +87,18 @@ sce guardrails analyze-progression \
   --age <AGE>
 ```
 
-4) Calculate VDOT-based paces:
+4. Calculate VDOT-based paces:
+
 ```bash
 sce vdot calculate-paces --vdot <VDOT>
 ```
+
 Use these paces to set pace_range for each workout type (easy, tempo, intervals).
 
-5) Design exact workouts using AI judgment:
+5. Design exact workouts using AI judgment:
 
 **YOU design the workouts** using:
+
 - Strategic hints from macro plan (workout_structure_hints)
 - Current athlete state (CTL, TSB, readiness)
 - Guardrail analysis (safe volume range, warnings)
@@ -96,6 +106,7 @@ Use these paces to set pace_range for each workout type (easy, tempo, intervals)
 - VDOT-based pace zones
 
 Create explicit workout JSON manually with exact distances. Example structure:
+
 ```json
 {
   "weeks": [
@@ -124,7 +135,12 @@ Create explicit workout JSON manually with exact distances. Example structure:
           "pace_range": "5:20-5:35",
           "target_rpe": 7,
           "intervals": [
-            {"duration_minutes": 20, "pace": "5:25-5:30", "type": "threshold", "recovery": "0"}
+            {
+              "duration_minutes": 20,
+              "pace": "5:25-5:30",
+              "type": "threshold",
+              "recovery": "0"
+            }
           ],
           "warmup_minutes": 15,
           "cooldown_minutes": 10,
@@ -150,6 +166,7 @@ Create explicit workout JSON manually with exact distances. Example structure:
 ```
 
 **CRITICAL REQUIREMENTS**:
+
 - Workouts MUST sum exactly to target_volume_km (±0.1km tolerance)
 - **Required fields (all workouts)**: date, day_of_week, workout_type, distance_km, pace_range, target_rpe
 - **Structure fields (YOU must design these - critical for athlete execution)**:
@@ -164,11 +181,14 @@ Create explicit workout JSON manually with exact distances. Example structure:
 
 Write JSON to `/tmp/weekly_plan_w<week>.json`
 
-6) Validate your design:
+6. Validate your design:
+
 ```bash
 sce plan validate-week --file /tmp/weekly_plan_w<week>.json
 ```
+
 This checks:
+
 - Sum-to-target (workouts sum to target_volume_km)
 - Required fields present
 - Date alignment (within week boundaries)
@@ -177,15 +197,17 @@ This checks:
 
 If validation fails, fix the issues and re-validate.
 
-7) Interval structure validation (conditional):
-Run **only if** your designed week includes a structured tempo/interval workout
-with explicit work + recovery bouts (Daniels-style). If not, skip.
+7. Interval structure validation (conditional):
+   Run **only if** your designed week includes a structured tempo/interval workout
+   with explicit work + recovery bouts (Daniels-style). If not, skip.
 
 Prepare two small JSON files from the planned session:
+
 - `/tmp/work_bouts.json` (list of work bouts with durations)
 - `/tmp/recovery_bouts.json` (list of recovery bouts)
 
 Example formats:
+
 ```json
 [
   { "duration_minutes": 4.0, "distance_km": 1.0, "pace_per_km_seconds": 240 },
@@ -201,6 +223,7 @@ Example formats:
 ```
 
 Then run:
+
 ```bash
 sce plan validate-intervals \
   --type intervals \
@@ -210,7 +233,7 @@ sce plan validate-intervals \
   --weekly-volume <WEEKLY_KM>
 ```
 
-8) Present directly in chat:
+8. Present directly in chat:
 
 **IMPORTANT**: Always show the complete weekly training plan with ALL activities (running + other sports).
 
@@ -220,12 +243,14 @@ Present in this structure:
 **Phase**: {phase} | **Run Volume**: {target_km}km | **Dates**: {start} to {end}
 
 **Multi-Sport Context** (if applicable):
+
 - Athlete profile: {list other_sports from profile}
 - Running priority: {running_priority} (PRIMARY/EQUAL/SECONDARY)
 - Expected other sport activities: {e.g., "climbing 2x/week, cycling 1x/week"}
 - Load integration: Running plan accounts for {systemic load from other sports}
 
 **Coaching Rationale**:
+
 - Why these exact workouts? (reference workout_structure_hints)
 - How this follows macro plan strategic guidance
 - Volume change vs previous week: {prev_km}km → {target_km}km ({change}%)
@@ -235,16 +260,19 @@ Present in this structure:
 **Weekly Training Schedule**:
 
 **Monday ({date})**:
+
 - 🏃 Run: {workout_type} - {distance}km @ {pace}
   - Target RPE: {rpe}/10
   - Notes: {notes}
 - 🧗 Climbing: {expected activity from profile or "None scheduled"}
 
 **Tuesday ({date})**:
+
 - 🏃 Run: Rest
 - 🧗 Climbing: {expected activity}
 
 **Wednesday ({date})**:
+
 - 🏃 Run: {workout_type} - {distance}km @ {pace}
   - Target RPE: {rpe}/10
   - Notes: {notes}
@@ -253,6 +281,7 @@ Present in this structure:
 ... (continue for all 7 days, showing BOTH running AND other sports)
 
 **Integration Notes**:
+
 - Days with both activities: {e.g., "Mon: easy run + climbing (systemic load stacked)"}
 - Recovery days (no activities): {e.g., "Tue, Thu"}
 - Conflict avoidance: {e.g., "No quality runs on climbing days"}
@@ -260,6 +289,7 @@ Present in this structure:
 **Week Summary**:
 
 **Running**:
+
 - Total volume: {sum_of_workouts}km (target: {target_km}km)
 - Running days: {count} days
 - Quality sessions: {count} (excluding long run)
@@ -267,6 +297,7 @@ Present in this structure:
 - Easy volume: {percentage}% | Quality volume: {percentage}%
 
 **Multi-Sport Load** (if applicable):
+
 - Total systemic load: {running_load + other_sports_load}au
 - Running contribution: {percentage}%
 - Other sports contribution: {percentage}%
@@ -280,6 +311,7 @@ I'll record your approval with:
 **Handoff note**: main agent must record approval via the command above.
 
 ## References (load only if needed)
+
 - Weekly volume progression: `references/volume_progression_weekly.md`
 - Workout generation: `references/workout_generation.md`
 - Choosing run count: `references/choosing_run_count.md`
@@ -291,7 +323,9 @@ I'll record your approval with:
 - Core methodology: `docs/coaching/methodology.md`
 
 ## Output
+
 Return:
+
 - `weekly_json_path`
 - `week_number`
 - `athlete_prompt` (single yes/no + adjustment question)

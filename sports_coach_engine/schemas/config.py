@@ -40,8 +40,6 @@ class PathSettings(BaseModel):
     metrics_dir: str = "data/metrics"
     plans_dir: str = "data/plans"
     state_dir: str = "data/state"
-    conversations_dir: str = "data/conversations"
-    backup_dir: str = "data/backup"
 
 
 class StravaSettings(BaseModel):
@@ -71,7 +69,6 @@ class SystemSettings(BaseModel):
     lock_timeout_ms: int = 300_000  # 5 minutes
     lock_retry_count: int = 3
     lock_retry_delay_ms: int = 2_000
-    backup_retention_count: int = 3  # per month
     metrics_stale_hours: int = 24
 
 

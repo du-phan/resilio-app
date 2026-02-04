@@ -8,8 +8,6 @@ paths:
   metrics_dir: "data/metrics"
   plans_dir: "data/plans"
   state_dir: "data/state"
-  conversations_dir: "data/conversations"
-  backup_dir: "data/backup"
 
 # Strava API configuration
 strava:
@@ -35,5 +33,4 @@ system:
   lock_timeout_ms: 300000    # 5 minutes
   lock_retry_count: 3
   lock_retry_delay_ms: 2000
-  backup_retention_count: 3  # per month
   metrics_stale_hours: 24

@@ -91,8 +91,6 @@ class PathSettings(BaseModel):
     activities_dir: str = "activities"
     metrics_dir: str = "metrics"
     plans_dir: str = "plans"
-    conversations_dir: str = "conversations"
-    backup_dir: str = "backup"
 
 
 class StravaSettings(BaseModel):
@@ -119,24 +117,7 @@ class SystemSettings(BaseModel):
     lock_timeout_ms: int = 300_000  # 5 minutes
     lock_retry_count: int = 3
     lock_retry_delay_ms: int = 2_000
-    backup_retention_count: int = 3  # per month
     metrics_stale_hours: int = 24
-
-
-class ConversationLoggerSettings(BaseModel):
-    """Conversation logger configuration (M14)."""
-    # Two-tier retention policies
-    transcript_retention_days: int = 60    # Full transcripts (bulky, debug-only)
-    summary_retention_days: int = 180      # Summaries (compact, coaching context)
-
-    # Summary generation
-    summary_enabled: bool = True            # Enable automatic summary generation
-    summary_fallback_enabled: bool = True   # Use fallback if Claude unavailable
-
-    # Message handling
-    max_message_length: int = 10_000
-    include_metadata: bool = False          # Include metadata in markdown
-    auto_persist_interval: int = 5          # Messages between auto-saves
 
 
 class Settings(BaseModel):
@@ -145,7 +126,6 @@ class Settings(BaseModel):
     strava: StravaSettings = Field(default_factory=StravaSettings)
     training_defaults: TrainingDefaults = Field(default_factory=TrainingDefaults)
     system: SystemSettings = Field(default_factory=SystemSettings)
-    conversation_logger: ConversationLoggerSettings = Field(default_factory=ConversationLoggerSettings)
 
 
 class StravaSecrets(BaseModel):
@@ -468,8 +448,6 @@ paths:
   activities_dir: "activities"
   metrics_dir: "metrics"
   plans_dir: "plans"
-  conversations_dir: "conversations"
-  backup_dir: "backup"
 
 # Strava API configuration
 strava:
@@ -495,18 +473,7 @@ system:
   lock_timeout_ms: 300000    # 5 minutes
   lock_retry_count: 3
   lock_retry_delay_ms: 2000
-  backup_retention_count: 3  # per month
   metrics_stale_hours: 24
-
-# Conversation logger settings (M14)
-conversation_logger:
-  transcript_retention_days: 60    # Full transcripts (bulky, debug-only)
-  summary_retention_days: 180      # Summaries (compact, coaching context)
-  summary_enabled: true             # Enable automatic summary generation
-  summary_fallback_enabled: true    # Use fallback if Claude unavailable
-  max_message_length: 10000
-  include_metadata: false
-  auto_persist_interval: 5          # Messages between auto-saves
 ```
 
 #### `config/secrets.local.yaml`

@@ -24,8 +24,6 @@ def init_data_directory(root_path: Path = Path(".")):
         root_path / "metrics" / "weekly",
         root_path / "plans" / "archive",
         root_path / "plans" / "workouts",
-        root_path / "conversations",
-        root_path / "backup",
     ]
 
     for directory in directories:

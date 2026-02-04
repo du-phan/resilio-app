@@ -20,7 +20,7 @@ def init_command(ctx: typer.Context) -> None:
     """Initialize data directory structure and config templates.
 
     Creates:
-    - data/athlete/, data/activities/, data/metrics/, data/plans/, data/conversations/, data/backup/ directories
+    - data/athlete/, data/activities/, data/metrics/, data/plans/ directories
     - config/ directory with settings.yaml and secrets.local.yaml templates
 
     Safe to run multiple times - won't overwrite existing files.
@@ -43,8 +43,6 @@ def init_command(ctx: typer.Context) -> None:
         repo_root / paths.plans_dir / "archive",
         repo_root / paths.plans_dir / "workouts",
         repo_root / paths.state_dir,
-        repo_root / paths.conversations_dir,
-        repo_root / paths.backup_dir,
     ]
 
     config_dir = repo_root / "config"
@@ -127,8 +125,6 @@ paths:
   metrics_dir: "data/metrics"
   plans_dir: "data/plans"
   state_dir: "data/state"
-  conversations_dir: "data/conversations"
-  backup_dir: "data/backup"
 
 # Strava API endpoints
 strava:

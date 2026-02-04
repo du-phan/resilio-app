@@ -10,7 +10,7 @@ This document specifies the three core usage scenarios for the Sports Coach Engi
 2. **Scenario 2: Existing User Weekly Cycle** - Ongoing training management
 3. **Scenario 3: Reset / Archive / Fresh Start** - Plan changes and data management
 
-Each scenario is broken down into precise steps, mapped to technical modules (M1-M14), and identifies gaps requiring resolution before implementation.
+Each scenario is broken down into precise steps, mapped to technical modules (M1-M13), and identifies gaps requiring resolution before implementation.
 
 ### 1.2 Relationship to Other Documents
 
@@ -167,7 +167,6 @@ NOT: "Start with a conservative 15km week" (ignores actual fitness)
 | F1   | Present plan summary        | "Here's your 14-week plan to your March 15 half marathon..."  | M12       |
 | F2   | Show current week           | This week's Mon-Sun workout schedule                          | M12       |
 | F3   | Explain next steps          | "Sync your Strava 2-3x per week. Say 'show my week' anytime." | M12       |
-| F4   | Log onboarding conversation | `conversations/YYYY-MM-DD_session.md`                         | M14       |
 
 ### 2.4 Module Mapping Summary
 
@@ -178,7 +177,7 @@ NOT: "Start with a conservative 15km week" (ignores actual fitness)
 | C: Data Collection    | M1, M4                  | M12                |
 | D: Profile & Baseline | M4, M6, M7, M8, M9, M13 | M3                 |
 | E: Plan Generation    | M10                     | M3                 |
-| F: Handoff            | M12, M14                | —                  |
+| F: Handoff            | M12                     | —                  |
 
 ---
 
@@ -218,7 +217,7 @@ The package does NOT parse intent, match keywords, or generate formatted text re
 ```
 M1 (parse intent) → M5 (fetch since last_sync) → M6 (normalize) → M7 (analyze notes)
 → M8 (calculate loads) → M13 (extract memories) → M9 (recompute metrics)
-→ M11 (check adaptation triggers, generate suggestions) → M12 (render) → M14 (log)
+→ M11 (check adaptation triggers, generate suggestions) → M12 (render)
 ```
 
 **Response includes:**
@@ -265,7 +264,7 @@ Since it was upper-body dominant, your legs should be relatively fresh.
 **Flow:**
 
 ```
-M1 (parse intent) → M3/M10 (read plan) → M9 (current metrics) → M12 (render) → M14 (log)
+M1 (parse intent) → M3/M10 (read plan) → M9 (current metrics) → M12 (render)
 ```
 
 **Response includes:**
@@ -322,7 +321,7 @@ be relatively fresh since Monday's climbing was mostly upper-body work.
 
 ```
 M1 (parse intent) → M11 (evaluate options based on metrics/plan)
-→ M12 (present alternatives) → User chooses → M3 (update plan) → M14 (log)
+→ M12 (present alternatives) → User chooses → M3 (update plan)
 ```
 
 **Response pattern:**
@@ -378,7 +377,7 @@ options—the athlete doesn't need to remember to report missed workouts.
 **Flow:**
 
 ```
-M1 (parse intent) → M10 (read next week's workouts) → M12 (render with context) → M14 (log)
+M1 (parse intent) → M10 (read next week's workouts) → M12 (render with context)
 ```
 
 **Response includes:**
@@ -395,7 +394,7 @@ M1 (parse intent) → M10 (read next week's workouts) → M12 (render with conte
 **Flow:**
 
 ```
-M9 (compute weekly summary) → M12 (render analysis) → M14 (log)
+M9 (compute weekly summary) → M12 (render analysis)
 ```
 
 **Response includes:**
@@ -414,7 +413,7 @@ M9 (compute weekly summary) → M12 (render analysis) → M14 (log)
 **Flow:**
 
 ```
-M9 (weekly summary) → M10 (refine next week's workouts) → M12 (present) → M14 (log)
+M9 (weekly summary) → M10 (refine next week's workouts) → M12 (present)
 ```
 
 **Process:**
@@ -530,12 +529,12 @@ Refined week 5:
 
 | Pattern                 | Primary Modules         | Supporting Modules |
 | ----------------------- | ----------------------- | ------------------ |
-| A: Sync Strava          | M5, M6, M7, M8, M9, M11 | M13, M12, M14      |
-| B: Weekly Status        | M3, M10, M9             | M12, M14           |
-| C: Plan Adjustment      | M1, M11                 | M3, M12, M14       |
-| D: Next Week Preview    | M10                     | M12, M14           |
-| E: Weekly Summary       | M9                      | M12, M14           |
-| F: Next Week Generation | M9, M10                 | M12, M14           |
+| A: Sync Strava          | M5, M6, M7, M8, M9, M11 | M13, M12           |
+| B: Weekly Status        | M3, M10, M9             | M12                |
+| C: Plan Adjustment      | M1, M11                 | M3, M12            |
+| D: Next Week Preview    | M10                     | M12                |
+| E: Weekly Summary       | M9                      | M12                |
+| F: Next Week Generation | M9, M10                 | M12                |
 
 ---
 
@@ -543,11 +542,11 @@ Refined week 5:
 
 ### 4.1 Use Cases
 
-| Sub-Scenario        | Description                      | Data Preserved               | Data Archived             |
-| ------------------- | -------------------------------- | ---------------------------- | ------------------------- |
-| **3A: Goal Change** | Same athlete, new goal           | Profile, activities, metrics | Current plan              |
-| **3B: Soft Reset**  | Same athlete, new training block | Profile, memories            | Plan, activities, metrics |
-| **3C: Hard Reset**  | New athlete or clean slate       | Nothing                      | Everything                |
+| Sub-Scenario        | Description                      | Data Preserved               | Data Archived/Removed                      |
+| ------------------- | -------------------------------- | ---------------------------- | ----------------------------------------- |
+| **3A: Goal Change** | Same athlete, new goal           | Profile, activities, metrics | Current plan archived                      |
+| **3B: Soft Reset**  | Same athlete, new training block | Profile, memories, activities, metrics | Plan archived |
+| **3C: Hard Reset**  | New athlete or clean slate       | Nothing                      | Everything removed                         |
 
 ### 4.2 Sub-Scenario 3A: Goal Change
 
@@ -557,7 +556,7 @@ Refined week 5:
 
 ```
 M1 (parse intent) → M4 (update goal) → M10 (archive old plan, generate new)
-→ M3 (write) → M12 (present new plan) → M14 (log)
+→ M3 (write) → M12 (present new plan)
 ```
 
 **Process:**
@@ -602,17 +601,16 @@ Week 1 starts Monday. Want to see the overview?
 **Flow:**
 
 ```
-M1 (parse intent) → M3 (archive plan, activities, metrics) → M4 (keep profile)
-→ M10 (generate fresh plan) → M12 (present) → M14 (log)
+M1 (parse intent) → M3 (archive plan) → M4 (keep profile)
+→ M10 (generate fresh plan) → M12 (present)
 ```
 
 **What happens:**
 
 - Profile and memories preserved (same athlete)
-- Activities archived to `backup/YYYY-MM-DD_HH-MM/activities/`
-- Metrics archived to `backup/YYYY-MM-DD_HH-MM/metrics/`
-- Current plan archived
-- New plan generated with conservative cold-start approach
+- Activities and metrics preserved
+- Current plan archived to `plans/archive/`
+- New plan generated using recent history (favoring latest weeks)
 
 **Use case:** Athlete returning after long break, wants fresh baseline
 
@@ -623,26 +621,25 @@ M1 (parse intent) → M3 (archive plan, activities, metrics) → M4 (keep profil
 **Flow:**
 
 ```
-M1 (parse intent) → M12 (confirm with warning) → M3 (archive everything)
-→ M4 (clear profile) → Return to Scenario 1
+M1 (parse intent) → M12 (confirm with warning) → M3 (delete everything)
+→ Return to Scenario 1
 ```
 
 **What happens:**
 
-- ALL data archived to `backup/YYYY-MM-DD_HH-MM/`
-- Profile cleared
+- ALL data deleted (no backup)
 - System returns to new user state
 - User goes through Scenario 1 again
 
 **Confirmation required:**
 
 ```
-This will archive ALL your data and start fresh:
+This will delete ALL your data and start fresh:
 - Training history: 47 activities over 10 weeks
 - Current plan: Week 3 of 14-week HM plan
 - Memories: 5 stored insights
 
-Your data will be backed up to backup/2024-01-15_14-30/.
+Your data will be removed with no backup.
 
 Type "confirm reset" to proceed, or anything else to cancel.
 ```
@@ -651,9 +648,9 @@ Type "confirm reset" to proceed, or anything else to cancel.
 
 | Sub-Scenario    | Primary Modules | Supporting Modules |
 | --------------- | --------------- | ------------------ |
-| 3A: Goal Change | M4, M10         | M3, M12, M14       |
-| 3B: Soft Reset  | M3, M10         | M4, M12, M14       |
-| 3C: Hard Reset  | M3, M4          | M12, M14           |
+| 3A: Goal Change | M4, M10         | M3, M12            |
+| 3B: Soft Reset  | M3, M10         | M4, M12            |
+| 3C: Hard Reset  | M3              | M12                |
 
 ---
 
@@ -957,27 +954,27 @@ Confirm this plan, or let me know if you need adjustments.
 
 **Coach:** I understand. Just to be clear, there are two options:
 
-1. **Soft reset** - Archive your plan and metrics, but keep your profile. Good if you're the same athlete starting a new training block.
+1. **Soft reset** - Archive your plan, delete activities/metrics, and keep your profile. Good if you're the same athlete starting a new training block.
 
-2. **Hard reset** - Archive EVERYTHING and start as a new user. Good if you're a different person or want a completely clean slate.
+2. **Hard reset** - Delete EVERYTHING and start as a new user. Good if you're a different person or want a completely clean slate.
 
 Which would you prefer?
 
 **User:** Hard reset
 
-**Coach:** This will archive ALL your data:
+**Coach:** This will delete ALL your data with no backup:
 
 - Training history: 47 activities over 10 weeks
 - Current plan: Week 5 of 14-week HM plan
 - Memories: 5 stored insights
 
-Your data will be backed up to `backup/2024-01-15_14-30/`.
+Your data will be removed permanently.
 
 Type "confirm reset" to proceed, or anything else to cancel.
 
 **User:** confirm reset
 
-**Coach:** Done. All data archived.
+**Coach:** Done. All data deleted.
 
 Welcome! I'm your AI running coach. Let's get you set up...
 [Returns to Scenario 1]

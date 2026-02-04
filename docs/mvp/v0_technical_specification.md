@@ -85,7 +85,7 @@ easy to evolve while avoiding overengineering.
                               │ calls internally
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Internal Modules (M1-M14)                       │
+│                  Internal Modules (M1-M13)                       │
 │  Pure domain logic, no intent parsing, no prose generation       │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -110,7 +110,6 @@ See `docs/specs/api_layer.md` for full API documentation.
 | M11       | Adaptation Engine       | `core/adaptation.py`   | Apply rules to adjust workouts                       | `plans/`                   |
 | M12       | Data Enrichment         | `core/enrichment.py`   | Add interpretive context to raw data                 | None                       |
 | M13       | Memory & Insights       | `core/memory.py`       | Extract durable athlete facts                        | `athlete/memories.yaml`    |
-| M14       | Conversation Logger     | `core/logger.py`       | Persist session transcripts                          | `conversations/`           |
 
 #### Initialization Sequence (Cold Start)
 
@@ -182,7 +181,7 @@ All persistence flows through `M3 Repository I/O`.
 
 **Depends on**
 
-- M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13, M14
+- M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12, M13
 
 See `docs/specs/modules/m01_workflows.md` for full specification.
 
@@ -658,25 +657,6 @@ See `docs/specs/modules/m12_enrichment.md` for full specification.
    - If new memory contradicts existing: archive old with `superseded_by` reference
    - Keep archived memories for 90 days, then delete
 
-#### M14 — Conversation Logger
-
-**Responsibilities**
-
-- Persist conversation sessions for auditability and context.
-- Store timestamps + role-tagged messages.
-
-**Inputs**
-
-- User and coach messages for a session
-
-**Outputs**
-
-- `conversations/YYYY-MM-DD_session.md`
-
-**Depends on**
-
-- M3
-
 ### 4.3 Workflow Data Flow (v0)
 
 **Sync flow**
@@ -686,7 +666,6 @@ See `docs/specs/modules/m12_enrichment.md` for full specification.
 3. M9 recomputes daily metrics
 4. M11 applies adaptations if triggered
 5. M12 summarizes results
-6. M14 logs the session transcript
 
 **"What should I do today?" flow**
 
@@ -694,7 +673,6 @@ See `docs/specs/modules/m12_enrichment.md` for full specification.
 2. M9 computes current status (if stale)
 3. M11 checks if adaptation needed
 4. M12 renders today's workout + rationale
-5. M14 logs the session transcript
 
 ### 4.4 Transaction Model (v0)
 
@@ -788,8 +766,6 @@ metrics/weekly_summary.yaml
 plans/current_plan.yaml
 plans/archive/*.yaml
 plans/workouts/week_##/*.yaml
-
-conversations/YYYY-MM-DD_session.md
 ```
 
 ---
@@ -977,13 +953,6 @@ No special additions required in v0 beyond what the PRD already defines. The sou
   - `content: str`
   - `superseded_by: str`
   - `archived_at: date`
-
-### 6.8 Conversation Logs (`conversations/YYYY-MM-DD_session.md`)
-
-**Required (minimal)**
-
-- Timestamped, role-tagged lines (user/coach/assistant).
-- Include a short session header (date + athlete name).
 
 ### 6.9 Load Multipliers Configuration
 
@@ -1353,13 +1322,13 @@ v0 supports three levels of reset to handle different scenarios:
 
 **Workflow:**
 
-1. Archive plan, activities, metrics to `backup/YYYY-MM-DD_HH-MM_soft_reset/`
+1. Archive current plan to `plans/archive/YYYY-MM-DD_soft_reset/`
 2. Keep `athlete/profile.yaml` and `athlete/memories.yaml` (same athlete)
-3. Clear `athlete/training_history.yaml` sync state
-4. M10 generates new plan with cold-start approach (baseline from Strava if available)
+3. Keep `athlete/training_history.yaml` and recent activities/metrics intact
+4. M10 generates a fresh plan using existing history (favoring recent weeks)
 
-**Data preserved:** Profile, memories
-**Data archived:** Plan, activities, metrics
+**Data preserved:** Profile, memories, activities, metrics
+**Data archived:** Plan only
 
 **Trigger phrases:** "start fresh", "new training block", "returning after break"
 
@@ -1369,20 +1338,20 @@ v0 supports three levels of reset to handle different scenarios:
 
 **Workflow:**
 
-1. Archive ALL data to `backup/YYYY-MM-DD_HH-MM_hard_reset/`
-2. Clear `athlete/` directory
+1. Delete all data directories: `athlete/`, `activities/`, `metrics/`, `plans/`, `state/`
+2. Re-initialize data directory structure
 3. Return to Scenario 1 (new user setup flow)
 4. Requires explicit double-confirmation
 
-**Data preserved:** None (all archived)
-**Data archived:** Everything
+**Data preserved:** None
+**Data removed:** Everything (no archival)
 
 **Confirmation requirement:**
 
 ```
-Coach: This will archive ALL your data and start completely fresh.
-       Your training history, memories, and profile will be backed up
-       but no longer active. Type "confirm hard reset" to proceed.
+Coach: This will delete ALL your data and start completely fresh.
+       Your training history, memories, and profile will be removed
+       with no backup. Type "confirm hard reset" to proceed.
 User: confirm hard reset
 Coach: Done. Let's start fresh. What's your name?
 ```
@@ -1689,55 +1658,9 @@ Minimum prompt outputs:
 
 ---
 
-## 12. Backup & Recovery (v0)
+## 12. Data Integrity (v0)
 
-### 12.1 Automatic Backup
-
-After each successful Strava sync:
-
-1. Copy modified directories to backup:
-   ```
-   backup/YYYY-MM-DD_HH-MM/
-     activities/
-     metrics/
-     plans/
-   ```
-2. Retain last 3 backups per month
-3. Delete older backups automatically (on next sync)
-
-**What's backed up:**
-
-- `activities/` - all activity files
-- `metrics/` - daily metrics and weekly summary
-- `plans/` - current plan and workout files
-
-**What's NOT backed up (can be regenerated):**
-
-- `athlete/training_history.yaml` - sync state only
-- `conversations/` - logs, not critical
-
-### 12.2 Manual Recovery Commands
-
-**Recompute Metrics:**
-
-```
-rollback_metrics --date YYYY-MM-DD
-```
-
-- Clears all metrics from the specified date forward
-- Recomputes CTL/ATL/TSB/ACWR from activity files
-- Useful when activity data was corrected
-
-**Restore from Backup:**
-
-```
-restore_backup --timestamp YYYY-MM-DD_HH-MM
-```
-
-- Copies backed-up files over current files
-- Triggers full metric recomputation afterward
-
-### 12.3 Data Integrity Checks
+### 12.1 Integrity Checks
 
 On startup (before any operation):
 
@@ -1755,14 +1678,14 @@ On startup (before any operation):
 [OK] All files pass schema validation
 ```
 
-### 12.4 Corruption Recovery
+### 12.2 Corruption Recovery
 
 If a YAML file is corrupted (won't parse):
 
-1. Check for recent backup containing the file
-2. If found: offer to restore from backup
-3. If not found:
-   - For activity files: offer to re-fetch from Strava (if source=strava)
+1. For activity files: offer to re-fetch from Strava (if source=strava)
+2. For metrics files: delete and recompute from activities
+3. For plans/workouts: regenerate plan and workouts from current profile
+4. For profile/memories: prompt user to re-enter critical fields
    - For metrics files: regenerate from activities
    - For plan files: warn user; may need to regenerate plan
 4. Log corruption event to `config/.corruption_log`

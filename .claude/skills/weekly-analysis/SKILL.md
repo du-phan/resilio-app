@@ -10,6 +10,7 @@ argument-hint: ""
 ## Overview
 
 This skill provides complete weekly training analysis by:
+
 1. Comparing planned vs. actual training (completion)
 2. Validating intensity distribution (80/20 rule)
 3. Analyzing multi-sport load breakdown
@@ -38,6 +39,7 @@ sce week
 ```
 
 **Parse key data**:
+
 - Total planned vs. completed workouts
 - Running volume vs. other activities
 - CTL/ATL/TSB/ACWR/readiness changes
@@ -47,6 +49,7 @@ sce week
 Use the `sce week` summary to compare planned vs completed workouts and volume.
 
 **Interpretation zones** (by completion rate or volume match):
+
 - ≥90%: Excellent completion
 - 70-89%: Good, minor adjustments needed
 - 50-69%: Fair, discuss barriers
@@ -59,12 +62,14 @@ sce analysis intensity --activities [ACTIVITIES_FILE] --days 7
 ```
 
 **Returns**:
+
 - `distribution`: % breakdown (low vs. moderate+high intensity)
 - `compliance`: Meets 80/20 guideline?
 - `polarization_score`: 0-100 (separation of easy from hard)
 - `violations`: Specific issues
 
 **Quick interpretation**:
+
 - ≥75% low intensity: Compliant ✅
 - 60-74% low intensity: Moderate-intensity rut ⚠️
 - <60% low intensity: Severe imbalance ❌
@@ -78,12 +83,14 @@ sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
 ```
 
 **Returns**:
+
 - `systemic_load_by_sport`: Cardio/whole-body load by activity
 - `lower_body_load_by_sport`: Leg strain breakdown
 - `priority_adherence`: How well schedule respected running priority
 - `fatigue_flags`: Warning signals
 
 **Quick zones** (for running PRIMARY):
+
 - 60-70% running load: Good
 - 50-60%: Fair
 - <50%: Concerning
@@ -93,6 +100,7 @@ sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
 ### Step 5: Pattern Detection
 
 **Review activity notes for qualitative signals**:
+
 ```bash
 # List activities with notes
 sce activity list --since 7d --has-notes
@@ -105,6 +113,7 @@ sce activity search --query "pain sore tight discomfort" --since 7d
 ```
 
 **Patterns to identify**:
+
 1. **Consistency**: Completed all weekday runs, skipped weekend (schedule conflict?)
 2. **Intensity**: Easy runs too fast (RPE 6 instead of 4)
 3. **Multi-sport**: Climbing sessions preceded by rest days (good planning)
@@ -130,6 +139,7 @@ sce memory add --type TRAINING_RESPONSE \
 ```
 
 **Guidelines**:
+
 - Capture patterns with 3+ occurrences or high significance
 - Use HIGH confidence for 3+, MEDIUM for 2 occurrences
 - Tag for future retrieval
@@ -137,6 +147,7 @@ sce memory add --type TRAINING_RESPONSE \
 ### Step 6: Synthesize and Communicate
 
 **Structure**:
+
 1. **Opening**: Overall summary + key achievement (positive first)
 2. **Completion**: Planned vs. completed
 3. **Intensity**: 80/20 compliance, violations if any
@@ -146,11 +157,13 @@ sce memory add --type TRAINING_RESPONSE \
 7. **Next Week**: Specific recommendations with concrete numbers
 
 **Example opening**:
+
 ```
 Great week! You completed 7/8 planned workouts (88% completion) and your CTL increased from 42 → 44.
 ```
 
 **See complete worked examples**:
+
 - [Balanced week with excellent execution](examples/example_week_balanced.md)
 - [80/20 intensity violation](examples/example_week_80_20_violation.md)
 - [Multi-sport conflict](examples/example_week_multi_sport.md)
@@ -160,6 +173,7 @@ Great week! You completed 7/8 planned workouts (88% completion) and your CTL inc
 **After presenting analysis**, append summary to training log:
 
 Create JSON with week summary:
+
 ```json
 {
   "week_number": 1,
@@ -181,6 +195,7 @@ Create JSON with week summary:
 ```
 
 **Append to log**:
+
 ```bash
 sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 ```
@@ -195,6 +210,7 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 **After completing weekly analysis**, transition to planning next week's workouts for adaptive training.
 
 **Ask athlete**:
+
 ```
 "Your weekly review is complete. Ready to plan next week's workouts?"
 ```
@@ -202,11 +218,13 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 **If athlete says yes**:
 
 Run the executor flow:
+
 1. `weekly-plan-generate` → creates weekly JSON + presents review in chat
 2. Athlete approval (main agent)
 3. `weekly-plan-apply` → validates + persists approved week
 
 **Context to pass to weekly-plan-generate**:
+
 - Current week's completion rate
 - ACWR and readiness scores
 - Any illness/injury signals detected
@@ -214,6 +232,7 @@ Run the executor flow:
 - Notable patterns or concerns
 
 **If athlete says no** (wants to wait):
+
 ```
 "No problem! When you're ready to plan next week, just let me know."
 ```
@@ -255,11 +274,13 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 ## Quick Decision Trees
 
 ### Q: Adherence <50%
+
 1. Don't criticize - investigate barriers
 2. Assess cause: External (life stress), plan mismatch, motivation, physical
 3. Adapt: Adjust current week using `weekly-plan-generate` + `weekly-plan-apply` (target current week)
 
 ### Q: Intensity violates 80/20 (moderate-intensity rut)
+
 1. Show distribution (e.g., 65/35 instead of 80/20)
 2. Explain gray zone problem (RPE 5-6 = too hard to recover, not hard enough to adapt)
 3. Provide specific pace targets from VDOT
@@ -268,6 +289,7 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 **For detailed intensity violation handling**: See [references/intensity_guidelines.md](references/intensity_guidelines.md)
 
 ### Q: Multi-sport conflict (e.g., climbing comp → next-day long run)
+
 1. Analyze systemic vs. lower-body load
 2. Explain impact (systemic fatigue even though legs okay)
 3. Present options: Move long run, adjust expectations, or skip/replace
@@ -276,12 +298,14 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 **For complete multi-sport scenarios**: See [references/multi_sport_balance.md](references/multi_sport_balance.md)
 
 ### Q: Volume increased too quickly (e.g., +60%)
+
 1. Show violation of 10% rule
 2. Connect to ACWR spike
 3. Recommend pull-back for next week
 4. Validate with: `sce guardrails progression --previous [X] --current [Y]`
 
 ### Q: Athlete wants to increase despite concerns (ACWR 1.35)
+
 1. Explain leading indicator (predicts injury before symptoms)
 2. Offer compromise: Maintain this week, reassess next week
 3. Balance motivation with objective risk
@@ -308,9 +332,11 @@ Before sending weekly review, verify:
 # Weekly Review: Week [N] ([DATE_RANGE])
 
 ## Summary
+
 [One sentence: overall + key achievement]
 
 ## Completion
+
 **Completion rate**: [X]% ([Y]/[Z] workouts)
 
 Completed: [list]
@@ -318,13 +344,16 @@ Missed: [list with reasons]
 Extra: [list]
 
 ## Intensity Distribution (80/20)
+
 **Distribution**: [X]% easy, [Y]% moderate+hard
 **Compliance**: [✓/✗]
 
 [If violations: specific issue + recommendation]
 
 ## Multi-Sport Load
+
 **Total systemic**: [X] AU
+
 - Running: [X] AU ([Y]%)
 - [Sport]: [X] AU ([Y]%)
 
@@ -332,10 +361,12 @@ Extra: [list]
 [If concerns: flag interactions]
 
 ## Patterns
+
 **Positive**: [reinforce]
 **Concerning**: [flag proactively]
 
 ## Metrics (Week-over-week)
+
 - **CTL**: [prev] → [current] ([change])
 - **ATL**: [prev] → [current] ([change])
 - **TSB**: [prev] → [current] ([change])
@@ -344,6 +375,7 @@ Extra: [list]
 **Interpretation**: [1-2 sentences]
 
 ## Next Week Recommendations
+
 1. [Primary with concrete numbers]
 2. [Secondary]
 3. [Tertiary]
@@ -351,6 +383,7 @@ Extra: [list]
 **Focus**: [One key theme]
 
 ## Overall Assessment
+
 [2-3 sentences: big picture, progress, encouragement]
 ```
 
