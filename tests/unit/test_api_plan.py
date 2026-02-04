@@ -212,6 +212,42 @@ def test_export_plan_structure_derives_phases_and_volumes(mock_get_plan, mock_lo
     assert result.recovery_weeks == [2]
 
 
+@patch("sports_coach_engine.api.plan.get_current_plan")
+def test_export_plan_structure_general_fitness_no_date(mock_get_plan, mock_log):
+    """General fitness with no target date should return race_week=None."""
+    weeks = [
+        SimpleNamespace(
+            week_number=1,
+            start_date=date(2026, 1, 26),
+            end_date=date(2026, 2, 1),
+            target_volume_km=20.0,
+            is_recovery_week=False,
+        ),
+        SimpleNamespace(
+            week_number=2,
+            start_date=date(2026, 2, 2),
+            end_date=date(2026, 2, 8),
+            target_volume_km=22.0,
+            is_recovery_week=True,
+        ),
+    ]
+    plan = SimpleNamespace(
+        total_weeks=2,
+        goal={"type": "general_fitness", "target_date": None},
+        phases=[
+            {"phase": "build", "start_week": 1, "end_week": 1},
+            {"phase": "recovery", "start_week": 2, "end_week": 2},
+        ],
+        weeks=weeks,
+    )
+    mock_get_plan.return_value = plan
+
+    result = export_plan_structure()
+
+    assert not isinstance(result, PlanError)
+    assert result.race_week is None
+
+
 # ============================================================
 # BUILD_MACRO_TEMPLATE TESTS
 # ============================================================

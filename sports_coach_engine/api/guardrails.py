@@ -401,9 +401,14 @@ def calculate_safe_volume_range(
                 error_type="invalid_input", message=f"CTL must be non-negative, got {current_ctl}"
             )
 
+        # Normalize goal type
+        normalized_goal = goal_type.lower().replace("-", "_").replace(" ", "_")
+        if normalized_goal == "general_fitness":
+            normalized_goal = "fitness"
+
         # Validate goal type
         valid_goals = {"5k", "10k", "half_marathon", "marathon", "fitness"}
-        if goal_type.lower() not in valid_goals:
+        if normalized_goal not in valid_goals:
             return GuardrailsError(
                 error_type="invalid_input",
                 message=f"Invalid goal type '{goal_type}'. Valid: {', '.join(valid_goals)}",
@@ -427,7 +432,7 @@ def calculate_safe_volume_range(
 
         # Call core function
         result = core_calculate_safe_range(
-            current_ctl, goal_type, athlete_age, recent_weekly_volume_km, run_days_per_week
+            current_ctl, normalized_goal, athlete_age, recent_weekly_volume_km, run_days_per_week
         )
         return result
 

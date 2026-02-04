@@ -11,7 +11,7 @@ Use CLI only.
 ## Preconditions (block if missing)
 
 - Approved baseline VDOT provided via arguments
-- Goal present (race type/date/time)
+- Goal present (type; date or horizon; time optional)
 - Profile constraints present
 - Metrics available (`sce status`)
 

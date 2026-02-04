@@ -277,6 +277,19 @@ class TestValidatePlanStructure:
         # Peak phase (2 weeks) may be flagged as short (recommend 3-5 for half marathon)
         # This brings score down to 60% (3 of 5 checks pass)
 
+    def test_general_fitness_allows_null_race_week(self):
+        """General fitness should allow race_week=None."""
+        result = api_validate_plan_structure(
+            total_weeks=4,
+            goal_type="general_fitness",
+            phases={"build": 3, "recovery": 1},
+            weekly_volumes_km=[20, 22, 24, 18],
+            recovery_weeks=[4],
+            race_week=None,
+        )
+
+        assert isinstance(result, PlanStructureValidation)
+
     def test_phase_too_short(self):
         """Phase below minimum weeks triggers violation."""
         result = api_validate_plan_structure(

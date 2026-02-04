@@ -925,16 +925,16 @@ def api_validate_plan_structure(
     phases: Dict[str, int],
     weekly_volumes_km: List[float],
     recovery_weeks: List[int],
-    race_week: int,
+    race_week: Optional[int],
 ) -> Union[PlanStructureValidation, ValidationError]:
     """Validate training plan structure for common errors.
 
     Checks:
     - Phase duration appropriateness (base, build, peak, taper)
     - Volume progression (10% rule)
-    - Peak placement (2-3 weeks before race)
+    - Peak placement (2-3 weeks before race; skipped for general_fitness)
     - Recovery week frequency (every 3-4 weeks)
-    - Taper structure (gradual volume reduction)
+    - Taper structure (gradual volume reduction; skipped for general_fitness)
 
     Returns:
         PlanStructureValidation with overall_quality_score (0-100),

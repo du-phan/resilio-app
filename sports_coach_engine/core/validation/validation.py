@@ -303,7 +303,7 @@ def validate_plan_structure(
     phases: Dict[str, int],  # phase_name -> num_weeks
     weekly_volumes_km: List[float],  # Week 1 to N volumes
     recovery_weeks: List[int],  # Week numbers designated as recovery
-    race_week: int,  # Week number of race
+    race_week: Optional[int],  # Week number of race (optional for general_fitness)
 ) -> PlanStructureValidation:
     """Validate training plan structure for common errors.
 
@@ -328,6 +328,9 @@ def validate_plan_structure(
     violations: List[Violation] = []
     recommendations: List[str] = []
 
+    goal_type_normalized = goal_type.lower().replace("-", "_").replace(" ", "_")
+    is_general_fitness = goal_type_normalized == "general_fitness"
+
     # Standard phase durations by goal type
     PHASE_STANDARDS = {
         "5k": {"base": (4, 8), "build": (4, 8), "peak": (2, 4), "taper": (1, 2)},
@@ -342,6 +345,15 @@ def validate_plan_structure(
     # 1. Phase duration checks
     phase_checks: Dict[str, PhaseCheck] = {}
     for phase_name, weeks in phases.items():
+        if is_general_fitness:
+            phase_checks[phase_name] = PhaseCheck(
+                weeks=weeks,
+                appropriate=True,
+                note="General fitness uses rolling cycles",
+                issue=None,
+            )
+            continue
+
         if phase_name in standards:
             min_weeks, max_weeks = standards[phase_name]
             appropriate = min_weeks <= weeks <= max_weeks
@@ -420,41 +432,49 @@ def validate_plan_structure(
         )
 
     # 3. Peak placement check (2-3 weeks before race)
-    peak_week_number = weekly_volumes_km.index(max(weekly_volumes_km)) + 1
-    weeks_before_race = race_week - peak_week_number
-    peak_appropriate = 2 <= weeks_before_race <= 3
-    peak_note = None
-
-    if not peak_appropriate:
-        if weeks_before_race < 2:
-            violations.append(
-                Violation(
-                    type="PEAK_TOO_CLOSE_TO_RACE",
-                    severity="MODERATE",
-                    message=f"Peak week {weeks_before_race} week(s) before race (recommend 2-3 weeks)",
-                    recommendation="Move peak earlier to allow adequate taper",
-                )
-            )
-            peak_note = "Too close to race - insufficient taper"
-        else:
-            violations.append(
-                Violation(
-                    type="PEAK_TOO_FAR_FROM_RACE",
-                    severity="LOW",
-                    message=f"Peak week {weeks_before_race} weeks before race (recommend 2-3 weeks)",
-                    recommendation="Move peak closer to race to maintain fitness",
-                )
-            )
-            peak_note = "Too far from race - may lose peak fitness"
+    if is_general_fitness or race_week is None:
+        peak_placement_check = PeakPlacementCheck(
+            peak_week_number=0,
+            weeks_before_race=0,
+            appropriate=True,
+            note="Not applicable for general fitness",
+        )
     else:
-        peak_note = "Optimal peak placement (2-3 weeks before race)"
+        peak_week_number = weekly_volumes_km.index(max(weekly_volumes_km)) + 1
+        weeks_before_race = race_week - peak_week_number
+        peak_appropriate = 2 <= weeks_before_race <= 3
+        peak_note = None
 
-    peak_placement_check = PeakPlacementCheck(
-        peak_week_number=peak_week_number,
-        weeks_before_race=weeks_before_race,
-        appropriate=peak_appropriate,
-        note=peak_note,
-    )
+        if not peak_appropriate:
+            if weeks_before_race < 2:
+                violations.append(
+                    Violation(
+                        type="PEAK_TOO_CLOSE_TO_RACE",
+                        severity="MODERATE",
+                        message=f"Peak week {weeks_before_race} week(s) before race (recommend 2-3 weeks)",
+                        recommendation="Move peak earlier to allow adequate taper",
+                    )
+                )
+                peak_note = "Too close to race - insufficient taper"
+            else:
+                violations.append(
+                    Violation(
+                        type="PEAK_TOO_FAR_FROM_RACE",
+                        severity="LOW",
+                        message=f"Peak week {weeks_before_race} weeks before race (recommend 2-3 weeks)",
+                        recommendation="Move peak closer to race to maintain fitness",
+                    )
+                )
+                peak_note = "Too far from race - may lose peak fitness"
+        else:
+            peak_note = "Optimal peak placement (2-3 weeks before race)"
+
+        peak_placement_check = PeakPlacementCheck(
+            peak_week_number=peak_week_number,
+            weeks_before_race=weeks_before_race,
+            appropriate=peak_appropriate,
+            note=peak_note,
+        )
 
     # 4. Recovery week frequency check (every 3-4 weeks)
     if len(recovery_weeks) > 0:
@@ -508,49 +528,57 @@ def validate_plan_structure(
         )
 
     # 5. Taper structure check (gradual volume reduction)
-    taper_weeks = [w for w in range(race_week - 2, race_week + 1) if w > 0 and w <= len(weekly_volumes_km)]
-    week_reductions: Dict[int, float] = {}
-    taper_appropriate = False
-    taper_note = None
+    if is_general_fitness or race_week is None:
+        taper_structure_check = TaperStructureCheck(
+            taper_weeks=[],
+            week_reductions={},
+            appropriate=True,
+            note="Not applicable for general fitness",
+        )
+    else:
+        taper_weeks = [w for w in range(race_week - 2, race_week + 1) if w > 0 and w <= len(weekly_volumes_km)]
+        week_reductions: Dict[int, float] = {}
+        taper_appropriate = False
+        taper_note = None
 
-    if len(taper_weeks) >= 2:
-        peak_vol = max(weekly_volumes_km)
-        for week_num in taper_weeks:
-            week_vol = weekly_volumes_km[week_num - 1]
-            reduction_pct = (week_vol / peak_vol) * 100
-            week_reductions[week_num] = reduction_pct
+        if len(taper_weeks) >= 2:
+            peak_vol = max(weekly_volumes_km)
+            for week_num in taper_weeks:
+                week_vol = weekly_volumes_km[week_num - 1]
+                reduction_pct = (week_vol / peak_vol) * 100
+                week_reductions[week_num] = reduction_pct
 
-        # Standard 3-week taper: 70%, 50%, 30%
-        # For 2-week taper: 60%, 30%
-        if len(taper_weeks) == 3:
-            target_reductions = {taper_weeks[0]: 70, taper_weeks[1]: 50, taper_weeks[2]: 30}
-            taper_appropriate = all(
-                abs(week_reductions[w] - target_reductions[w]) <= 15 for w in taper_weeks
-            )
-            taper_note = "Standard 3-week taper (70%, 50%, 30%)" if taper_appropriate else "Taper reductions not aligned with standard"
-        elif len(taper_weeks) == 2:
-            target_reductions = {taper_weeks[0]: 60, taper_weeks[1]: 30}
-            taper_appropriate = all(
-                abs(week_reductions[w] - target_reductions[w]) <= 15 for w in taper_weeks
-            )
-            taper_note = "Standard 2-week taper (60%, 30%)" if taper_appropriate else "Taper reductions not aligned with standard"
-
-        if not taper_appropriate:
-            violations.append(
-                Violation(
-                    type="TAPER_STRUCTURE_SUBOPTIMAL",
-                    severity="LOW",
-                    message="Taper volume reductions not aligned with standard protocol",
-                    recommendation="Use gradual taper: 3-week (70%, 50%, 30%) or 2-week (60%, 30%)",
+            # Standard 3-week taper: 70%, 50%, 30%
+            # For 2-week taper: 60%, 30%
+            if len(taper_weeks) == 3:
+                target_reductions = {taper_weeks[0]: 70, taper_weeks[1]: 50, taper_weeks[2]: 30}
+                taper_appropriate = all(
+                    abs(week_reductions[w] - target_reductions[w]) <= 15 for w in taper_weeks
                 )
-            )
+                taper_note = "Standard 3-week taper (70%, 50%, 30%)" if taper_appropriate else "Taper reductions not aligned with standard"
+            elif len(taper_weeks) == 2:
+                target_reductions = {taper_weeks[0]: 60, taper_weeks[1]: 30}
+                taper_appropriate = all(
+                    abs(week_reductions[w] - target_reductions[w]) <= 15 for w in taper_weeks
+                )
+                taper_note = "Standard 2-week taper (60%, 30%)" if taper_appropriate else "Taper reductions not aligned with standard"
 
-    taper_structure_check = TaperStructureCheck(
-        taper_weeks=taper_weeks,
-        week_reductions=week_reductions,
-        appropriate=taper_appropriate,
-        note=taper_note,
-    )
+            if not taper_appropriate:
+                violations.append(
+                    Violation(
+                        type="TAPER_STRUCTURE_SUBOPTIMAL",
+                        severity="LOW",
+                        message="Taper volume reductions not aligned with standard protocol",
+                        recommendation="Use gradual taper: 3-week (70%, 50%, 30%) or 2-week (60%, 30%)",
+                    )
+                )
+
+        taper_structure_check = TaperStructureCheck(
+            taper_weeks=taper_weeks,
+            week_reductions=week_reductions,
+            appropriate=taper_appropriate,
+            note=taper_note,
+        )
 
     # Calculate overall quality score
     total_checks = 5  # phase, volume, peak, recovery, taper

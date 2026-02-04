@@ -232,13 +232,16 @@ See [profile_setup_workflow.md](references/profile_setup_workflow.md) for detail
 - "What are you training for?"
 - "When is your race?" (date)
 - "What's your goal time?" (optional)
+- "Do you have a race or time-trial date? If not, how many weeks do you want to focus on this goal?"
 
 ```bash
 sce goal set --type half_marathon --date 2026-06-01
 # Optional: --time "1:30:00" if specific goal
+sce goal set --type 10k --horizon-weeks 12
+sce goal set --type general_fitness
 ```
 
-**Goal types**: `5k`, `10k`, `half_marathon`, `marathon`
+**Goal types**: `5k`, `10k`, `half_marathon`, `marathon`, `general_fitness` (use benchmark date or horizon when no race)
 
 ---
 

@@ -79,7 +79,7 @@ class PlanStructureExport:
 
     total_weeks: int
     goal_type: str
-    race_week: int
+    race_week: Optional[int]
     phases: dict
     weekly_volumes_km: list
     recovery_weeks: list
@@ -1213,8 +1213,14 @@ def export_plan_structure() -> Union[PlanStructureExport, PlanError]:
 
     goal_type = goal.get("type") if isinstance(goal, dict) else getattr(goal, "type", None)
     goal_date = goal.get("target_date") if isinstance(goal, dict) else getattr(goal, "target_date", None)
-    if goal_type is None or goal_date is None:
-        return PlanError(error_type="validation", message="Goal type/date missing in plan")
+    if goal_type is None:
+        return PlanError(error_type="validation", message="Goal type missing in plan")
+
+    goal_type_normalized = str(goal_type).lower().replace("-", "_").replace(" ", "_")
+    is_general_fitness = goal_type_normalized == "general_fitness"
+
+    if goal_date is None and not is_general_fitness:
+        return PlanError(error_type="validation", message="Goal date missing in plan")
 
     if isinstance(goal_date, str):
         try:
@@ -1237,7 +1243,8 @@ def export_plan_structure() -> Union[PlanStructureExport, PlanError]:
         end_week = phase.get("end_week")
         if phase_name is None or start_week is None or end_week is None:
             continue
-        phases[phase_name] = int(end_week) - int(start_week) + 1
+        phase_len = int(end_week) - int(start_week) + 1
+        phases[phase_name] = phases.get(phase_name, 0) + phase_len
 
     # Weeks (sorted by week_number)
     weeks_list = getattr(plan, "weeks", None) or []
@@ -1257,17 +1264,19 @@ def export_plan_structure() -> Union[PlanStructureExport, PlanError]:
     ]
 
     # Race week: find week containing goal date
-    race_week = total_weeks
-    for week in weeks_sorted:
-        week_start = getattr(week, "start_date", None)
-        week_end = getattr(week, "end_date", None)
-        if isinstance(week_start, str):
-            week_start = date.fromisoformat(week_start)
-        if isinstance(week_end, str):
-            week_end = date.fromisoformat(week_end)
-        if week_start and week_end and week_start <= goal_date <= week_end:
-            race_week = getattr(week, "week_number", total_weeks)
-            break
+    race_week = None
+    if goal_date is not None:
+        race_week = total_weeks
+        for week in weeks_sorted:
+            week_start = getattr(week, "start_date", None)
+            week_end = getattr(week, "end_date", None)
+            if isinstance(week_start, str):
+                week_start = date.fromisoformat(week_start)
+            if isinstance(week_end, str):
+                week_end = date.fromisoformat(week_end)
+            if week_start and week_end and week_start <= goal_date <= week_end:
+                race_week = getattr(week, "week_number", total_weeks)
+                break
 
     return PlanStructureExport(
         total_weeks=total_weeks,
@@ -1530,7 +1539,7 @@ def create_macro_plan(
     AI Coach via weekly-plan generation.
 
     Args:
-        goal_type: Race distance ("5k", "10k", "half_marathon", "marathon")
+        goal_type: Goal type ("5k", "10k", "half_marathon", "marathon", "general_fitness")
         race_date: Goal race date
         target_time: Target finish time (optional, e.g., "1:30:00")
         total_weeks: Total weeks in plan
@@ -1579,7 +1588,7 @@ def create_macro_plan(
         if goal_type_lower not in [g.value for g in GoalType]:
             return PlanError(
                 error_type="validation",
-                message=f"Invalid goal type: {goal_type}. Valid: 5k, 10k, half_marathon, marathon"
+                message=f"Invalid goal type: {goal_type}. Valid: 5k, 10k, half_marathon, marathon, general_fitness"
             )
 
         # Convert string to GoalType enum
@@ -1599,8 +1608,18 @@ def create_macro_plan(
                 message=f"Start date must be Monday, got {start_date.strftime('%A')}"
             )
 
-        # Create phase structure
-        phases = _create_phase_structure(total_weeks)
+        # Create phase structure (general_fitness uses rolling cycles)
+        raw_phases = calculate_periodization(goal_type_enum, total_weeks, start_date)
+
+        # Normalize phase week numbers to 1-indexed for plan storage
+        phases = []
+        for phase in raw_phases:
+            phase_copy = phase.copy()
+            if "start_week" in phase_copy:
+                phase_copy["start_week"] = int(phase_copy["start_week"]) + 1
+            if "end_week" in phase_copy:
+                phase_copy["end_week"] = int(phase_copy["end_week"]) + 1
+            phases.append(phase_copy)
 
         # Strict CLI-only: AI coach must supply weekly volume targets
         if not weekly_volumes_km:
@@ -1705,6 +1724,13 @@ def create_macro_plan(
             stub_weeks.append(stub_week)
 
         # Create MasterPlan with stub weeks
+        # Resolve conflict policy from profile (fallback to ask_each_time)
+        profile_result = get_profile()
+        if isinstance(profile_result, ProfileError):
+            conflict_policy = "ask_each_time"
+        else:
+            conflict_policy = profile_result.conflict_policy.value if profile_result.conflict_policy else "ask_each_time"
+
         plan = MasterPlan(
             id=f"plan_{uuid.uuid4().hex[:12]}",
             created_at=date.today(),
@@ -1725,7 +1751,7 @@ def create_macro_plan(
             vdot_history=[],
             plan_state=None,
             constraints_applied=[],
-            conflict_policy="running_goal_wins"
+            conflict_policy=conflict_policy
         )
 
         # Persist to disk

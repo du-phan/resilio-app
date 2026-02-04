@@ -992,7 +992,7 @@ def plan_validate_structure_command(
     phases_json: str = typer.Option(..., "--phases", help="JSON file with phases (dict: phase_name -> weeks)"),
     weekly_volumes_json: str = typer.Option(..., "--weekly-volumes", help="JSON file with weekly volumes (list of km)"),
     recovery_weeks_json: str = typer.Option(..., "--recovery-weeks", help="JSON file with recovery weeks (list of week numbers)"),
-    race_week: int = typer.Option(..., "--race-week", help="Week number of race"),
+    race_week: Optional[int] = typer.Option(None, "--race-week", help="Week number of race (optional for general_fitness)"),
 ) -> None:
     """Validate training plan structure for common errors.
 
@@ -1435,8 +1435,16 @@ def plan_append_week_command(
 @app.command(name="create-macro")
 def create_macro_command(
     ctx: typer.Context,
-    goal_type: str = typer.Option(..., "--goal-type", help="Race distance: 5k, 10k, half_marathon, marathon"),
-    race_date: str = typer.Option(..., "--race-date", help="Race date (YYYY-MM-DD)"),
+    goal_type: str = typer.Option(
+        ...,
+        "--goal-type",
+        help="Goal type: 5k, 10k, half_marathon, marathon, general_fitness",
+    ),
+    race_date: Optional[str] = typer.Option(
+        None,
+        "--race-date",
+        help="Target date (YYYY-MM-DD). Optional; if omitted, end of horizon is used as benchmark date.",
+    ),
     target_time: Optional[str] = typer.Option(None, "--target-time", help="Target finish time (e.g., '1:30:00')"),
     total_weeks: int = typer.Option(..., "--total-weeks", help="Total weeks in plan"),
     start_date: str = typer.Option(..., "--start-date", help="Plan start date (YYYY-MM-DD, must be Monday)"),
@@ -1468,18 +1476,25 @@ def create_macro_command(
             --current-ctl 44.0 --baseline-vdot 48.0 \\
             --macro-template-json /tmp/macro_template.json
 
+        # Benchmark goal with derived date (end of horizon)
+        sce plan create-macro --goal-type 10k --total-weeks 12 --start-date 2026-02-02 \\
+            --current-ctl 30.0 --baseline-vdot 42.0 \\
+            --macro-template-json /tmp/macro_template.json
+
     Requires an approved baseline VDOT and a filled macro template JSON.
+
+    If --race-date is omitted, the end of the training horizon is used as a
+    benchmark date (e.g., for a time trial or fitness check).
 
     Returns:
         Macro plan structure with phases, volume trajectory, CTL projections,
         recovery weeks, and assessment milestones.
     """
     from sports_coach_engine.api.plan import create_macro_plan
-    from datetime import date as dt_date
+    from datetime import date as dt_date, timedelta
 
     # Parse dates
     try:
-        race_date_parsed = dt_date.fromisoformat(race_date)
         start_date_parsed = dt_date.fromisoformat(start_date)
     except ValueError as e:
         envelope = {
@@ -1490,6 +1505,25 @@ def create_macro_command(
         }
         output_json(envelope)
         raise typer.Exit(code=5)
+    warnings = []
+    race_date_parsed = None
+    if race_date:
+        try:
+            race_date_parsed = dt_date.fromisoformat(race_date)
+        except ValueError as e:
+            envelope = {
+                "success": False,
+                "message": f"Invalid date format: {e}",
+                "error_type": "validation",
+                "data": None
+            }
+            output_json(envelope)
+            raise typer.Exit(code=5)
+    else:
+        race_date_parsed = start_date_parsed + timedelta(weeks=total_weeks, days=-1)
+        warnings.append(
+            "Target date derived from start_date + total_weeks; treated as benchmark date."
+        )
 
     # Enforce baseline VDOT approval before creating macro plan
     if baseline_vdot is None:
@@ -1740,14 +1774,23 @@ def create_macro_command(
             f"Next: Present macro plan to athlete for approval, then use weekly-plan-generate "
             f"+ weekly-plan-apply for Week 1"
         )
+        if warnings:
+            success_message += "\nWarning: " + " ".join(warnings)
+
+        data = result
+        if warnings:
+            data = {"plan": result, "warnings": warnings}
+
+        envelope = create_success_envelope(
+            message=success_message,
+            data=data,
+        )
     else:
         success_message = "Macro plan creation failed"
-
-    # Convert to envelope
-    envelope = api_result_to_envelope(
-        result,
-        success_message=success_message
-    )
+        envelope = api_result_to_envelope(
+            result,
+            success_message=success_message
+        )
 
     # Output JSON
     output_json(envelope)

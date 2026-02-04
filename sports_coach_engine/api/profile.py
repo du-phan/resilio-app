@@ -339,7 +339,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
 
 def set_goal(
     race_type: str,
-    target_date: date,
+    target_date: Optional[date],
     target_time: Optional[str] = None,
 ) -> Union[Goal, ProfileError]:
     """
@@ -358,7 +358,7 @@ def set_goal(
     Args:
         race_type: Type of race. Valid values:
             - "5k", "10k", "half_marathon", "marathon"
-        target_date: Race date
+        target_date: Race date (optional for general_fitness)
         target_time: Target finish time (optional, e.g., "1:45:00" for HH:MM:SS)
 
     Returns:
@@ -390,9 +390,17 @@ def set_goal(
             message=f"Invalid race type '{race_type}'. Valid types: {valid_types}",
         )
 
+    if target_date is None and goal_type != GoalType.GENERAL_FITNESS:
+        return ProfileError(
+            error_type="validation",
+            message="target_date is required for race goals. Provide a date or set general_fitness.",
+        )
+
     # Create goal object
     # Convert date to ISO string if needed
-    target_date_str = target_date.isoformat() if isinstance(target_date, date) else target_date
+    target_date_str = (
+        target_date.isoformat() if isinstance(target_date, date) else target_date
+    )
 
     goal = Goal(
         type=goal_type,

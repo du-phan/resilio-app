@@ -98,7 +98,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce status`** | Get current training metrics | [Metrics](cli_metrics.md#sce-status) |
 | **`sce today [--date YYYY-MM-DD]`** | Get workout recommendation | [Metrics](cli_metrics.md#sce-today) |
 | **`sce week`** | Get weekly summary | [Metrics](cli_metrics.md#sce-week) |
-| **`sce goal set --type --date [--time]`** | Set race goal | [Planning](cli_planning.md#sce-goal-set) |
+| **`sce goal set --type [--date|--horizon-weeks] [--time]`** | Set goal | [Planning](cli_planning.md#sce-goal-set) |
 | **`sce goal validate`** | Validate existing goal | [Planning](cli_planning.md#sce-goal-validate) |
 | **`sce auth url`** | Get OAuth URL | [Auth](cli_auth.md#sce-auth-url) |
 | **`sce auth exchange --code`** | Exchange auth code | [Auth](cli_auth.md#sce-auth-exchange) |

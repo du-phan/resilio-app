@@ -30,7 +30,7 @@ Commands for setting race goals and managing training plans, including macro pla
 
 ## sce goal set
 
-Set a race goal (validates feasibility if target time provided).
+Set a goal (validates feasibility if target time provided).
 
 **Usage:**
 
@@ -41,13 +41,19 @@ sce goal set --type 10k --date 2026-06-01 --time 00:45:00
 # Set half marathon goal
 sce goal set --type half_marathon --date 2026-09-15 --time 01:45:00
 
-# Set marathon goal (no time = fitness goal)
+# Set marathon goal (no time = race goal without time)
 sce goal set --type marathon --date 2026-11-01
+
+# General fitness goal (no date required)
+sce goal set --type general_fitness
+
+# Non-race performance goal with horizon
+sce goal set --type 10k --horizon-weeks 12
 ```
 
 **Supported race types:**
 
-- `5k`, `10k`, `half_marathon`, `marathon`
+- `5k`, `10k`, `half_marathon`, `marathon`, `general_fitness`
 
 **Returns:**
 
@@ -73,7 +79,8 @@ sce goal set --type marathon --date 2026-11-01
 
 1. Goal saved to profile
 2. If a target time is provided, feasibility is assessed and returned
-3. Planning workflows use this goal as input (see `sce plan create-macro`)
+3. If no date is provided, a default horizon is used and a target date is derived
+4. Planning workflows use this goal as input (see `sce plan create-macro`)
 
 ---
 
@@ -343,7 +350,7 @@ sce plan create-macro \
   --baseline-vdot 48.0 \
   --macro-template-json /tmp/macro_template.json
 
-# Generate macro plan without target time (fitness goal)
+# Generate macro plan without target time (benchmark goal)
 sce plan template-macro --total-weeks 20 --out /tmp/macro_template.json
 # Fill /tmp/macro_template.json with volumes + hints
 sce plan create-macro \
@@ -354,12 +361,23 @@ sce plan create-macro \
   --current-ctl 38.5 \
   --baseline-vdot 44.0 \
   --macro-template-json /tmp/macro_template.json
+
+# Generate macro plan without race-date (benchmark date derived from horizon)
+sce plan template-macro --total-weeks 12 --out /tmp/macro_template.json
+# Fill /tmp/macro_template.json with volumes + hints
+sce plan create-macro \
+  --goal-type 10k \
+  --total-weeks 12 \
+  --start-date 2026-02-02 \
+  --current-ctl 30.0 \
+  --baseline-vdot 42.0 \
+  --macro-template-json /tmp/macro_template.json
 ```
 
 **Parameters:**
 
-- `--goal-type` (required) - Race distance: `5k`, `10k`, `half_marathon`, `marathon`
-- `--race-date` (required) - Race date in YYYY-MM-DD format
+- `--goal-type` (required) - Goal type: `5k`, `10k`, `half_marathon`, `marathon`, `general_fitness`
+- `--race-date` (optional) - Target date in YYYY-MM-DD format. If omitted, end of horizon is treated as a benchmark date.
 - `--target-time` (optional) - Target finish time in HH:MM:SS format (e.g., 01:30:00)
 - `--total-weeks` (required) - Total training weeks (typically 12-20)
 - `--start-date` (required) - Plan start date (YYYY-MM-DD), must be Monday
@@ -646,7 +664,7 @@ sce plan export-structure --out-dir /tmp
 - `/tmp/weekly_volumes_list.json` (list of weekly volumes in km)
 - `/tmp/recovery_weeks.json` (list of recovery week numbers)
 
-**Returns:** total_weeks, goal_type, race_week, phases, weekly_volumes_km, recovery_weeks, and file paths.
+**Returns:** total_weeks, goal_type, race_week (null for general_fitness), phases, weekly_volumes_km, recovery_weeks, and file paths.
 
 ---
 

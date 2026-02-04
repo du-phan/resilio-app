@@ -627,6 +627,11 @@ def calculate_safe_volume_range(
         ctl_zone = "advanced"
         base_range = (55, 80)
 
+    # Normalize goal type
+    normalized_goal = goal_type.lower().replace("-", "_").replace(" ", "_")
+    if normalized_goal == "general_fitness":
+        normalized_goal = "fitness"
+
     # Adjust for goal type
     goal_adjustments = {
         "5k": 0.9,  # Slightly lower volume for 5K
@@ -636,7 +641,7 @@ def calculate_safe_volume_range(
         "fitness": 1.0,  # Base volume
     }
 
-    adjustment_factor = goal_adjustments.get(goal_type, 1.0)
+    adjustment_factor = goal_adjustments.get(normalized_goal, 1.0)
     goal_adjusted_range = (
         int(base_range[0] * adjustment_factor),
         int(base_range[1] * adjustment_factor),

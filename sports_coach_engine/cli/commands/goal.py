@@ -4,8 +4,8 @@ sce goal - Manage race goals.
 Set a race goal and automatically validate feasibility.
 """
 
-from datetime import datetime
-from typing import Optional, Dict, Any
+from datetime import datetime, timedelta, date
+from typing import Optional, Dict, Any, List
 
 import typer
 
@@ -15,6 +15,7 @@ from sports_coach_engine.api.vdot import estimate_current_vdot, calculate_vdot_f
 from sports_coach_engine.api.validation import api_assess_goal_feasibility, ValidationError
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
+from sports_coach_engine.utils.dates import get_next_monday
 
 # Create subcommand app
 app = typer.Typer(help="Manage race goals")
@@ -26,17 +27,22 @@ def goal_set_command(
     race_type: str = typer.Option(
         ...,
         "--type",
-        help="Race type: 5k, 10k, half_marathon, or marathon",
+        help="Goal type: 5k, 10k, half_marathon, marathon, or general_fitness",
     ),
-    target_date: str = typer.Option(
-        ...,
+    target_date: Optional[str] = typer.Option(
+        None,
         "--date",
-        help="Race date (YYYY-MM-DD)",
+        help="Target date (YYYY-MM-DD). Use for race or time trial.",
     ),
     target_time: Optional[str] = typer.Option(
         None,
         "--time",
         help="Target finish time (HH:MM:SS), optional",
+    ),
+    horizon_weeks: Optional[int] = typer.Option(
+        None,
+        "--horizon-weeks",
+        help="Training horizon in weeks (alternative to --date)",
     ),
 ) -> None:
     """Set a new race goal with automatic feasibility validation.
@@ -44,30 +50,22 @@ def goal_set_command(
     Sets a race goal and validates feasibility based on current fitness (VDOT, CTL)
     and time available for training.
 
-    Valid race types:
+    Valid goal types:
     - 5k
     - 10k
     - half_marathon
     - marathon
+    - general_fitness
 
     Examples:
         sce goal set --type 10k --date 2026-06-01
         sce goal set --type half_marathon --date 2026-04-15 --time 01:45:00
         sce goal set --type marathon --date 2026-10-20 --time 03:30:00
+        sce goal set --type general_fitness
+        sce goal set --type 10k --horizon-weeks 12
     """
-    # Parse target_date
-    try:
-        date_obj = datetime.fromisoformat(target_date).date()
-    except ValueError:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Invalid date format: {target_date}. Use YYYY-MM-DD.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)  # Validation error
-
     # Validate race_type
-    valid_race_types = ["5k", "10k", "half_marathon", "marathon"]
+    valid_race_types = ["5k", "10k", "half_marathon", "marathon", "general_fitness"]
     if race_type not in valid_race_types:
         envelope = create_error_envelope(
             error_type="validation",
@@ -75,6 +73,58 @@ def goal_set_command(
         )
         output_json(envelope)
         raise typer.Exit(code=5)  # Validation error
+
+    if horizon_weeks is not None and horizon_weeks <= 0:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="--horizon-weeks must be a positive integer",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if target_date and horizon_weeks:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Provide either --date or --horizon-weeks, not both.",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    if race_type == "general_fitness" and target_time:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="general_fitness goals cannot include a target time.",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    warnings: List[str] = []
+    date_obj: Optional[date] = None
+
+    # Parse or derive target_date
+    if target_date:
+        try:
+            date_obj = datetime.fromisoformat(target_date).date()
+        except ValueError:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=f"Invalid date format: {target_date}. Use YYYY-MM-DD.",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)  # Validation error
+    else:
+        default_horizons = {
+            "general_fitness": 4,
+            "5k": 8,
+            "10k": 12,
+            "half_marathon": 16,
+            "marathon": 20,
+        }
+        weeks = horizon_weeks if horizon_weeks is not None else default_horizons[race_type]
+        if horizon_weeks is None:
+            warnings.append(f"No target date provided; using default horizon of {weeks} weeks.")
+        start_date = get_next_monday(date.today())
+        date_obj = start_date + timedelta(weeks=weeks, days=-1)
 
     # Validate target_time format if provided and convert to seconds
     goal_time_seconds: Optional[int] = None
@@ -136,7 +186,7 @@ def goal_set_command(
 
     # 4. Assess goal feasibility (if target_time provided)
     validation_data: Optional[Dict[str, Any]] = None
-    if target_time and goal_time_seconds and vdot_for_goal:
+    if target_time and goal_time_seconds and vdot_for_goal and date_obj is not None:
         feasibility_result = api_assess_goal_feasibility(
             goal_type=race_type,
             goal_time_seconds=goal_time_seconds,
@@ -175,7 +225,8 @@ def goal_set_command(
 
     # 6. Build combined response
     if hasattr(result, 'type'):  # Goal object successfully created
-        base_msg = f"Goal set: {race_type} on {target_date}"
+        date_str = date_obj.isoformat() if date_obj else "unspecified date"
+        base_msg = f"Goal set: {race_type} on {date_str}"
         if target_time:
             base_msg += f" (target: {target_time})"
 
@@ -190,10 +241,11 @@ def goal_set_command(
             data={
                 "goal": {
                     "race_type": race_type,
-                    "target_date": target_date,
+                    "target_date": date_obj.isoformat() if date_obj else None,
                     "target_time": target_time,
                 },
                 "validation": validation_data,
+                "warnings": warnings or None,
             },
         )
     else:
@@ -239,7 +291,7 @@ def goal_validate_command(
         output_json(envelope)
         raise typer.Exit(code=2)
 
-    if not profile_result.goal or not profile_result.goal.target_date:
+    if not profile_result.goal:
         envelope = create_error_envelope(
             error_type="validation",
             message="No goal set in profile. Use 'sce goal set' to set a goal first.",
@@ -251,6 +303,29 @@ def goal_validate_command(
     race_type = goal.type.value
     target_date_str = goal.target_date
     target_time = goal.target_time
+
+    if race_type == "general_fitness" and not target_date_str:
+        envelope = create_success_envelope(
+            message="Goal: general_fitness (no target date - validation not applicable)",
+            data={
+                "goal": {
+                    "race_type": race_type,
+                    "target_date": None,
+                    "target_time": None,
+                },
+                "validation": None,
+            },
+        )
+        output_json(envelope)
+        raise typer.Exit(code=0)
+
+    if not target_date_str:
+        envelope = create_error_envelope(
+            error_type="validation",
+            message="Goal is missing a target date. Use 'sce goal set' to set a date or horizon.",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
 
     # Parse target_date
     try:

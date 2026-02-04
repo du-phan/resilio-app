@@ -126,7 +126,7 @@ def api_validate_plan_structure(
     phases: Dict[str, int],
     weekly_volumes_km: List[float],
     recovery_weeks: List[int],
-    race_week: int,
+    race_week: Optional[int],
 ) -> Union[PlanStructureValidation, ValidationError]:
     """Validate training plan structure for common errors.
 
@@ -179,13 +179,22 @@ def api_validate_plan_structure(
                 "recovery_weeks must contain positive integers", "INVALID_RECOVERY_WEEK"
             )
 
-    if not isinstance(race_week, int) or race_week <= 0:
-        return ValidationError("race_week must be a positive integer", "INVALID_RACE_WEEK")
+    goal_type_normalized = goal_type.lower().replace("-", "_").replace(" ", "_")
+    is_general_fitness = goal_type_normalized == "general_fitness"
 
-    if race_week > total_weeks:
+    if race_week is None and not is_general_fitness:
         return ValidationError(
-            f"race_week ({race_week}) exceeds total_weeks ({total_weeks})", "RACE_WEEK_OUT_OF_RANGE"
+            "race_week is required for race goals", "INVALID_RACE_WEEK"
         )
+
+    if race_week is not None:
+        if not isinstance(race_week, int) or race_week <= 0:
+            return ValidationError("race_week must be a positive integer", "INVALID_RACE_WEEK")
+
+        if race_week > total_weeks:
+            return ValidationError(
+                f"race_week ({race_week}) exceeds total_weeks ({total_weeks})", "RACE_WEEK_OUT_OF_RANGE"
+            )
 
     # Call core function
     try:
