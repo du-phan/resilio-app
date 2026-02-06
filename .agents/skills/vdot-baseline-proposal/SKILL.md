@@ -45,15 +45,32 @@ One-line definitions for other metrics:
 sce profile get
 sce race list
 sce status
-sce vdot estimate-current --lookback-days 28
+sce vdot estimate-current --lookback-days 90  # Longer lookback for continuity analysis
 sce activity list --since 30d --sport run
 ```
 
+**NEW: Understanding estimate-current output:**
+- `source` field explains estimation method (e.g., "race_decay_adjusted (75% continuity)")
+- `confidence`: HIGH (recent race/3+ workouts), MEDIUM (decay + validation), LOW (single workout/easy pace)
+- May include HR-detected easy runs if max_hr is in profile
+- Training continuity score shown when using race decay
+- Clear error message if insufficient data (no CTL-based fallback)
+
 2. Choose a baseline VDOT:
 
-- Prefer recent race (≤90 days)
-- Else use `vdot estimate-current`
-- Else conservative CTL-based estimate (cite as low confidence)
+Strategy (automatic via `vdot estimate-current`):
+- **Recent race (<90 days)**: Use race VDOT directly (HIGH confidence)
+- **Older race (≥90 days)**: Apply continuity-aware decay
+  - Analyzes actual training breaks (not just elapsed time)
+  - Validates with recent pace data (quality + HR-based easy runs)
+  - Uses Daniels' Table 9.2 decay methodology
+- **No race**: Use pace analysis (quality workouts → HR-detected easy runs)
+- **Insufficient data**: Return error asking athlete to establish baseline via:
+  - Adding a race result (`sce race add`)
+  - Running quality workouts (tempo, threshold, interval)
+  - Running easy runs consistently (requires max_hr in profile)
+
+The system will NOT provide a CTL-based guess - we need actual pace data.
 
 3. Get pace ranges:
 

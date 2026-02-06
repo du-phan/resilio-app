@@ -26,6 +26,10 @@ from sports_coach_engine.schemas.vdot import (
     ConfidenceLevel,
     VDOTEstimate,
     WorkoutPaceData,
+    EasyPaceData,
+    BreakAnalysis,
+    VDOTDecayResult,
+    PaceAnalysisResult,
 )
 from sports_coach_engine.core.vdot import (
     calculate_vdot as core_calculate_vdot,
@@ -311,30 +315,31 @@ def estimate_current_vdot(
     lookback_days: int = 28,
 ) -> Union[VDOTEstimate, VDOTError]:
     """
-    Estimate current VDOT from recent workout paces.
+    Estimate current VDOT with training continuity awareness.
 
-    Analyzes tempo and interval workouts from the last N days to estimate
-    current fitness level. This provides a way to compare current fitness
-    against historical PBs for progression/regression analysis.
-
-    Detection logic:
-    - Tempo workouts: Average pace significantly faster than easy pace
-    - Interval workouts: workout_type or keywords in title/description
+    Algorithm:
+    1. Check for recent race (<90 days) → HIGH confidence
+    2. If race >90 days:
+       a. Detect training breaks
+       b. Apply continuity-aware decay
+       c. Validate with recent pace data
+       d. Adjust upward if pace data suggests higher fitness
+    3. No race: Use pace analysis only (quality workouts → easy runs → error)
 
     Args:
-        lookback_days: Number of days to look back (default: 28)
+        lookback_days: Number of days to look back for pace analysis (default: 28)
 
     Returns:
         VDOTEstimate with current VDOT estimate and supporting data
-
         VDOTError on failure
 
     Example:
-        >>> estimate = estimate_current_vdot(lookback_days=28)
+        >>> estimate = estimate_current_vdot(lookback_days=90)
         >>> if isinstance(estimate, VDOTError):
         ...     print(f"Error: {estimate.message}")
         ... else:
-        ...     print(f"Current VDOT estimate: {estimate.estimated_vdot} ({estimate.confidence})")
+        ...     print(f"Current VDOT: {estimate.estimated_vdot} ({estimate.confidence})")
+        ...     print(f"Source: {estimate.source}")
     """
     from datetime import date as dt_date, timedelta
     from pathlib import Path
@@ -343,7 +348,10 @@ def estimate_current_vdot(
     from sports_coach_engine.core.paths import get_activities_dir
     from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
     from sports_coach_engine.schemas.activity import NormalizedActivity
-    from sports_coach_engine.core.vdot.tables import VDOT_TABLE
+    from sports_coach_engine.core.vdot.continuity import detect_training_breaks, calculate_vdot_decay
+    from sports_coach_engine.core.vdot.pace_analysis import analyze_recent_paces
+    from sports_coach_engine.api.profile import get_profile, ProfileError
+    from sports_coach_engine.api.metrics import get_current_metrics, MetricsError
 
     try:
         # Load activities
@@ -357,188 +365,174 @@ def estimate_current_vdot(
                 message="No activities found. Run 'sce sync' to import activities from Strava.",
             )
 
-        # Calculate cutoff date
-        cutoff_date = dt_date.today() - timedelta(days=lookback_days)
-
-        # Load and filter activities
-        activities: list[NormalizedActivity] = []
+        # Load all activities (we need full history for break detection)
+        all_activities: list[NormalizedActivity] = []
         for activity_file in activity_files:
             result = repo.read_yaml(str(activity_file), NormalizedActivity, ReadOptions())
             if isinstance(result, NormalizedActivity):
-                # Filter by date and sport type
-                activity_date = result.date
-                if activity_date >= cutoff_date and result.sport_type.lower() == "run":
-                    activities.append(result)
+                if result.sport_type.lower() in ["run", "trail_run", "virtual_run"]:
+                    all_activities.append(result)
 
-        if not activities:
+        if not all_activities:
             return VDOTError(
                 error_type="not_found",
-                message=f"No running activities found in the last {lookback_days} days.",
+                message="No running activities found. Run 'sce sync' to import activities.",
             )
 
-        # Detect quality workouts (tempo, interval)
-        quality_keywords = ["tempo", "threshold", "interval", "track", "speed", "workout"]
-        quality_workouts: list[WorkoutPaceData] = []
+        # Get profile (for max_hr and race history)
+        profile_result = get_profile()
+        if isinstance(profile_result, ProfileError):
+            return VDOTError(
+                error_type="not_found",
+                message="Profile not found. Run 'sce profile create' to create your profile.",
+            )
+        profile = profile_result
 
-        for activity in activities:
-            # Check for workout keywords
-            title = (activity.name or "").lower()
-            description = (activity.description or "").lower()
-            has_quality_keyword = any(keyword in title or keyword in description for keyword in quality_keywords)
+        # Get max_hr for HR-based easy pace detection
+        max_hr = None
+        if profile.vital_signs and profile.vital_signs.max_hr:
+            max_hr = profile.vital_signs.max_hr
 
-            # Calculate average pace (sec per km)
-            if activity.distance_km > 0 and activity.duration_seconds > 0:
-                avg_pace_sec_per_km = int(activity.duration_seconds / activity.distance_km)
+        # Step 1: Check for recent race (<90 days)
+        if profile.race_history:
+            races_with_dates = [
+                (race, race.date)
+                for race in profile.race_history
+                if race.vdot and race.date
+            ]
 
-                # Only consider paces faster than 6:00/km (360 sec/km) as quality efforts
-                if has_quality_keyword and avg_pace_sec_per_km < 360:
-                    # Find implied VDOT from pace
-                    implied_vdot = _find_vdot_from_pace(avg_pace_sec_per_km, "threshold")
+            if races_with_dates:
+                # Sort by date descending (most recent first)
+                races_with_dates.sort(key=lambda x: x[1], reverse=True)
+                most_recent_race, race_date_str = races_with_dates[0]
+                race_date = dt_date.fromisoformat(race_date_str)
+                days_since_race = (dt_date.today() - race_date).days
 
-                    if implied_vdot:
-                        workout_data = WorkoutPaceData(
-                            date=activity.date.isoformat(),
-                            workout_type="tempo" if "tempo" in title or "threshold" in title else "interval",
-                            pace_sec_per_km=avg_pace_sec_per_km,
-                            implied_vdot=implied_vdot,
-                        )
-                        quality_workouts.append(workout_data)
-
-        if not quality_workouts:
-            # Fallback to race history when no recent quality workouts
-            from sports_coach_engine.api.profile import get_profile, ProfileError
-
-            profile_result = get_profile()
-            if isinstance(profile_result, ProfileError):
-                return VDOTError(
-                    error_type="not_found",
-                    message=f"No quality workouts (tempo/interval) found in the last {lookback_days} days. "
-                    "Try running a tempo or interval workout first.",
-                )
-
-            profile = profile_result
-            if profile.race_history:
-                # Find most recent race with VDOT and date
-                races_with_dates = [
-                    (race, race.date)
-                    for race in profile.race_history
-                    if race.vdot and race.date
-                ]
-
-                if races_with_dates:
-                    # Sort by date descending (most recent first)
-                    races_with_dates.sort(key=lambda x: x[1], reverse=True)
-                    most_recent_race, race_date_str = races_with_dates[0]
-
-                    # Calculate age of race
-                    race_date = dt_date.fromisoformat(race_date_str)
-                    days_since_race = (dt_date.today() - race_date).days
-                    months_since_race = days_since_race / 30.44
-
-                    # Apply decay based on age
-                    base_vdot = most_recent_race.vdot
-                    if months_since_race < 3:
-                        decay_factor = 1.0
-                        confidence = ConfidenceLevel.HIGH
-                    elif months_since_race < 6:
-                        decay_factor = 0.97  # 3% decay
-                        confidence = ConfidenceLevel.MEDIUM
-                    else:
-                        # For races 6+ months old, apply progressive decay
-                        # 7% at 6 months, up to 15% at 24+ months
-                        decay_pct = min(7 + (months_since_race - 6) * 0.5, 15)
-                        decay_factor = 1.0 - (decay_pct / 100)
-                        confidence = ConfidenceLevel.LOW
-
-                    estimated_vdot = int(round(base_vdot * decay_factor))
-
-                    # Clamp to valid VDOT range
-                    estimated_vdot = max(30, min(85, estimated_vdot))
-
+                # Recent race path (<90 days)
+                if days_since_race < 90:
                     return VDOTEstimate(
-                        estimated_vdot=estimated_vdot,
-                        confidence=confidence,
-                        source=f"race_history ({most_recent_race.distance} @ {most_recent_race.time}, {int(months_since_race)} months ago)",
-                        supporting_data=[
-                            WorkoutPaceData(
-                                date=race_date_str,
-                                workout_type="race",
-                                pace_sec_per_km=0,  # Not applicable for race history
-                                implied_vdot=estimated_vdot,
-                            )
-                        ],
+                        estimated_vdot=int(most_recent_race.vdot),
+                        confidence=ConfidenceLevel.HIGH,
+                        source=f"recent_race ({most_recent_race.distance} @ {most_recent_race.time}, {days_since_race} days ago)",
+                        supporting_data=[]
                     )
 
-            # No quality workouts and no race history
-            return VDOTError(
-                error_type="not_found",
-                message=f"No quality workouts (tempo/interval) found in the last {lookback_days} days "
-                "and no race history available. Try running a tempo or interval workout first, "
-                "or add race results to your profile.",
+                # Step 2: Race >90 days - apply continuity-aware decay
+                # Detect training breaks
+                break_analysis = detect_training_breaks(
+                    all_activities,
+                    race_date,
+                    lookback_months=18
+                )
+
+                # Get CTL for multi-sport adjustment
+                ctl_current = None
+                metrics_result = get_current_metrics()
+                if not isinstance(metrics_result, MetricsError):
+                    ctl_current = metrics_result.ctl.value if hasattr(metrics_result, 'ctl') else None
+
+                # Calculate decay
+                decay_result = calculate_vdot_decay(
+                    base_vdot=most_recent_race.vdot,
+                    race_date=race_date,
+                    break_analysis=break_analysis,
+                    ctl_at_race=None,  # TODO: Implement historical CTL estimation
+                    ctl_current=ctl_current
+                )
+
+                # Step 2c: Validate with recent pace data
+                pace_analysis = analyze_recent_paces(
+                    all_activities,
+                    lookback_days=lookback_days,
+                    max_hr=max_hr
+                )
+
+                # Adjust upward if pace data suggests higher fitness
+                if pace_analysis.implied_vdot_range:
+                    pace_min, pace_max = pace_analysis.implied_vdot_range
+
+                    # If decayed VDOT significantly lower than pace suggests
+                    if decay_result.decayed_vdot < pace_min - 2:
+                        adjusted_vdot = int((decay_result.decayed_vdot + pace_min) / 2)
+                        confidence = ConfidenceLevel.MEDIUM
+                        source = f"race_decay_adjusted ({break_analysis.continuity_score:.0%} continuity, {len(pace_analysis.quality_workouts + pace_analysis.easy_runs)} pace data points)"
+                    else:
+                        adjusted_vdot = decay_result.decayed_vdot
+                        confidence = decay_result.confidence
+                        source = f"race_decay ({break_analysis.continuity_score:.0%} continuity, {int(days_since_race/30.44)} months old)"
+                else:
+                    adjusted_vdot = decay_result.decayed_vdot
+                    confidence = decay_result.confidence
+                    source = f"race_decay ({break_analysis.continuity_score:.0%} continuity, {int(days_since_race/30.44)} months old)"
+
+                return VDOTEstimate(
+                    estimated_vdot=adjusted_vdot,
+                    confidence=confidence,
+                    source=source,
+                    supporting_data=pace_analysis.quality_workouts  # Convert easy_runs if needed
+                )
+
+        # Step 3: No race - use pace analysis only
+        pace_analysis = analyze_recent_paces(
+            all_activities,
+            lookback_days=lookback_days,
+            max_hr=max_hr
+        )
+
+        # Quality workouts (best signal)
+        if pace_analysis.quality_workouts:
+            vdots = [w.implied_vdot for w in pace_analysis.quality_workouts]
+            estimated_vdot = int(median(vdots))
+            confidence = ConfidenceLevel.MEDIUM if len(vdots) >= 3 else ConfidenceLevel.LOW
+            source = f"quality_workouts ({len(vdots)} workouts)"
+
+            return VDOTEstimate(
+                estimated_vdot=estimated_vdot,
+                confidence=confidence,
+                source=source,
+                supporting_data=pace_analysis.quality_workouts
             )
 
-        # Calculate median VDOT
-        vdots = [w.implied_vdot for w in quality_workouts]
-        estimated_vdot = int(median(vdots))
-
-        # Determine confidence based on number of data points
-        if len(quality_workouts) >= 3:
-            confidence = ConfidenceLevel.HIGH
-        elif len(quality_workouts) >= 2:
-            confidence = ConfidenceLevel.MEDIUM
-        else:
+        # Easy runs (secondary signal)
+        if pace_analysis.easy_runs:
+            vdots = [e.implied_vdot for e in pace_analysis.easy_runs]
+            estimated_vdot = int(median(vdots))
             confidence = ConfidenceLevel.LOW
+            source = f"easy_pace_analysis ({len(vdots)} easy runs, HR-detected)"
 
-        # Determine source description
-        workout_types = [w.workout_type for w in quality_workouts]
-        if "tempo" in workout_types:
-            source = "tempo_workouts"
-        else:
-            source = "interval_workouts"
+            # Convert EasyPaceData to WorkoutPaceData for supporting_data
+            supporting_data = [
+                WorkoutPaceData(
+                    date=er.date,
+                    workout_type="easy",
+                    pace_sec_per_km=er.pace_sec_per_km,
+                    implied_vdot=er.implied_vdot
+                )
+                for er in pace_analysis.easy_runs
+            ]
 
-        return VDOTEstimate(
-            estimated_vdot=estimated_vdot,
-            confidence=confidence,
-            source=source,
-            supporting_data=quality_workouts,
+            return VDOTEstimate(
+                estimated_vdot=estimated_vdot,
+                confidence=confidence,
+                source=source,
+                supporting_data=supporting_data
+            )
+
+        # No data available - require baseline establishment
+        return VDOTError(
+            error_type="not_found",
+            message=(
+                "Insufficient data for VDOT estimation. To establish your baseline:\n\n"
+                "1. Add a race result: 'sce race add --distance 10k --time MM:SS'\n"
+                "2. OR run quality workouts with keywords (tempo, threshold, interval)\n"
+                "3. OR run easy runs consistently (requires max HR in profile for detection)\n\n"
+                "Why no CTL-based estimate? CTL measures training volume, not pace capability.\n"
+                "We need actual pace data (races or workouts) to estimate your VDOT accurately."
+            )
         )
 
     except Exception as e:
         return VDOTError(error_type="calculation_failed", message=f"VDOT estimation failed: {e}")
 
 
-def _find_vdot_from_pace(pace_sec_per_km: int, pace_type: str = "threshold") -> Optional[int]:
-    """
-    Find VDOT that corresponds to a given pace.
-
-    Args:
-        pace_sec_per_km: Pace in seconds per km
-        pace_type: Type of pace ("threshold", "interval", "easy")
-
-    Returns:
-        VDOT value, or None if pace is out of range
-    """
-    from sports_coach_engine.core.vdot.tables import VDOT_TABLE
-
-    # Map pace type to table fields
-    pace_field_map = {
-        "threshold": ("threshold_min_sec_per_km", "threshold_max_sec_per_km"),
-        "interval": ("interval_min_sec_per_km", "interval_max_sec_per_km"),
-        "easy": ("easy_min_sec_per_km", "easy_max_sec_per_km"),
-    }
-
-    if pace_type not in pace_field_map:
-        return None
-
-    min_field, max_field = pace_field_map[pace_type]
-
-    # Find VDOT where pace falls within the range
-    for entry in VDOT_TABLE:
-        min_pace = getattr(entry, min_field)
-        max_pace = getattr(entry, max_field)
-
-        # Check if pace falls within this VDOT's range (with some tolerance)
-        if min_pace - 5 <= pace_sec_per_km <= max_pace + 5:
-            return entry.vdot
-
-    return None
+# Moved to sports_coach_engine.core.vdot.pace_analysis

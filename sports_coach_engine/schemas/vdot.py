@@ -8,7 +8,7 @@ Running Formula methodology.
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, Dict, Tuple
-from datetime import timedelta
+from datetime import timedelta, date
 from enum import Enum
 
 
@@ -42,10 +42,10 @@ class ConditionType(str, Enum):
 
 
 class ConfidenceLevel(str, Enum):
-    """Confidence level for VDOT calculations (time-based)."""
-    HIGH = "high"        # Recent race (<2 weeks)
-    MEDIUM = "medium"    # Race 2-6 weeks old
-    LOW = "low"          # Race >6 weeks or estimated
+    """Confidence level for VDOT calculations."""
+    HIGH = "high"        # Recent race (<90 days) or multiple quality workouts
+    MEDIUM = "medium"    # Race with continuity decay or pace validation
+    LOW = "low"          # Single workout, long break, or easy pace only
 
 
 class RaceSource(str, Enum):
@@ -226,6 +226,16 @@ class WorkoutPaceData(BaseModel):
     implied_vdot: int = Field(..., description="VDOT implied by this pace")
 
 
+class EasyPaceData(BaseModel):
+    """Single easy run pace data point for VDOT estimation."""
+
+    date: str = Field(..., description="Run date (ISO format)")
+    pace_sec_per_km: int = Field(..., description="Average pace in seconds per km")
+    average_hr: Optional[int] = Field(None, description="Average heart rate if available")
+    implied_vdot: int = Field(..., description="VDOT implied by this easy pace")
+    detected_by: str = Field(..., description="Detection method: 'heart_rate' or 'pace_heuristic'")
+
+
 class VDOTEstimate(BaseModel):
     """Current VDOT estimate from recent workout paces."""
 
@@ -240,3 +250,44 @@ class VDOTEstimate(BaseModel):
         use_enum_values=True,
         populate_by_name=True,
     )
+
+
+class BreakPeriod(BaseModel):
+    """Period with no running activity."""
+
+    start_date: date = Field(..., description="Start date of break")
+    end_date: date = Field(..., description="End date of break")
+    days: int = Field(..., description="Duration in days")
+
+
+class BreakAnalysis(BaseModel):
+    """Training continuity analysis result."""
+
+    active_weeks: int = Field(..., description="Weeks with ≥1 run")
+    total_weeks: int = Field(..., description="Total weeks analyzed")
+    break_periods: list[BreakPeriod] = Field(default_factory=list, description="Identified break periods")
+    longest_break_days: int = Field(..., description="Longest break duration in days")
+    continuity_score: float = Field(..., ge=0.0, le=1.0, description="Active weeks / total weeks")
+
+
+class VDOTDecayResult(BaseModel):
+    """VDOT decay calculation result."""
+
+    base_vdot: float = Field(..., description="Original race VDOT")
+    decayed_vdot: int = Field(..., ge=30, le=85, description="VDOT after decay")
+    decay_percentage: float = Field(..., ge=0.0, description="Percentage decay applied")
+    decay_factor: float = Field(..., ge=0.0, le=1.0, description="Decay multiplier (1 - decay_pct/100)")
+    confidence: ConfidenceLevel = Field(..., description="Confidence in decayed estimate")
+    reason: str = Field(..., description="Explanation of decay calculation")
+    break_analysis: BreakAnalysis = Field(..., description="Training continuity data")
+
+
+class PaceAnalysisResult(BaseModel):
+    """Recent pace analysis result."""
+
+    quality_workouts: list[WorkoutPaceData] = Field(default_factory=list)
+    easy_runs: list[EasyPaceData] = Field(default_factory=list)
+    implied_vdot_range: Optional[Tuple[int, int]] = Field(None, description="Min-max VDOT from all paces")
+    detected_easy_pace_range: Optional[Tuple[int, int]] = Field(None, description="Min-max pace from easy runs (sec/km)")
+    detection_method: str = Field(..., description="'heart_rate', 'pace_heuristic', or 'none'")
+    no_hr_data: bool = Field(default=False, description="Flag indicating no HR data available")

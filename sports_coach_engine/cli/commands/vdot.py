@@ -298,37 +298,41 @@ def vdot_estimate_current_command(
     lookback_days: int = typer.Option(
         28,
         "--lookback-days",
-        help="Number of days to look back for quality workouts"
+        help="Number of days to look back for pace analysis"
     ),
 ) -> None:
-    """Estimate current VDOT from recent workout paces.
+    """Estimate current VDOT with training continuity awareness.
 
-    Analyzes tempo and interval workouts from recent training to estimate
-    current fitness level. Useful for comparing against historical PBs
-    to track progression/regression.
+    Uses a multi-source approach to estimate current fitness:
+        1. Recent race (<90 days): HIGH confidence
+        2. Older race: Apply continuity-aware decay based on actual training breaks
+        3. Quality workouts: Analyze tempo/interval paces
+        4. Easy runs: HR-based detection (65-78% max HR) for additional data
 
-    Detection logic:
-        - Searches for tempo/interval keywords in workout titles
-        - Extracts average pace from quality workouts
-        - Calculates implied VDOT from workout paces
-        - Returns median VDOT with confidence level
+    Training continuity-aware decay (Daniels' methodology):
+        - High continuity (≥75% active weeks): Minimal decay
+        - Short breaks (<28 days): Daniels Table 9.2 decay (1-7%)
+        - Long breaks (≥28 days): Progressive decay (8-20%) with multi-sport adjustment
+
+    HR-based easy pace detection:
+        - Automatically detects easy efforts via heart rate zones (65-78% max HR)
+        - Infers VDOT from easy paces for more robust estimates
+        - Works even when athletes don't label runs as "easy"
+        - Requires max_hr in profile ('sce profile update --max-hr 199')
 
     Examples:
         sce vdot estimate-current
-        sce vdot estimate-current --lookback-days 14
+        sce vdot estimate-current --lookback-days 90
 
     Confidence levels:
-        - HIGH: 3+ quality workouts found
-        - MEDIUM: 2 quality workouts found
-        - LOW: Only 1 quality workout found
+        - HIGH: Recent race (<90 days) or 3+ quality workouts
+        - MEDIUM: Race with continuity decay or pace validation
+        - LOW: Single workout, long break, or easy pace only
 
     Use this to compare current fitness against race history:
         1. sce race list  # View historical PBs
         2. sce vdot estimate-current  # Estimate current VDOT
         3. Compare current VDOT to peak VDOT from race history
-
-    Note: Requires quality workouts with tempo/interval keywords in titles.
-    If no quality workouts found, run a tempo workout first.
     """
     # Call API
     result = estimate_current_vdot(lookback_days=lookback_days)
