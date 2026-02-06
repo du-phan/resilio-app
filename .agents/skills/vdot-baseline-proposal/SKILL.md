@@ -43,7 +43,6 @@ One-line definitions for other metrics:
 
 ```bash
 sce profile get
-sce race list
 sce status
 sce vdot estimate-current --lookback-days 90  # Longer lookback for continuity analysis
 sce activity list --since 30d --sport run
@@ -66,7 +65,7 @@ Strategy (automatic via `vdot estimate-current`):
   - Uses Daniels' Table 9.2 decay methodology
 - **No race**: Use pace analysis (quality workouts → HR-detected easy runs)
 - **Insufficient data**: Return error asking athlete to establish baseline via:
-  - Adding a race result (`sce race add`)
+  - Adding a PB (`sce profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD`)
   - Running quality workouts (tempo, threshold, interval)
   - Running easy runs consistently (requires max_hr in profile)
 

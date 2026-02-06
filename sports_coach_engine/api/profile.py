@@ -28,6 +28,7 @@ from sports_coach_engine.schemas.profile import (
     DetailLevel,
     CoachingStyle,
     IntensityMetric,
+    PBEntry,
 )
 from sports_coach_engine.schemas.activity import NormalizedActivity
 
@@ -335,6 +336,117 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
             message=f"Failed to save profile: {str(write_result)}",
         )
     return profile
+
+
+def set_personal_best(
+    distance: str,
+    time: str,
+    date_str: Optional[str] = None,
+    **kwargs,
+) -> Union[Dict, ProfileError]:
+    """Set a personal best for a distance on the athlete profile.
+
+    Calculates VDOT automatically and updates peak_vdot if applicable.
+
+    Args:
+        distance: Race distance ("5k", "10k", "half_marathon", "marathon", "mile", "15k")
+        time: PB time ("MM:SS" or "HH:MM:SS")
+        date_str: PB date (ISO format "YYYY-MM-DD"). If None, uses "date" from kwargs.
+
+    Returns:
+        Dict with PB info on success, ProfileError on failure.
+    """
+    from sports_coach_engine.api.vdot import calculate_vdot_from_race, VDOTError
+
+    # Handle the 'date' parameter being passed as kwarg (from CLI)
+    pb_date = date_str or kwargs.get("date", "")
+    if not pb_date:
+        return ProfileError(error_type="validation", message="Date is required")
+
+    # Validate distance
+    from sports_coach_engine.schemas.vdot import RaceDistance
+    valid_distances = [d.value for d in RaceDistance]
+    if distance.lower() not in valid_distances:
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid distance '{distance}'. Valid: {', '.join(valid_distances)}",
+        )
+
+    # Validate date
+    try:
+        date.fromisoformat(pb_date)
+    except ValueError:
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid date format '{pb_date}'. Use ISO format YYYY-MM-DD",
+        )
+
+    # Calculate VDOT
+    vdot_result = calculate_vdot_from_race(distance, time)
+    if isinstance(vdot_result, VDOTError):
+        return ProfileError(
+            error_type="validation",
+            message=f"Failed to calculate VDOT: {vdot_result.message}",
+        )
+
+    vdot_value = float(vdot_result.vdot)
+
+    # Load profile
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+    profile = repo.read_yaml(profile_path, AthleteProfile, ReadOptions(should_validate=True))
+
+    if isinstance(profile, RepoError):
+        return ProfileError(
+            error_type="not_found",
+            message=f"Failed to load profile: {str(profile)}",
+        )
+
+    # Check if this replaces an existing PB
+    dist_key = distance.lower()
+    existing = profile.personal_bests.get(dist_key)
+    is_new = existing is None
+
+    # Only replace if the new time is faster (higher VDOT)
+    if existing and existing.vdot > vdot_value:
+        return ProfileError(
+            error_type="validation",
+            message=f"Existing {dist_key} PB ({existing.time}, VDOT {existing.vdot:.1f}) is faster than {time} (VDOT {vdot_value:.1f}). Use a faster time to update your PB.",
+        )
+
+    # Set the PB
+    profile.personal_bests[dist_key] = PBEntry(
+        time=time,
+        date=pb_date,
+        vdot=vdot_value,
+    )
+
+    # Update peak VDOT
+    if profile.personal_bests:
+        best_pb = max(profile.personal_bests.values(), key=lambda pb: pb.vdot)
+        profile.peak_vdot = best_pb.vdot
+        profile.peak_vdot_date = best_pb.date
+    else:
+        profile.peak_vdot = None
+        profile.peak_vdot_date = None
+
+    # Save
+    write_result = repo.write_yaml(profile_path, profile)
+    if isinstance(write_result, RepoError):
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to save profile: {str(write_result)}",
+        )
+
+    return {
+        "distance": dist_key,
+        "time": time,
+        "date": pb_date,
+        "vdot": vdot_value,
+        "is_new": is_new,
+        "peak_vdot": profile.peak_vdot,
+        "peak_vdot_date": profile.peak_vdot_date,
+    }
 
 
 def set_goal(
@@ -941,7 +1053,7 @@ def add_sport_to_profile(
             error_type="unknown",
             message=f"Failed to save profile: {write_result.message}",
         )
-        return profile
+    return profile
 
 
 def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]:

@@ -329,10 +329,10 @@ def vdot_estimate_current_command(
         - MEDIUM: Race with continuity decay or pace validation
         - LOW: Single workout, long break, or easy pace only
 
-    Use this to compare current fitness against race history:
-        1. sce race list  # View historical PBs
+    Use this to compare current fitness against PBs:
+        1. sce profile get  # View PBs section
         2. sce vdot estimate-current  # Estimate current VDOT
-        3. Compare current VDOT to peak VDOT from race history
+        3. Compare current VDOT to peak VDOT from personal bests
     """
     # Call API
     result = estimate_current_vdot(lookback_days=lookback_days)

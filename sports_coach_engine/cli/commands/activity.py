@@ -366,6 +366,109 @@ def activity_search_command(
     raise typer.Exit(code=0)
 
 
+def activity_export_command(
+    ctx: typer.Context,
+    since: str = typer.Option(
+        "28d",
+        "--since",
+        help="Time period (e.g., '28d' for 28 days, or 'YYYY-MM-DD')",
+    ),
+    out: str = typer.Option(
+        "/tmp/activities_export.json",
+        "--out",
+        help="Output JSON file path",
+    ),
+    sport: Optional[str] = typer.Option(
+        None,
+        "--sport",
+        help="Filter by sport type (e.g., 'run', 'climb', 'cycle')",
+    ),
+) -> None:
+    """Export activities as JSON for use with analysis commands.
+
+    Creates a JSON file that can be passed to sce analysis commands
+    (intensity, load, gaps, capacity, risk-assess).
+
+    Examples:
+        sce activity export --since 28d --out /tmp/activities.json
+        sce activity export --since 7d --out /tmp/week_activities.json --sport run
+        sce analysis intensity --activities /tmp/activities.json --days 28
+    """
+    import json as json_module
+
+    try:
+        # Parse since parameter
+        try:
+            start_date = _parse_since(since)
+        except ValueError as e:
+            envelope = create_error_envelope(
+                error_type="validation",
+                message=str(e),
+            )
+            output_json(envelope)
+            raise typer.Exit(code=5)
+
+        end_date = date.today()
+
+        # Load activities from YAML files
+        repo = RepositoryIO()
+        activity_files = repo.list_files("data/activities/**/*.yaml")
+
+        exported = []
+        for file_path in activity_files:
+            result = repo.read_yaml(file_path, NormalizedActivity)
+            if isinstance(result, NormalizedActivity):
+                activity = result
+
+                # Filter by date range
+                if not (start_date <= activity.date <= end_date):
+                    continue
+
+                # Filter by sport
+                if sport and activity.sport_type != sport:
+                    continue
+
+                # Serialize to dict using Pydantic
+                exported.append(activity.model_dump(mode="json"))
+
+        # Sort by date
+        exported.sort(key=lambda x: x.get("date", ""), reverse=True)
+
+        # Write JSON file
+        with open(out, "w") as f:
+            json_module.dump(exported, f, indent=2, default=str)
+
+        # Build response
+        envelope = create_success_envelope(
+            message=f"Exported {len(exported)} activities to {out}",
+            data={
+                "count": len(exported),
+                "output_file": out,
+                "date_range": {
+                    "start": start_date.isoformat(),
+                    "end": end_date.isoformat(),
+                },
+                "filters": {
+                    "sport": sport,
+                },
+            },
+        )
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        envelope = create_error_envelope(
+            error_type="unknown",
+            message=f"Failed to export activities: {str(e)}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=1)
+
+    output_json(envelope)
+    raise typer.Exit(code=0)
+
+
 # Register commands
 app.command(name="list", help="List activities in a date range")(activity_list_command)
 app.command(name="search", help="Search activities by text content")(activity_search_command)
+app.command(name="export", help="Export activities as JSON for analysis commands")(activity_export_command)

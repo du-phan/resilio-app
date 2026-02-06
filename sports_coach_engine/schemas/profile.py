@@ -9,7 +9,6 @@ from enum import Enum
 import warnings
 
 from sports_coach_engine.schemas.adaptation import AdaptationThresholds
-from sports_coach_engine.schemas.vdot import RaceSource
 
 
 # ============================================================
@@ -145,17 +144,12 @@ class StravaConnection(BaseModel):
     athlete_id: str
 
 
-class RacePerformance(BaseModel):
-    """Single race performance with full metadata for PB tracking."""
+class PBEntry(BaseModel):
+    """Personal best for a single distance."""
 
-    distance: str  # "5k", "10k", "half_marathon", "marathon"
-    time: str  # HH:MM:SS format
+    time: str  # HH:MM:SS or MM:SS format
     date: str  # ISO date string (YYYY-MM-DD)
-    location: Optional[str] = None  # Race name or location
-    source: RaceSource  # official_race, gps_watch, estimated
-    vdot: float = Field(ge=30.0, le=85.0, description="Pre-calculated VDOT for this performance")
-    notes: Optional[str] = None  # Conditions, how it felt, etc.
-    is_pb: bool = False  # Marked as PB for this distance
+    vdot: float = Field(ge=30.0, le=85.0, description="Pre-calculated VDOT for this PB")
 
 
 class AthleteProfile(BaseModel):
@@ -184,16 +178,16 @@ class AthleteProfile(BaseModel):
         description="Jack Daniels VDOT (calculated from recent_race or estimated)"
     )
 
-    # Race History & Peak Performance Tracking
-    race_history: List[RacePerformance] = Field(
-        default_factory=list,
-        description="Complete race performance history with PB tracking"
+    # Personal Bests & Peak Performance Tracking
+    personal_bests: dict[str, PBEntry] = Field(
+        default_factory=dict,
+        description="Personal bests by distance (e.g., '10k' -> PBEntry)"
     )
     peak_vdot: Optional[float] = Field(
         default=None,
         ge=30.0,
         le=85.0,
-        description="Highest VDOT achieved (from race_history)"
+        description="Highest VDOT achieved (from personal_bests)"
     )
     peak_vdot_date: Optional[str] = Field(
         default=None,

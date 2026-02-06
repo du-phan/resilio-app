@@ -17,19 +17,7 @@ This skill guides complete athlete onboarding from authentication to goal settin
 
 **Why historical data matters**: ask "I see you average 35km/week over the last X weeks/months - should we maintain this?" instead of "How much do you run?" (no context).
 
-**Metric explainer rule (athlete-facing)**:
-On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
-
-Use this exact VDOT explainer on first mention:
-"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
-
-One-line definitions for other metrics:
-- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
-- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
-- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
-- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
-- RPE: "RPE is your perceived effort from 1–10."
+**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Do not repeat unless the athlete asks.
 
 ---
 
@@ -169,7 +157,7 @@ sce profile analyze       # Profile suggestions from synced data
 
 ### Step 4: Profile Setup (Natural Conversation)
 
-**Use natural conversation for text/number inputs. Use AskUserQuestion ONLY for conflict policy.**
+**Use natural conversation for text/number inputs. Use AskUserQuestion for decisions with distinct trade-offs (conflict policy, goal feasibility).**
 
 **For complete field-by-field guidance**: See [references/profile_setup_workflow.md](references/profile_setup_workflow.md)
 
@@ -186,7 +174,7 @@ sce profile analyze       # Profile suggestions from synced data
 
 - Options: `"running"` (PRIMARY), `"equal"` (EQUAL), other sport name (SECONDARY)
 
-**Step 4d - Conflict Policy**: Use AskUserQuestion (ONLY use here - trade-offs exist)
+**Step 4d - Conflict Policy**: Use AskUserQuestion (trade-offs with distinct options)
 
 - Options: Ask each time | Primary sport wins | Running goal wins
 
@@ -196,13 +184,12 @@ sce profile analyze       # Profile suggestions from synced data
 sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
 ```
 
-**Step 4.5 - Personal Bests (Race History)**:
+**Step 4.5 - Personal Bests**:
 
-- CRITICAL: Manual entry FIRST (Sync defaults to 365 days, but old PBs may still be missing)
 - Ask directly: "What are your PBs for 5K, 10K, half, marathon?"
-- Enter each: `sce race add --distance 10k --time 42:30 --date 2023-06-15 --source official_race`
-- Auto-import supplement: `sce race import-from-strava --since 120d`
-- Verify: `sce race list`
+- Enter each: `sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15`
+- After sync, cross-check standout activities conversationally: "I see a strong 43:15 10K on Dec 15 — was that a race?" If yes, update PB if faster.
+- Verify: `sce profile get` (PBs section)
 
 **Step 4f - Other Sports Collection**:
 
@@ -247,76 +234,11 @@ sce goal set --type half_marathon --date 2026-06-01
 
 **CRITICAL: Always validate goal against current fitness before committing to plan.**
 
-#### Get Performance Baseline
+Run `sce performance baseline` and `sce goal set` (which includes automatic feasibility validation). Respond based on the verdict (VERY_REALISTIC → UNREALISTIC).
 
-```bash
-sce performance baseline
-```
+**For complete verdict handling, coaching responses, and edge cases**: See [references/goal_validation.md](references/goal_validation.md)
 
-**Present context to athlete**:
-
-- Current VDOT estimate: XX (from recent workouts)
-- Peak VDOT: YY (from ZZ race on [date])
-- Goal requires VDOT: ZZ
-- Gap: +/- N VDOT points
-
-#### Set Goal (Automatic Validation)
-
-The `sce goal set` command automatically validates feasibility:
-
-```bash
-sce goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
-# Automatically returns: goal saved + feasibility verdict + recommendations
-```
-
-**Output includes**:
-
-- Feasibility verdict: VERY_REALISTIC / REALISTIC / AMBITIOUS_BUT_REALISTIC / AMBITIOUS / UNREALISTIC
-- VDOT gap (current vs. required)
-- Weeks available for training
-- Recommendations for achieving goal
-
-#### Coaching Response Based on Verdict
-
-**VERY_REALISTIC / REALISTIC:**
-
-- Build confidence: "Your goal is well within reach based on your current fitness (VDOT 48) and training history."
-- Set expectations: "We'll design a plan that maintains fitness and sharpens your speed."
-
-**AMBITIOUS_BUT_REALISTIC:**
-
-- Acknowledge challenge: "This is a stretch goal requiring VDOT improvement from 48 → 52 (+8.3%) over 20 weeks."
-- Build commitment: "It's achievable with strong adherence. Are you ready to commit to 4 quality runs/week?"
-
-**AMBITIOUS:**
-
-- Use AskUserQuestion to present options:
-  - **Option 1**: Keep ambitious goal, design aggressive plan, acknowledge 40-50% success probability
-  - **Option 2**: Adjust goal to realistic range (suggest alternative: 1:35:00 = VDOT 49)
-  - **Option 3**: Target a later race (suggest +8 weeks for better preparation)
-
-**UNREALISTIC:**
-
-- Present reality: "Your goal requires VDOT 52, but current fitness is VDOT 45. That's a 15.6% improvement in 12 weeks."
-- Show math: "Typical VDOT gains are 1.5 points/month. You'd need 7 points in 3 months = 2.3 points/month (50% faster than typical)."
-- Recommend alternatives:
-  - Alternative time: "Based on current fitness, 1:38:00 is realistic (VDOT 48)"
-  - Alternative timeline: "For your 1:30:00 goal, I recommend targeting a race 5 months out"
-
-**Decision point**: Wait for athlete confirmation before proceeding to Step 6 (Constraints Discussion).
-
-#### Edge Case: No Current VDOT Estimate
-
-If `sce performance baseline` returns no VDOT estimate (no recent quality workouts):
-
-```
-Coach: "I don't have enough recent quality workout data to estimate your current fitness.
-Your goal is half marathon 1:30:00 (VDOT 52 required).
-
-Let's take a conservative approach initially and reassess after your first tempo run gives us a VDOT estimate."
-```
-
-**Proceed with goal set**, but flag that validation will improve after first quality workout.
+**Decision point**: Wait for athlete confirmation before proceeding to Step 6.
 
 ---
 
@@ -392,11 +314,9 @@ Would you like me to create a personalized plan now?"
 
 **Adjustments**: Ask directly "How much have you been running weekly?" (no data to reference)
 
-### Q: Athlete refuses Strava auth
+### Q: Athlete doesn't have a Strava account
 
-**Response**: "No problem - you can still use the system, but I won't have historical context. CTL starts at 0, you'll manually log via `sce log`. We can still create a great plan."
-
-**Proceed**: Rely on stated values instead of synced data
+**Response**: Strava authentication is required. Guide the athlete to create a free account at strava.com before proceeding. They'll need to record at least a few activities before we can provide data-driven coaching.
 
 ### Q: Multiple sports with complex schedule
 
@@ -423,7 +343,7 @@ Would you like me to create a personalized plan now?"
 ❌ **Bad**: AskUserQuestion for "What's your name?"
 ✅ **Good**: Natural conversation for all text/number inputs
 
-**AskUserQuestion ONLY for conflict policy**
+**AskUserQuestion for decisions with distinct trade-offs (conflict policy, goal feasibility)**
 
 ### 3. Skipping auth check
 
@@ -451,12 +371,12 @@ Would you like me to create a personalized plan now?"
 
 **Use activity gaps as conversation starters**
 
-### 7. Only relying on Strava auto-import for PBs
+### 7. Not asking for PBs directly
 
-❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
-✅ **Good**: Ask directly for PBs first, then auto-import as supplement
+❌ **Bad**: Only looking at synced data for PBs (misses pre-Strava performances)
+✅ **Good**: Ask directly for PBs first, then cross-check synced data conversationally
 
-**Manual entry is primary** - Automatic sync targets 365 days, but doesn't replace historical context for old PBs.
+**Ask first, verify second** - Most runners know their PBs. Sync data is supplementary, not primary.
 
 ---
 
@@ -469,7 +389,7 @@ Would you like me to create a personalized plan now?"
 3. ✅ Profile created (name, age, max HR, conflict policy)
    3.5. ✅ Running experience collected (years, or marked as unknown)
 4. ✅ Injury history recorded in memory system (if applicable)
-5. ✅ Race history captured (PBs added via `sce race add`, auto-import run)
+5. ✅ Personal bests captured (PBs added via `sce profile set-pb`)
 6. ✅ Goal set (race type, date)
 7. ✅ Constraints discussed (run days, duration, other sports)
 8. ✅ Other sports data collected (all sports >15% from sce profile analyze)
@@ -479,7 +399,7 @@ Would you like me to create a personalized plan now?"
 **Quality checks**:
 
 - All data referenced from `sce profile analyze`
-- AskUserQuestion used ONLY for conflict policy
+- AskUserQuestion used for decisions with distinct trade-offs (conflict policy, goal feasibility)
 - Natural conversation for text/number inputs
 - Injury history in memory system with proper tags
 - Multi-sport athletes have other_sports populated based on actual Strava data

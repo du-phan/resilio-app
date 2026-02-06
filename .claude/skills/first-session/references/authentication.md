@@ -89,21 +89,9 @@ sce auth status
 
 ## Troubleshooting
 
-### Q: Athlete doesn't want to provide Strava access
+### Q: Athlete doesn't have a Strava account
 
-**Response**:
-```
-No problem - you can still use the system, but I won't have access to historical activity data.
-
-This means:
-- Your CTL will start at 0
-- I won't see your climbing/cycling activities automatically
-- You'll need to manually log activities via `sce log` command
-
-We can still create a great plan - I just won't have the historical context.
-```
-
-**Proceed with profile setup**, relying on stated values instead of synced data.
+**Response**: Strava authentication is required for data-driven coaching. Guide the athlete to create a free account at strava.com and record a few activities before proceeding. Without Strava data, the system cannot calculate CTL, detect patterns, or provide personalized coaching.
 
 ### Q: Authorization code expired
 

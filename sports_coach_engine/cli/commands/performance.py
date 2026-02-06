@@ -43,7 +43,7 @@ def performance_baseline_command(
     Output includes:
         - Current fitness: VDOT estimate, CTL, confidence level
         - Peak performance: Historical peak VDOT, date, regression analysis
-        - Race history: Personal bests with VDOT calculations
+        - Personal bests: Personal bests with VDOT calculations
         - Training patterns: Typical workout distances and paces
         - Equivalent race times: Predicted times at current VDOT
         - Interpretation: Summary of fitness status

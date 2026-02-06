@@ -23,6 +23,7 @@ If missing, return a blocking checklist and stop.
 - Non-interactive: do not ask the athlete questions or call approval commands.
 - Apply only when approvals state matches the provided file.
 - If the athlete requests changes, the main agent must re-run weekly-plan-generate and record a new approval before applying.
+- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
 ## Workflow
 

@@ -25,29 +25,16 @@ If missing, return a blocking checklist and stop.
 - Return an `athlete_prompt` for the main agent to ask and capture approval.
 - If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new proposal.
 - If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
+- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
-## Metric explainer rule (athlete-facing)
-
-If the athlete_prompt mentions any metrics, add a first-mention explainer. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling).
-
-Use this exact VDOT explainer on first mention:
-"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
-
-One-line definitions for other metrics:
-- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
-- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
-- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
-- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
-- RPE: "RPE is your perceived effort from 1–10."
+**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Include them in athlete_prompt if metrics are mentioned.
 
 ## Workflow
 
 1. Gather evidence:
 
 ```bash
-sce profile get
-sce race list
+sce profile get          # Includes personal_bests section
 sce status
 sce vdot estimate-current --lookback-days 90  # Longer lookback for continuity analysis
 sce activity list --since 30d --sport run
@@ -70,7 +57,7 @@ Strategy (automatic via `vdot estimate-current`):
   - Uses Daniels' Table 9.2 decay methodology
 - **No race**: Use pace analysis (quality workouts → HR-detected easy runs)
 - **Insufficient data**: Return error asking athlete to establish baseline via:
-  - Adding a race result (`sce race add`)
+  - Adding a PB (`sce profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD`)
   - Running quality workouts (tempo, threshold, interval)
   - Running easy runs consistently (requires max_hr in profile)
 

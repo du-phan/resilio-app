@@ -666,6 +666,66 @@ def profile_validate_command(ctx: typer.Context) -> None:
     raise typer.Exit(code=0)  # Warning, not error
 
 
+@app.command(name="set-pb")
+def profile_set_pb_command(
+    ctx: typer.Context,
+    distance: str = typer.Option(
+        ...,
+        "--distance",
+        help="Race distance: 5k, 10k, half_marathon, marathon, mile, 15k"
+    ),
+    time: str = typer.Option(
+        ...,
+        "--time",
+        help="PB time in MM:SS or HH:MM:SS format (e.g., '42:30' or '1:30:00')"
+    ),
+    date: str = typer.Option(
+        ...,
+        "--date",
+        help="PB date in YYYY-MM-DD format"
+    ),
+) -> None:
+    """Set a personal best for a distance on your profile.
+
+    Automatically calculates VDOT and updates peak VDOT if applicable.
+    Replaces any existing PB for the same distance (keeps only the best).
+
+    Examples:
+        sce profile set-pb --distance 10k --time 42:30 --date 2024-06-15
+        sce profile set-pb --distance 5k --time 18:45 --date 2023-05-10
+        sce profile set-pb --distance half_marathon --time 1:30:00 --date 2023-09-15
+    """
+    from sports_coach_engine.api.profile import set_personal_best, ProfileError
+
+    result = set_personal_best(
+        distance=distance,
+        time=time,
+        date=date,
+    )
+
+    if isinstance(result, ProfileError):
+        envelope = create_error_envelope(
+            error_type=result.error_type,
+            message=result.message,
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    # Build success message
+    vdot = result.get("vdot", 0)
+    is_new = result.get("is_new", True)
+    action = "Set" if is_new else "Updated"
+    msg = f"{action} {distance.upper()} PB: {time} on {date} (VDOT {vdot:.1f})"
+
+    envelope = OutputEnvelope(
+        ok=True,
+        message=msg,
+        data=result,
+    )
+    output_json(envelope)
+    raise typer.Exit(code=0)
+
+
 @app.command(name="edit")
 def profile_edit_command(ctx: typer.Context) -> None:
     """Open profile YAML in $EDITOR for direct editing.

@@ -48,8 +48,8 @@ class PerformanceBaseline:
     # Peak performance (from profile)
     peak_performance: Dict[str, Any]  # {peak_vdot, peak_vdot_date, months_since_peak, regression_vdot, regression_percentage}
 
-    # Race history (personal bests)
-    race_history: Dict[str, Any]  # {personal_bests: [...], total_races}
+    # Personal bests
+    personal_bests: Dict[str, Any]  # {personal_bests: [...], total_pbs}
 
     # Training patterns (from profile analysis)
     training_patterns: Optional[Dict[str, Any]]  # {typical_easy_pace, typical_easy_distance, typical_long_run_distance, weekly_volume_recent_4wk}
@@ -126,7 +126,7 @@ def api_get_performance_baseline(
 
     peak_vdot: Optional[int] = None
     peak_vdot_date: Optional[str] = None
-    race_history_data: list = []
+    pb_data: list = []
 
     typical_easy_pace: Optional[str] = None
     typical_easy_distance: Optional[float] = None
@@ -137,24 +137,14 @@ def api_get_performance_baseline(
         peak_vdot = profile_result.peak_vdot
         peak_vdot_date = profile_result.peak_vdot_date
 
-        # Extract race history
-        if profile_result.race_history:
-            for race in profile_result.race_history:
-                race_vdot_result = calculate_vdot_from_race(
-                    race_distance=race.distance,
-                    race_time=race.time,
-                    race_date=race.date,
-                )
-
-                race_vdot = None
-                if not isinstance(race_vdot_result, VDOTError):
-                    race_vdot = race_vdot_result.vdot
-
-                race_history_data.append({
-                    "distance": race.distance,
-                    "time": race.time,
-                    "vdot": race_vdot,
-                    "date": race.date,
+        # Extract personal bests
+        if profile_result.personal_bests:
+            for distance, pb in profile_result.personal_bests.items():
+                pb_data.append({
+                    "distance": distance,
+                    "time": pb.time,
+                    "vdot": pb.vdot,
+                    "date": pb.date,
                 })
 
         # Extract training patterns
@@ -226,9 +216,9 @@ def api_get_performance_baseline(
         "regression_percentage": regression_percentage,
     }
 
-    race_history_result = {
-        "personal_bests": race_history_data,
-        "total_races": len(race_history_data),
+    personal_bests_data = {
+        "personal_bests": pb_data,
+        "total_pbs": len(pb_data),
     }
 
     training_patterns_data = None
@@ -241,7 +231,7 @@ def api_get_performance_baseline(
     baseline = PerformanceBaseline(
         current_fitness=current_fitness_data,
         peak_performance=peak_performance_data,
-        race_history=race_history_result,
+        personal_bests=personal_bests_data,
         training_patterns=training_patterns_data,
         equivalent_race_times_current_vdot=equivalent_times,
         interpretation=interpretation,

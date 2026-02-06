@@ -187,7 +187,7 @@ $ python -m pytest tests/unit/test_vdot_continuity.py tests/unit/test_vdot_pace_
 ```
 VDOT: 34 (10% time decay from 38)
 Confidence: LOW
-Source: "race_history (10k @ 49:30, 11 months ago)"
+Source: "personal_bests (10k @ 49:30, 11 months ago)"
 Easy pace: 7:12-7:44 min/km
 Problem: Slower than actual training (6:00-6:30)
 ```
@@ -241,7 +241,7 @@ Validation: Pace data suggests maintained fitness
 **Error Message**:
 ```
 Insufficient data for VDOT estimation. To establish your baseline:
-1. Add a race result: 'sce race add --distance 10k --time MM:SS'
+1. Add a PB: 'sce profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD'
 2. OR run quality workouts with keywords (tempo, threshold, interval)
 3. OR run easy runs consistently (requires max HR in profile)
 

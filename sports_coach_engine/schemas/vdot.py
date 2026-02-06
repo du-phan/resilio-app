@@ -48,12 +48,6 @@ class ConfidenceLevel(str, Enum):
     LOW = "low"          # Single workout, long break, or easy pace only
 
 
-class RaceSource(str, Enum):
-    """Source/quality of race timing measurement."""
-    OFFICIAL_RACE = "official_race"    # Chip-timed race (highest accuracy)
-    GPS_WATCH = "gps_watch"            # GPS-verified effort (good accuracy)
-    ESTIMATED = "estimated"            # Calculated/estimated (lower accuracy)
-
 
 # ============================================================
 # CORE VDOT MODELS

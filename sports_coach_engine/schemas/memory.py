@@ -30,7 +30,7 @@ class MemoryType(str, Enum):
     CONTEXT = "context"                      # Life context, background
     INSIGHT = "insight"                      # Observed patterns
     TRAINING_RESPONSE = "training_response"  # How athlete responds to stimuli
-    RACE_HISTORY = "race_history"            # Race performances and PBs
+    PERSONAL_BEST = "personal_best"          # Personal bests and race context
 
 
 class MemoryConfidence(str, Enum):

@@ -26,6 +26,7 @@ If missing, return a blocking checklist and stop.
 - Return an `athlete_prompt` for the main agent to ask and capture approval.
 - If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new week JSON (do not edit the prior file in place).
 - If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
+- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
 ## Philosophy
 
@@ -39,19 +40,7 @@ You are the weekly planning specialist. Use your AI coaching judgment to design 
 CLI tools provide computational support (metrics, guardrails, pace calculations).
 You provide qualitative coaching decisions (exact distances, workout types, pacing).
 
-**Metric explainer rule (athlete-facing)**:
-On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
-
-Use this exact VDOT explainer on first mention:
-"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
-
-One-line definitions for other metrics:
-- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
-- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
-- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
-- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
-- RPE: "RPE is your perceived effort from 1–10."
+**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Do not repeat unless the athlete asks.
 
 ## Workflow
 
@@ -85,10 +74,14 @@ sce profile get  # Load athlete profile including other_sports
 - What other sports they do (climbing, cycling, surfing, etc.)
 - Expected frequency/volume for each sport
 - Running priority (PRIMARY/EQUAL/SECONDARY)
-- Use this to avoid scheduling conflicts (e.g., no quality runs on climbing days)
+- **Specific day constraints**: Extract the `days` field for each sport (e.g., climbing on tue,thu). Mark these days as BLOCKED for quality running sessions. Only schedule easy/recovery runs on other-sport days, or rest entirely.
 
-If you already have an activities JSON file for the last 28 days, you may run:
-`sce analysis intensity --activities <FILE> --days 28`
+Optionally export and analyze recent intensity distribution:
+
+```bash
+sce activity export --since 28d --out /tmp/activities_28d.json
+sce analysis intensity --activities /tmp/activities_28d.json --days 28
+```
 
 3. Analyze progression safety:
 
@@ -104,7 +97,7 @@ sce guardrails analyze-progression \
 4. Calculate VDOT-based paces:
 
 ```bash
-sce vdot calculate-paces --vdot <VDOT>
+sce vdot paces --vdot <VDOT>
 ```
 
 Use these paces to set pace_range for each workout type (easy, tempo, intervals).

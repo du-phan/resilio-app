@@ -100,7 +100,7 @@ sce guardrails analyze-progression \
 4. Calculate VDOT-based paces:
 
 ```bash
-sce vdot calculate-paces --vdot <VDOT>
+sce vdot paces --vdot <VDOT>
 ```
 
 Use these paces to set pace_range for each workout type (easy, tempo, intervals).

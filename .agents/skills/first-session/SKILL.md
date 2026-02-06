@@ -199,9 +199,8 @@ sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_t
 
 - CRITICAL: Manual entry FIRST (Sync defaults to 365 days, but old PBs may still be missing)
 - Ask directly: "What are your PBs for 5K, 10K, half, marathon?"
-- Enter each: `sce race add --distance 10k --time 42:30 --date 2023-06-15 --source official_race`
-- Auto-import supplement: `sce race import-from-strava --since 120d`
-- Verify: `sce race list`
+- Enter each: `sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15`
+- Verify: `sce profile get` (check `personal_bests` section)
 
 **Step 4f - Other Sports Collection**:
 
@@ -455,8 +454,8 @@ Would you like me to create a personalized plan now?"
 
 ### 7. Only relying on Strava auto-import for PBs
 
-❌ **Bad**: Only running `sce race import-from-strava` (misses old PBs)
-✅ **Good**: Ask directly for PBs first, then auto-import as supplement
+❌ **Bad**: Skipping PB collection (misses old PBs outside sync window)
+✅ **Good**: Ask directly for PBs first, enter via `sce profile set-pb`
 
 **Manual entry is primary** - Automatic sync targets 365 days, but doesn't replace historical context for old PBs.
 
@@ -471,7 +470,7 @@ Would you like me to create a personalized plan now?"
 3. ✅ Profile created (name, age, max HR, conflict policy)
    3.5. ✅ Running experience collected (years, or marked as unknown)
 4. ✅ Injury history recorded in memory system (if applicable)
-5. ✅ Race history captured (PBs added via `sce race add`, auto-import run)
+5. ✅ Personal bests captured (PBs added via `sce profile set-pb`)
 6. ✅ Goal set (race type, date)
 7. ✅ Constraints discussed (run days, duration, other sports)
 8. ✅ Other sports data collected (all sports >15% from sce profile analyze)

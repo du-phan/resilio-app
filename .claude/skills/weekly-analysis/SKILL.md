@@ -1,7 +1,7 @@
 ---
 name: weekly-analysis
 description: Comprehensive weekly training review including completion checks, intensity distribution validation (80/20), multi-sport load breakdown, and pattern detection. Use when athlete asks "how was my week?", "weekly review", "analyze training", or "did I follow the plan?".
-allowed-tools: Bash, Read, Write
+allowed-tools: Bash, Read, Write, AskUserQuestion
 argument-hint: ""
 ---
 
@@ -22,19 +22,7 @@ This skill provides complete weekly training analysis by:
 
 **Conversational flow**: See CLAUDE.md "Conversational Pacing" for guidance on when to wait for athlete responses vs. batching questions.
 
-**Metric explainer rule (athlete-facing)**:
-On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
-
-Use this exact VDOT explainer on first mention:
-"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
-
-One-line definitions for other metrics:
-- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
-- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
-- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
-- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
-- RPE: "RPE is your perceived effort from 1–10."
+**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Do not repeat unless the athlete asks.
 
 ---
 
@@ -75,8 +63,16 @@ Use the `sce week` summary to compare planned vs completed workouts and volume.
 
 ### Step 3: Intensity Distribution Analysis
 
+First, export activities for analysis (if not already done):
+
 ```bash
-sce analysis intensity --activities [ACTIVITIES_FILE] --days 7
+sce activity export --since 7d --out /tmp/week_activities.json
+```
+
+Then analyze intensity distribution:
+
+```bash
+sce analysis intensity --activities /tmp/week_activities.json --days 7
 ```
 
 **Returns**:
@@ -88,16 +84,17 @@ sce analysis intensity --activities [ACTIVITIES_FILE] --days 7
 
 **Quick interpretation**:
 
-- ≥75% low intensity: Compliant ✅
-- 60-74% low intensity: Moderate-intensity rut ⚠️
-- <60% low intensity: Severe imbalance ❌
+- ≥80% low intensity: Compliant ✅ (80/20 target met)
+- 75-79% low intensity: Acceptable but watch the trend ⚠️ (close — tighten easy pace)
+- 60-74% low intensity: Moderate-intensity rut ❌ (gray zone problem — too hard to recover, not hard enough to adapt)
+- <60% low intensity: Severe imbalance ❌❌ (injury/overtraining risk)
 
 **For detailed 80/20 philosophy and violation handling**: See [references/intensity_guidelines.md](references/intensity_guidelines.md)
 
 ### Step 4: Multi-Sport Load Breakdown
 
 ```bash
-sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
+sce analysis load --activities /tmp/week_activities.json --days 7 --priority [PRIORITY]
 ```
 
 **Returns**:
@@ -241,13 +238,15 @@ Run the executor flow:
 2. Athlete approval (main agent)
 3. `weekly-plan-apply` → validates + persists approved week
 
-**Context to pass to weekly-plan-generate**:
+**Context to pass to weekly-plan-generate** (as notes argument):
 
 - Current week's completion rate
 - ACWR and readiness scores
 - Any illness/injury signals detected
 - 80/20 intensity distribution compliance
 - Notable patterns or concerns
+
+**Example notes format**: `completion=88%, acwr=1.1, readiness=52, pattern: easy_runs_too_fast, no_injury_signals, intensity=82/18_compliant`
 
 **If athlete says no** (wants to wait):
 

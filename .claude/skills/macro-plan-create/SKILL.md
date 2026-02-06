@@ -27,6 +27,7 @@ If missing, return a blocking checklist and stop.
 - Include an `athlete_prompt` for the main agent to ask and capture approval.
 - If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new plan + review doc.
 - If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
+- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
 ## Workflow
 
@@ -51,7 +52,12 @@ sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECEN
 sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 ```
 
-Fill the template (replace all nulls) with AI-coach decisions.
+Fill the template (replace all nulls) with AI-coach decisions:
+
+- **Starting volume**: Use `sce guardrails safe-volume` output as the baseline for week 1.
+- **Weekly progression**: 5-10% volume increase per non-recovery week, respecting guardrails.
+- **Recovery weeks**: Every 3rd-4th week at ~70% of the prior week's volume.
+- **Phase-specific patterns**: See `references/volume_progression_macro.md` for base/build/peak/taper guidance.
 
 **Example 1: Single-sport runner (4-week generic block)**
 

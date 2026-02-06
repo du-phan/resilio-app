@@ -1,5 +1,7 @@
 # API Layer Specification
 
+> **Implementation status**: Most functions described here are implemented and accessible via the `sce` CLI. Some functions (e.g., `get_todays_workout`, `explain_workout`, `regenerate_plan`, `accept_suggestion`, `decline_suggestion`) are **planned** — they exist as API-layer stubs but are not yet wired to CLI commands. The CLI (`sce` commands documented in `docs/coaching/cli/`) is the authoritative interface for v0.
+
 ## 1. Overview
 
 ### 1.1 Purpose

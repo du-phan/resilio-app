@@ -45,8 +45,8 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 - [**Guardrails**](cli_guardrails.md) - Volume limits, progression checks (`sce guardrails`)
 - [**Analysis**](cli_analysis.md) - Intensity, gaps, load distribution, capacity (`sce analysis`)
 
-### Race Management
-- [**Race Commands**](cli_race.md) - Add performances, list history, import from Strava (`sce race`)
+### Personal Bests
+- [**Profile Commands**](cli_profile.md) - Set PBs with `sce profile set-pb`
 
 ## Quick Lookup by Command
 
@@ -75,7 +75,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | `sce plan validate-structure` | Planning | [cli_planning.md](cli_planning.md#sce-plan-validate-structure) |
 | `sce plan export-structure` | Planning | [cli_planning.md](cli_planning.md#sce-plan-export-structure) |
 | `sce plan template-macro` | Planning | [cli_planning.md](cli_planning.md#sce-plan-template-macro) |
-| `sce race {add\|list\|import-from-strava}` | Race | [cli_race.md](cli_race.md) |
+| `sce profile set-pb --distance --time --date` | Profile | [cli_profile.md](cli_profile.md) |
 
 ## By Use Case
 
@@ -140,9 +140,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce vdot six-second`** | Apply six-second rule | [VDOT](cli_vdot.md#sce-vdot-six-second) |
 | **`sce vdot adjust`** | Adjust for conditions | [VDOT](cli_vdot.md#sce-vdot-adjust) |
 | **`sce vdot estimate-current`** | Estimate from workouts | [VDOT](cli_vdot.md#sce-vdot-estimate-current) |
-| **`sce race add`** | Add race performance | [Race](cli_race.md#sce-race-add) |
-| **`sce race list`** | List race history | [Race](cli_race.md#sce-race-list) |
-| **`sce race import-from-strava`** | Auto-detect races | [Race](cli_race.md#sce-race-import-from-strava) |
+| **`sce profile set-pb`** | Set personal best | [Profile](cli_profile.md#sce-profile-set-pb) |
 | **`sce guardrails quality-volume`** | Validate T/I/R volumes | [Guardrails](cli_guardrails.md#sce-guardrails-quality-volume) |
 | **`sce guardrails progression`** | Validate progression | [Guardrails](cli_guardrails.md#sce-guardrails-progression) |
 | **`sce guardrails analyze-progression`** | Analyze context | [Guardrails](cli_guardrails.md#sce-guardrails-analyze-progression) |
@@ -171,4 +169,4 @@ See [Core Concepts](core_concepts.md) for:
 
 ---
 
-**Navigation**: [Core Concepts](core_concepts.md) | [Auth](cli_auth.md) | [Data](cli_data.md) | [Metrics](cli_metrics.md) | [Dates](cli_dates.md) | [Profile](cli_profile.md) | [Planning](cli_planning.md) | [VDOT](cli_vdot.md) | [Activity](cli_activity.md) | [Memory](cli_memory.md) | [Analysis](cli_analysis.md) | [Risk](cli_risk.md) | [Guardrails](cli_guardrails.md) | [Race](cli_race.md)
+**Navigation**: [Core Concepts](core_concepts.md) | [Auth](cli_auth.md) | [Data](cli_data.md) | [Metrics](cli_metrics.md) | [Dates](cli_dates.md) | [Profile](cli_profile.md) | [Planning](cli_planning.md) | [VDOT](cli_vdot.md) | [Activity](cli_activity.md) | [Memory](cli_memory.md) | [Analysis](cli_analysis.md) | [Risk](cli_risk.md) | [Guardrails](cli_guardrails.md)

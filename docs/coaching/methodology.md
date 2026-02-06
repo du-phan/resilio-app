@@ -29,6 +29,8 @@ Comprehensive guide to the training principles, metrics, and methodologies used 
 | 50-70     | Advanced     | Advanced competitive athlete     | Peak training periods   |
 | > 70      | Elite        | Elite/professional level         | Elite training volumes  |
 
+> **v0 note**: CLAUDE.md uses tighter zones (<30/30-45/45-60/60-75/>75) calibrated for the v0 athlete population. Use CLAUDE.md zones for coaching decisions; the zones above are the full theoretical scale.
+
 **Use for**:
 
 - Assess overall fitness level
@@ -138,6 +140,8 @@ ACWR = acute_load / chronic_load
 | 50-70 | Moderate  | Normal training state       | Proceed as planned   |
 | 70-85 | Good      | Fresh, ready for work       | Quality sessions OK  |
 | > 85  | Excellent | Peak readiness              | Hard sessions, races |
+
+> **v0 note**: In v0, readiness is objective-only (no subjective inputs) and capped at 65. CLAUDE.md uses v0-calibrated zones (≤25/25-40/40-55/55-65/>65). Use CLAUDE.md zones for coaching decisions; the zones above are the full theoretical scale for when subjective inputs are added.
 
 **Use for**:
 

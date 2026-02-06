@@ -234,8 +234,8 @@ sce vdot adjust --pace 5:15 --condition hills --severity 5
 
 ## sce vdot estimate-current
 
-Estimate current VDOT from recent tempo and interval workouts. See full documentation in [Race Commands](cli_race.md#sce-vdot-estimate-current).
+Estimate current VDOT from recent tempo and interval workouts.
 
 ---
 
-**Navigation**: [Back to Index](index.md) | [Previous: Profile Commands](cli_profile.md) | [Next: Race Commands](cli_race.md)
+**Navigation**: [Back to Index](index.md) | [Previous: Profile Commands](cli_profile.md) | [Next: Guardrails Commands](cli_guardrails.md)

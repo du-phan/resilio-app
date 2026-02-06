@@ -393,31 +393,31 @@ def estimate_current_vdot(
         if profile.vital_signs and profile.vital_signs.max_hr:
             max_hr = profile.vital_signs.max_hr
 
-        # Step 1: Check for recent race (<90 days)
-        if profile.race_history:
-            races_with_dates = [
-                (race, race.date)
-                for race in profile.race_history
-                if race.vdot and race.date
+        # Step 1: Check for recent PB (<90 days)
+        if profile.personal_bests:
+            pbs_with_dates = [
+                (dist, pb)
+                for dist, pb in profile.personal_bests.items()
+                if pb.vdot and pb.date
             ]
 
-            if races_with_dates:
+            if pbs_with_dates:
                 # Sort by date descending (most recent first)
-                races_with_dates.sort(key=lambda x: x[1], reverse=True)
-                most_recent_race, race_date_str = races_with_dates[0]
-                race_date = dt_date.fromisoformat(race_date_str)
+                pbs_with_dates.sort(key=lambda x: x[1].date, reverse=True)
+                most_recent_dist, most_recent_pb = pbs_with_dates[0]
+                race_date = dt_date.fromisoformat(most_recent_pb.date)
                 days_since_race = (dt_date.today() - race_date).days
 
-                # Recent race path (<90 days)
+                # Recent PB path (<90 days)
                 if days_since_race < 90:
                     return VDOTEstimate(
-                        estimated_vdot=int(most_recent_race.vdot),
+                        estimated_vdot=int(most_recent_pb.vdot),
                         confidence=ConfidenceLevel.HIGH,
-                        source=f"recent_race ({most_recent_race.distance} @ {most_recent_race.time}, {days_since_race} days ago)",
+                        source=f"recent_pb ({most_recent_dist} @ {most_recent_pb.time}, {days_since_race} days ago)",
                         supporting_data=[]
                     )
 
-                # Step 2: Race >90 days - apply continuity-aware decay
+                # Step 2: PB >90 days - apply continuity-aware decay
                 # Detect training breaks
                 break_analysis = detect_training_breaks(
                     all_activities,
@@ -433,7 +433,7 @@ def estimate_current_vdot(
 
                 # Calculate decay
                 decay_result = calculate_vdot_decay(
-                    base_vdot=most_recent_race.vdot,
+                    base_vdot=most_recent_pb.vdot,
                     race_date=race_date,
                     break_analysis=break_analysis,
                     ctl_at_race=None,  # TODO: Implement historical CTL estimation
@@ -523,11 +523,11 @@ def estimate_current_vdot(
             error_type="not_found",
             message=(
                 "Insufficient data for VDOT estimation. To establish your baseline:\n\n"
-                "1. Add a race result: 'sce race add --distance 10k --time MM:SS'\n"
+                "1. Add a PB: 'sce profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD'\n"
                 "2. OR run quality workouts with keywords (tempo, threshold, interval)\n"
                 "3. OR run easy runs consistently (requires max HR in profile for detection)\n\n"
                 "Why no CTL-based estimate? CTL measures training volume, not pace capability.\n"
-                "We need actual pace data (races or workouts) to estimate your VDOT accurately."
+                "We need actual pace data (PBs or workouts) to estimate your VDOT accurately."
             )
         )
 

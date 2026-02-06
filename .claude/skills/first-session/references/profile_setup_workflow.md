@@ -242,53 +242,28 @@ Coach: "What are your personal bests for 5K, 10K, half marathon, and marathon?"
 Coach: "When did you run these? Were they official races or GPS efforts?"
 ```
 
-#### Step 2: Manual Entry for Each PB Mentioned
+#### Step 2: Enter Each PB
 
 ```bash
-sce race add --distance 10k --time 42:30 --date 2023-06-15 \
-  --source official_race --location "City 10K Championship"
-
-sce race add --distance 5k --time 18:45 --date 2022-05-10 \
-  --source gps_watch --notes "Parkrun effort"
+sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15
+sce profile set-pb --distance 5k --time 18:45 --date 2022-05-10
 ```
 
-**Race sources**:
-- `official_race`: Chip-timed race (highest accuracy)
-- `gps_watch`: GPS-verified effort (good accuracy)
-- `estimated`: Calculated/estimated (lower accuracy)
+#### Step 3: Cross-Check Synced Data
 
-#### Step 3: Auto-Import Recent Races
+After sync, review standout activities conversationally:
+```
+Coach: "I see a strong 43:15 10K on Dec 15 — was that a race?"
+```
+If athlete confirms and it's faster than existing PB, update:
+```bash
+sce profile set-pb --distance 10k --time 43:15 --date 2025-12-15
+```
 
-**After manual entry, supplement with auto-import**:
+#### Step 4: Verify PBs
 
 ```bash
-sce race import-from-strava --since 120d
-```
-
-**What this detects**:
-- Strava activities with `workout_type == 1` (race flag)
-- Keywords in title/description: "race", "5K", "10K", "HM", "PB", "PR"
-- Distance matching standard race distances (±5%)
-
-**Present detected races for confirmation**:
-```
-Coach: "Found 2 potential races in last 6 months (180 days):
-- Half Marathon 1:32:00 (Nov 2025) - not yet in race_history
-- 10K 43:00 (Dec 2025) - not yet in race_history
-
-Should I add these to your race history?"
-```
-
-**If athlete confirms**, add each race:
-```bash
-sce race add --distance half_marathon --time 1:32:00 --date 2025-11-15 \
-  --source gps_watch --location "State Half Marathon"
-```
-
-#### Step 4: Verify Race History
-
-```bash
-sce race list
+sce profile get   # Check personal_bests section
 ```
 
 **Review with athlete**:
@@ -301,7 +276,7 @@ Coach: "I have your 10K PB at 42:30 (Jun 2023, VDOT 48), 5K at 18:45 (May 2022, 
 **For long-term context**:
 
 ```bash
-sce memory add --type RACE_HISTORY \
+sce memory add --type PERSONAL_BEST \
   --content "10K PB: 42:30 (Jun 2023, City 10K, VDOT 48)" \
   --tags "distance:10k,vdot:48,year:2023,pb:true" \
   --confidence high
@@ -322,7 +297,7 @@ sce memory add --type RACE_HISTORY \
 
 **Response**: "No problem - we can estimate. What's your rough 5K or 10K time?"
 
-Use `--source estimated` and add note: `--notes "Athlete estimate, not official"`
+Enter the approximate time: `sce profile set-pb --distance 5k --time 25:00 --date 2023-01-01`
 
 #### Q: Athlete has no race history
 
