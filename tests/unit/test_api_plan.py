@@ -269,12 +269,12 @@ def test_build_macro_template_shape():
 # ============================================================
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_with_valid_template(mock_repo_cls, mock_persist):
+def test_create_macro_plan_with_valid_template(mock_repo_cls):
     """Test creating macro plan with valid template (single-sport, no systemic load)."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, 28.0, 30.0, 28.0]  # 4-week plan
     weekly_hints = [
@@ -305,12 +305,12 @@ def test_create_macro_plan_with_valid_template(mock_repo_cls, mock_persist):
     assert result.weeks[0].target_systemic_load_au == 0.0  # Default for single-sport
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_with_systemic_load_targets(mock_repo_cls, mock_persist):
+def test_create_macro_plan_with_systemic_load_targets(mock_repo_cls):
     """Test creating macro plan with systemic load targets (multi-sport)."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [40.0, 45.0, 50.0, 45.0]
     weekly_systemic = [95.0, 105.0, 110.0, 100.0]  # Multi-sport total load
@@ -342,12 +342,12 @@ def test_create_macro_plan_with_systemic_load_targets(mock_repo_cls, mock_persis
     assert result.weeks[2].target_systemic_load_au == 110.0
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_validates_volumes_positive(mock_repo_cls, mock_persist):
+def test_create_macro_plan_validates_volumes_positive(mock_repo_cls):
     """Test that negative or zero volumes are rejected."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, -10.0, 30.0]  # Invalid: negative volume
     weekly_hints = [
@@ -374,12 +374,12 @@ def test_create_macro_plan_validates_volumes_positive(mock_repo_cls, mock_persis
     assert "positive number" in result.message
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_derives_starting_peak_volumes(mock_repo_cls, mock_persist):
+def test_create_macro_plan_derives_starting_peak_volumes(mock_repo_cls):
     """Test that starting/peak volumes are derived from weekly_volumes_km."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [20.0, 25.0, 30.0, 35.0, 32.0]  # Peak is 35.0
     weekly_hints = [
@@ -407,12 +407,12 @@ def test_create_macro_plan_derives_starting_peak_volumes(mock_repo_cls, mock_per
     assert max(w.target_volume_km for w in result.weeks) == 35.0  # Peak
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_validates_structure_hints_schema(mock_repo_cls, mock_persist):
+def test_create_macro_plan_validates_structure_hints_schema(mock_repo_cls):
     """Test that invalid structure hints are rejected."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, 28.0, 30.0]
     weekly_hints = [
@@ -439,12 +439,12 @@ def test_create_macro_plan_validates_structure_hints_schema(mock_repo_cls, mock_
     assert "invalid" in result.message.lower()
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_rejects_length_mismatch(mock_repo_cls, mock_persist):
+def test_create_macro_plan_rejects_length_mismatch(mock_repo_cls):
     """Test that volume/hint length mismatches are rejected."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, 28.0, 30.0]  # 3 weeks
     weekly_hints = [
@@ -471,12 +471,12 @@ def test_create_macro_plan_rejects_length_mismatch(mock_repo_cls, mock_persist):
     assert "length" in result.message
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_validates_systemic_load_length(mock_repo_cls, mock_persist):
+def test_create_macro_plan_validates_systemic_load_length(mock_repo_cls):
     """Test that systemic load length must match total_weeks."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, 28.0, 30.0]
     weekly_systemic = [95.0, 105.0]  # Wrong length (2 instead of 3)
@@ -505,12 +505,12 @@ def test_create_macro_plan_validates_systemic_load_length(mock_repo_cls, mock_pe
     assert "weekly_systemic_load_au length" in result.message
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_validates_systemic_load_non_negative(mock_repo_cls, mock_persist):
+def test_create_macro_plan_validates_systemic_load_non_negative(mock_repo_cls):
     """Test that negative systemic load values are rejected."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, 28.0, 30.0]
     weekly_systemic = [95.0, -10.0, 110.0]  # Invalid: negative
@@ -539,12 +539,12 @@ def test_create_macro_plan_validates_systemic_load_non_negative(mock_repo_cls, m
     assert "non-negative" in result.message
 
 
-@patch("sports_coach_engine.core.plan.persist_plan")
 @patch("sports_coach_engine.core.repository.RepositoryIO")
-def test_create_macro_plan_defaults_systemic_load_to_zero(mock_repo_cls, mock_persist):
+def test_create_macro_plan_defaults_systemic_load_to_zero(mock_repo_cls):
     """Test that systemic load defaults to 0.0 when not provided (single-sport)."""
     mock_repo = Mock()
     mock_repo_cls.return_value = mock_repo
+    mock_repo.write_yaml.return_value = None  # Success
 
     weekly_volumes = [25.0, 28.0, 30.0]
     weekly_hints = [

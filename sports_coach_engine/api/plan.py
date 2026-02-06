@@ -1578,7 +1578,6 @@ def create_macro_plan(
     try:
         # Import here to avoid circular dependency
         from sports_coach_engine.core.repository import RepositoryIO
-        from sports_coach_engine.core.plan import persist_plan
         from sports_coach_engine.schemas.plan import GoalType, MasterPlan, WeekPlan, WorkoutStructureHints
         from datetime import timedelta
         import uuid
@@ -1756,7 +1755,13 @@ def create_macro_plan(
 
         # Persist to disk
         repo = RepositoryIO()
-        persist_plan(plan, repo)
+        from sports_coach_engine.core.paths import current_plan_path
+        write_result = repo.write_yaml(current_plan_path(), plan)
+        if write_result is not None:
+            return PlanError(
+                error_type="persistence",
+                message=f"Failed to save plan: {write_result.message}"
+            )
 
         return plan
 

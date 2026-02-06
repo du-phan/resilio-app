@@ -171,25 +171,6 @@ def current_plan_path() -> str:
     return f"{get_plans_dir()}/current_plan.yaml"
 
 
-def plan_archive_dir() -> str:
-    """Get path to plan archive directory.
-
-    Returns:
-        Path to archive directory
-    """
-    return f"{get_plans_dir()}/archive"
-
-
-def plan_workouts_dir(week_number: int) -> str:
-    """Get path to workouts directory for a specific week.
-
-    Args:
-        week_number: Week number (1-based)
-
-    Returns:
-        Path to week's workout directory (e.g., "data/plans/workouts/week_01")
-    """
-    return f"{get_plans_dir()}/workouts/week_{week_number:02d}"
 
 
 def approvals_state_path() -> str:

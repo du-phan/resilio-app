@@ -48,7 +48,6 @@ from sports_coach_engine.schemas.plan import (
 from sports_coach_engine.core.guardrails.volume import validate_workout_minimums
 from sports_coach_engine.core.paths import (
     current_plan_path,
-    plan_workouts_dir,
     get_plans_dir,
     current_plan_review_path,
     current_training_log_path,
@@ -1517,111 +1516,6 @@ def validate_guardrails(
 
 
 # ============================================================
-# PLAN PERSISTENCE
-# ============================================================
-
-
-def persist_plan(plan: MasterPlan, repo: Optional[RepositoryIO] = None) -> None:
-    """
-    Persist a training plan to disk.
-
-    File structure created:
-    plans/
-    ├── current_plan.yaml           # Master plan metadata
-    └── workouts/
-        ├── week_01/
-        │   ├── monday_easy.yaml
-        │   ├── wednesday_tempo.yaml
-        │   └── sunday_long_run.yaml
-        └── week_02/
-            └── ...
-
-    Args:
-        plan: MasterPlan to persist
-        repo: RepositoryIO instance (creates new one if None)
-
-    Raises:
-        RepoError: If file write fails
-    """
-    if repo is None:
-        repo = RepositoryIO()
-
-    # Write master plan metadata
-    error = repo.write_yaml(current_plan_path(), plan)
-    if error:
-        raise RuntimeError(f"Failed to write master plan: {error.message}")
-
-    # Write individual workouts
-    for week in plan.weeks:
-        week_dir = plan_workouts_dir(week.week_number)
-
-        for workout in week.workouts:
-            # Generate filename: "monday_tempo.yaml", "sunday_long_run.yaml"
-            day_name = _get_day_name(workout.day_of_week).lower()
-            workout_name = workout.workout_type.replace("_", "_")  # Already snake_case
-            filename = f"{day_name}_{workout_name}.yaml"
-
-            workout_path = f"{week_dir}/{filename}"
-            error = repo.write_yaml(workout_path, workout)
-            if error:
-                raise RuntimeError(f"Failed to write workout {workout_path}: {error.message}")
-
-
-def archive_current_plan(reason: str, repo: Optional[RepositoryIO] = None) -> Optional[str]:
-    """
-    Archive the current plan before regenerating.
-
-    Moves entire plans/ directory to:
-    plans_archive/YYYY-MM-DD_HHmmss_{reason}/
-
-    Args:
-        reason: Reason for archiving (e.g., "goal_changed", "regenerated")
-        repo: RepositoryIO instance (creates new one if None)
-
-    Returns:
-        Archive path if plan was archived, None if no plan existed
-    """
-    if repo is None:
-        repo = RepositoryIO()
-
-    plans_dir = repo.resolve_path("plans")
-
-    # Check if current plan exists
-    if not plans_dir.exists():
-        return None
-
-    # Generate archive path with timestamp
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    archive_name = f"{timestamp}_{reason}"
-    archive_dir = repo.resolve_path(f"plans_archive/{archive_name}")
-
-    # Create archive directory
-    archive_dir.parent.mkdir(parents=True, exist_ok=True)
-
-    # Move entire plans/ directory to archive
-    shutil.move(str(plans_dir), str(archive_dir))
-
-    # Create fresh plans/ directory
-    plans_dir.mkdir(parents=True, exist_ok=True)
-
-    # Note: Plan review and training log are already included in the archived plans/ directory
-    # No need to copy them separately since they're in data/plans/current_plan_review.md
-    # and data/plans/current_training_log.md which get moved with the directory
-
-    # Write archive info file
-    archive_info = {
-        "archived_at": timestamp,
-        "reason": reason,
-        "original_path": f"{get_plans_dir()}/",
-    }
-    archive_info_path = archive_dir.parent / f"{archive_name}_info.yaml"
-    with open(archive_info_path, "w") as f:
-        import yaml
-        yaml.safe_dump(archive_info, f)
-
-    return str(archive_dir)
-
-
 # ============================================================
 # PLAN REVIEW AND TRAINING LOG FUNCTIONS
 # ============================================================

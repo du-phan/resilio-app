@@ -36,9 +36,9 @@ from sports_coach_engine.core.paths import (
     athlete_profile_path,
     daily_metrics_path,
     current_plan_path,
-    plan_archive_dir,
     activity_path,
     weekly_metrics_summary_path,
+    get_plans_dir,
 )
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.core.profile import ProfileService
@@ -823,8 +823,7 @@ def run_plan_generation(
         plan_path = current_plan_path()
         if repo.file_exists(plan_path):
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-            archive_path = f"{plan_archive_dir()}/plan_{timestamp}.yaml"
-            repo.ensure_directory(plan_archive_dir())
+            archive_path = f"{get_plans_dir()}/archive_plan_{timestamp}.yaml"
 
             old_plan = repo.read_yaml(plan_path, schema=None)
             repo.write_yaml(archive_path, old_plan)

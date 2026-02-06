@@ -40,8 +40,6 @@ def init_command(ctx: typer.Context) -> None:
         repo_root / paths.activities_dir,
         repo_root / paths.metrics_dir / "daily",
         repo_root / paths.metrics_dir / "weekly",
-        repo_root / paths.plans_dir / "archive",
-        repo_root / paths.plans_dir / "workouts",
         repo_root / paths.state_dir,
     ]
 
