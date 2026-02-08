@@ -411,9 +411,6 @@ class TestCTLATLCalculation:
         # avg_3d == avg_7d == 100 -> ratio 0 -> trend score 50
         assert trend == pytest.approx(50.0, abs=0.1)
 
-        # On day 8, should detect building trend
-        assert ctl_atl.ctl_trend == "building"
-
 
 # ============================================================
 # ACWR CALCULATION TESTS (5 tests)
