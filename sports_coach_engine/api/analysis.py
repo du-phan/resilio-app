@@ -59,7 +59,7 @@ def api_validate_intensity_distribution(
 
     Args:
         activities: List of activity dicts with keys:
-            - intensity_zone (str): z1, z2, z3, z4, z5
+            - calculated.session_type (str): easy, moderate, hard
             - duration_minutes (int)
             - date (str or date)
         date_range_days: Rolling window in days (default 28 for 4 weeks)
@@ -92,27 +92,43 @@ def api_validate_intensity_distribution(
                 message=f"Only {len(activities)} activities provided - need at least 3 for meaningful 80/20 analysis",
             )
 
-        # Validate activity structure
+        # Map session_type to intensity_zone
+        def _session_type_to_zone(session_type: str) -> str:
+            """Map session_type (easy/moderate/hard) to intensity_zone (z1-z5)."""
+            mapping = {
+                "easy": "z2",
+                "recovery": "z1",
+                "moderate": "z3",
+                "hard": "z4",
+            }
+            return mapping.get(session_type.lower(), "z2")
+
+        # Transform activities: extract session_type from calculated field
+        normalized_activities = []
         for i, activity in enumerate(activities):
-            required_keys = ["intensity_zone", "duration_minutes"]
-            missing = [k for k in required_keys if k not in activity]
-            if missing:
+            if "duration_minutes" not in activity:
                 return AnalysisError(
                     error_type="invalid_input",
-                    message=f"Activity {i} missing required keys: {missing}",
+                    message=f"Activity {i} missing required key: duration_minutes",
                 )
 
-            # Validate intensity zone
-            zone = activity.get("intensity_zone", "").lower()
-            if zone not in ["z1", "z2", "z3", "z4", "z5"]:
+            calculated = activity.get("calculated", {})
+            session_type = calculated.get("session_type")
+
+            if not session_type:
                 return AnalysisError(
                     error_type="invalid_input",
-                    message=f"Activity {i} has invalid intensity_zone '{zone}' (must be z1-z5)",
+                    message=f"Activity {i} missing 'calculated.session_type'",
                 )
+
+            # Create normalized activity with intensity_zone for core function
+            normalized_activity = activity.copy()
+            normalized_activity["intensity_zone"] = _session_type_to_zone(session_type)
+            normalized_activities.append(normalized_activity)
 
         # Call core function
         result = validate_intensity_distribution(
-            activities=activities,
+            activities=normalized_activities,
             date_range_days=date_range_days,
         )
 
@@ -200,9 +216,9 @@ def api_analyze_load_distribution_by_sport(
 
     Args:
         activities: List of activity dicts with keys:
-            - sport (str): running, climbing, cycling, etc.
-            - systemic_load_au (float)
-            - lower_body_load_au (float)
+            - sport_type (str): run, climb, cycle, etc.
+            - calculated.systemic_load_au (float)
+            - calculated.lower_body_load_au (float)
             - date (str or date)
         date_range_days: Analysis window in days (default 7)
         sport_priority: "running_primary", "equal", or "other_primary"
@@ -236,19 +252,35 @@ def api_analyze_load_distribution_by_sport(
                 message="No activities provided - cannot analyze load distribution",
             )
 
-        # Validate activity structure
+        # Transform activities: extract fields from current schema
+        normalized_activities = []
         for i, activity in enumerate(activities):
-            required_keys = ["sport", "systemic_load_au", "lower_body_load_au"]
-            missing = [k for k in required_keys if k not in activity]
-            if missing:
+            sport_type = activity.get("sport_type")
+            if not sport_type:
                 return AnalysisError(
                     error_type="invalid_input",
-                    message=f"Activity {i} missing required keys: {missing}",
+                    message=f"Activity {i} missing 'sport_type'",
                 )
+
+            calculated = activity.get("calculated", {})
+            systemic_load = calculated.get("systemic_load_au")
+            lower_body_load = calculated.get("lower_body_load_au")
+
+            if systemic_load is None or lower_body_load is None:
+                return AnalysisError(
+                    error_type="invalid_input",
+                    message=f"Activity {i} missing load values in 'calculated' field",
+                )
+
+            # Create normalized activity for core function
+            normalized_activity = activity.copy()
+            normalized_activity["systemic_load_au"] = systemic_load
+            normalized_activity["lower_body_load_au"] = lower_body_load
+            normalized_activities.append(normalized_activity)
 
         # Call core function
         result = analyze_load_distribution_by_sport(
-            activities=activities,
+            activities=normalized_activities,
             date_range_days=date_range_days,
             sport_priority=sport_priority,
         )
@@ -412,26 +444,43 @@ def api_assess_current_risk(
                 message="Readiness must be 0-100",
             )
 
-        # Validate recent activities
+        # Validate and normalize recent activities
         if not recent_activities:
             return AnalysisError(
                 error_type="insufficient_data",
                 message="No recent activities - cannot assess contextual risk",
             )
 
+        normalized_activities = []
         for i, activity in enumerate(recent_activities):
-            required_keys = ["sport", "systemic_load_au", "lower_body_load_au"]
-            missing = [k for k in required_keys if k not in activity]
-            if missing:
+            sport_type = activity.get("sport_type")
+            if not sport_type:
                 return AnalysisError(
                     error_type="invalid_input",
-                    message=f"Recent activity {i} missing required keys: {missing}",
+                    message=f"Recent activity {i} missing 'sport_type'",
                 )
+
+            calculated = activity.get("calculated", {})
+            systemic_load = calculated.get("systemic_load_au")
+            lower_body_load = calculated.get("lower_body_load_au")
+
+            if systemic_load is None or lower_body_load is None:
+                return AnalysisError(
+                    error_type="invalid_input",
+                    message=f"Recent activity {i} missing load values in 'calculated' field",
+                )
+
+            # Create normalized activity for core function
+            normalized_activity = activity.copy()
+            normalized_activity["sport"] = sport_type
+            normalized_activity["systemic_load_au"] = systemic_load
+            normalized_activity["lower_body_load_au"] = lower_body_load
+            normalized_activities.append(normalized_activity)
 
         # Call core function
         result = assess_current_risk(
             current_metrics=current_metrics,
-            recent_activities=recent_activities,
+            recent_activities=normalized_activities,
             planned_workout=planned_workout,
         )
 

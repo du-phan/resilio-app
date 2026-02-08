@@ -41,12 +41,12 @@ from sports_coach_engine.schemas.analysis import (
 def sample_intensity_activities():
     """Sample activities for intensity distribution analysis."""
     return [
-        {"intensity_zone": "z2", "duration_minutes": 40, "date": "2026-01-01"},
-        {"intensity_zone": "z2", "duration_minutes": 30, "date": "2026-01-03"},
-        {"intensity_zone": "z4", "duration_minutes": 45, "date": "2026-01-05"},
-        {"intensity_zone": "z2", "duration_minutes": 60, "date": "2026-01-08"},
-        {"intensity_zone": "z2", "duration_minutes": 40, "date": "2026-01-10"},
-        {"intensity_zone": "z5", "duration_minutes": 30, "date": "2026-01-12"},
+        {"duration_minutes": 40, "date": "2026-01-01", "calculated": {"session_type": "easy"}},
+        {"duration_minutes": 30, "date": "2026-01-03", "calculated": {"session_type": "easy"}},
+        {"duration_minutes": 45, "date": "2026-01-05", "calculated": {"session_type": "hard"}},
+        {"duration_minutes": 60, "date": "2026-01-08", "calculated": {"session_type": "easy"}},
+        {"duration_minutes": 40, "date": "2026-01-10", "calculated": {"session_type": "easy"}},
+        {"duration_minutes": 30, "date": "2026-01-12", "calculated": {"session_type": "hard"}},
     ]
 
 
@@ -68,33 +68,28 @@ def sample_multisport_activities():
     """Sample multi-sport activities for load distribution."""
     return [
         {
-            "sport": "running",
-            "systemic_load_au": 160,
-            "lower_body_load_au": 160,
+            "sport_type": "run",
+            "calculated": {"systemic_load_au": 160, "lower_body_load_au": 160},
             "date": "2026-01-13",
         },
         {
-            "sport": "climbing",
-            "systemic_load_au": 340,
-            "lower_body_load_au": 52,
+            "sport_type": "climb",
+            "calculated": {"systemic_load_au": 340, "lower_body_load_au": 52},
             "date": "2026-01-14",
         },
         {
-            "sport": "running",
-            "systemic_load_au": 315,
-            "lower_body_load_au": 315,
+            "sport_type": "run",
+            "calculated": {"systemic_load_au": 315, "lower_body_load_au": 315},
             "date": "2026-01-15",
         },
         {
-            "sport": "yoga",
-            "systemic_load_au": 70,
-            "lower_body_load_au": 48,
+            "sport_type": "yoga",
+            "calculated": {"systemic_load_au": 70, "lower_body_load_au": 48},
             "date": "2026-01-16",
         },
         {
-            "sport": "running",
-            "systemic_load_au": 120,
-            "lower_body_load_au": 120,
+            "sport_type": "run",
+            "calculated": {"systemic_load_au": 120, "lower_body_load_au": 120},
             "date": "2026-01-17",
         },
     ]
@@ -130,15 +125,13 @@ def sample_recent_activities():
     """Sample recent activities for risk assessment."""
     return [
         {
-            "sport": "climbing",
-            "systemic_load_au": 340,
-            "lower_body_load_au": 52,
+            "sport_type": "climb",
+            "calculated": {"systemic_load_au": 340, "lower_body_load_au": 52},
             "date": "2026-01-14",
         },
         {
-            "sport": "running",
-            "systemic_load_au": 160,
-            "lower_body_load_au": 160,
+            "sport_type": "run",
+            "calculated": {"systemic_load_au": 160, "lower_body_load_au": 160},
             "date": "2026-01-13",
         },
     ]
@@ -228,7 +221,7 @@ class TestValidateIntensityDistribution:
         """Too few activities returns error."""
         result = api_validate_intensity_distribution(
             activities=[
-                {"intensity_zone": "z2", "duration_minutes": 40, "date": "2026-01-01"}
+                {"duration_minutes": 40, "date": "2026-01-01", "calculated": {"session_type": "easy"}}
             ],
             date_range_days=28,
         )
@@ -237,20 +230,20 @@ class TestValidateIntensityDistribution:
         assert result.error_type == "insufficient_data"
         assert "at least 3" in result.message
 
-    def test_invalid_intensity_zone(self):
-        """Invalid intensity zone returns error."""
+    def test_invalid_session_type(self):
+        """Missing session_type returns error."""
         result = api_validate_intensity_distribution(
             activities=[
-                {"intensity_zone": "z9", "duration_minutes": 40, "date": "2026-01-01"},
-                {"intensity_zone": "z2", "duration_minutes": 30, "date": "2026-01-02"},
-                {"intensity_zone": "z3", "duration_minutes": 45, "date": "2026-01-03"},
+                {"duration_minutes": 40, "date": "2026-01-01", "calculated": {}},
+                {"duration_minutes": 30, "date": "2026-01-02", "calculated": {"session_type": "easy"}},
+                {"duration_minutes": 45, "date": "2026-01-03", "calculated": {"session_type": "easy"}},
             ],
             date_range_days=28,
         )
 
         assert isinstance(result, AnalysisError)
         assert result.error_type == "invalid_input"
-        assert "invalid intensity_zone" in result.message
+        assert "session_type" in result.message
 
 
 class TestDetectActivityGaps:
