@@ -1,7 +1,7 @@
 ---
 name: vdot-baseline-proposal
 description: Proposes a baseline VDOT and returns evidence plus a single approval prompt for the main agent. Use when a macro plan needs an approved baseline VDOT.
-disable-model-invocation: true
+disable-model-invocation: false
 context: fork
 agent: vdot-analyst
 allowed-tools: Bash, Read

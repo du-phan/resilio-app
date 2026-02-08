@@ -719,6 +719,265 @@ class TestACWRCalculation:
         # Should return None (not crash)
         assert acwr is None
 
+    def test_acwr_includes_today_load(self, temp_repo):
+        """Should include today's load when today_load parameter is provided."""
+        # Create 28 days of consistent load (27 previous + today)
+        start_date = date(2026, 1, 1)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+
+        # Create 27 previous days with load = 300 AU
+        for i in range(27):
+            current_date = start_date + timedelta(days=i)
+
+            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+
+            daily_metrics = DailyMetrics(
+                date=current_date,
+                calculated_at=datetime.now(),
+                daily_load=DailyLoad(
+                    date=current_date,
+                    systemic_load_au=300.0,
+                    lower_body_load_au=300.0,
+                    activity_count=1,
+                    activities=[],
+                ),
+                ctl_atl=CTLATLMetrics(
+                    ctl=40.0,
+                    atl=45.0,
+                    tsb=-5.0,
+                    ctl_zone=CTLZone.RECREATIONAL,
+                    tsb_zone=TSBZone.OPTIMAL,
+                ),
+                acwr=None,
+                readiness=ReadinessScore(
+                    score=70,
+                    level=ReadinessLevel.READY,
+                    confidence=ConfidenceLevel.LOW,
+                    components=ReadinessComponents(
+                        tsb_contribution=60.0,
+                        load_trend_contribution=70.0,
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
+                    ),
+                    recommendation="Execute as planned.",
+                ),
+                baseline_established=True,
+                acwr_available=False,
+                data_days_available=i + 1,
+                flags=[],
+            )
+
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+
+        # Calculate ACWR on day 28, passing today's load
+        target_date = start_date + timedelta(days=27)
+        today_load = 300.0
+
+        acwr = calculate_acwr(target_date, temp_repo, today_load=today_load)
+
+        assert acwr is not None
+
+        # With consistent load (27 previous + today), ACWR should be ~1.0
+        # acute_7d = 300 * 7 = 2100
+        # chronic_28d = 300 * 28 = 8400 → avg = 300
+        # ACWR = (2100/7) / 300 = 300 / 300 = 1.0
+        assert acwr.acwr == pytest.approx(1.0, abs=0.1)
+        assert acwr.zone == ACWRZone.SAFE
+        assert acwr.load_spike_elevated is False
+
+    def test_acwr_today_load_creates_spike(self, temp_repo):
+        """Should detect spike when today_load is significantly higher."""
+        # Create 27 days of low load, then high load today
+        start_date = date(2026, 1, 1)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+
+        # Create 27 previous days with low load = 200 AU
+        for i in range(27):
+            current_date = start_date + timedelta(days=i)
+
+            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+
+            daily_metrics = DailyMetrics(
+                date=current_date,
+                calculated_at=datetime.now(),
+                daily_load=DailyLoad(
+                    date=current_date,
+                    systemic_load_au=200.0,
+                    lower_body_load_au=200.0,
+                    activity_count=1,
+                    activities=[],
+                ),
+                ctl_atl=CTLATLMetrics(
+                    ctl=40.0,
+                    atl=45.0,
+                    tsb=-5.0,
+                    ctl_zone=CTLZone.RECREATIONAL,
+                    tsb_zone=TSBZone.OPTIMAL,
+                ),
+                acwr=None,
+                readiness=ReadinessScore(
+                    score=70,
+                    level=ReadinessLevel.READY,
+                    confidence=ConfidenceLevel.LOW,
+                    components=ReadinessComponents(
+                        tsb_contribution=60.0,
+                        load_trend_contribution=70.0,
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
+                    ),
+                    recommendation="Execute as planned.",
+                ),
+                baseline_established=True,
+                acwr_available=False,
+                data_days_available=i + 1,
+                flags=[],
+            )
+
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+
+        # Calculate ACWR on day 28 with high today_load
+        target_date = start_date + timedelta(days=27)
+        today_load = 600.0  # High spike
+
+        acwr = calculate_acwr(target_date, temp_repo, today_load=today_load)
+
+        assert acwr is not None
+
+        # acute_7d = 600 + (200 * 6) = 600 + 1200 = 1800
+        # chronic_28d = 600 + (200 * 27) = 600 + 5400 = 6000 → avg = 214.3
+        # ACWR = (1800/7) / 214.3 = 257.1 / 214.3 = 1.20
+        # This should be elevated but not quite caution zone
+        assert acwr.acwr > 1.0
+        assert acwr.acwr < 1.3  # Still in safe zone
+        assert acwr.load_spike_elevated is False
+
+    def test_acwr_today_load_none_preserves_behavior(self, temp_repo):
+        """Should preserve original behavior when today_load=None."""
+        # Create 30 days of consistent load
+        start_date = date(2026, 1, 1)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+
+        for i in range(30):
+            current_date = start_date + timedelta(days=i)
+
+            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+
+            daily_metrics = DailyMetrics(
+                date=current_date,
+                calculated_at=datetime.now(),
+                daily_load=DailyLoad(
+                    date=current_date,
+                    systemic_load_au=300.0,
+                    lower_body_load_au=300.0,
+                    activity_count=1,
+                    activities=[],
+                ),
+                ctl_atl=CTLATLMetrics(
+                    ctl=40.0,
+                    atl=45.0,
+                    tsb=-5.0,
+                    ctl_zone=CTLZone.RECREATIONAL,
+                    tsb_zone=TSBZone.OPTIMAL,
+                ),
+                acwr=None,
+                readiness=ReadinessScore(
+                    score=70,
+                    level=ReadinessLevel.READY,
+                    confidence=ConfidenceLevel.LOW,
+                    components=ReadinessComponents(
+                        tsb_contribution=60.0,
+                        load_trend_contribution=70.0,
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
+                    ),
+                    recommendation="Execute as planned.",
+                ),
+                baseline_established=True,
+                acwr_available=False,
+                data_days_available=i + 1,
+                flags=[],
+            )
+
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+
+        # Calculate ACWR with explicit None (should exclude today)
+        target_date = start_date + timedelta(days=29)
+        acwr = calculate_acwr(target_date, temp_repo, today_load=None)
+
+        assert acwr is not None
+
+        # Should use 28 previous days (days 1-28 ago)
+        # All have 300 AU, so ACWR = 1.0
+        assert acwr.acwr == pytest.approx(1.0, abs=0.1)
+        assert acwr.zone == ACWRZone.SAFE
+
+    def test_acwr_today_load_spike_enters_caution(self, temp_repo):
+        """Should detect caution zone when today's spike creates ACWR > 1.3."""
+        # Create 27 days of low load, recent 6 days with moderate spike, today with high spike
+        start_date = date(2026, 1, 1)
+        (temp_repo.repo_root / "data" / "metrics" / "daily").mkdir(parents=True, exist_ok=True)
+
+        # Create 27 previous days
+        for i in range(27):
+            current_date = start_date + timedelta(days=i)
+
+            # Last 6 days (i=21-26) have moderate spike
+            if i >= 21:
+                daily_load = 400.0  # Moderate
+            else:
+                daily_load = 200.0  # Low baseline
+
+            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+
+            daily_metrics = DailyMetrics(
+                date=current_date,
+                calculated_at=datetime.now(),
+                daily_load=DailyLoad(
+                    date=current_date,
+                    systemic_load_au=daily_load,
+                    lower_body_load_au=daily_load,
+                    activity_count=1,
+                    activities=[],
+                ),
+                ctl_atl=CTLATLMetrics(
+                    ctl=40.0,
+                    atl=45.0,
+                    tsb=-5.0,
+                    ctl_zone=CTLZone.RECREATIONAL,
+                    tsb_zone=TSBZone.OPTIMAL,
+                ),
+                acwr=None,
+                readiness=ReadinessScore(
+                    score=70,
+                    level=ReadinessLevel.READY,
+                    confidence=ConfidenceLevel.LOW,
+                    components=ReadinessComponents(
+                        tsb_contribution=60.0,
+                        load_trend_contribution=70.0,
+                        weights_used={"tsb": 0.4, "load_trend": 0.4},
+                    ),
+                    recommendation="Execute as planned.",
+                ),
+                baseline_established=True,
+                acwr_available=False,
+                data_days_available=i + 1,
+                flags=[],
+            )
+
+            temp_repo.write_yaml(f"data/metrics/daily/{current_date.isoformat()}.yaml", daily_metrics)
+
+        # Calculate ACWR on day 28 with high today_load
+        target_date = start_date + timedelta(days=27)
+        today_load = 500.0  # High spike today
+
+        acwr = calculate_acwr(target_date, temp_repo, today_load=today_load)
+
+        assert acwr is not None
+
+        # acute_7d = 500 (today) + (400 * 6) = 500 + 2400 = 2900
+        # chronic_28d = 500 (today) + (400 * 6) + (200 * 21) = 500 + 2400 + 4200 = 7100 → avg = 253.6
+        # ACWR = (2900/7) / 253.6 = 414.3 / 253.6 = 1.63
+        assert acwr.acwr > 1.5  # Should be in HIGH_RISK zone
+        assert acwr.zone == ACWRZone.HIGH_RISK
+        assert acwr.load_spike_elevated is True
+
 
 # ============================================================
 # READINESS SCORE TESTS (6 tests)

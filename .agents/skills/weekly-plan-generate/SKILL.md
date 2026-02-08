@@ -1,7 +1,11 @@
 ---
 name: weekly-plan-generate
 description: Designs exact workouts for a single week using AI coaching judgment and presents the review directly in chat without applying it. Use for Week 1 and all subsequent weeks.
-compatibility: Codex CLI/IDE; requires local sce CLI and repo context
+disable-model-invocation: false
+context: fork
+agent: weekly-planner
+allowed-tools: Bash, Read, Write
+argument-hint: "[optional-notes]"
 ---
 
 # Weekly Plan Generate (Workout Designer)
@@ -19,9 +23,10 @@ If missing, return a blocking checklist and stop.
 ## Interactivity & Feedback
 
 - Non-interactive: do not ask the athlete questions or call approval commands.
-- Return an `athlete_prompt` for the coach to ask and capture approval.
-- If the athlete declines or requests changes, the coach will re-run this skill with notes; treat notes as hard constraints and generate a new week JSON (do not edit the prior file in place).
-- If new constraints are provided (injury, schedule limits), assume the coach updated profile/memory before re-run.
+- Return an `athlete_prompt` for the main agent to ask and capture approval.
+- If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new week JSON (do not edit the prior file in place).
+- If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
+- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
 ## Philosophy
 
@@ -35,19 +40,7 @@ You are the weekly planning specialist. Use your AI coaching judgment to design 
 CLI tools provide computational support (metrics, guardrails, pace calculations).
 You provide qualitative coaching decisions (exact distances, workout types, pacing).
 
-**Metric explainer rule (athlete-facing)**:
-On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
-
-Use this exact VDOT explainer on first mention:
-"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
-
-One-line definitions for other metrics:
-- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
-- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
-- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
-- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
-- RPE: "RPE is your perceived effort from 1–10."
+**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Do not repeat unless the athlete asks.
 
 ## Workflow
 
@@ -81,10 +74,14 @@ sce profile get  # Load athlete profile including other_sports
 - What other sports they do (climbing, cycling, surfing, etc.)
 - Expected frequency/volume for each sport
 - Running priority (PRIMARY/EQUAL/SECONDARY)
-- Use this to avoid scheduling conflicts (e.g., no quality runs on climbing days)
+- **Specific day constraints**: Extract the `days` field for each sport (e.g., climbing on tue,thu). Mark these days as BLOCKED for quality running sessions. Only schedule easy/recovery runs on other-sport days, or rest entirely.
 
-If you already have an activities JSON file for the last 28 days, you may run:
-`sce analysis intensity --activities <FILE> --days 28`
+Optionally export and analyze recent intensity distribution:
+
+```bash
+sce activity export --since 28d --out /tmp/activities_28d.json
+sce analysis intensity --activities /tmp/activities_28d.json --days 28
+```
 
 3. Analyze progression safety:
 
@@ -152,8 +149,8 @@ Create explicit workout JSON manually with exact distances. Example structure:
               "recovery": "0"
             }
           ],
-          "warmup_minutes": 15,
-          "cooldown_minutes": 10,
+          "warmup_km": 2.5,
+          "cooldown_km": 1.5,
           "key_workout": true,
           "notes": "First quality session of build phase"
         },
@@ -164,7 +161,7 @@ Create explicit workout JSON manually with exact distances. Example structure:
           "distance_km": 12.0,
           "pace_range": "6:20-6:40",
           "target_rpe": 5,
-          "warmup_minutes": 5,
+          "warmup_km": 0.5,
           "key_workout": true,
           "notes": "Priority aerobic session - key workout of the week"
         }
@@ -181,8 +178,8 @@ Create explicit workout JSON manually with exact distances. Example structure:
 - **Required fields (all workouts)**: date, day_of_week, workout_type, distance_km, pace_range, target_rpe
 - **Structure fields (YOU must design these - critical for athlete execution)**:
   - `intervals`: For tempo/interval workouts, define exact structure (e.g., `[{"duration_minutes": 20, "pace": "5:30-5:40", "type": "threshold", "recovery": "0"}]`). Omit for easy/long runs.
-  - `warmup_minutes`: Design based on workout intensity (0-5min for easy, 10-20min for quality, 5-10min for long runs)
-  - `cooldown_minutes`: Design based on workout intensity (0-5min for easy, 10-15min for quality, 0-5min for long runs)
+  - `warmup_km`: Design based on workout type (0 for easy/long, 1.5-2.5km for tempo, 2.0-3.0km for intervals)
+  - `cooldown_km`: Design based on workout type (0 for easy/long, 1.0-2.0km for tempo, 1.5-2.0km for intervals)
   - `key_workout`: Mark 1-2 priority sessions per week that athlete shouldn't skip (typically long run + one quality session)
 - Use day_of_week numbering: 0=Monday, 6=Sunday
 - Follow workout_structure_hints constraints (max quality sessions, long run %, etc.)
@@ -318,10 +315,11 @@ Does this plan work for you, considering both your running and {other sports}?
 I'll record your approval with:
 `sce approvals approve-week --week {N} --file /tmp/weekly_plan_w{N}.json`
 
-**Handoff note**: coach must record approval via the command above.
+**Handoff note**: main agent must record approval via the command above.
 
 ## References (load only if needed)
 
+- Workout structure & session mechanics: `references/workout_structure.md`
 - Weekly volume progression: `references/volume_progression_weekly.md`
 - Workout generation: `references/workout_generation.md`
 - Choosing run count: `references/choosing_run_count.md`

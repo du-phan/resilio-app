@@ -407,8 +407,8 @@ WORKOUT_DEFAULTS = {
         "target_rpe": 7,
         "purpose": "Improve lactate threshold - the pace you can sustain for ~60 minutes",
         "intervals": [{"type": "tempo_block", "duration_minutes": 20}],
-        "warmup_minutes": 15,
-        "cooldown_minutes": 10,
+        "warmup_km": 2.0,
+        "cooldown_km": 1.5,
     },
     WorkoutType.INTERVALS: {
         "duration_minutes": 50,
@@ -416,8 +416,8 @@ WORKOUT_DEFAULTS = {
         "target_rpe": 8,
         "purpose": "Boost VO2max - maximum aerobic capacity",
         "intervals": [{"type": "800m", "reps": 6, "recovery": "400m jog"}],
-        "warmup_minutes": 15,
-        "cooldown_minutes": 10,
+        "warmup_km": 2.5,
+        "cooldown_km": 1.5,
     },
     WorkoutType.FARTLEK: {
         "duration_minutes": 45,
@@ -776,8 +776,8 @@ def create_workout(
 
     # Get interval structure
     intervals = defaults.get("intervals")
-    warmup_minutes = defaults.get("warmup_minutes", 10)
-    cooldown_minutes = defaults.get("cooldown_minutes", 10)
+    warmup_km = defaults.get("warmup_km", 0.0)
+    cooldown_km = defaults.get("cooldown_km", 0.0)
 
     # Generate purpose text with phase context
     purpose = _generate_purpose(workout_type, phase, defaults["purpose"])
@@ -804,8 +804,8 @@ def create_workout(
         hr_range_low=hr_range_low,
         hr_range_high=hr_range_high,
         intervals=intervals,
-        warmup_minutes=warmup_minutes,
-        cooldown_minutes=cooldown_minutes,
+        warmup_km=warmup_km,
+        cooldown_km=cooldown_km,
         purpose=purpose,
         notes=notes,
         key_workout=key_workout,
@@ -1138,8 +1138,8 @@ def get_workout_template(workout_type: WorkoutType) -> dict:
             "target_rpe": int,
             "purpose": str,
             "intervals": Optional[list[dict]],
-            "warmup_minutes": int,
-            "cooldown_minutes": int
+            "warmup_km": float,
+            "cooldown_km": float
         }
     """
     # Use existing WORKOUT_DEFAULTS
@@ -1196,8 +1196,8 @@ def create_downgraded_workout(
         hr_range_low=original.hr_range_low,
         hr_range_high=original.hr_range_high,
         intervals=None,  # Remove intervals
-        warmup_minutes=10,
-        cooldown_minutes=10,
+        warmup_km=0.0,
+        cooldown_km=0.0,
         purpose=f"Downgraded from {original.workout_type} - {easy_defaults['purpose']}",
         notes=f"Adjusted based on athlete state (originally {original.workout_type})",
         key_workout=False,
@@ -1254,8 +1254,8 @@ def create_shortened_workout(
         hr_range_low=original.hr_range_low,
         hr_range_high=original.hr_range_high,
         intervals=new_intervals,
-        warmup_minutes=original.warmup_minutes,
-        cooldown_minutes=original.cooldown_minutes,
+        warmup_km=original.warmup_km,
+        cooldown_km=original.cooldown_km,
         purpose=original.purpose,
         notes=f"Shortened to {duration_minutes}min (originally {original.duration_minutes}min)",
         key_workout=original.key_workout,

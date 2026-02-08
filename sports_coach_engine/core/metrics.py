@@ -210,7 +210,7 @@ def compute_daily_metrics(
     )
 
     # Step 4: Calculate ACWR (if >= 28 days data)
-    acwr = calculate_acwr(target_date, repo)
+    acwr = calculate_acwr(target_date, repo, today_load=daily_load.systemic_load_au)
     acwr_available = acwr is not None
 
     # Step 5: Compute readiness score
@@ -535,6 +535,7 @@ def calculate_ctl_atl(
 def calculate_acwr(
     target_date: date,
     repo: RepositoryIO,
+    today_load: Optional[float] = None,
 ) -> Optional[ACWRMetrics]:
     """
     Calculate Acute:Chronic Workload Ratio.
@@ -548,28 +549,54 @@ def calculate_acwr(
     Args:
         target_date: Date to calculate ACWR for
         repo: Repository I/O instance
+        today_load: Optional systemic load for target_date. When provided, ACWR
+                    includes today's load (reads 27 previous days + today = 28 total).
+                    When None, reads 28 previous days (original behavior).
 
     Returns:
         ACWRMetrics or None if insufficient data
     """
-    # Read last 28 days of metrics (not including today, which is being computed)
-    metrics_28d = []
-    for i in range(1, 29):  # Days 1-28 ago
-        check_date = target_date - timedelta(days=i)
-        metrics = _read_previous_metrics(check_date, repo)
+    if today_load is not None:
+        # Include today: read 27 previous days + today = 28 days total
+        # Acute = today + 6 previous = 7 days
+        # Chronic = today + 27 previous = 28 days
+        metrics_prev = []
+        for i in range(1, 28):  # Days 1-27 ago
+            check_date = target_date - timedelta(days=i)
+            metrics = _read_previous_metrics(check_date, repo)
 
-        if metrics is None:
-            # Not enough data
-            return None
+            if metrics is None:
+                # Not enough data
+                return None
 
-        metrics_28d.append(metrics)
+            metrics_prev.append(metrics)
 
-    # Sum loads
-    acute_7d = sum(m.daily_load.systemic_load_au for m in metrics_28d[:7])
-    chronic_28d_total = sum(m.daily_load.systemic_load_au for m in metrics_28d)
+        # Sum loads with today included
+        acute_7d = today_load + sum(m.daily_load.systemic_load_au for m in metrics_prev[:6])
+        chronic_28d_total = today_load + sum(m.daily_load.systemic_load_au for m in metrics_prev)
 
-    # Calculate average
-    chronic_28d_avg = chronic_28d_total / 28.0
+        # Calculate average
+        chronic_28d_avg = chronic_28d_total / 28.0
+
+    else:
+        # Original behavior: read 28 previous days (not including today)
+        metrics_28d = []
+        for i in range(1, 29):  # Days 1-28 ago
+            check_date = target_date - timedelta(days=i)
+            metrics = _read_previous_metrics(check_date, repo)
+
+            if metrics is None:
+                # Not enough data
+                return None
+
+            metrics_28d.append(metrics)
+
+        # Sum loads
+        acute_7d = sum(m.daily_load.systemic_load_au for m in metrics_28d[:7])
+        chronic_28d_total = sum(m.daily_load.systemic_load_au for m in metrics_28d)
+
+        # Calculate average
+        chronic_28d_avg = chronic_28d_total / 28.0
 
     # Handle divide-by-zero
     if chronic_28d_avg == 0:

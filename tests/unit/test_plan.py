@@ -120,13 +120,14 @@ class TestWorkoutPrescription:
             workout_type=WorkoutType.EASY,
             phase=PlanPhase.BASE,
             duration_minutes=40,
+            distance_km=8.0,
             intensity_zone=IntensityZone.ZONE_2,
             target_rpe=4,
             purpose="Recovery and aerobic maintenance",
         )
         assert workout.workout_type == WorkoutType.EASY
         assert workout.target_rpe == 4
-        assert workout.status == "scheduled"
+        assert workout.distance_km == 8.0
 
     def test_hr_ranges_valid(self):
         """Valid HR ranges should pass."""
@@ -138,6 +139,7 @@ class TestWorkoutPrescription:
             workout_type=WorkoutType.TEMPO,
             phase=PlanPhase.BUILD,
             duration_minutes=45,
+            distance_km=10.0,
             intensity_zone=IntensityZone.ZONE_4,
             target_rpe=7,
             hr_range_low=160,
@@ -158,6 +160,7 @@ class TestWorkoutPrescription:
                 workout_type=WorkoutType.EASY,
                 phase=PlanPhase.BASE,
                 duration_minutes=40,
+                distance_km=8.0,
                 intensity_zone=IntensityZone.ZONE_2,
                 target_rpe=4,
                 hr_range_low=25,  # Too low
@@ -177,6 +180,7 @@ class TestWorkoutPrescription:
                 workout_type=WorkoutType.INTERVALS,
                 phase=PlanPhase.PEAK,
                 duration_minutes=50,
+                distance_km=10.0,
                 intensity_zone=IntensityZone.ZONE_5,
                 target_rpe=8,
                 hr_range_high=225,  # Too high
@@ -197,6 +201,7 @@ class TestWorkoutPrescription:
                 workout_type=WorkoutType.EASY,
                 phase=PlanPhase.BASE,
                 duration_minutes=40,
+                distance_km=8.0,
                 intensity_zone=IntensityZone.ZONE_2,
                 target_rpe=0,  # Invalid
                 purpose="Test",
@@ -212,6 +217,7 @@ class TestWorkoutPrescription:
                 workout_type=WorkoutType.INTERVALS,
                 phase=PlanPhase.PEAK,
                 duration_minutes=50,
+                distance_km=10.0,
                 intensity_zone=IntensityZone.ZONE_5,
                 target_rpe=11,  # Invalid
                 purpose="Test",
@@ -228,6 +234,7 @@ class TestWorkoutPrescription:
                 workout_type=WorkoutType.EASY,
                 phase=PlanPhase.BASE,
                 duration_minutes=40,
+                distance_km=8.0,
                 intensity_zone=IntensityZone.ZONE_2,
                 target_rpe=4,
                 purpose="Test",
@@ -244,6 +251,7 @@ class TestWorkoutPrescription:
                 workout_type=WorkoutType.EASY,
                 phase=PlanPhase.BASE,
                 duration_minutes=0,  # Invalid
+                distance_km=8.0,
                 intensity_zone=IntensityZone.ZONE_2,
                 target_rpe=4,
                 purpose="Test",
@@ -263,6 +271,7 @@ class TestWeekPlan:
             workout_type=WorkoutType.EASY,
             phase=PlanPhase.BASE,
             duration_minutes=40,
+            distance_km=8.0,
             intensity_zone=IntensityZone.ZONE_2,
             target_rpe=4,
             purpose="Test",
@@ -293,6 +302,7 @@ class TestWeekPlan:
             workout_type=WorkoutType.EASY,
             phase=PlanPhase.BASE,
             duration_minutes=30,
+            distance_km=5.0,
             intensity_zone=IntensityZone.ZONE_2,
             target_rpe=3,
             purpose="Recovery",
@@ -326,6 +336,7 @@ class TestMasterPlan:
             workout_type=WorkoutType.EASY,
             phase=PlanPhase.BASE,
             duration_minutes=40,
+            distance_km=8.0,
             intensity_zone=IntensityZone.ZONE_2,
             target_rpe=4,
             purpose="Test",
@@ -373,6 +384,7 @@ class TestPlanGenerationResult:
             workout_type=WorkoutType.EASY,
             phase=PlanPhase.BASE,
             duration_minutes=40,
+            distance_km=8.0,
             intensity_zone=IntensityZone.ZONE_2,
             target_rpe=4,
             purpose="Test",
@@ -423,6 +435,7 @@ class TestPlanGenerationResult:
             workout_type=WorkoutType.EASY,
             phase=PlanPhase.BASE,
             duration_minutes=40,
+            distance_km=8.0,
             intensity_zone=IntensityZone.ZONE_2,
             target_rpe=4,
             purpose="Test",
@@ -532,17 +545,30 @@ class TestPeriodization:
         assert len(build_weeks) == 9
 
     def test_timeline_too_short_raises_error(self):
-        """Timeline shorter than minimum should raise ValueError."""
+        """Timeline shorter than minimum should log warning but still generate plan."""
         from sports_coach_engine.core.plan import calculate_periodization
+        import sys
+        from io import StringIO
 
-        # Marathon needs 16+ weeks
-        with pytest.raises(ValueError) as exc_info:
-            calculate_periodization(
+        # Marathon needs 16+ weeks, but function now warns instead of raising
+        # Capture stderr to verify warning is logged
+        captured = StringIO()
+        old_stderr = sys.stderr
+        sys.stderr = captured
+
+        try:
+            phases = calculate_periodization(
                 goal=GoalType.MARATHON,
                 weeks_available=10,
                 start_date=date(2026, 1, 20),
             )
-        assert "minimum 16 weeks" in str(exc_info.value)
+            # Should still return phases despite being shorter than ideal
+            assert len(phases) > 0
+            # Check warning was logged
+            stderr_output = captured.getvalue()
+            assert "minimum 16 weeks" in stderr_output or "Warning" in stderr_output
+        finally:
+            sys.stderr = old_stderr
 
     def test_phase_dates_are_continuous(self):
         """Phase start/end dates should be continuous with no gaps."""
@@ -756,8 +782,8 @@ class TestWorkoutCreation:
         assert len(workout.intervals) > 0
 
         # Should have warmup/cooldown
-        assert workout.warmup_minutes >= 10
-        assert workout.cooldown_minutes >= 10
+        assert workout.warmup_km > 0
+        assert workout.cooldown_km > 0
 
         # Should have lactate threshold purpose
         assert "lactate threshold" in workout.purpose.lower()

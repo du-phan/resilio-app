@@ -18,7 +18,7 @@ Use in athlete-facing outputs. Do not repeat unless the athlete asks. For multi-
 - CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
 - ATL: "ATL is your short-term load—basically how much you've trained in the past week."
 - TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- ACWR: "ACWR compares your last 7 days of training load to your 28-day rolling average; above 1.3 flags a load spike."
 - Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
 - RPE: "RPE is your perceived effort from 1–10."
 

@@ -56,9 +56,14 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 2. **first-session** - Athlete onboarding
 3. **weekly-analysis** - Weekly review + insights
 
-**Executor skills** (non-interactive, run in subagents): 4. **vdot-baseline-proposal** - Propose baseline VDOT 5. **macro-plan-create** - Create macro plan + review doc 6. **weekly-plan-generate** - Generate weekly JSON + review 7. **weekly-plan-apply** - Validate + persist weekly JSON
+**Executor skills** (non-interactive, invoked by main agent via Skill tool):
 
-**Rule**: All athlete-facing questions and approvals happen in the main agent. Executor skills must not ask questions.
+4. **vdot-baseline-proposal** - Propose baseline VDOT
+5. **macro-plan-create** - Create macro plan + review doc
+6. **weekly-plan-generate** - Generate weekly JSON + review
+7. **weekly-plan-apply** - Validate + persist weekly JSON
+
+**Rule**: All athlete-facing questions and approvals happen in the main agent. Executor skills must not ask questions. The main agent invokes executor skills programmatically as part of the Planning Approval Protocol.
 
 ### Subagent Interactivity Protocol
 
@@ -130,7 +135,7 @@ sce approvals status
 - CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
 - ATL: "ATL is your short-term load—basically how much you've trained in the past week."
 - TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- ACWR: "ACWR compares your last 7 days of training load to your 28-day rolling average; above 1.3 flags a load spike."
 - Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
 - RPE: "RPE is your perceived effort from 1–10."
 

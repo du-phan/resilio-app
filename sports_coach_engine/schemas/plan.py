@@ -67,6 +67,41 @@ class IntensityZone(str, Enum):
 # ============================================================
 
 
+class VolumeRecommendation(BaseModel):
+    """
+    Safe volume range recommendation based on current fitness.
+
+    Returned by suggest_volume_adjustment() toolkit function. Provides
+    conservative starting and peak volume ranges based on CTL, goal distance,
+    and available timeline. Claude Code uses this to set realistic targets.
+    """
+
+    start_range_km: tuple[float, float] = Field(..., description="Safe starting volume range (min, max)")
+    peak_range_km: tuple[float, float] = Field(..., description="Safe peak volume range (min, max)")
+    rationale: str = Field(..., description="Explanation of volume recommendations")
+    current_ctl: float = Field(..., ge=0, description="Current CTL used for recommendation")
+    goal_distance_km: float = Field(..., gt=0, description="Goal race distance")
+    weeks_available: int = Field(..., ge=1, description="Weeks available to train")
+
+
+class WeeklyVolume(BaseModel):
+    """
+    Single week's volume recommendation in progression curve.
+
+    Returned by calculate_volume_progression() toolkit function. Represents
+    one week's target volume in a linear progression with recovery weeks.
+    Claude Code uses these as baseline targets and adjusts based on readiness.
+    """
+
+    week_number: int = Field(..., ge=1, description="Week number (1-indexed)")
+    volume_km: float = Field(..., ge=0, description="Target volume for this week")
+    is_recovery_week: bool = Field(False, description="Is this a scheduled recovery week?")
+    phase: PlanPhase = Field(..., description="Periodization phase")
+    reasoning: str = Field(..., description="Why this volume (e.g., 'Recovery week -20%')")
+
+    model_config = ConfigDict(use_enum_values=True)
+
+
 class GuardrailViolation(BaseModel):
     """
     Training science guardrail violation (detection only, not enforcement).
@@ -109,8 +144,9 @@ class WorkoutPrescription(BaseModel):
     date: date
     day_of_week: int = Field(..., ge=0, le=6, description="Day of week (0=Monday, 6=Sunday)")
     workout_type: WorkoutType = Field(..., description="Workout classification")
-    distance_km: float = Field(..., ge=0, description="Target distance (km)")
+    distance_km: float = Field(..., ge=0, description="Total session distance in km (warmup + work + cooldown)")
     target_rpe: int = Field(..., ge=1, le=10, description="Target RPE on 1-10 scale")
+    week_number: int = Field(..., ge=1, description="Week number in plan (1-indexed)")
 
     # Pacing (coaching decision - simple format)
     pace_range: Optional[str] = Field(None, description="Simple format: '6:00-6:30' (auto-splits)")
@@ -126,8 +162,8 @@ class WorkoutPrescription(BaseModel):
     )
 
     # Warmup/cooldown (coaching decision - varies by workout type)
-    warmup_minutes: int = Field(default=0, ge=0, description="Coach designs based on workout intensity")
-    cooldown_minutes: int = Field(default=0, ge=0, description="Coach designs based on workout intensity")
+    warmup_km: float = Field(default=0.0, ge=0, description="Warm-up distance in km (at E-pace)")
+    cooldown_km: float = Field(default=0.0, ge=0, description="Cool-down distance in km (at E-pace + 10-20s/km)")
 
     # Priority designation (coaching decision)
     key_workout: bool = Field(default=False, description="Coach marks week's critical session(s)")
@@ -160,6 +196,10 @@ class WorkoutPrescription(BaseModel):
     # Duration (calculated from distance + pace, needed for validation/enrichment)
     duration_minutes: Optional[int] = Field(None, gt=0, description="Auto-calculated from distance + pace")
 
+    # Execution tracking
+    status: str = Field("scheduled", description="scheduled | completed | skipped | adapted")
+    execution: Optional[dict] = Field(None, description="Actual execution data (filled post-workout)")
+
     @model_validator(mode='after')
     def enrich_workout(self) -> 'WorkoutPrescription':
         """Auto-fill derived/calculated fields from minimal input."""
@@ -173,12 +213,12 @@ class WorkoutPrescription(BaseModel):
         # 2. Calculate duration from distance + pace
         if self.duration_minutes is None and self.distance_km and self.pace_range_min_km:
             # Parse pace (format: "6:00" means 6 minutes per km)
+            # distance_km is total (includes WU/CD at ~E-pace and work at work-pace)
+            # Use work pace as estimate — slightly underestimates total duration but close enough
             try:
                 pace_parts = self.pace_range_min_km.split(":")
                 pace_min_per_km = int(pace_parts[0]) + (int(pace_parts[1]) / 60.0 if len(pace_parts) > 1 else 0)
-                workout_duration = int(self.distance_km * pace_min_per_km)
-                # Add warmup/cooldown to total duration
-                self.duration_minutes = workout_duration + self.warmup_minutes + self.cooldown_minutes
+                self.duration_minutes = int(self.distance_km * pace_min_per_km)
             except (ValueError, IndexError):
                 # If pace parsing fails, estimate based on workout type
                 type_to_pace = {
@@ -191,8 +231,7 @@ class WorkoutPrescription(BaseModel):
                     WorkoutType.RACE: 5.0,
                 }
                 pace_min_per_km = type_to_pace.get(self.workout_type, 6.0)
-                workout_duration = int(self.distance_km * pace_min_per_km)
-                self.duration_minutes = workout_duration + self.warmup_minutes + self.cooldown_minutes
+                self.duration_minutes = int(self.distance_km * pace_min_per_km)
 
         # 3. Derive intensity zone from workout type
         if self.intensity_zone is None:
@@ -222,7 +261,7 @@ class WorkoutPrescription(BaseModel):
             }
             self.purpose = type_to_purpose.get(self.workout_type, "Aerobic development")
 
-        # NOTE: intervals, warmup_minutes, cooldown_minutes, key_workout are coaching decisions
+        # NOTE: intervals, warmup_km, cooldown_km, key_workout are coaching decisions
         # DO NOT auto-set them - coach must explicitly design these for athlete execution
 
         return self

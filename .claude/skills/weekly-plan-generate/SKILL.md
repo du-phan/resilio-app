@@ -149,8 +149,8 @@ Create explicit workout JSON manually with exact distances. Example structure:
               "recovery": "0"
             }
           ],
-          "warmup_minutes": 15,
-          "cooldown_minutes": 10,
+          "warmup_km": 2.5,
+          "cooldown_km": 1.5,
           "key_workout": true,
           "notes": "First quality session of build phase"
         },
@@ -161,7 +161,7 @@ Create explicit workout JSON manually with exact distances. Example structure:
           "distance_km": 12.0,
           "pace_range": "6:20-6:40",
           "target_rpe": 5,
-          "warmup_minutes": 5,
+          "warmup_km": 0.5,
           "key_workout": true,
           "notes": "Priority aerobic session - key workout of the week"
         }
@@ -178,8 +178,8 @@ Create explicit workout JSON manually with exact distances. Example structure:
 - **Required fields (all workouts)**: date, day_of_week, workout_type, distance_km, pace_range, target_rpe
 - **Structure fields (YOU must design these - critical for athlete execution)**:
   - `intervals`: For tempo/interval workouts, define exact structure (e.g., `[{"duration_minutes": 20, "pace": "5:30-5:40", "type": "threshold", "recovery": "0"}]`). Omit for easy/long runs.
-  - `warmup_minutes`: Design based on workout intensity (0-5min for easy, 10-20min for quality, 5-10min for long runs)
-  - `cooldown_minutes`: Design based on workout intensity (0-5min for easy, 10-15min for quality, 0-5min for long runs)
+  - `warmup_km`: Design based on workout type (0 for easy/long, 1.5-2.5km for tempo, 2.0-3.0km for intervals)
+  - `cooldown_km`: Design based on workout type (0 for easy/long, 1.0-2.0km for tempo, 1.5-2.0km for intervals)
   - `key_workout`: Mark 1-2 priority sessions per week that athlete shouldn't skip (typically long run + one quality session)
 - Use day_of_week numbering: 0=Monday, 6=Sunday
 - Follow workout_structure_hints constraints (max quality sessions, long run %, etc.)
@@ -319,6 +319,7 @@ I'll record your approval with:
 
 ## References (load only if needed)
 
+- Workout structure & session mechanics: `references/workout_structure.md`
 - Weekly volume progression: `references/volume_progression_weekly.md`
 - Workout generation: `references/workout_generation.md`
 - Choosing run count: `references/choosing_run_count.md`

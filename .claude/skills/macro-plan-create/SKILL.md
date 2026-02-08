@@ -1,7 +1,7 @@
 ---
 name: macro-plan-create
 description: Creates a macro plan skeleton from an approved baseline VDOT and writes a review doc with an approval prompt for the main agent. Use after baseline VDOT approval.
-disable-model-invocation: true
+disable-model-invocation: false
 context: fork
 agent: macro-planner
 allowed-tools: Bash, Read, Write
