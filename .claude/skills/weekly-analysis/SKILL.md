@@ -38,6 +38,21 @@ sce sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
 
 **Note**: Without `--since`, `sce sync` uses smart detection (incremental sync from last activity).
 
+### Step 0.5: Check for Active Training Plan (MANDATORY)
+
+**Before analyzing the week, determine if the athlete has a structured plan:**
+
+```bash
+sce plan week
+```
+
+This returns the current week's planned workouts (date, workout_type, distance_km, target_rpe, pace_range, intensity_zone) plus plan context (week number, phase, total weeks, goal).
+
+**If plan exists** → the weekly analysis MUST compare actual vs planned (Step 2 Option A)
+**If no plan / error** → proceed with freeform analysis (Step 2 Option B)
+
+**Why this matters:** Without this step, the coach may analyze a week as freeform training when the athlete is actually on a structured plan — missing critical adherence insights.
+
 ### Step 1: Get Weekly Summary
 
 ```bash
@@ -50,16 +65,47 @@ sce week
 - Running volume vs. other activities
 - CTL/ATL/TSB/ACWR/readiness changes
 
-### Step 2: Weekly Completion Check
+### Step 2: Plan Adherence (if on plan) OR Activity Summary (if freeform)
 
-Use the `sce week` summary to compare planned vs completed workouts and volume.
+#### Option A: Athlete on Structured Plan
 
-**Interpretation zones** (by completion rate or volume match):
+Cross-reference planned workouts (from Step 0.5) with actual activities (from `sce week`):
+
+1. **Map planned → actual by date:**
+   - **Match**: Correct workout type on planned date
+   - **Day shift**: Correct type/volume but different day (e.g., Wed→Thu)
+   - **Volume variance**: Right day but >15% over/under planned distance
+   - **Missed**: Planned workout not completed
+   - **Extra**: Activity not in the plan (including cross-training)
+
+2. **Assess adherence:**
+   - **Workout completion**: How many planned workouts were completed (count day-shifts as completed)
+   - **Volume adherence**: Actual running km vs planned km — flag if >115% or <80%
+   - **Quality session check**: Were tempo/interval/long run sessions completed as prescribed? (highest priority)
+
+3. **Flag critical patterns:**
+   - ⚠️ Quality sessions missed or downgraded (tempo→easy) — high priority
+   - ⚠️ Long run >20% over/under planned distance
+   - ⚠️ Easy runs at moderate pace (80/20 violation risk)
+   - ⚠️ Unplanned high-load activities on rest days or before quality sessions
+
+**Context matters:** A day shift (Wed→Thu) is usually fine. Volume variance needs coaching judgment — was it intentional, terrain-driven, or loss of discipline?
+
+**Interpretation zones** (by completion rate):
 
 - ≥90%: Excellent completion
 - 70-89%: Good, minor adjustments needed
 - 50-69%: Fair, discuss barriers
 - <50%: Poor, major replanning needed
+
+#### Option B: Freeform Training (No Structured Plan)
+
+Focus on training quality without plan reference:
+
+1. List all activities by date with sport/distance/duration
+2. Compare volume to recent 4-week average
+3. Assess frequency, sport distribution, consistency
+4. Check if training supports stated goals
 
 ### Step 3: Intensity Distribution Analysis
 
@@ -182,6 +228,7 @@ Great week! You completed 7/8 planned workouts (88% completion) and your CTL inc
 - [Balanced week with excellent execution](examples/example_week_balanced.md)
 - [80/20 intensity violation](examples/example_week_80_20_violation.md)
 - [Multi-sport conflict](examples/example_week_multi_sport.md)
+- [Plan adherence comparison](#example-plan-adherence-comparison-week-2-of-marathon-plan) (inline below)
 
 ### Step 7: Log Weekly Summary to Training Log
 
@@ -288,6 +335,25 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 
 ---
 
+### Example: Plan Adherence Comparison (Week 2 of Marathon Plan)
+
+**From `sce plan week`** (planned):
+- Mon Feb 2: 8km easy (RPE 4, 6:19-6:49/km)
+- Wed Feb 4: 7km easy (RPE 4, 6:19-6:49/km)
+- Sun Feb 8: 12km long run (RPE 5, 6:20-6:49/km)
+
+**From `sce week`** (actual):
+| Planned | Actual | Status |
+|---------|--------|--------|
+| Mon: 8km easy | Mon: 8.5km run, 53 min, HR 145.8 | ✅ Match |
+| Wed: 7km easy | Thu: 6.6km run, 39 min, HR 145.4 | ⚠️ Day shift (Wed→Thu) |
+| Sun: 12km long | Sun: 15.5km run, 96 min, HR 148.8 | ⚠️ Volume +29% |
+| — | Mon: 80 min climb (RPE 4) | ➕ Extra (cross-training) |
+
+**Coach summary**: "You completed all 3 planned runs — great consistency! Two things to discuss: Sunday's long run was 29% over target (15.5 vs 12km). Was that intentional? In base phase, I'd prefer staying closer to plan to build gradually. Also, the Wednesday→Thursday shift is totally fine — was that a schedule thing?"
+
+---
+
 ## Quick Decision Trees
 
 ### Q: Adherence <50%
@@ -327,12 +393,28 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 2. Offer compromise: Maintain this week, reassess next week
 3. Balance motivation with objective risk
 
+### Q: Athlete completed MORE workouts than planned
+
+**Investigate:**
+1. Extra activities: same sport or cross-training?
+   - Same sport on rest day → recovery deficit risk, check ACWR
+   - Cross-training → assess systemic load impact via multi-sport analysis
+2. Did extra activities fall on rest days or before quality sessions?
+   - Before quality session → may have compromised quality workout
+   - On rest day → flag recovery importance
+3. Were extra activities high-intensity or easy?
+   - High-intensity → 80/20 violation risk
+   - Easy → generally acceptable if ACWR safe
+
+**Approach:** Celebrate enthusiasm, explain "more ≠ better" (adaptation during rest), suggest channeling energy into quality execution of planned sessions.
+
 ---
 
 ## Quick Pitfalls Checklist
 
 Before sending weekly review, verify:
 
+0. ✅ **Checked for active plan** - Ran `sce plan week` before analyzing
 1. ✅ **Started with positive** - Not leading with criticism
 2. ✅ **Contextualized completion** - Investigated why low (if applicable)
 3. ✅ **Flagged 80/20 violations** - Checked intensity distribution
@@ -351,6 +433,18 @@ Before sending weekly review, verify:
 ## Summary
 
 [One sentence: overall + key achievement]
+
+## Plan Adherence (if on structured plan)
+
+**Week [N] of [TOTAL] — [PHASE] phase**
+
+| Planned | Actual | Status |
+|---------|--------|--------|
+| [date: workout] | [date: activity] | ✅/⚠️/❌ |
+
+**Workout completion**: [X]/[Y] planned workouts
+**Volume adherence**: [actual]km / [planned]km = [pct]%
+**Quality sessions**: [completed/missed]
 
 ## Completion
 
