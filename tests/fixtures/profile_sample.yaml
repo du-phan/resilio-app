@@ -9,7 +9,8 @@ primary_sport: "bouldering"
 conflict_policy: "ask_each_time"
 
 constraints:
-  available_run_days: ["tuesday", "saturday"]
+  blocked_run_days: ["monday", "wednesday", "thursday", "friday", "sunday"]
+  preferred_long_run_days: ["saturday", "sunday"]
   min_run_days_per_week: 2
   max_run_days_per_week: 3
 

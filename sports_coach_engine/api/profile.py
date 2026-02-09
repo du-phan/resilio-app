@@ -64,7 +64,7 @@ def create_profile(
     conflict_policy: str = "ask_each_time",
     min_run_days: int = 2,
     max_run_days: int = 4,
-    available_run_days: Optional[List[Weekday]] = None,
+    blocked_run_days: Optional[List[Weekday]] = None,
     detail_level: Optional["DetailLevel"] = None,
     coaching_style: Optional["CoachingStyle"] = None,
     intensity_metric: Optional["IntensityMetric"] = None,
@@ -95,7 +95,7 @@ def create_profile(
         conflict_policy: "primary_sport_wins", "running_goal_wins", or "ask_each_time" (default: "ask_each_time")
         min_run_days: Minimum run days per week (default: 2)
         max_run_days: Maximum run days per week (default: 4)
-        available_run_days: List of available weekdays (defaults to all 7 days)
+        blocked_run_days: List of blocked weekdays (defaults to empty list - no blocked days)
 
     Returns:
         Created AthleteProfile
@@ -107,7 +107,8 @@ def create_profile(
         ...     name="Alex",
         ...     age=32,
         ...     max_hr=190,
-        ...     running_priority="equal"
+        ...     running_priority="equal",
+        ...     blocked_run_days=[Weekday.TUESDAY, Weekday.THURSDAY]
         ... )
         >>> if isinstance(profile, ProfileError):
         ...     print(f"Error: {profile.message}")
@@ -157,14 +158,14 @@ def create_profile(
         )
 
     # Create constraints
-    # Schema now provides default for available_run_days (all 7 days)
+    # Schema provides default for blocked_run_days (empty list)
     # Only pass if explicitly provided
     constraint_kwargs = {
         "min_run_days_per_week": min_run_days,
         "max_run_days_per_week": max_run_days,
     }
-    if available_run_days is not None:
-        constraint_kwargs["available_run_days"] = available_run_days
+    if blocked_run_days is not None:
+        constraint_kwargs["blocked_run_days"] = blocked_run_days
 
     constraints = TrainingConstraints(**constraint_kwargs)
 
@@ -291,7 +292,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
         ...     constraints={
         ...         "min_run_days_per_week": 3,
         ...         "max_run_days_per_week": 5,
-        ...         "available_run_days": ["monday", "wednesday", "friday", "sunday"]
+        ...         "blocked_run_days": ["tuesday", "thursday"]
         ...     }
         ... )
         >>> if isinstance(profile, ProfileError):
@@ -984,6 +985,7 @@ def _auto_update_profile_patterns(workout_patterns: Dict, volume_data: Dict) -> 
 def add_sport_to_profile(
     sport: str,
     days: Optional[List[Weekday]] = None,
+    frequency: Optional[int] = None,
     duration: int = 60,
     intensity: str = "moderate",
     flexible: bool = False,
@@ -994,7 +996,8 @@ def add_sport_to_profile(
 
     Args:
         sport: Name of the sport (e.g., "climbing", "yoga", "cycling")
-        days: Days of the week for this sport (optional, None for flexible scheduling)
+        days: Days of the week for this sport (optional)
+        frequency: Times per week (optional, 1-7). Use when days vary but frequency is consistent.
         duration: Typical session duration in minutes (default: 60)
         intensity: Intensity level (easy, moderate, hard, moderate_to_hard) (default: moderate)
         flexible: Whether this commitment is flexible (True) or fixed (False)
@@ -1004,8 +1007,9 @@ def add_sport_to_profile(
         Updated AthleteProfile or ProfileError
 
     Examples:
-        >>> add_sport_to_profile("climbing", [Weekday.TUESDAY, Weekday.THURSDAY], 120, "moderate_to_hard", notes="Gym 6-7pm")
-        >>> add_sport_to_profile("yoga", intensity="easy")  # Flexible scheduling
+        >>> add_sport_to_profile("climbing", days=[Weekday.TUESDAY, Weekday.THURSDAY], duration=120, intensity="moderate_to_hard")
+        >>> add_sport_to_profile("climbing", frequency=3, duration=120, intensity="moderate_to_hard")  # 3x/week, flexible days
+        >>> add_sport_to_profile("yoga", frequency=2, intensity="easy")  # 2x/week, flexible scheduling
     """
     from sports_coach_engine.schemas.profile import OtherSport
 
@@ -1034,6 +1038,7 @@ def add_sport_to_profile(
     new_sport = OtherSport(
         sport=sport,
         days=days,
+        frequency_per_week=frequency,
         typical_duration_minutes=duration,
         typical_intensity=intensity,
         is_flexible=flexible,

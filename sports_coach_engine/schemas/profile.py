@@ -101,18 +101,19 @@ class Goal(BaseModel):
 
 
 class TrainingConstraints(BaseModel):
-    """Training constraints and availability."""
+    """Training constraints and availability.
 
-    available_run_days: List[Weekday] = Field(
-        default_factory=lambda: [
-            Weekday.MONDAY,
-            Weekday.TUESDAY,
-            Weekday.WEDNESDAY,
-            Weekday.THURSDAY,
-            Weekday.FRIDAY,
-            Weekday.SATURDAY,
-            Weekday.SUNDAY,
-        ]
+    Uses subtractive scheduling model: specify days you CAN'T run,
+    rather than listing all days you CAN run.
+    """
+
+    blocked_run_days: List[Weekday] = Field(
+        default_factory=list,
+        description="Days you absolutely cannot run (e.g., fixed climbing/yoga commitments)"
+    )
+    preferred_long_run_days: List[Weekday] = Field(
+        default_factory=lambda: [Weekday.SATURDAY, Weekday.SUNDAY],
+        description="Preferred days for long runs (soft preference)"
     )
     min_run_days_per_week: int = Field(ge=0, le=7)
     max_run_days_per_week: int = Field(ge=0, le=7)
@@ -123,11 +124,41 @@ class OtherSport(BaseModel):
     """Other sport commitment."""
 
     sport: str
-    days: Optional[List[Weekday]] = None
+    days: Optional[List[Weekday]] = None  # Preferred/fixed days (None = flexible)
+    frequency_per_week: Optional[int] = Field(
+        default=None, ge=1, le=7, description="How many times per week (required if days not specified)"
+    )
     typical_duration_minutes: int = Field(default=60, ge=0)
     typical_intensity: str = "moderate"  # easy, moderate, hard, moderate_to_hard
     is_flexible: bool = False  # Can this commitment be rescheduled?
     notes: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_frequency_and_days(self) -> "OtherSport":
+        """
+        Validate and auto-fill frequency_per_week and is_flexible fields.
+
+        Rules:
+        - If days provided and frequency not set → auto-set frequency = len(days)
+        - If frequency provided without days → auto-set is_flexible = True
+        - At least one of days or frequency_per_week must be provided
+        """
+        if self.days is not None and self.frequency_per_week is None:
+            # Auto-set frequency from days length
+            self.frequency_per_week = len(self.days)
+
+        if self.frequency_per_week is not None and self.days is None:
+            # Frequency without specific days means flexible scheduling
+            self.is_flexible = True
+
+        # Validate: at least one must be provided
+        if self.days is None and self.frequency_per_week is None:
+            raise ValueError(
+                "Either 'days' or 'frequency_per_week' must be provided. "
+                "Specify fixed days (--days monday,wednesday) or frequency (--frequency 3)."
+            )
+
+        return self
 
 
 class CommunicationPreferences(BaseModel):

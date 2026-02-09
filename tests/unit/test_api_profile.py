@@ -501,8 +501,8 @@ class TestPR1NewFields:
 class TestPR2ConstraintFields:
     """Test constraint fields added in PR2."""
     @patch("sports_coach_engine.api.profile.RepositoryIO")
-    def test_create_profile_with_available_days(self, mock_repo_cls, mock_log):
-        """Test creating profile with available_run_days constraint."""
+    def test_create_profile_with_blocked_days(self, mock_repo_cls, mock_log):
+        """Test creating profile with blocked_run_days constraint."""
         from sports_coach_engine.schemas.profile import Weekday
 
         mock_repo = Mock()
@@ -510,17 +510,17 @@ class TestPR2ConstraintFields:
         mock_repo.read_yaml.return_value = None  # No existing profile
         mock_repo.write_yaml.return_value = None
 
-        available_days = [Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY]
+        blocked_days = [Weekday.TUESDAY, Weekday.THURSDAY]
 
         result = create_profile(
             name="Test Athlete",
-            available_run_days=available_days,
+            blocked_run_days=blocked_days,
         )
 
         # Should return AthleteProfile
         assert isinstance(result, AthleteProfile)
         assert result.name == "Test Athlete"
-        assert result.constraints.available_run_days == available_days
+        assert result.constraints.blocked_run_days == blocked_days
 
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_create_profile_constraint_defaults(self, mock_repo_cls, mock_log):
@@ -536,6 +536,8 @@ class TestPR2ConstraintFields:
 
         # Should return AthleteProfile with defaults
         assert isinstance(result, AthleteProfile)
-        # Default: all days available (from schema default)
-        assert len(result.constraints.available_run_days) == 7
-        assert Weekday.MONDAY in result.constraints.available_run_days
+        # Default: no blocked days (all days available)
+        assert len(result.constraints.blocked_run_days) == 0
+        # Preferred long run days default
+        assert Weekday.SATURDAY in result.constraints.preferred_long_run_days
+        assert Weekday.SUNDAY in result.constraints.preferred_long_run_days

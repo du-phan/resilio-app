@@ -295,9 +295,9 @@ def validate_constraints(
 
     Checks per M4 spec:
     - max_run_days < min_run_days → Error
-    - len(available_run_days) < min_run_days → Warning
-    - len(available_run_days) = 0 AND goal.type ≠ general_fitness → Error
-    - All available_run_days consecutive (back-to-back) → Warning
+    - len(available_days) < min_run_days → Warning
+    - len(available_days) = 0 AND goal.type ≠ general_fitness → Error
+    - All available days consecutive (back-to-back) → Warning
 
     Args:
         constraints: Training constraints to validate
@@ -318,13 +318,25 @@ def validate_constraints(
             )
         )
 
+    # Compute available days from blocked days
+    all_weekdays = [
+        Weekday.MONDAY,
+        Weekday.TUESDAY,
+        Weekday.WEDNESDAY,
+        Weekday.THURSDAY,
+        Weekday.FRIDAY,
+        Weekday.SATURDAY,
+        Weekday.SUNDAY,
+    ]
+    available_days = [day for day in all_weekdays if day not in constraints.blocked_run_days]
+    available_count = len(available_days)
+
     # Check: insufficient available days
-    available_count = len(constraints.available_run_days)
     if available_count < constraints.min_run_days_per_week:
         errors.append(
             ConstraintError(
-                field="available_run_days",
-                message=f"Insufficient available run days ({available_count}) to meet minimum ({constraints.min_run_days_per_week}). Consider adjusting constraints.",
+                field="blocked_run_days",
+                message=f"Insufficient available run days ({available_count}) to meet minimum ({constraints.min_run_days_per_week}). Remove some blocked days or adjust constraints.",
                 severity="warning",
             )
         )
@@ -333,8 +345,8 @@ def validate_constraints(
     if available_count == 0 and goal.type != GoalType.GENERAL_FITNESS:
         errors.append(
             ConstraintError(
-                field="available_run_days",
-                message="Cannot create a race-focused plan with 0 available run days. Add at least one run day or switch to general_fitness goal.",
+                field="blocked_run_days",
+                message="Cannot create a race-focused plan with all days blocked. Remove some blocked days or switch to general_fitness goal.",
                 severity="error",
             )
         )
@@ -353,7 +365,7 @@ def validate_constraints(
         }
 
         day_numbers = sorted(
-            [weekday_order[day] for day in constraints.available_run_days]
+            [weekday_order[day] for day in available_days]
         )
 
         # Check if all consecutive
@@ -364,7 +376,7 @@ def validate_constraints(
         if all_consecutive:
             errors.append(
                 ConstraintError(
-                    field="available_run_days",
+                    field="blocked_run_days",
                     message="Back-to-back run days detected. Plan will enforce hard/easy separation (one day must be easy).",
                     severity="warning",
                 )

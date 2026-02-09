@@ -78,24 +78,27 @@ Athlete: "About 2 hours max"
 Command: sce profile set --max-session-minutes 120
 ```
 
-### available-days (comma-separated)
-**What**: Days of week athlete can train
-**Format**: Lowercase, comma-separated (e.g., "monday,wednesday,friday")
+### blocked-days (comma-separated)
+**What**: Days athlete CANNOT run (subtractive model)
+**Format**: Lowercase, comma-separated (e.g., "tuesday,thursday")
+**Default**: Empty list (no blocked days)
+**Philosophy**: Ask for exceptions, not exhaustive lists
+
 **Example**:
 ```
-Coach: "Which days work best for running?"
-Athlete: "Tuesdays, Thursdays, and weekends"
-Command: sce profile set --available-days "tuesday,thursday,saturday,sunday"
+Coach: "Are there any days you absolutely CANNOT run?"
+Athlete: "Tuesdays and Thursdays - that's climbing night"
+Command: sce profile set --blocked-days "tuesday,thursday"
 ```
 
-### preferred-days (comma-separated, optional)
-**What**: Days athlete prefers for long runs or quality
-**Example**: `sce profile set --preferred-days "saturday,sunday"`
+**If athlete says "all days work"**: Don't specify --blocked-days (defaults to empty)
 
-### time-preference (string, optional)
-**What**: Preferred time of day for training
-**Values**: "morning", "afternoon", "evening", "flexible"
-**Example**: `sce profile set --time-preference morning`
+### preferred-long-run-days (comma-separated, optional)
+**What**: Preferred days for long runs (soft preference, not constraint)
+**Default**: "saturday,sunday"
+**Example**: `sce profile set --preferred-long-run-days "saturday,sunday"`
+
+**Note**: This is a preference, not a constraint. The planner will try to place long runs on these days but can deviate if needed.
 
 ---
 
@@ -131,17 +134,35 @@ Command: sce profile set --run-priority equal
 ## Additional Sport Constraints
 
 ### sport (via add-sport command)
-**What**: Add non-running sport with constraints
+**What**: Add non-running sport with flexible scheduling support
 **Fields per sport**:
 - `--sport`: Sport name (e.g., "climbing", "cycling")
-- `--days`: Fixed days for this sport (comma-separated)
+- `--days`: Specific days (comma-separated) - optional for flexible scheduling
+- `--frequency`: Times per week (1-7) - use when days vary but frequency is consistent
 - `--duration`: Typical session duration (minutes)
-- `--intensity`: typical, easy, moderate, moderate_to_hard, hard
+- `--intensity`: easy, moderate, hard, moderate_to_hard
+- `--fixed` or `--flexible`: Whether days can be swapped
 
-**Example**:
+**Three scheduling patterns**:
+
+1. **Fixed days** (always same days):
 ```bash
-sce profile add-sport --sport climbing --days "tuesday,thursday" --duration 120 --intensity moderate_to_hard
+sce profile add-sport --sport climbing --days "tuesday,thursday" --duration 120 --intensity moderate_to_hard --fixed
 ```
+
+2. **Frequency-based** (days vary, frequency consistent):
+```bash
+sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
+# "I climb 3x/week but the days change"
+```
+
+3. **Preferred days with flexibility** (usual pattern but can swap):
+```bash
+sce profile add-sport --sport yoga --days "monday,wednesday,friday" --duration 60 --intensity easy --flexible
+# "Usually Mon/Wed/Fri but sometimes I swap days"
+```
+
+**Auto-inference**: If you specify `--days` without `--frequency`, frequency is auto-set to the number of days. If you specify `--frequency` without `--days`, the system auto-marks it as flexible.
 
 **List all sports**:
 ```bash
@@ -269,9 +290,8 @@ sce profile set --max-hr 185
 | max-run-days | integer | Yes | Natural conversation |
 | min-run-days | integer | No | Natural conversation |
 | max-session-minutes | integer | Recommended | Natural conversation |
-| available-days | csv | Recommended | Natural conversation |
-| preferred-days | csv | No | Natural conversation |
-| time-preference | string | No | Natural conversation |
+| blocked-days | csv | No (default: empty) | Natural conversation |
+| preferred-long-run-days | csv | No (default: sat/sun) | Natural conversation |
 | run-priority | string | Yes if multi-sport | Natural conversation |
 | conflict-policy | string | Yes if multi-sport | **AskUserQuestion** |
 | current-goal-distance | string | Yes | `sce goal` command |

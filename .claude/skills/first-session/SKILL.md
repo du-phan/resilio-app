@@ -161,9 +161,20 @@ sce profile analyze       # Profile suggestions from synced data
 
 **For complete field-by-field guidance**: See [references/profile_setup_workflow.md](references/profile_setup_workflow.md)
 
-#### Quick Overview
+#### Multi-Sport Branching Logic
+
+**Check sport distribution** from `sce profile analyze` → `sport_percentages`:
+
+- **If >1 sport at >15%**: Use **multi-sport sequence** (steps 4a-4f-4d-4e)
+- **If mostly running (>80%)**: Use standard sequence (steps 4a-4d-4e-4f)
+
+This ensures we understand the athlete's complete training picture before asking about constraints.
+
+#### Quick Overview (Multi-Sport Sequence)
 
 **Step 4a - Basic Info**: Name, age, max HR (reference Strava peak), resting HR, running experience (years)
+
+**Why this matters**: "I need your complete training picture. Climbing loads your cardiovascular system even though it doesn't stress your legs the same way. If I ignore it, I'll over-prescribe running and you'll burn out."
 
 **Step 4b - Injury History**: Search activities for gaps/pain mentions → Store in memory system with tags
 
@@ -174,14 +185,38 @@ sce profile analyze       # Profile suggestions from synced data
 
 - Options: `"running"` (PRIMARY), `"equal"` (EQUAL), other sport name (SECONDARY)
 
-**Step 4d - Conflict Policy**: Use AskUserQuestion (trade-offs with distinct options)
+**Step 4f - Other Sports Collection** (MOVED UP for multi-sport athletes):
+
+**IMPORTANT**: This step happens BEFORE profile creation for multi-sport athletes, so we can properly set up constraints in Step 6.
+
+- Check distribution: `sce profile analyze` → sport_percentages
+- Collect ALL sports >15%
+- **New flexible scheduling model**:
+  - **Option 1**: Fixed days → `sce profile add-sport --sport climbing --days tue,thu --duration 120 --fixed`
+  - **Option 2**: Frequency (flexible days) → `sce profile add-sport --sport climbing --frequency 3 --duration 120`
+  - **Option 3**: Preferred days (can swap) → `sce profile add-sport --sport yoga --days mon,wed,fri --duration 60 --flexible`
+
+**Coaching conversation**:
+- "Tell me about your climbing schedule."
+- If athlete says "3 times a week, days vary" → Use `--frequency 3`
+- If athlete says "Tuesday/Thursday nights at the gym, always" → Use `--days tue,thu --fixed`
+- If athlete says "Usually Monday/Wednesday/Friday but sometimes I swap" → Use `--days mon,wed,fri --flexible`
+
+**Step 4f-validation - Data Alignment**:
+
+- Verify: `sce profile validate`
+- Check: All sports >15% from analyze are in other_sports
+- Only proceed when alignment confirmed
+
+**Step 4d - Conflict Policy** (NOW informed by actual sport picture): Use AskUserQuestion (trade-offs with distinct options)
 
 - Options: Ask each time | Primary sport wins | Running goal wins
+- Context: "Your week has climbing 3x (flexible), yoga 2x. When training conflicts arise..."
 
 **Step 4e - Create Profile**:
 
 ```bash
-sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
+sce profile create --name "Alex" --age 32 --max-hr 190 --run-priority equal --conflict-policy ask_each_time
 ```
 
 **Step 4.5 - Personal Bests**:
@@ -190,18 +225,6 @@ sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_t
 - Enter each: `sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15`
 - After sync, cross-check standout activities conversationally: "I see a strong 43:15 10K on Dec 15 — was that a race?" If yes, update PB if faster.
 - Verify: `sce profile get` (PBs section)
-
-**Step 4f - Other Sports Collection**:
-
-- Check distribution: `sce profile analyze` → sport_percentages
-- Collect ALL sports >15%: `sce profile add-sport --sport climbing --days tue,thu --duration 120`
-- running_priority determines CONFLICT RESOLUTION, not whether to track sports
-
-**Step 4f-validation - Data Alignment**:
-
-- Verify: `sce profile validate`
-- Check: All sports >15% from analyze are in other_sports
-- Only proceed when alignment confirmed
 
 **Step 4g - Communication Preferences** (optional):
 
@@ -242,9 +265,13 @@ Run `sce performance baseline` and `sce goal set` (which includes automatic feas
 
 ---
 
-### Step 6: Constraints Discussion (Before Plan Generation)
+### Step 6: Running Constraints (Subtractive Model)
 
-**CRITICAL: Discuss constraints before designing plan.**
+**CRITICAL: Discuss constraints AFTER other sports are configured. This step is now informed by the athlete's complete training picture.**
+
+**Context-aware conversation**: For multi-sport athletes, reference their other sports when discussing constraints.
+
+Example: "Your week has climbing 3x (flexible) and yoga 2x. Given your half marathon goal, 3 quality run days fits well alongside everything else. Does that sound manageable?"
 
 **Questions** (natural conversation):
 
@@ -256,35 +283,35 @@ Run `sce performance baseline` and `sce goal set` (which includes automatic feas
 
    - Store as: `--max-run-days N`
 
-3. **Available days (reverse logic)**: "Are there any days you absolutely CANNOT run?"
+3. **Blocked days (subtractive model)**: "Are there any days you absolutely CANNOT run?"
 
-   - **If athlete says "No" or "All days work"**: Keep default (all 7 days available)
-   - **If athlete says "Tuesdays and Thursdays"**: Remove those from available_run_days
-   - **Example**: If "cannot run Tue/Thu" → `--available-days "monday,wednesday,friday,saturday,sunday"`
-   - **Default assumes all 7 days available** - ask only for exceptions
+   - **NEW APPROACH**: Ask for exceptions, not exhaustive lists
+   - **If athlete says "No" or "All days work"**: No blocked days (default)
+   - **If athlete says "Tuesdays and Thursdays - that's climbing night"**: Block those days
+   - **Example**: "Cannot run Tue/Thu" → `--blocked-days "tuesday,thursday"`
+   - **Default is empty** - only specify days that are BLOCKED
 
 4. **Session duration**: "What's the longest time for a long run?" (90-180 min typical)
 
    - Store as: `--max-session-minutes N`
 
-5. **Other sports schedule**: "Are climbing days fixed or flexible?" (if applicable)
-   - Context for workout scheduling around other sports
-
 **Store constraints**:
 
 ```bash
-# Example: Cannot run Tue/Thu, 3-4 days/week, max 120 min sessions
+# Example: Cannot run Tue/Thu (climbing nights), 3-4 days/week, max 120 min sessions
 sce profile set --min-run-days 3 --max-run-days 4 \
-  --available-days "monday,wednesday,friday,saturday,sunday" \
+  --blocked-days "tuesday,thursday" \
   --max-session-minutes 120
 ```
 
-**If athlete says "all days work"**:
+**If athlete says "all days work"** (no blocked days):
 
 ```bash
-# No need to specify --available-days (defaults to all 7 days)
+# No need to specify --blocked-days (defaults to empty - no blocked days)
 sce profile set --min-run-days 3 --max-run-days 4 --max-session-minutes 120
 ```
+
+**Auto-derive suggestion**: If the athlete added climbing on Tue/Thu as fixed commitment, you can suggest: "Since climbing is fixed on Tuesday/Thursday, should I block those days for running?" But don't assume - some athletes can do both on the same day.
 
 ---
 

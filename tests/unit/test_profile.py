@@ -53,7 +53,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.RUNNING_GOAL_WINS,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.TUESDAY, Weekday.SATURDAY],
+                blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
                 min_run_days_per_week=2,
                 max_run_days_per_week=3,
             ),
@@ -83,7 +83,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.ASK_EACH_TIME,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.MONDAY],
+                blocked_run_days=[Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),
@@ -110,7 +110,7 @@ class TestProfileService:
             primary_sport="climbing",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.TUESDAY, Weekday.THURSDAY],
+                blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=2,
                 max_run_days_per_week=2,
             ),
@@ -162,7 +162,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.RUNNING_GOAL_WINS,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.MONDAY],
+                blocked_run_days=[Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),
@@ -191,7 +191,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.ASK_EACH_TIME,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.FRIDAY],
+                blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),
@@ -244,10 +244,11 @@ class TestProfileService:
             primary_sport="bouldering",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
             constraints=TrainingConstraints(
-                available_run_days=[
-                    Weekday.TUESDAY,
-                    Weekday.WEDNESDAY,
-                    Weekday.SATURDAY,
+                blocked_run_days=[
+                    Weekday.MONDAY,
+                    Weekday.THURSDAY,
+                    Weekday.FRIDAY,
+                    Weekday.SUNDAY,
                 ],
                 min_run_days_per_week=2,
                 max_run_days_per_week=3,
@@ -263,7 +264,7 @@ class TestProfileService:
                     days=[Weekday.MONDAY, Weekday.THURSDAY],
                     typical_duration_minutes=120,
                     typical_intensity="moderate_to_hard",
-                    is_flexible=False,  # Inverted: was is_fixed=True, now not flexible
+                    is_flexible=False,  # Fixed commitment
                 )
             ],
         )
@@ -331,7 +332,7 @@ class TestProfileValidation:
                 running_priority=RunningPriority.PRIMARY,
                 conflict_policy=ConflictPolicy.ASK_EACH_TIME,
                 constraints=TrainingConstraints(
-                    available_run_days=[Weekday.MONDAY],
+                    blocked_run_days=[Weekday.MONDAY],
                     min_run_days_per_week=1,
                     max_run_days_per_week=10,  # Invalid: > 7
                 ),
@@ -351,7 +352,7 @@ class TestProfileValidation:
                 running_priority=RunningPriority.PRIMARY,
                 conflict_policy=ConflictPolicy.ASK_EACH_TIME,
                 constraints=TrainingConstraints(
-                    available_run_days=[Weekday.MONDAY],
+                    blocked_run_days=[Weekday.MONDAY],
                     min_run_days_per_week=1,
                     max_run_days_per_week=1,
                 ),
@@ -422,7 +423,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[Weekday.TUESDAY, Weekday.SATURDAY],
+            blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
             min_run_days_per_week=2,
             max_run_days_per_week=3,
         )
@@ -438,7 +439,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[Weekday.TUESDAY],
+            blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
             min_run_days_per_week=3,
             max_run_days_per_week=2,  # Invalid: max < min
         )
@@ -457,7 +458,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[Weekday.TUESDAY],  # Only 1 day
+            blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY],  # Only Sunday available (1 day)
             min_run_days_per_week=3,  # But need 3 days
             max_run_days_per_week=4,
         )
@@ -468,7 +469,7 @@ class TestConstraintValidation:
         # Should be valid (warning, not error)
         assert result.valid
         assert any(
-            e.field == "available_run_days" and e.severity == "warning"
+            e.field == "blocked_run_days" and e.severity == "warning"
             for e in result.errors
         )
 
@@ -477,7 +478,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[],  # No days
+            blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],  # All days blocked
             min_run_days_per_week=0,
             max_run_days_per_week=0,
         )
@@ -487,9 +488,9 @@ class TestConstraintValidation:
 
         assert not result.valid
         assert any(
-            e.field == "available_run_days"
+            e.field == "blocked_run_days"
             and e.severity == "error"
-            and "race-focused" in e.message
+            and "all days blocked" in e.message
             for e in result.errors
         )
 
@@ -498,7 +499,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[],
+            blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
             min_run_days_per_week=0,
             max_run_days_per_week=0,
         )
@@ -510,15 +511,16 @@ class TestConstraintValidation:
         assert result.valid
 
     def test_validate_constraints_warning_consecutive_days(self):
-        """Should warn when all days are consecutive."""
+        """Should warn when all available days are consecutive."""
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[
-                Weekday.MONDAY,
-                Weekday.TUESDAY,
-                Weekday.WEDNESDAY,
-            ],  # All consecutive
+            blocked_run_days=[
+                Weekday.THURSDAY,
+                Weekday.FRIDAY,
+                Weekday.SATURDAY,
+                Weekday.SUNDAY,
+            ],  # Leaves Mon/Tue/Wed consecutive
             min_run_days_per_week=3,
             max_run_days_per_week=3,
         )
@@ -529,22 +531,23 @@ class TestConstraintValidation:
         # Should be valid (warning only)
         assert result.valid
         assert any(
-            e.field == "available_run_days"
+            e.field == "blocked_run_days"
             and e.severity == "warning"
             and "Back-to-back" in e.message
             for e in result.errors
         )
 
     def test_validate_constraints_no_warning_non_consecutive(self):
-        """Should not warn when days are not all consecutive."""
+        """Should not warn when available days are not all consecutive."""
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            available_run_days=[
-                Weekday.TUESDAY,
-                Weekday.THURSDAY,
-                Weekday.SATURDAY,
-            ],  # Not all consecutive
+            blocked_run_days=[
+                Weekday.MONDAY,
+                Weekday.WEDNESDAY,
+                Weekday.FRIDAY,
+                Weekday.SUNDAY,
+            ],  # Leaves Tue/Thu/Sat non-consecutive
             min_run_days_per_week=3,
             max_run_days_per_week=3,
         )

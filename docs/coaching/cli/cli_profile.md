@@ -41,10 +41,10 @@ Create a new athlete profile with sensible defaults.
 **Optional - Constraints:**
 - `--min-run-days` (integer, 0-7) - Minimum run days per week (default: 2)
 - `--max-run-days` (integer, 0-7) - Maximum run days per week (default: 4)
-- `--available-days` (comma-separated) - Available run days (e.g., "monday,wednesday,friday")
-- `--preferred-days` (comma-separated) - Preferred run days (subset of available)
-- `--time-preference` (`morning`, `evening`, `flexible`) - Time of day preference
+- `--blocked-days` (comma-separated) - Days you CANNOT run (e.g., "tuesday,thursday" for climbing nights)
 - `--max-session-minutes` (integer) - Maximum session duration (default: 90)
+
+**Note**: The scheduling model is subtractive - specify which days are BLOCKED, not which days are available. This is easier for multi-sport athletes ("I can't run Tuesday/Thursday" vs. listing all 5 available days).
 
 **Optional - Multi-Sport:**
 - `--run-priority` (`primary`, `secondary`, `equal`) - Running priority (default: equal)
@@ -68,12 +68,12 @@ sce profile create \
   --max-hr 199 --resting-hr 55 \
   --injury-history "IT band 2024, resolved" \
   --run-experience-years 3 --weekly-km 25 \
-  --available-days "tuesday,thursday,saturday,sunday" \
-  --preferred-days "saturday,sunday" \
-  --time-preference morning \
+  --blocked-days "monday,wednesday,friday" \
   --run-priority equal --primary-sport climbing \
   --conflict-policy ask_each_time \
   --detail-level moderate
+
+# Note: blocked-days "mon,wed,fri" means athlete CAN run Tue/Thu/Sat/Sun (4 available days)
 ```
 
 ---
@@ -104,12 +104,11 @@ sce profile get
       "target_date": "2026-09-15"
     },
     "constraints": {
-      "available_run_days": ["tuesday", "thursday", "saturday", "sunday"],
-      "preferred_run_days": ["saturday", "sunday"],
+      "blocked_run_days": ["monday", "wednesday", "friday"],
+      "preferred_long_run_days": ["saturday", "sunday"],
       "min_run_days_per_week": 2,
       "max_run_days_per_week": 4,
-      "max_time_per_session_minutes": 90,
-      "time_preference": "morning"
+      "max_time_per_session_minutes": 90
     },
     "running_priority": "equal",
     "conflict_policy": "ask_each_time",
@@ -141,8 +140,7 @@ sce profile set --max-hr 190 --resting-hr 55
 
 # Update constraints
 sce profile set --min-run-days 3 --max-run-days 4
-sce profile set --available-days "tuesday,thursday,saturday,sunday"
-sce profile set --time-preference morning
+sce profile set --blocked-days "tuesday,thursday"  # Cannot run Tue/Thu (climbing nights)
 
 # Update priorities
 sce profile set --run-priority primary
@@ -158,44 +156,41 @@ sce profile set --intensity-metric hr
 
 ## sce profile add-sport
 
-Add a sport commitment to track multi-sport training load.
+Add a sport commitment to track multi-sport training load. Supports flexible scheduling with frequency-based patterns.
 
 **Required:**
 - `--sport` (string) - Sport name (e.g., climbing, yoga, cycling)
 
 **Optional:**
-- `--days` (comma-separated) - Days for this sport (omit for flexible scheduling)
+- `--days` (comma-separated) - Specific days for this sport (e.g., "tuesday,thursday")
+- `--frequency` (integer, 1-7) - Times per week when days vary but frequency is consistent
 - `--duration` (integer) - Typical session duration in minutes (default: 60)
 - `--intensity` (string) - Intensity level: easy, moderate, hard, moderate_to_hard (default: moderate)
-- `--flexible` / `--fixed` (boolean) - Flexible scheduling (True) or fixed commitment (False) (default: --fixed)
+- `--flexible` / `--fixed` (boolean) - Whether days can be swapped (default: --fixed)
 - `--notes` (string) - Optional notes about the commitment
 
-**Examples:**
+**Scheduling Patterns:**
 
+1. **Fixed days** (always same days):
 ```bash
-# Fixed commitment with specific days and duration/intensity (default --fixed)
-sce profile add-sport \
-  --sport climbing \
-  --days tuesday,thursday \
-  --duration 120 \
-  --intensity moderate_to_hard \
-  --notes "Bouldering gym 6-7pm"
-
-# Flexible commitment - can reschedule if needed
-sce profile add-sport \
-  --sport yoga \
-  --days monday \
-  --intensity easy \
-  --flexible
-
-# Sport with flexible scheduling (no fixed days)
-sce profile add-sport \
-  --sport climbing \
-  --intensity moderate_to_hard
-
-# Sport with all defaults (flexible scheduling, 60min, moderate intensity)
-sce profile add-sport --sport yoga
+sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard --fixed
 ```
+
+2. **Frequency-based** (days vary, frequency consistent):
+```bash
+sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
+# "I climb 3x/week but the days change"
+```
+
+3. **Preferred days with flexibility** (usual pattern but can swap):
+```bash
+sce profile add-sport --sport yoga --days monday,wednesday,friday --duration 60 --flexible
+# "Usually Mon/Wed/Fri but sometimes I swap days"
+```
+
+**Auto-inference:**
+- If `--days` specified without `--frequency`: Frequency auto-set to number of days
+- If `--frequency` specified without `--days`: Auto-marked as flexible scheduling
 
 ---
 

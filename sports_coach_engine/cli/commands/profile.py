@@ -39,10 +39,10 @@ def profile_create_command(
     ),
     min_run_days: int = typer.Option(2, "--min-run-days", help="Minimum run days per week"),
     max_run_days: int = typer.Option(4, "--max-run-days", help="Maximum run days per week"),
-    available_days: Optional[str] = typer.Option(
+    blocked_days: Optional[str] = typer.Option(
         None,
-        "--available-days",
-        help="Available run days (comma-separated, e.g., 'monday,wednesday,friday')"
+        "--blocked-days",
+        help="Days you cannot run (comma-separated, e.g., 'tuesday,thursday' for climbing nights)"
     ),
     detail_level: Optional[str] = typer.Option(
         None,
@@ -68,17 +68,17 @@ def profile_create_command(
     Examples:
         sce profile create --name "Alex" --age 32 --max-hr 190
         sce profile create --name "Sam" --run-priority primary
-        sce profile create --name "Alex" --available-days "monday,wednesday,friday"
+        sce profile create --name "Alex" --blocked-days "tuesday,thursday"
     """
     # Parse constraint fields (comma-separated days to List[Weekday])
-    available_days_list = None
-    if available_days:
+    blocked_days_list = None
+    if blocked_days:
         try:
-            available_days_list = [Weekday(d.strip().lower()) for d in available_days.split(',')]
+            blocked_days_list = [Weekday(d.strip().lower()) for d in blocked_days.split(',')]
         except ValueError as e:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"Invalid day in --available-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                message=f"Invalid day in --blocked-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
                 data={}
             )
             output_json(envelope)
@@ -134,7 +134,7 @@ def profile_create_command(
         conflict_policy=conflict_policy,
         min_run_days=min_run_days,
         max_run_days=max_run_days,
-        available_run_days=available_days_list,
+        blocked_run_days=blocked_days_list,
         detail_level=detail_level_enum,
         coaching_style=coaching_style_enum,
         intensity_metric=intensity_metric_enum,
@@ -218,10 +218,10 @@ def profile_set_command(
         "--max-session-minutes",
         help="Maximum session duration in minutes (e.g., 90, 180)"
     ),
-    available_days: Optional[str] = typer.Option(
+    blocked_days: Optional[str] = typer.Option(
         None,
-        "--available-days",
-        help="Available run days (comma-separated, e.g., 'monday,wednesday,friday')"
+        "--blocked-days",
+        help="Days you cannot run (comma-separated, e.g., 'tuesday,thursday' for climbing nights)"
     ),
     detail_level: Optional[str] = typer.Option(
         None,
@@ -251,7 +251,7 @@ def profile_set_command(
         sce profile set --conflict-policy ask_each_time
         sce profile set --min-run-days 3 --max-run-days 4
         sce profile set --max-session-minutes 180
-        sce profile set --available-days "tuesday,thursday,saturday,sunday"
+        sce profile set --blocked-days "tuesday,thursday"
     """
     # Collect non-None fields
     fields = {}
@@ -284,14 +284,14 @@ def profile_set_command(
         constraint_updates["max_time_per_session_minutes"] = max_session_minutes
 
     # Parse new constraint fields
-    if available_days is not None:
+    if blocked_days is not None:
         try:
-            available_days_list = [Weekday(d.strip().lower()) for d in available_days.split(',')]
-            constraint_updates["available_run_days"] = available_days_list
+            blocked_days_list = [Weekday(d.strip().lower()) for d in blocked_days.split(',')]
+            constraint_updates["blocked_run_days"] = blocked_days_list
         except ValueError as e:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"Invalid day in --available-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                message=f"Invalid day in --blocked-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
                 data={}
             )
             output_json(envelope)
@@ -477,6 +477,7 @@ def profile_add_sport_command(
     ctx: typer.Context,
     sport: str = typer.Option(..., "--sport", help="Sport name (e.g., climbing, yoga, cycling)"),
     days: Optional[str] = typer.Option(None, "--days", help="Days (comma-separated, e.g., 'tuesday,thursday'). Optional for flexible scheduling."),
+    frequency: Optional[int] = typer.Option(None, "--frequency", help="Times per week (e.g., 3). Use when days vary but frequency is consistent."),
     duration: int = typer.Option(60, "--duration", help="Typical session duration in minutes (default: 60)"),
     intensity: str = typer.Option("moderate", "--intensity", help="Intensity: easy, moderate, hard, moderate_to_hard (default: moderate)"),
     flexible: bool = typer.Option(False, "--flexible/--fixed", help="Flexible scheduling (True) or fixed commitment (False)"),
@@ -488,9 +489,14 @@ def profile_add_sport_command(
     so the coach can account for multi-sport training load.
 
     Examples:
+        # Fixed days commitment
         sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard --fixed
-        sce profile add-sport --sport yoga --days monday --duration 60 --intensity easy --notes "Morning yoga 7am" --flexible
-        sce profile add-sport --sport swimming --intensity moderate --flexible  # Flexible scheduling, no fixed days
+
+        # Flexible scheduling with frequency
+        sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
+
+        # Fixed days with flexible scheduling (can swap days within the week)
+        sce profile add-sport --sport yoga --days monday,wednesday,friday --duration 60 --flexible
     """
     from sports_coach_engine.api.profile import add_sport_to_profile
 
@@ -512,6 +518,7 @@ def profile_add_sport_command(
     result = add_sport_to_profile(
         sport=sport,
         days=day_list,
+        frequency=frequency,
         duration=duration,
         intensity=intensity,
         flexible=flexible,
@@ -521,6 +528,8 @@ def profile_add_sport_command(
     # Build success message
     if days:
         success_msg = f"Added sport commitment: {sport} on {days}"
+    elif frequency:
+        success_msg = f"Added sport commitment: {sport} ({frequency}x/week, flexible days)"
     else:
         success_msg = f"Added sport commitment: {sport} (flexible scheduling)"
 
