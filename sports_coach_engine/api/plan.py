@@ -2417,6 +2417,92 @@ def validate_week_plan(
         errors.extend([e["message"] for e in validation_result.errors])
         warnings.extend([w["message"] for w in validation_result.warnings])
 
+        # Enforce max session duration if profile provides a limit
+        max_session_minutes = None
+        try:
+            from sports_coach_engine.api.profile import get_profile, ProfileError
+            profile_result = get_profile()
+            if not isinstance(profile_result, ProfileError) and profile_result.constraints:
+                max_session_minutes = profile_result.constraints.max_time_per_session_minutes
+        except Exception:
+            max_session_minutes = None
+
+        import math
+
+        def _estimate_duration_minutes(workout: dict) -> Optional[int]:
+            if workout.get("duration_minutes") is not None:
+                try:
+                    return int(math.ceil(float(workout["duration_minutes"])))
+                except (TypeError, ValueError):
+                    return None
+            distance_km = workout.get("distance_km")
+            if not distance_km:
+                return None
+            pace_candidates = []
+            pace_min_field = workout.get("pace_range_min_km")
+            pace_max_field = workout.get("pace_range_max_km")
+            for pace_field in (pace_min_field, pace_max_field):
+                if pace_field:
+                    try:
+                        parts = str(pace_field).strip().split(":")
+                        pace_candidates.append(
+                            int(parts[0]) + (int(parts[1]) / 60.0 if len(parts) > 1 else 0)
+                        )
+                    except (ValueError, IndexError):
+                        pass
+
+            pace_range = workout.get("pace_range")
+            if pace_range:
+                try:
+                    pace_parts = [p.strip() for p in pace_range.split("-") if p.strip()]
+                    for pace_part in pace_parts:
+                        parts = pace_part.split(":")
+                        pace_candidates.append(
+                            int(parts[0]) + (int(parts[1]) / 60.0 if len(parts) > 1 else 0)
+                        )
+                except (ValueError, IndexError):
+                    pass
+            if pace_candidates:
+                pace_min_per_km = max(pace_candidates)
+                return int(math.ceil(distance_km * pace_min_per_km))
+            type_to_pace = {
+                "easy": 6.0,
+                "long_run": 6.5,
+                "tempo": 5.5,
+                "intervals": 5.0,
+                "fartlek": 5.75,
+                "strides": 6.0,
+                "race": 5.0,
+            }
+            workout_type = workout.get("workout_type")
+            pace_min_per_km = type_to_pace.get(workout_type, 6.0)
+            return int(math.ceil(distance_km * pace_min_per_km))
+
+        if max_session_minutes == 0:
+            errors.append("Profile max_time_per_session_minutes is 0; set a positive value or leave unset")
+            max_session_minutes = None
+        if max_session_minutes:
+            for i, workout in enumerate(week.get("workouts", [])):
+                workout_type = workout.get("workout_type")
+                distance_km = workout.get("distance_km")
+                if (distance_km is None or distance_km == 0) and workout.get("duration_minutes") is None:
+                    if workout_type != "rest":
+                        errors.append(
+                            f"Workout {i}: non-rest workout missing distance_km and duration_minutes"
+                        )
+                    continue
+                duration = _estimate_duration_minutes(workout)
+                if duration is None:
+                    warnings.append(
+                        f"Workout {i}: duration_minutes missing; cannot validate max session limit"
+                    )
+                    continue
+                if duration > max_session_minutes:
+                    errors.append(
+                        f"Workout {i}: duration {duration}min exceeds max session limit "
+                        f"({max_session_minutes}min)"
+                    )
+
     # Check date alignment
     if "start_date" in week and "end_date" in week:
         try:

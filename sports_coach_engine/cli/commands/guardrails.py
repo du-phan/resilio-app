@@ -14,6 +14,7 @@ from sports_coach_engine.api.guardrails import (
     validate_quality_volume,
     validate_weekly_progression,
     validate_long_run_limits,
+    validate_weekly_volume_feasibility,
     calculate_safe_volume_range,
     calculate_break_return_plan,
     calculate_masters_recovery,
@@ -276,10 +277,10 @@ def long_run_command(
         "--pct-limit",
         help="Percentage limit (default 30%)"
     ),
-    duration_limit: int = typer.Option(
-        150,
+    duration_limit: Optional[int] = typer.Option(
+        None,
         "--duration-limit",
-        help="Duration limit in minutes (default 150)"
+        help="Duration limit in minutes (default: profile max or 150)"
     ),
 ) -> None:
     """Validate long run against weekly volume and duration limits.
@@ -298,12 +299,24 @@ def long_run_command(
         - violations: List of specific violations with recommendations
     """
     # Call API
+    resolved_duration_limit = duration_limit
+    if resolved_duration_limit is None:
+        try:
+            from sports_coach_engine.api.profile import get_profile, ProfileError
+            profile_result = get_profile()
+            if not isinstance(profile_result, ProfileError) and profile_result.constraints:
+                resolved_duration_limit = profile_result.constraints.max_time_per_session_minutes
+        except Exception:
+            resolved_duration_limit = None
+    if resolved_duration_limit is None:
+        resolved_duration_limit = 150
+
     result = validate_long_run_limits(
         long_run_km=distance,
         long_run_duration_minutes=duration,
         weekly_volume_km=weekly_volume,
         pct_limit=pct_limit,
-        duration_limit_minutes=duration_limit,
+        duration_limit_minutes=resolved_duration_limit,
     )
 
     # Build success message
@@ -323,6 +336,64 @@ def long_run_command(
     output_json(envelope)
 
     # Exit with appropriate code
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="feasible-volume")
+def feasible_volume_command(
+    ctx: typer.Context,
+    run_days: int = typer.Option(
+        ...,
+        "--run-days",
+        help="Planned run days per week"
+    ),
+    max_session_minutes: int = typer.Option(
+        ...,
+        "--max-session-minutes",
+        help="Max session duration in minutes"
+    ),
+    easy_pace_min_per_km: float = typer.Option(
+        ...,
+        "--easy-pace-min-per-km",
+        help="Conservative easy pace in min/km (e.g., 6.5 for 6:30/km)"
+    ),
+    target_volume: Optional[float] = typer.Option(
+        None,
+        "--target-volume",
+        help="Planned weekly volume in km (optional)"
+    ),
+) -> None:
+    """Validate weekly volume feasibility based on session duration constraints.
+
+    Calculates the maximum feasible weekly volume given run frequency,
+    max session duration, and a conservative easy pace.
+
+    Examples:
+        sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5
+        sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5 --target-volume 32
+    """
+    result = validate_weekly_volume_feasibility(
+        run_days_per_week=run_days,
+        max_time_per_session_minutes=max_session_minutes,
+        easy_pace_min_per_km=easy_pace_min_per_km,
+        target_volume_km=target_volume,
+    )
+
+    if hasattr(result, "overall_ok"):
+        if result.overall_ok:
+            msg = (
+                f"Weekly volume feasible (max ≈ {result.max_weekly_volume_km:.1f}km)"
+            )
+        else:
+            violation_count = len(result.violations)
+            msg = f"Weekly volume infeasible: {violation_count} violation(s) found"
+    else:
+        msg = "Feasibility validation failed"
+
+    envelope = api_result_to_envelope(result, success_message=msg)
+    output_json(envelope)
+
     exit_code = get_exit_code_from_envelope(envelope)
     raise typer.Exit(code=exit_code)
 

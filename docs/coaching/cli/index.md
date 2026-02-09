@@ -145,6 +145,7 @@ sce plan week --next     # Next week's plan → [Planning Commands](cli_planning
 | **`sce guardrails progression`** | Validate progression | [Guardrails](cli_guardrails.md#sce-guardrails-progression) |
 | **`sce guardrails analyze-progression`** | Analyze context | [Guardrails](cli_guardrails.md#sce-guardrails-analyze-progression) |
 | **`sce guardrails long-run`** | Validate long run | [Guardrails](cli_guardrails.md#sce-guardrails-long-run) |
+| **`sce guardrails feasible-volume`** | Validate feasibility | [Guardrails](cli_guardrails.md#sce-guardrails-feasible-volume) |
 | **`sce guardrails safe-volume`** | Calculate safe range | [Guardrails](cli_guardrails.md#sce-guardrails-safe-volume) |
 | **`sce guardrails break-return`** | Plan return after break | [Guardrails](cli_guardrails.md#sce-guardrails-break-return) |
 | **`sce guardrails masters-recovery`** | Age-specific recovery | [Guardrails](cli_guardrails.md#sce-guardrails-masters-recovery) |

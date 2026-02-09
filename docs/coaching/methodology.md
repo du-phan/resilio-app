@@ -275,6 +275,7 @@ Evidence-based training rules provided as **validation tools**. Claude Code deci
 | 80/20 intensity distribution | ~80% low intensity, ≤20% moderate+high        | Maximizes aerobic development, minimizes injury | ≥3 run days/week             |
 | ACWR safety                  | ACWR > 1.5 = significant load spike           | Load spike indicator (not a prediction)         | M11 detects → Claude decides |
 | Long run caps                | ≤25-30% of weekly run volume, ≤2.5 hours      | Prevents overuse injuries                       | Weekly validation            |
+| Max session duration         | ≤ athlete's `max_time_per_session_minutes`    | Keeps training feasible + respects constraints  | Weekly validation            |
 | Hard/easy separation         | No back-to-back high-intensity (RPE ≥7)       | Recovery between quality sessions               | Across all sports            |
 | T/I/R volume limits          | Threshold ≤10%, Intervals ≤8%, Repetition ≤5% | Prevents excessive intensity                    | Of weekly mileage            |
 | Recovery weeks               | Every 4th week at ~70% volume                 | Consolidates adaptations                        | During base/build phases     |
@@ -293,6 +294,8 @@ Minimum workout durations prevent unrealistic short workouts when weekly volume 
 - Intervals: 35 minutes total (including warmup/cooldown)
 
 **Profile-aware minimums**: Use `sce profile analyze` to populate `typical_*` fields so minimums scale to the athlete's history. If weekly volume is too low to meet minimums at the current run frequency, reduce run count rather than prescribing unrealistic short runs.
+
+**Max session constraint**: Always cap workouts at the athlete's `max_time_per_session_minutes`. If the weekly volume target can't be achieved within that cap, lower weekly volume or adjust constraints (never schedule over-cap sessions).
 
 ### 80/20 Intensity Distribution
 
@@ -358,6 +361,7 @@ Sports Coach Engine synthesizes principles from multiple proven training systems
 - Start: 60-90 minutes
 - Build gradually: +10-15 minutes every 2-3 weeks
 - Cap: 25-30% of weekly volume, ≤2.5 hours
+- Low-frequency adjustment: With **≤2 run days/week**, long runs often reach **45-55% of weekly volume** to make total volume feasible (still respect time cap).
 
 **Recovery Weeks**:
 

@@ -31,6 +31,7 @@ If missing, return a blocking checklist and stop.
 ```bash
 sce dates next-monday
 sce profile get
+sce profile analyze
 sce status
 sce memory list --type INJURY_HISTORY
 ```
@@ -39,6 +40,25 @@ sce memory list --type INJURY_HISTORY
 
 ```bash
 sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECENT>
+```
+
+Also validate feasibility vs. max session constraint (use conservative easy pace):
+
+```bash
+sce guardrails feasible-volume \
+  --run-days <MAX_RUN_DAYS> \
+  --max-session-minutes <MAX_SESSION_MIN> \
+  --easy-pace-min-per-km <EASY_PACE_SLOW> \
+  --target-volume <PLANNED_PEAK>
+```
+
+If the planned peak exceeds feasibility, **block** and reduce peak volume or adjust constraints.
+
+If historical activity JSON is available, check proven capacity (cap at 120%):
+
+```bash
+sce analysis capacity --week <PEAK_WEEK> --volume <PLANNED_PEAK> --load <PLANNED_SYSTEMIC> \
+  --historical /tmp/all_activities.json
 ```
 
 3. Create a macro template JSON at `/tmp/macro_template.json` using the CLI:

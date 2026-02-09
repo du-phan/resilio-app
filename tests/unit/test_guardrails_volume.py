@@ -13,6 +13,7 @@ from sports_coach_engine.core.guardrails.volume import (
     validate_quality_volume,
     validate_weekly_progression,
     validate_long_run_limits,
+    validate_weekly_volume_feasibility,
     calculate_safe_volume_range,
     analyze_weekly_progression_context,
 )
@@ -247,6 +248,50 @@ class TestWeeklyProgressionValidation:
         )
 
         assert result.ok is True
+
+
+# ============================================================
+# WEEKLY VOLUME FEASIBILITY TESTS
+# ============================================================
+
+
+class TestWeeklyVolumeFeasibility:
+    """Tests for weekly volume feasibility vs. max session duration."""
+
+    def test_target_at_limit_is_ok(self):
+        """Target equal to feasible max should be valid."""
+        result = validate_weekly_volume_feasibility(
+            run_days_per_week=2,
+            max_time_per_session_minutes=90,
+            easy_pace_min_per_km=6.0,
+            target_volume_km=30.0,
+        )
+
+        assert result.overall_ok is True
+        assert result.max_weekly_volume_km == 30.0
+        assert len(result.violations) == 0
+
+    def test_target_over_limit_is_violation(self):
+        """Target above feasible max should create a violation."""
+        result = validate_weekly_volume_feasibility(
+            run_days_per_week=2,
+            max_time_per_session_minutes=90,
+            easy_pace_min_per_km=6.0,
+            target_volume_km=31.0,
+        )
+
+        assert result.overall_ok is False
+        assert len(result.violations) == 1
+        assert result.violations[0].type == "WEEKLY_VOLUME_EXCEEDS_MAX_SESSION_FEASIBILITY"
+
+    def test_invalid_inputs_raise(self):
+        """Invalid inputs should raise ValueError."""
+        with pytest.raises(ValueError):
+            validate_weekly_volume_feasibility(
+                run_days_per_week=0,
+                max_time_per_session_minutes=90,
+                easy_pace_min_per_km=6.0,
+            )
 
 
 # ============================================================

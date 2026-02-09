@@ -100,6 +100,30 @@ sce guardrails safe-volume --ctl 44 --recent-volume 22 --run-days-per-week 4
 
 ---
 
+## Feasibility vs. Max Session Duration
+
+**Problem**: Weekly volume targets may be *impossible* if the athlete has a max session duration cap.
+
+**Rule**: Compute a **feasible weekly maximum** using the athlete's max session minutes and conservative easy pace.
+
+```
+max_single_session_km = max_session_minutes / easy_pace_min_per_km
+max_weekly_volume_km = max_single_session_km × run_days_per_week
+```
+
+**Guardrail command**:
+```bash
+sce guardrails feasible-volume \
+  --run-days 2 \
+  --max-session-minutes 90 \
+  --easy-pace-min-per-km 6.5 \
+  --target-volume 32
+```
+
+If `target_volume_km` exceeds the feasible max, **reduce volume** or **adjust constraints**.
+
+---
+
 ## Phase-Specific Volume Targets
 
 ### Base Phase
@@ -169,6 +193,11 @@ sce guardrails safe-volume --ctl 44 --recent-volume 22 --run-days-per-week 4
 ### Running SECONDARY
 - Minimal volume (20-30 km/week maintenance)
 - No progressive buildup
+
+### Low Run Frequency Adjustment
+
+With **≤2 run days/week**, long runs often need to be **45-55% of weekly volume**
+to keep total volume feasible. Still respect the max session duration cap.
 
 **Use systemic load** (not just running km) for macro planning with multi-sport athletes.
 

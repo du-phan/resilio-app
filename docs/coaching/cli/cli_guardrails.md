@@ -9,6 +9,7 @@ Volume validation and recovery planning based on Daniels' Running Formula and Pf
 - `sce guardrails progression` - Validate weekly volume progression (10% rule)
 - `sce guardrails analyze-progression` - Analyze progression with rich context for AI coaching
 - `sce guardrails long-run` - Validate long run limits
+- `sce guardrails feasible-volume` - Validate weekly volume feasibility (session duration)
 - `sce guardrails safe-volume` - Calculate safe volume range
 - `sce guardrails break-return` - Generate return-to-training protocol
 - `sce guardrails masters-recovery` - Calculate age-specific recovery adjustments
@@ -103,7 +104,7 @@ sce guardrails analyze-progression \
 
 ## sce guardrails long-run
 
-Validate long run against weekly volume (≤30%) and duration (≤150min) limits.
+Validate long run against weekly volume (≤30%) and duration limits.
 
 **Usage:**
 
@@ -112,6 +113,23 @@ sce guardrails long-run --distance 18.0 --duration 135 --weekly-volume 50.0
 ```
 
 **Returns:** `pct_ok`, `duration_ok`, `violations[]` with recommendations.
+**Duration default:** profile `max_time_per_session_minutes` if available, otherwise 150 minutes.
+
+---
+
+## sce guardrails feasible-volume
+
+Validate whether a weekly volume target is feasible given **run frequency** and a
+**max session duration** constraint.
+
+**Usage:**
+
+```bash
+sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5
+sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5 --target-volume 32
+```
+
+**Returns:** `max_single_session_km`, `max_weekly_volume_km`, `overall_ok`, `violations[]`.
 
 ---
 

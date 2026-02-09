@@ -23,6 +23,7 @@ from sports_coach_engine.schemas.guardrails import (
     QualityVolumeValidation,
     WeeklyProgressionValidation,
     LongRunValidation,
+    FeasibleVolumeValidation,
     SafeVolumeRange,
     BreakReturnPlan,
     MastersRecoveryAdjustment,
@@ -35,6 +36,7 @@ from sports_coach_engine.core.guardrails.volume import (
     validate_quality_volume as core_validate_quality,
     validate_weekly_progression as core_validate_progression,
     validate_long_run_limits as core_validate_long_run,
+    validate_weekly_volume_feasibility as core_validate_feasibility,
     calculate_safe_volume_range as core_calculate_safe_range,
     analyze_weekly_progression_context as core_analyze_progression_context,
 )
@@ -350,6 +352,59 @@ def validate_long_run_limits(
     except ValueError as e:
         return GuardrailsError(
             error_type="calculation_failed", message=f"Long run validation failed: {e}"
+        )
+    except Exception as e:
+        return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+
+
+def validate_weekly_volume_feasibility(
+    run_days_per_week: int,
+    max_time_per_session_minutes: int,
+    easy_pace_min_per_km: float,
+    target_volume_km: Optional[float] = None,
+) -> Union[FeasibleVolumeValidation, GuardrailsError]:
+    """
+    Validate weekly volume feasibility based on session duration constraints.
+
+    Uses a conservative easy-pace estimate to compute the maximum feasible
+    weekly volume given run frequency and max session duration.
+    """
+    try:
+        if run_days_per_week <= 0 or run_days_per_week > 7:
+            return GuardrailsError(
+                error_type="invalid_input",
+                message=f"Run days per week must be 1-7, got {run_days_per_week}",
+            )
+        if max_time_per_session_minutes <= 0:
+            return GuardrailsError(
+                error_type="invalid_input",
+                message=(
+                    f"Max session minutes must be positive, got {max_time_per_session_minutes}"
+                ),
+            )
+        if easy_pace_min_per_km <= 0:
+            return GuardrailsError(
+                error_type="invalid_input",
+                message=f"Easy pace must be positive, got {easy_pace_min_per_km}",
+            )
+        if target_volume_km is not None and target_volume_km <= 0:
+            return GuardrailsError(
+                error_type="invalid_input",
+                message=f"Target volume must be positive, got {target_volume_km}",
+            )
+
+        result = core_validate_feasibility(
+            run_days_per_week=run_days_per_week,
+            max_time_per_session_minutes=max_time_per_session_minutes,
+            easy_pace_min_per_km=easy_pace_min_per_km,
+            target_volume_km=target_volume_km,
+        )
+        return result
+
+    except ValueError as e:
+        return GuardrailsError(
+            error_type="calculation_failed",
+            message=f"Feasibility validation failed: {e}",
         )
     except Exception as e:
         return GuardrailsError(error_type="calculation_failed", message=f"Unexpected error: {e}")

@@ -218,6 +218,42 @@ class LongRunValidation(BaseModel):
         }
 
 
+class FeasibleVolumeValidation(BaseModel):
+    """Validation of weekly volume feasibility based on session duration constraints."""
+
+    run_days_per_week: int = Field(..., ge=1, le=7, description="Planned run days per week")
+    max_time_per_session_minutes: int = Field(..., gt=0, description="Max session duration in minutes")
+    easy_pace_min_per_km: float = Field(..., gt=0, description="Conservative easy pace (min/km)")
+    max_single_session_km: float = Field(..., gt=0, description="Max distance per session (km)")
+    max_weekly_volume_km: float = Field(..., gt=0, description="Max feasible weekly volume (km)")
+    target_volume_km: Optional[float] = Field(None, description="Planned weekly volume target (km)")
+    violations: List[Violation] = Field(default_factory=list, description="List of violations found")
+    overall_ok: bool = Field(..., description="Whether weekly volume is feasible")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "run_days_per_week": 2,
+                "max_time_per_session_minutes": 90,
+                "easy_pace_min_per_km": 6.5,
+                "max_single_session_km": 13.8,
+                "max_weekly_volume_km": 27.6,
+                "target_volume_km": 32.0,
+                "violations": [
+                    {
+                        "type": "WEEKLY_VOLUME_EXCEEDS_MAX_SESSION_FEASIBILITY",
+                        "severity": "high",
+                        "message": "Target weekly volume (32.0km) exceeds feasible max (27.6km)",
+                        "current_value": 32.0,
+                        "limit_value": 27.6,
+                        "recommendation": "Reduce weekly volume or increase max session minutes/run days",
+                    }
+                ],
+                "overall_ok": False,
+            }
+        }
+
+
 class SafeVolumeRange(BaseModel):
     """Safe weekly volume range based on current fitness and goals."""
 

@@ -10,6 +10,7 @@ from sports_coach_engine.schemas.guardrails import (
     QualityVolumeValidation,
     WeeklyProgressionValidation,
     LongRunValidation,
+    FeasibleVolumeValidation,
     SafeVolumeRange,
     Violation,
     ViolationSeverity,
@@ -568,6 +569,70 @@ def validate_long_run_limits(
         duration_ok=duration_ok,
         violations=violations,
         overall_ok=pct_ok and duration_ok,
+    )
+
+
+# ============================================================
+# WEEKLY VOLUME FEASIBILITY (MAX SESSION LIMITS)
+# ============================================================
+
+
+def validate_weekly_volume_feasibility(
+    run_days_per_week: int,
+    max_time_per_session_minutes: int,
+    easy_pace_min_per_km: float,
+    target_volume_km: Optional[float] = None,
+) -> FeasibleVolumeValidation:
+    """
+    Validate whether weekly volume is feasible given session time limits.
+
+    Uses a conservative easy-pace estimate to compute maximum feasible distance
+    per session and weekly volume ceiling.
+    """
+    if run_days_per_week <= 0 or run_days_per_week > 7:
+        raise ValueError(f"run_days_per_week must be 1-7, got {run_days_per_week}")
+    if max_time_per_session_minutes <= 0:
+        raise ValueError(
+            f"max_time_per_session_minutes must be positive, got {max_time_per_session_minutes}"
+        )
+    if easy_pace_min_per_km <= 0:
+        raise ValueError(f"easy_pace_min_per_km must be positive, got {easy_pace_min_per_km}")
+
+    max_single_session_km = max_time_per_session_minutes / easy_pace_min_per_km
+    max_weekly_volume_km = max_single_session_km * run_days_per_week
+
+    violations = []
+    overall_ok = True
+
+    if target_volume_km is not None and target_volume_km > max_weekly_volume_km:
+        overall_ok = False
+        violations.append(
+            Violation(
+                type="WEEKLY_VOLUME_EXCEEDS_MAX_SESSION_FEASIBILITY",
+                severity=ViolationSeverity.HIGH,
+                message=(
+                    f"Target weekly volume ({target_volume_km:.1f}km) exceeds feasible "
+                    f"max ({max_weekly_volume_km:.1f}km) based on {run_days_per_week} runs "
+                    f"and {max_time_per_session_minutes}min cap."
+                ),
+                current_value=target_volume_km,
+                limit_value=max_weekly_volume_km,
+                recommendation=(
+                    f"Reduce weekly volume to ≤{max_weekly_volume_km:.1f}km or increase "
+                    "max session minutes/run days."
+                ),
+            )
+        )
+
+    return FeasibleVolumeValidation(
+        run_days_per_week=run_days_per_week,
+        max_time_per_session_minutes=max_time_per_session_minutes,
+        easy_pace_min_per_km=easy_pace_min_per_km,
+        max_single_session_km=round(max_single_session_km, 2),
+        max_weekly_volume_km=round(max_weekly_volume_km, 2),
+        target_volume_km=target_volume_km,
+        violations=violations,
+        overall_ok=overall_ok,
     )
 
 

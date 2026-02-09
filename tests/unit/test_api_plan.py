@@ -5,9 +5,11 @@ Tests get_current_plan(), regenerate_plan(), get_pending_suggestions(),
 accept_suggestion(), and decline_suggestion().
 """
 
+import json
 import pytest
 from datetime import date, timedelta
 from unittest.mock import Mock, patch
+from pathlib import Path
 
 from sports_coach_engine.api.plan import (
     get_current_plan,
@@ -19,6 +21,7 @@ from sports_coach_engine.api.plan import (
     get_pending_suggestions,
     accept_suggestion,
     decline_suggestion,
+    validate_week_plan,
     PlanError,
     AcceptResult,
     DeclineResult,
@@ -118,6 +121,237 @@ class TestGetCurrentPlan:
         assert isinstance(result, PlanError)
         assert result.error_type == "validation"
         assert "Failed to load plan" in result.message
+
+
+def _write_week_plan(tmp_path: Path, week: dict) -> str:
+    path = tmp_path / "weekly_plan.json"
+    path.write_text(json.dumps({"weeks": [week]}))
+    return str(path)
+
+
+class TestValidateWeekPlanMaxSession:
+    """Tests for max session enforcement in validate_week_plan."""
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_uses_slowest_pace_range(self, mock_get_profile, tmp_path):
+        """Slow end of pace_range should drive max-session validation."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 14.0,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "easy",
+                    "distance_km": 14.0,
+                    "target_rpe": 4,
+                    "pace_range": "6:00-6:30",
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is False
+        assert any("exceeds max session limit" in e for e in result["errors"])
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_uses_ceil_for_duration(self, mock_get_profile, tmp_path):
+        """Ceil rounding should enforce over-limit durations."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 13.9,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "easy",
+                    "distance_km": 13.9,
+                    "target_rpe": 4,
+                    "pace_range": "6:30-6:30",
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is False
+        assert any("exceeds max session limit" in e for e in result["errors"])
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_non_rest_zero_distance_is_error(self, mock_get_profile, tmp_path):
+        """Non-rest workouts missing distance/duration should fail."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 0.0,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "easy",
+                    "distance_km": 0,
+                    "target_rpe": 3,
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is False
+        assert any("missing distance_km and duration_minutes" in e for e in result["errors"])
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_rest_zero_distance_is_ok(self, mock_get_profile, tmp_path):
+        """Rest workouts with zero distance should be allowed."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 0.0,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "rest",
+                    "distance_km": 0,
+                    "target_rpe": 1,
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is True
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_uses_pace_range_max_fields(self, mock_get_profile, tmp_path):
+        """pace_range_min_km/pace_range_max_km should be used if pace_range missing."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 14.0,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "easy",
+                    "distance_km": 14.0,
+                    "target_rpe": 4,
+                    "pace_range_min_km": "6:00",
+                    "pace_range_max_km": "6:30",
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is False
+        assert any("exceeds max session limit" in e for e in result["errors"])
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_max_session_zero_is_error(self, mock_get_profile, tmp_path):
+        """max_time_per_session_minutes = 0 should fail validation."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=0)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 0.0,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "rest",
+                    "distance_km": 0,
+                    "target_rpe": 1,
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is False
+        assert any("max_time_per_session_minutes is 0" in e for e in result["errors"])
+
+    @patch("sports_coach_engine.api.profile.get_profile")
+    def test_intervals_use_slowest_pace(self, mock_get_profile, tmp_path):
+        """Intervals should use slowest pace for duration estimation."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+
+        week = {
+            "week_number": 1,
+            "phase": "build",
+            "start_date": "2026-02-16",
+            "end_date": "2026-02-22",
+            "target_volume_km": 14.0,
+            "target_systemic_load_au": 0.0,
+            "workouts": [
+                {
+                    "date": "2026-02-16",
+                    "day_of_week": 0,
+                    "workout_type": "intervals",
+                    "distance_km": 14.0,
+                    "target_rpe": 7,
+                    "pace_range": "5:30-6:30",
+                }
+            ],
+        }
+
+        plan_path = _write_week_plan(tmp_path, week)
+        result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is False
+        assert any("exceeds max session limit" in e for e in result["errors"])
 
 
 # ============================================================
