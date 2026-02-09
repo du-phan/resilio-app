@@ -1,106 +1,69 @@
 # Sports Coach Engine
 
-AI-powered adaptive running coach for multi-sport athletes, running entirely in Codex or Claude Code terminal sessions.
+AI-powered adaptive running coach for multi-sport athletes, designed to run entirely inside
+Codex or Claude Code terminal sessions with local YAML/JSON persistence.
 
-**Current Status**: Phase 7 Complete (M1-M14). System ready for coaching sessions.
+## Quick Links
 
-## Setup
+- `AGENTS.md` - Codex usage, skills, coaching protocols
+- `CLAUDE.md` - Claude Code usage, coaching protocols
+- `docs/coaching/cli/index.md` - CLI command index
+- `docs/coaching/methodology.md` - Training methodology
+- `docs/getting_started_non_coders.html` - Guided setup for non-coders
 
-### Getting Started (Non-Coders)
-
-If you are not comfortable with the terminal, use the guided setup page:
-
-- `docs/getting_started_non_coders.html`
-
-### 1. Install Dependencies
+## Coach Quickstart (Codex/Claude)
 
 ```bash
-# Using poetry (recommended)
+# Install dependencies (Poetry recommended)
 poetry install
 
-# Or using pip (PEP 517)
-pip install -e .
-```
-
-### 2. Create Configuration
-
-```bash
-# Create config directory
+# Create config
 mkdir -p config
-
-# Copy templates
 cp templates/settings.yaml config/settings.yaml
 cp templates/secrets.local.yaml config/secrets.local.yaml
 
-# Edit secrets with your Strava credentials
-# Get credentials from: https://www.strava.com/settings/api
+# Add Strava credentials
 vim config/secrets.local.yaml
+
+# Core session flow
+poetry run sce auth status
+poetry run sce sync
+poetry run sce profile analyze
+poetry run sce status
 ```
 
-**Note**: `config/secrets.local.yaml` is gitignored and will not be committed.
+For full coaching workflows and behavior rules, see `AGENTS.md` and `CLAUDE.md`.
 
-### 3. Run Tests
-
-```bash
-# All tests
-pytest tests/ -v
-
-# Unit tests only
-pytest tests/unit -v
-
-# Integration tests
-pytest tests/integration -v
-
-# With coverage
-pytest tests/ -v --cov=sports_coach_engine/core
-```
-
-## Implementation Status
-
-All 14 modules are implemented (M1-M14), including Strava sync, metrics, planning,
-adaptation, and conversation logging. See `docs/IMPLEMENTATION_PROGRESS.md` for the
-full module/test breakdown.
-
-## Architecture
-
-- **Claude Code (AI)**: User interface - understands natural language intent
-- **API Layer** (`api/`): Public functions Claude Code calls
-- **Core Modules** (`core/`): Internal domain logic (M1-M14)
-- **Schemas** (`schemas/`): Pydantic data models
-- **Data Directory** (`data/`): Local YAML/JSON persistence
-
-See `docs/` for complete specifications.
-
-## Development
+## Developer Quickstart
 
 ```bash
+# Install dependencies
+poetry install
+
 # Run tests
 poetry run pytest
 
 # Type check
 poetry run mypy sports_coach_engine
 
-# Format code
+# Format
 poetry run black sports_coach_engine
 
 # Lint
 poetry run ruff sports_coach_engine
 ```
 
-## Documentation
+## Architecture Snapshot
 
-- `docs/mvp/v0_product_requirements_document.md` - Complete PRD
-- `docs/mvp/v0_technical_specification.md` - Architecture spec
-- `docs/specs/api_layer.md` - API documentation
-- `docs/specs/modules/` - Individual module specs (M1-M14)
-- `CLAUDE.md` - Guide for Claude Code integration
-- `AGENTS.md` - Guide for Codex integration
+- `sports_coach_engine/cli/` - Typer CLI entrypoints (`sce`)
+- `sports_coach_engine/core/` - Domain logic (metrics, planning, adaptation)
+- `sports_coach_engine/api/` - Public API layer for agents
+- `sports_coach_engine/schemas/` - Pydantic models
+- `data/` - Local persistence (gitignored)
 
-## Codex Support
+## Skills
 
-- Skills location: `.agents/skills`
-- Codex guidance: `AGENTS.md`
-- Claude Code skills remain in `.claude/skills` with guidance in `CLAUDE.md`
+Skills live in `.agents/skills` (Codex) and `.claude/skills` (Claude Code). For selection rules and workflows, see `AGENTS.md` and `CLAUDE.md`.
 
 ## License
 

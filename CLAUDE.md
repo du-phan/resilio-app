@@ -128,6 +128,8 @@ sce approvals status
 - Describe what you'll do: "Let me analyze your training week"
 - Describe capabilities: "I can help you set up your profile and sync your Strava data"
 - Use natural language: "Let's get started with your onboarding"
+- Present complete plans inline: "Here's your 24-week macro plan structure..." followed by full tables and rationale
+- Inform about persistent storage after approval: "This plan is now saved in your data directory for reference"
 - Explain metrics on first mention in plain language. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
 
 **Metric one-liners (use on first mention)**:
@@ -145,6 +147,7 @@ sce approvals status
 - Expose CLI commands: ~~"I'll run `sce week` to check"~~
 - Reference subagents: ~~"I'll spawn a subagent to analyze"~~
 - Mention tools: ~~"Let me use the Task tool"~~
+- Tell athletes to open files: ~~"You can review the full details at /tmp/macro_plan_review.md"~~
 
 **Examples:**
 
@@ -234,8 +237,14 @@ sce approvals status
 
 1. **VDOT baseline proposal**: `vdot-baseline-proposal` (present in chat)
 2. **Athlete approval** → `sce approvals approve-vdot --value <VDOT>`
-3. **Macro plan**: `macro-plan-create` (writes review doc)
+3. **Macro plan**:
+   - Run `macro-plan-create` skill (returns `review_path`, `macro_summary`, `athlete_prompt`)
+   - **CRITICAL**: Read the review doc from `review_path` and present it INLINE in chat
+   - DO NOT just show a bullet-point summary—athletes need to see the complete plan structure to make an informed decision
+   - The review doc is comprehensive and designed to be presented directly (includes tables, rationale, pacing, multi-sport context)
+   - After presenting the full review doc, use the `athlete_prompt` to ask for approval
 4. **Athlete approval** → `sce approvals approve-macro`
+   - After approval, the plan is automatically saved to `data/plans/current_plan_review.md` for reference
 5. **Weekly plan**: `weekly-plan-generate` (weekly JSON + review)
 6. **Athlete approval** → `sce approvals approve-week --week <N> --file /tmp/weekly_plan_wN.json`
 7. **Apply**: `weekly-plan-apply` → `sce plan populate --from-json /tmp/weekly_plan_wN.json --validate`
@@ -261,6 +270,28 @@ sce approvals status
 
 - `docs/coaching/methodology.md`
 - `.claude/skills/weekly-analysis/references/multi_sport_balance.md`
+
+---
+
+## Plan Storage and Reference
+
+**Macro Plan Review Document**:
+- During creation: Generated at `/tmp/macro_plan_review_YYYY_MM_DD.md` for preview
+- After approval: Permanently saved to `data/plans/current_plan_review.md`
+- Contains: Complete week-by-week structure, phase breakdown, VDOT pacing, coaching rationale, multi-sport integration
+
+**Weekly Plan JSON Files**:
+- During creation: Generated at `/tmp/weekly_plan_wN.json` for review
+- After approval: Stored in `data/plans/weeks/` directory as `week_N.json`
+- Contains: Exact workouts with dates, distances, paces, RPE, notes
+
+**Accessing Plans**:
+Athletes can reference saved plans at any time:
+- `sce plan export-structure --out-dir /tmp` (exports current macro plan structure)
+- `sce plan week --number N` (shows specific week details)
+- Direct file access: `data/plans/current_plan_review.md` (macro plan review)
+
+**Note**: The main agent should NEVER tell athletes to "open the file in /tmp" during approval workflows. Always present the complete plan inline in chat.
 
 ---
 

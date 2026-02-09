@@ -144,17 +144,31 @@ sce plan validate-structure \
   --race-week <RACE_WEEK>
 ```
 
-6. Write `/tmp/macro_plan_review_YYYY_MM_DD.md` with:
+6. Generate review document:
 
-- Start/end dates and phase breakdown
-- Volume table (weeks, phase, target volume, recovery flag)
-- Baseline VDOT + pace table
-- Approval prompt text for the athlete
-- Handoff note: main agent must record approval via
-  `sce approvals approve-macro`
+**Structure**: Follow `references/review_doc_template.md` exactly.
+
+**Critical requirements**:
+- Complete volume table (all weeks, no omissions)
+- Coaching rationale explains WHY these decisions (build trust)
+- Multi-sport section ONLY if `other_sports` in profile (check with `sce profile get`)
+- Systemic load column:
+  - Multi-sport: Show total load targets (running + other sports)
+  - Single-sport: Use 0.0 or omit column
+- Pace zones from VDOT using `sce vdot paces --vdot {value}`
+- Storage note: temporary in `/tmp/`, permanent in `data/plans/` after approval
+
+Write to: `/tmp/macro_plan_review_YYYY_MM_DD.md`
+
+**Validation**: After writing, verify:
+- All weeks have entries (count rows = total_weeks)
+- Recovery weeks clearly marked
+- Phase transitions align with table
+- Approval prompt is athlete-facing (no CLI commands exposed)
 
 ## References (load only if needed)
 
+- Review doc structure: `references/review_doc_template.md`
 - Macro volume progression: `references/volume_progression_macro.md`
 - Macro guardrails: `references/guardrails_macro.md`
 - Periodization: `references/periodization.md`
