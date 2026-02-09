@@ -122,7 +122,9 @@ class TestGetTodaysWorkout:
         assert result == mock_enriched_workout
 
         # Verify workflow was called
-        mock_workflow.assert_called_once()    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        mock_workflow.assert_called_once()
+
+    @patch("sports_coach_engine.api.coach.RepositoryIO")
     @patch("sports_coach_engine.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_workout(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval when no workout scheduled."""

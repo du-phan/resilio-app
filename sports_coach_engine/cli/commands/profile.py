@@ -439,7 +439,6 @@ def profile_analyze_command(ctx: typer.Context) -> None:
     - Activity date range and gaps (injury breaks, vacations)
     - Max HR observed in workouts
     - Weekly volume averages (run distance)
-    - Training day patterns (which days athlete typically trains)
     - Multi-sport frequency and priorities
 
     Pure computation on local data - no Strava API calls.
@@ -450,7 +449,6 @@ def profile_analyze_command(ctx: typer.Context) -> None:
         Output includes suggestions for:
         - max_hr: 199 (observed peak)
         - weekly_km: 22.5 (4-week average)
-        - suggested_run_days: [tuesday, thursday, saturday, sunday]
         - running_priority: equal (40% running, 60% other sports)
     """
     from sports_coach_engine.api.profile import analyze_profile_from_activities

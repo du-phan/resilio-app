@@ -11,7 +11,6 @@ Historical activity data from Strava is essential for intelligent coaching. With
 **With authentication** (6 months / 180 days of history):
 - Ask: "I see you average 35km/week - should we maintain this?"
 - Reference actual data: "Your CTL is 44 (solid recreational fitness)"
-- Identify patterns: "You typically train Tuesdays and weekends"
 - Detect injuries: "I notice a 2-week gap in November with CTL drop"
 
 **Without authentication**:

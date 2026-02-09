@@ -75,15 +75,6 @@ sce profile analyze
   "max_hr_observed": 194,
   "avg_hr_mean": 152,
   "weekly_run_km_avg": 48.2,
-  "training_days_distribution": {
-    "monday": 0.15,
-    "tuesday": 0.82,
-    "wednesday": 0.10,
-    "thursday": 0.88,
-    "friday": 0.05,
-    "saturday": 0.92,
-    "sunday": 0.85
-  },
   "sport_distribution": {
     "running": 0.88,
     "cycling": 0.12
@@ -97,7 +88,6 @@ sce profile analyze
 - Your CTL is 52 (competitive fitness level)
 - You average 48 km/week running
 - You also do occasional cycling (12% of activities)
-- You typically train Tuesdays, Thursdays, Saturdays, Sundays
 - Your peak HR is 194 bpm
 
 Let's set up your profile. What's your name?"

@@ -78,7 +78,7 @@ class TestGetCurrentMetrics:
     @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
     @patch("sports_coach_engine.api.metrics.enrich_metrics")
     def test_get_current_metrics_success(
-        self, mock_enrich, mock_find_date, mock_repo_cls, mock_log, mock_daily_metrics, mock_enriched_metrics
+        self, mock_enrich, mock_find_date, mock_repo_cls, mock_daily_metrics, mock_enriched_metrics
     ):
         """Test successful metrics retrieval."""
         # Mock repository

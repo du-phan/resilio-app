@@ -159,7 +159,6 @@ sce profile analyze       # Profile suggestions from synced data
 
 - `max_hr_observed`: Suggests max HR
 - `weekly_run_km_avg`: Average weekly volume
-- `training_days_distribution`: Which days athlete typically trains
 - `sport_distribution`: Multi-sport breakdown
 - `activity_gaps`: Potential injury/illness breaks
 

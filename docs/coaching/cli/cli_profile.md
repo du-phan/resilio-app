@@ -182,7 +182,6 @@ sce profile analyze
 Typical outputs include:
 - `max_hr_observed`
 - `weekly_run_km_recent_4wk`
-- `suggested_run_days`
 - `suggested_running_priority`
 - `sport_distribution`
 

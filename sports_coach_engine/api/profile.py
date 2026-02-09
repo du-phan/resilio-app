@@ -579,10 +579,6 @@ class ProfileAnalysis:
     weekly_run_km_recent_4wk: Optional[float]  # Last 4 weeks
     total_activities: int
 
-    # Training patterns
-    training_days_distribution: Dict[str, int]  # {"monday": 15, "tuesday": 12, ...}
-    preferred_days: List[str]  # Top 3-4 days by frequency
-
     # Multi-sport analysis
     sport_distribution: Dict[str, int]  # {"run": 26, "climb": 39, ...}
     sport_percentages: Dict[str, float]
@@ -591,7 +587,6 @@ class ProfileAnalysis:
     # Recommendations
     suggested_max_hr: Optional[int]
     suggested_weekly_km: Optional[float]
-    suggested_run_days: List[str]
     suggested_running_priority: str  # "primary" | "equal" | "secondary"
 
 
@@ -629,12 +624,8 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
           "max_hr_observed": 199,
           "avg_hr_mean": 165,
           "weekly_run_km_avg": 22.5,
-          "training_days_distribution": {
-            "monday": 15, "tuesday": 18, "wednesday": 12, ...
-          },
           "sport_distribution": {"run": 26, "climb": 39, "yoga": 13, ...},
-          "suggested_max_hr": 199,
-          "suggested_run_days": ["tuesday", "thursday", "saturday", "sunday"]
+          "suggested_max_hr": 199
         }
 
     Note: Dates reflect synced data window, not athlete's full training history.
@@ -677,18 +668,15 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
     # 5. Workout pattern analysis (for profile-aware minimums)
     workout_patterns = _analyze_workout_patterns(activities)
 
-    # 6. Training day patterns
-    day_patterns = _analyze_training_days(activities)
-
-    # 7. Sport distribution
+    # 6. Sport distribution
     sport_data = _analyze_sport_distribution(activities)
 
-    # 8. Generate recommendations
+    # 7. Generate recommendations
     recommendations = _generate_recommendations(
-        hr_data, volume_data, day_patterns, sport_data
+        hr_data, volume_data, sport_data
     )
 
-    # 9. Auto-update profile with workout patterns (if profile exists)
+    # 8. Auto-update profile with workout patterns (if profile exists)
     _auto_update_profile_patterns(workout_patterns, volume_data)
 
     # Build result
@@ -705,14 +693,11 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
         weekly_run_km_avg=volume_data['weekly_avg'],
         weekly_run_km_recent_4wk=volume_data['recent_4wk'],
         total_activities=len(activities),
-        training_days_distribution=day_patterns['distribution'],
-        preferred_days=day_patterns['preferred'],
         sport_distribution=sport_data['counts'],
         sport_percentages=sport_data['percentages'],
         run_to_other_ratio=sport_data['run_ratio'],
         suggested_max_hr=recommendations['max_hr'],
         suggested_weekly_km=recommendations['weekly_km'],
-        suggested_run_days=recommendations['run_days'],
         suggested_running_priority=recommendations['running_priority'],
     )
 
@@ -859,23 +844,6 @@ def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
     }
 
 
-def _analyze_training_days(activities: List[NormalizedActivity]) -> Dict:
-    """Find which days athlete typically trains."""
-    day_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-    day_counts = Counter(a.date.weekday() for a in activities)
-
-    distribution = {day_names[i]: day_counts.get(i, 0) for i in range(7)}
-
-    # Top 3-4 days by frequency
-    sorted_days = sorted(distribution.items(), key=lambda x: x[1], reverse=True)
-    preferred = [day for day, count in sorted_days[:4] if count >= 5]  # At least 5 activities
-
-    return {
-        'distribution': distribution,
-        'preferred': preferred
-    }
-
-
 def _analyze_sport_distribution(activities: List[NormalizedActivity]) -> Dict:
     """Classify sport participation."""
     sport_counts = Counter(a.sport_type for a in activities)
@@ -894,16 +862,13 @@ def _analyze_sport_distribution(activities: List[NormalizedActivity]) -> Dict:
     }
 
 
-def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) -> Dict:
+def _generate_recommendations(hr_data, volume_data, sport_data) -> Dict:
     """Generate profile field suggestions."""
     # Max HR: Use observed max if available
     suggested_max_hr = hr_data['max_hr']
 
     # Weekly volume: Use recent 4-week average, or overall average
     suggested_km = volume_data['recent_4wk'] or volume_data['weekly_avg']
-
-    # Run days: Use top 3-4 days
-    suggested_run_days = day_patterns['preferred']
 
     # Running priority
     run_ratio = sport_data['run_ratio']
@@ -917,7 +882,6 @@ def _generate_recommendations(hr_data, volume_data, day_patterns, sport_data) ->
     return {
         'max_hr': suggested_max_hr,
         'weekly_km': suggested_km,
-        'run_days': suggested_run_days,
         'running_priority': priority
     }
 
