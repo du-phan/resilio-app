@@ -53,7 +53,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.RUNNING_GOAL_WINS,
             constraints=TrainingConstraints(
-                blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
+                unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
                 min_run_days_per_week=2,
                 max_run_days_per_week=3,
             ),
@@ -83,7 +83,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.ASK_EACH_TIME,
             constraints=TrainingConstraints(
-                blocked_run_days=[Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+                unavailable_run_days=[Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),
@@ -110,7 +110,7 @@ class TestProfileService:
             primary_sport="climbing",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
             constraints=TrainingConstraints(
-                blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+                unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=2,
                 max_run_days_per_week=2,
             ),
@@ -162,7 +162,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.RUNNING_GOAL_WINS,
             constraints=TrainingConstraints(
-                blocked_run_days=[Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+                unavailable_run_days=[Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),
@@ -191,7 +191,7 @@ class TestProfileService:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.ASK_EACH_TIME,
             constraints=TrainingConstraints(
-                blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+                unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.SATURDAY, Weekday.SUNDAY],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),
@@ -244,7 +244,7 @@ class TestProfileService:
             primary_sport="bouldering",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
             constraints=TrainingConstraints(
-                blocked_run_days=[
+                unavailable_run_days=[
                     Weekday.MONDAY,
                     Weekday.THURSDAY,
                     Weekday.FRIDAY,
@@ -261,10 +261,10 @@ class TestProfileService:
             other_sports=[
                 OtherSport(
                     sport="bouldering",
-                    days=[Weekday.MONDAY, Weekday.THURSDAY],
+                    frequency_per_week=2,
+                    unavailable_days=[Weekday.MONDAY, Weekday.THURSDAY],
                     typical_duration_minutes=120,
                     typical_intensity="moderate_to_hard",
-                    is_flexible=False,  # Fixed commitment
                 )
             ],
         )
@@ -278,44 +278,6 @@ class TestProfileService:
         assert loaded.strava.athlete_id == "12345678"
         assert len(loaded.other_sports) == 1
         assert loaded.other_sports[0].sport == "bouldering"
-
-    def test_other_sport_is_flexible_field(self, tmp_path, monkeypatch):
-        """Test that is_flexible field works correctly."""
-        (tmp_path / ".git").mkdir()
-        monkeypatch.chdir(tmp_path)
-
-        # Test fixed commitment (is_flexible=False)
-        fixed_sport = {
-            "sport": "climbing",
-            "days": ["monday"],
-            "typical_duration_minutes": 120,
-            "typical_intensity": "moderate_to_hard",
-            "is_flexible": False,
-        }
-        sport_fixed = OtherSport.model_validate(fixed_sport)
-        assert sport_fixed.is_flexible == False
-
-        # Test flexible commitment (is_flexible=True)
-        flexible_sport = {
-            "sport": "yoga",
-            "days": ["wednesday"],
-            "typical_duration_minutes": 60,
-            "typical_intensity": "easy",
-            "is_flexible": True,
-        }
-        sport_flexible = OtherSport.model_validate(flexible_sport)
-        assert sport_flexible.is_flexible == True
-
-        # Test default value (should be False - fixed by default)
-        default_sport = {
-            "sport": "swimming",
-            "days": ["friday"],
-            "typical_duration_minutes": 45,
-            "typical_intensity": "moderate",
-        }
-        sport_default = OtherSport.model_validate(default_sport)
-        assert sport_default.is_flexible == False
-
 
 class TestProfileValidation:
     """Tests for profile schema validation."""
@@ -332,7 +294,7 @@ class TestProfileValidation:
                 running_priority=RunningPriority.PRIMARY,
                 conflict_policy=ConflictPolicy.ASK_EACH_TIME,
                 constraints=TrainingConstraints(
-                    blocked_run_days=[Weekday.MONDAY],
+                    unavailable_run_days=[Weekday.MONDAY],
                     min_run_days_per_week=1,
                     max_run_days_per_week=10,  # Invalid: > 7
                 ),
@@ -352,7 +314,7 @@ class TestProfileValidation:
                 running_priority=RunningPriority.PRIMARY,
                 conflict_policy=ConflictPolicy.ASK_EACH_TIME,
                 constraints=TrainingConstraints(
-                    blocked_run_days=[Weekday.MONDAY],
+                    unavailable_run_days=[Weekday.MONDAY],
                     min_run_days_per_week=1,
                     max_run_days_per_week=1,
                 ),
@@ -423,7 +385,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
+            unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
             min_run_days_per_week=2,
             max_run_days_per_week=3,
         )
@@ -439,7 +401,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+            unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
             min_run_days_per_week=3,
             max_run_days_per_week=2,  # Invalid: max < min
         )
@@ -458,7 +420,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY],  # Only Sunday available (1 day)
+            unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY],  # Only Sunday available (1 day)
             min_run_days_per_week=3,  # But need 3 days
             max_run_days_per_week=4,
         )
@@ -469,7 +431,7 @@ class TestConstraintValidation:
         # Should be valid (warning, not error)
         assert result.valid
         assert any(
-            e.field == "blocked_run_days" and e.severity == "warning"
+            e.field == "unavailable_run_days" and e.severity == "warning"
             for e in result.errors
         )
 
@@ -478,7 +440,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],  # All days blocked
+            unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],  # All days unavailable
             min_run_days_per_week=0,
             max_run_days_per_week=0,
         )
@@ -488,9 +450,9 @@ class TestConstraintValidation:
 
         assert not result.valid
         assert any(
-            e.field == "blocked_run_days"
+            e.field == "unavailable_run_days"
             and e.severity == "error"
-            and "all days blocked" in e.message
+            and "all days unavailable" in e.message
             for e in result.errors
         )
 
@@ -499,7 +461,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+            unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
             min_run_days_per_week=0,
             max_run_days_per_week=0,
         )
@@ -515,7 +477,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[
+            unavailable_run_days=[
                 Weekday.THURSDAY,
                 Weekday.FRIDAY,
                 Weekday.SATURDAY,
@@ -531,7 +493,7 @@ class TestConstraintValidation:
         # Should be valid (warning only)
         assert result.valid
         assert any(
-            e.field == "blocked_run_days"
+            e.field == "unavailable_run_days"
             and e.severity == "warning"
             and "Back-to-back" in e.message
             for e in result.errors
@@ -542,7 +504,7 @@ class TestConstraintValidation:
         from sports_coach_engine.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
-            blocked_run_days=[
+            unavailable_run_days=[
                 Weekday.MONDAY,
                 Weekday.WEDNESDAY,
                 Weekday.FRIDAY,

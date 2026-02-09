@@ -242,31 +242,31 @@ Coach: "What are your personal bests for 5K, 10K, half marathon, and marathon?"
 Coach: "When did you run these? Were they official races or GPS efforts?"
 ```
 
-#### Step 2: Manual Entry for Each PB Mentioned
+#### Step 2: Enter Each PB
 
 ```bash
 sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15
-
 sce profile set-pb --distance 5k --time 18:45 --date 2022-05-10
 ```
 
-#### Step 3: Cross-Check with Strava Data
+#### Step 3: Cross-Check Synced Data
 
-**After manual entry, review recent Strava activities for races the athlete may have forgotten**:
-
+After sync, review standout activities conversationally:
+```
+Coach: "I see a strong 43:15 10K on Dec 15 — was that a race?"
+```
+If athlete confirms and it's faster than existing PB, update:
 ```bash
-sce activity list --since 180d --sport run
+sce profile set-pb --distance 10k --time 43:15 --date 2025-12-15
 ```
 
-Look for activities that appear to be races (short distance, high effort) and ask the athlete if any should be added as PBs.
-
-#### Step 4: Verify Personal Bests
+#### Step 4: Verify PBs
 
 ```bash
-sce profile get
+sce profile get   # Check personal_bests section
 ```
 
-**Review `personal_bests` section with athlete**:
+**Review with athlete**:
 ```
 Coach: "I have your 10K PB at 42:30 (Jun 2023, VDOT 48), 5K at 18:45 (May 2022, VDOT 51). VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports. Anything missing?"
 ```
@@ -297,7 +297,7 @@ sce memory add --type PERSONAL_BEST \
 
 **Response**: "No problem - we can estimate. What's your rough 5K or 10K time?"
 
-Enter best estimate via `sce profile set-pb` and store a memory note about accuracy.
+Enter the approximate time: `sce profile set-pb --distance 5k --time 25:00 --date 2023-01-01`
 
 #### Q: Athlete has no race history
 
@@ -358,19 +358,19 @@ I need to track your climbing/yoga schedule to:
 
 **Climbing (40%)**:
 ```
-Coach: "What days do you typically climb?"
-Athlete: "Tuesdays and Thursdays, usually 2-hour sessions."
+Coach: "How many times per week do you climb? Any days you can’t do it?"
+Athlete: "Twice a week. I can’t climb Sundays."
 Coach: "Intensity? Light technique work or full sending?"
-Athlete: "Moderate to hard - I push pretty hard both days."
+Athlete: "Moderate to hard - I push pretty hard both sessions."
 ```
 
 ```bash
-sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
+sce profile add-sport --sport climbing --frequency 2 --unavailable-days sun --duration 120 --intensity moderate_to_hard
 ```
 
 **Yoga (19%)**:
 ```bash
-sce profile add-sport --sport yoga --days sun --duration 60 --intensity easy
+sce profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
 ```
 
 ### Handle Edge Cases

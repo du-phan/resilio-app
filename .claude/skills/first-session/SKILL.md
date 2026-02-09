@@ -13,11 +13,23 @@ This skill guides complete athlete onboarding from authentication to goal settin
 
 **Prerequisites**: This skill assumes your environment is ready (Python 3.11+, `sce` CLI available). If you haven't set up your environment yet, use the `complete-setup` skill first to install Python and the package.
 
-**Communication guideline**: When talking to athletes, never mention skills, slash commands, or internal tools. Say "Let me help you get started" not "I'll run the first-session skill." See CLAUDE.md "Athlete-Facing Communication Guidelines."
+**Communication guideline**: When talking to athletes, never mention skills, slash commands, or internal tools. Say "Let me help you get started" not "I'll run the first-session skill." See AGENTS.md / CLAUDE.md "Athlete-Facing Communication Guidelines."
 
 **Why historical data matters**: ask "I see you average 35km/week over the last X weeks/months - should we maintain this?" instead of "How much do you run?" (no context).
 
-**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Do not repeat unless the athlete asks.
+**Metric explainer rule (athlete-facing)**:
+On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
+
+Use this exact VDOT explainer on first mention:
+"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
+
+One-line definitions for other metrics:
+- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
+- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
+- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
+- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
+- RPE: "RPE is your perceived effort from 1–10."
 
 ---
 
@@ -157,7 +169,7 @@ sce profile analyze       # Profile suggestions from synced data
 
 ### Step 4: Profile Setup (Natural Conversation)
 
-**Use natural conversation for text/number inputs. Use AskUserQuestion for decisions with distinct trade-offs (conflict policy, goal feasibility).**
+**Use natural conversation for text/number inputs. Use chat-based numbered options for decisions with distinct trade-offs (conflict policy, goal feasibility).**
 
 **For complete field-by-field guidance**: See [references/profile_setup_workflow.md](references/profile_setup_workflow.md)
 
@@ -165,8 +177,8 @@ sce profile analyze       # Profile suggestions from synced data
 
 **Check sport distribution** from `sce profile analyze` → `sport_percentages`:
 
-- **If >1 sport at >15%**: Use **multi-sport sequence** (steps 4a-4f-4d-4e)
-- **If mostly running (>80%)**: Use standard sequence (steps 4a-4d-4e-4f)
+- **If >1 sport at >15%**: Use full sequence (steps 4a-4d-4e-4f)
+- **If mostly running (>80%)**: Use standard sequence (steps 4a-4d-4e), add 4f only if athlete reports regular non-running commitments
 
 This ensures we understand the athlete's complete training picture before asking about constraints.
 
@@ -185,39 +197,40 @@ This ensures we understand the athlete's complete training picture before asking
 
 - Options: `"running"` (PRIMARY), `"equal"` (EQUAL), other sport name (SECONDARY)
 
-**Step 4f - Other Sports Collection** (MOVED UP for multi-sport athletes):
-
-**IMPORTANT**: This step happens BEFORE profile creation for multi-sport athletes, so we can properly set up constraints in Step 6.
-
-- Check distribution: `sce profile analyze` → sport_percentages
-- Collect ALL sports >15%
-- **New flexible scheduling model**:
-  - **Option 1**: Fixed days → `sce profile add-sport --sport climbing --days tue,thu --duration 120 --fixed`
-  - **Option 2**: Frequency (flexible days) → `sce profile add-sport --sport climbing --frequency 3 --duration 120`
-  - **Option 3**: Preferred days (can swap) → `sce profile add-sport --sport yoga --days mon,wed,fri --duration 60 --flexible`
-
-**Coaching conversation**:
-- "Tell me about your climbing schedule."
-- If athlete says "3 times a week, days vary" → Use `--frequency 3`
-- If athlete says "Tuesday/Thursday nights at the gym, always" → Use `--days tue,thu --fixed`
-- If athlete says "Usually Monday/Wednesday/Friday but sometimes I swap" → Use `--days mon,wed,fri --flexible`
-
-**Step 4f-validation - Data Alignment**:
-
-- Verify: `sce profile validate`
-- Check: All sports >15% from analyze are in other_sports
-- Only proceed when alignment confirmed
-
-**Step 4d - Conflict Policy** (NOW informed by actual sport picture): Use AskUserQuestion (trade-offs with distinct options)
+**Step 4d - Conflict Policy** (from sport picture): Use chat-based numbered options (trade-offs with distinct options)
 
 - Options: Ask each time | Primary sport wins | Running goal wins
-- Context: "Your week has climbing 3x (flexible), yoga 2x. When training conflicts arise..."
+- Context: "Your week has climbing 3x/week and yoga 2x/week. When training conflicts arise..."
 
 **Step 4e - Create Profile**:
 
 ```bash
 sce profile create --name "Alex" --age 32 --max-hr 190 --run-priority equal --conflict-policy ask_each_time
 ```
+
+**Step 4f - Other Sports Collection** (AFTER profile creation):
+
+- Check distribution: `sce profile analyze` → sport_percentages
+- Collect ALL sports >15%
+- **Frequency + unavailable days model**:
+  - **Option 1**: Frequency only → `sce profile add-sport --sport climbing --frequency 3 --duration 120`
+  - **Option 2**: Frequency + unavailable days → `sce profile add-sport --sport climbing --frequency 3 --unavailable-days tue,thu --duration 120`
+
+**Temporary break handling**:
+- If athlete pauses a sport to focus on running or due to injury/illness:
+  - Pause: `sce profile pause-sport --sport climbing --reason focus_running`
+  - Resume later: `sce profile resume-sport --sport climbing`
+
+**Coaching conversation**:
+- "How many times per week do you climb? Any days you can’t do it?"
+- If athlete says "3 times a week, days vary" → Use `--frequency 3`
+- If athlete says "I can’t climb Sundays" → Add `--unavailable-days sunday`
+
+**Step 4f-validation - Data Alignment**:
+
+- Verify: `sce profile validate`
+- Check: All sports >15% from analyze are in other_sports
+- Only proceed when alignment confirmed
 
 **Step 4.5 - Personal Bests**:
 
@@ -271,7 +284,7 @@ Run `sce performance baseline` and `sce goal set` (which includes automatic feas
 
 **Context-aware conversation**: For multi-sport athletes, reference their other sports when discussing constraints.
 
-Example: "Your week has climbing 3x (flexible) and yoga 2x. Given your half marathon goal, 3 quality run days fits well alongside everything else. Does that sound manageable?"
+Example: "Your week has climbing 3x/week and yoga 2x/week. Given your half marathon goal, 3 quality run days fits well alongside everything else. Does that sound manageable?"
 
 **Questions** (natural conversation):
 
@@ -283,13 +296,13 @@ Example: "Your week has climbing 3x (flexible) and yoga 2x. Given your half mara
 
    - Store as: `--max-run-days N`
 
-3. **Blocked days (subtractive model)**: "Are there any days you absolutely CANNOT run?"
+3. **Unavailable days (subtractive model)**: "Are there any days you absolutely CANNOT run?"
 
    - **NEW APPROACH**: Ask for exceptions, not exhaustive lists
-   - **If athlete says "No" or "All days work"**: No blocked days (default)
-   - **If athlete says "Tuesdays and Thursdays - that's climbing night"**: Block those days
-   - **Example**: "Cannot run Tue/Thu" → `--blocked-days "tuesday,thursday"`
-   - **Default is empty** - only specify days that are BLOCKED
+   - **If athlete says "No" or "All days work"**: No unavailable days (default)
+   - **If athlete says "Tuesdays and Thursdays - that's climbing night"**: Mark those as unavailable
+   - **Example**: "Cannot run Tue/Thu" → `--unavailable-days "tuesday,thursday"`
+   - **Default is empty** - only specify days that are UNAVAILABLE
 
 4. **Session duration**: "What's the longest time for a long run?" (90-180 min typical)
 
@@ -300,18 +313,18 @@ Example: "Your week has climbing 3x (flexible) and yoga 2x. Given your half mara
 ```bash
 # Example: Cannot run Tue/Thu (climbing nights), 3-4 days/week, max 120 min sessions
 sce profile set --min-run-days 3 --max-run-days 4 \
-  --blocked-days "tuesday,thursday" \
+  --unavailable-days "tuesday,thursday" \
   --max-session-minutes 120
 ```
 
-**If athlete says "all days work"** (no blocked days):
+**If athlete says "all days work"** (no unavailable days):
 
 ```bash
-# No need to specify --blocked-days (defaults to empty - no blocked days)
+# No need to specify --unavailable-days (defaults to empty - no unavailable days)
 sce profile set --min-run-days 3 --max-run-days 4 --max-session-minutes 120
 ```
 
-**Auto-derive suggestion**: If the athlete added climbing on Tue/Thu as fixed commitment, you can suggest: "Since climbing is fixed on Tuesday/Thursday, should I block those days for running?" But don't assume - some athletes can do both on the same day.
+**Auto-derive suggestion**: If the athlete says they cannot run on certain days because of other sports, set those as `--unavailable-days` for running. But don’t assume - some athletes can do both on the same day.
 
 ---
 
@@ -349,8 +362,8 @@ Would you like me to create a personalized plan now?"
 
 **Approach**:
 
-1. Identify fixed commitments: "Which days non-negotiable for climbing/cycling?"
-2. Map running around fixed days
+1. Identify sport frequency and hard no-go days
+2. Map running around unavailable days
 3. Consider lower-body load: "Climbing doesn't impact legs, cycling does"
 4. Set conflict policy carefully (likely `ask_each_time`)
 
@@ -365,12 +378,12 @@ Would you like me to create a personalized plan now?"
 
 **Always check `sce profile analyze` first**
 
-### 2. Using AskUserQuestion for free-form text
+### 2. Using chat-based numbered options for free-form text
 
-❌ **Bad**: AskUserQuestion for "What's your name?"
+❌ **Bad**: chat-based numbered options for "What's your name?"
 ✅ **Good**: Natural conversation for all text/number inputs
 
-**AskUserQuestion for decisions with distinct trade-offs (conflict policy, goal feasibility)**
+**chat-based numbered options ONLY for decisions with distinct trade-offs (conflict policy, goal feasibility)**
 
 ### 3. Skipping auth check
 
@@ -426,7 +439,7 @@ Would you like me to create a personalized plan now?"
 **Quality checks**:
 
 - All data referenced from `sce profile analyze`
-- AskUserQuestion used for decisions with distinct trade-offs (conflict policy, goal feasibility)
+- chat-based numbered options used ONLY for decisions with distinct trade-offs (conflict policy, goal feasibility)
 - Natural conversation for text/number inputs
 - Injury history in memory system with proper tags
 - Multi-sport athletes have other_sports populated based on actual Strava data

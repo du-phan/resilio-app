@@ -73,7 +73,13 @@ class TestPhase1Integration:
             primary_sport="bouldering",
             conflict_policy=ConflictPolicy.PRIMARY_SPORT_WINS,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.TUESDAY, Weekday.SATURDAY],
+                unavailable_run_days=[
+                    Weekday.MONDAY,
+                    Weekday.WEDNESDAY,
+                    Weekday.THURSDAY,
+                    Weekday.FRIDAY,
+                    Weekday.SUNDAY,
+                ],
                 min_run_days_per_week=2,
                 max_run_days_per_week=2,
             ),
@@ -103,8 +109,8 @@ class TestPhase1Integration:
         assert not isinstance(loaded, ProfileError)
         assert loaded.name == "Integration Test Athlete"
         assert loaded.goal.type == GoalType.HALF_MARATHON
-        assert len(loaded.constraints.available_run_days) == 2
-        assert Weekday.TUESDAY in loaded.constraints.available_run_days
+        assert len(loaded.constraints.unavailable_run_days) == 5
+        assert Weekday.TUESDAY not in loaded.constraints.unavailable_run_days
 
         # Step 5: Update profile
         updated = profile_service.update_profile({"age": 33})
@@ -150,7 +156,15 @@ class TestPhase1Integration:
 
         # Create profile with invalid constraints
         constraints = TrainingConstraints(
-            available_run_days=[],  # No days
+            unavailable_run_days=[
+                Weekday.MONDAY,
+                Weekday.TUESDAY,
+                Weekday.WEDNESDAY,
+                Weekday.THURSDAY,
+                Weekday.FRIDAY,
+                Weekday.SATURDAY,
+                Weekday.SUNDAY,
+            ],  # No available days
             min_run_days_per_week=0,
             max_run_days_per_week=0,
         )
@@ -197,7 +211,14 @@ class TestPhase1Integration:
             running_priority=RunningPriority.PRIMARY,
             conflict_policy=ConflictPolicy.ASK_EACH_TIME,
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.MONDAY],
+                unavailable_run_days=[
+                    Weekday.TUESDAY,
+                    Weekday.WEDNESDAY,
+                    Weekday.THURSDAY,
+                    Weekday.FRIDAY,
+                    Weekday.SATURDAY,
+                    Weekday.SUNDAY,
+                ],
                 min_run_days_per_week=1,
                 max_run_days_per_week=1,
             ),

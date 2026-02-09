@@ -318,7 +318,7 @@ def validate_constraints(
             )
         )
 
-    # Compute available days from blocked days
+    # Compute available days from unavailable days
     all_weekdays = [
         Weekday.MONDAY,
         Weekday.TUESDAY,
@@ -328,15 +328,15 @@ def validate_constraints(
         Weekday.SATURDAY,
         Weekday.SUNDAY,
     ]
-    available_days = [day for day in all_weekdays if day not in constraints.blocked_run_days]
+    available_days = [day for day in all_weekdays if day not in constraints.unavailable_run_days]
     available_count = len(available_days)
 
     # Check: insufficient available days
     if available_count < constraints.min_run_days_per_week:
         errors.append(
             ConstraintError(
-                field="blocked_run_days",
-                message=f"Insufficient available run days ({available_count}) to meet minimum ({constraints.min_run_days_per_week}). Remove some blocked days or adjust constraints.",
+                field="unavailable_run_days",
+                message=f"Insufficient available run days ({available_count}) to meet minimum ({constraints.min_run_days_per_week}). Remove some unavailable days or adjust constraints.",
                 severity="warning",
             )
         )
@@ -345,8 +345,8 @@ def validate_constraints(
     if available_count == 0 and goal.type != GoalType.GENERAL_FITNESS:
         errors.append(
             ConstraintError(
-                field="blocked_run_days",
-                message="Cannot create a race-focused plan with all days blocked. Remove some blocked days or switch to general_fitness goal.",
+                field="unavailable_run_days",
+                message="Cannot create a race-focused plan with all days unavailable. Remove some unavailable days or switch to general_fitness goal.",
                 severity="error",
             )
         )
@@ -376,7 +376,7 @@ def validate_constraints(
         if all_consecutive:
             errors.append(
                 ConstraintError(
-                    field="blocked_run_days",
+                    field="unavailable_run_days",
                     message="Back-to-back run days detected. Plan will enforce hard/easy separation (one day must be easy).",
                     severity="warning",
                 )

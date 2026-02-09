@@ -2,78 +2,48 @@
 
 > **Quick Links**: [Back to Index](index.md) | [Core Concepts](core_concepts.md)
 
-Commands for managing athlete profiles including personal information, constraints, multi-sport commitments, and preferences.
+Commands for managing athlete profiles: basic info, run constraints, and multi-sport commitments.
 
 **Commands in this category:**
-- `sce profile create` - Create a new athlete profile
-- `sce profile get` - Get athlete profile with all settings
-- `sce profile set` - Update profile fields
-- `sce profile add-sport` - Add a sport commitment
-- `sce profile remove-sport` - Remove a sport commitment
-- `sce profile list-sports` - List all sport commitments
-- `sce profile edit` - Open profile YAML in $EDITOR
-- `sce profile analyze` - Analyze synced activity history to suggest profile values
+- `sce profile create`
+- `sce profile get`
+- `sce profile set`
+- `sce profile add-sport`
+- `sce profile remove-sport`
+- `sce profile pause-sport`
+- `sce profile resume-sport`
+- `sce profile list-sports`
+- `sce profile edit`
+- `sce profile analyze`
 
 ---
 
 ## sce profile create
 
-Create a new athlete profile with sensible defaults.
+Create a new athlete profile.
 
 **Required:**
-- `--name` (string) - Athlete name
+- `--name` - Athlete name
 
-**Optional - Basic Info:**
-- `--age` (integer, 0-120) - Age in years
-- `--email` (string) - Contact email
-
-**Optional - Vital Signs:**
-- `--max-hr` (integer, 120-220) - Maximum heart rate
-- `--resting-hr` (integer, 30-100) - Resting heart rate
-
-**Optional - Running Background:**
-- `--injury-history` (string) - Free-text injury description
-- `--run-experience-years` (integer) - Years of running experience
-- `--weekly-km` (float) - Current weekly volume baseline
-- `--run-days-per-week` (integer, 0-7) - Current frequency
-- `--vdot` (float, 30-85) - Jack Daniels VDOT
-
-**Optional - Constraints:**
-- `--min-run-days` (integer, 0-7) - Minimum run days per week (default: 2)
-- `--max-run-days` (integer, 0-7) - Maximum run days per week (default: 4)
-- `--blocked-days` (comma-separated) - Days you CANNOT run (e.g., "tuesday,thursday" for climbing nights)
-- `--max-session-minutes` (integer) - Maximum session duration (default: 90)
-
-**Note**: The scheduling model is subtractive - specify which days are BLOCKED, not which days are available. This is easier for multi-sport athletes ("I can't run Tuesday/Thursday" vs. listing all 5 available days).
-
-**Optional - Multi-Sport:**
-- `--run-priority` (`primary`, `secondary`, `equal`) - Running priority (default: equal)
-- `--primary-sport` (string) - Primary sport name if not running
-- `--conflict-policy` (`primary_sport_wins`, `running_goal_wins`, `ask_each_time`) - Conflict resolution (default: ask_each_time)
-
-**Optional - Preferences:**
-- `--detail-level` (`brief`, `moderate`, `detailed`) - Coaching detail level (default: moderate)
-- `--coaching-style` (`supportive`, `direct`, `analytical`) - Communication style (default: supportive)
-- `--intensity-metric` (`pace`, `hr`, `rpe`) - Primary intensity metric (default: pace)
+**Optional:**
+- `--age` - Age in years
+- `--max-hr` - Maximum heart rate
+- `--resting-hr` - Resting heart rate
+- `--run-priority` - `primary|secondary|equal` (default: `equal`)
+- `--primary-sport` - Primary sport name if not running
+- `--conflict-policy` - `primary_sport_wins|running_goal_wins|ask_each_time` (default: `ask_each_time`)
+- `--min-run-days` - Minimum run days/week (default: `2`)
+- `--max-run-days` - Maximum run days/week (default: `4`)
+- `--unavailable-days` - Days you cannot run (comma-separated)
+- `--detail-level` - `brief|moderate|detailed`
+- `--coaching-style` - `supportive|direct|analytical`
+- `--intensity-metric` - `pace|hr|rpe`
 
 **Examples:**
 
 ```bash
-# Minimal profile
 sce profile create --name "Alex"
-
-# Full profile with all fields
-sce profile create \
-  --name "Alex" --age 32 --email "alex@example.com" \
-  --max-hr 199 --resting-hr 55 \
-  --injury-history "IT band 2024, resolved" \
-  --run-experience-years 3 --weekly-km 25 \
-  --blocked-days "monday,wednesday,friday" \
-  --run-priority equal --primary-sport climbing \
-  --conflict-policy ask_each_time \
-  --detail-level moderate
-
-# Note: blocked-days "mon,wed,fri" means athlete CAN run Tue/Thu/Sat/Sun (4 available days)
+sce profile create --name "Alex" --age 32 --max-hr 190 --unavailable-days "tuesday,thursday"
 ```
 
 ---
@@ -82,123 +52,56 @@ sce profile create \
 
 Get athlete profile with all settings.
 
-**Usage:**
-
 ```bash
 sce profile get
-```
-
-**Returns:**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "name": "Alex",
-    "age": 32,
-    "email": "alex@example.com",
-    "max_hr": 190,
-    "injury_history": "IT band 2024, resolved",
-    "goal": {
-      "type": "half_marathon",
-      "target_date": "2026-09-15"
-    },
-    "constraints": {
-      "blocked_run_days": ["monday", "wednesday", "friday"],
-      "preferred_long_run_days": ["saturday", "sunday"],
-      "min_run_days_per_week": 2,
-      "max_run_days_per_week": 4,
-      "max_time_per_session_minutes": 90
-    },
-    "running_priority": "equal",
-    "conflict_policy": "ask_each_time",
-    "preferences": {
-      "detail_level": "moderate",
-      "coaching_style": "supportive",
-      "intensity_metric": "pace"
-    }
-  }
-}
 ```
 
 ---
 
 ## sce profile set
 
-Update profile fields. Only specified fields are updated; others remain unchanged.
-
-**Available Fields:** (Same as `sce profile create` except `--name` is not required)
+Update profile fields. Only specified fields are updated.
 
 **Examples:**
 
 ```bash
-# Update basic info
-sce profile set --name "Alex" --age 33 --email "newemail@example.com"
-
-# Update vital signs
 sce profile set --max-hr 190 --resting-hr 55
-
-# Update constraints
-sce profile set --min-run-days 3 --max-run-days 4
-sce profile set --blocked-days "tuesday,thursday"  # Cannot run Tue/Thu (climbing nights)
-
-# Update priorities
-sce profile set --run-priority primary
-sce profile set --conflict-policy running_goal_wins
-
-# Update preferences
-sce profile set --detail-level detailed
-sce profile set --coaching-style analytical
-sce profile set --intensity-metric hr
+sce profile set --min-run-days 3 --max-run-days 4 --unavailable-days "tuesday,thursday"
+sce profile set --run-priority primary --conflict-policy running_goal_wins
+sce profile set --detail-level detailed --coaching-style analytical --intensity-metric hr
 ```
 
 ---
 
 ## sce profile add-sport
 
-Add a sport commitment to track multi-sport training load. Supports flexible scheduling with frequency-based patterns.
+Add a non-running sport commitment.
 
 **Required:**
-- `--sport` (string) - Sport name (e.g., climbing, yoga, cycling)
+- `--sport` - Sport name
+- `--frequency` - Sessions/week (`1-7`)
 
 **Optional:**
-- `--days` (comma-separated) - Specific days for this sport (e.g., "tuesday,thursday")
-- `--frequency` (integer, 1-7) - Times per week when days vary but frequency is consistent
-- `--duration` (integer) - Typical session duration in minutes (default: 60)
-- `--intensity` (string) - Intensity level: easy, moderate, hard, moderate_to_hard (default: moderate)
-- `--flexible` / `--fixed` (boolean) - Whether days can be swapped (default: --fixed)
-- `--notes` (string) - Optional notes about the commitment
+- `--unavailable-days` - Days you cannot do this sport (comma-separated)
+- `--duration` - Typical session duration in minutes (default: `60`)
+- `--intensity` - `easy|moderate|hard|moderate_to_hard` (default: `moderate`)
+- `--notes` - Optional notes
 
-**Scheduling Patterns:**
+**Examples:**
 
-1. **Fixed days** (always same days):
 ```bash
-sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard --fixed
-```
+# Frequency with unavailable days
+sce profile add-sport --sport climbing --frequency 3 --unavailable-days tuesday,thursday --duration 120 --intensity moderate_to_hard
 
-2. **Frequency-based** (days vary, frequency consistent):
-```bash
-sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
-# "I climb 3x/week but the days change"
+# Frequency only (fully flexible)
+sce profile add-sport --sport yoga --frequency 2 --duration 60 --intensity easy
 ```
-
-3. **Preferred days with flexibility** (usual pattern but can swap):
-```bash
-sce profile add-sport --sport yoga --days monday,wednesday,friday --duration 60 --flexible
-# "Usually Mon/Wed/Fri but sometimes I swap days"
-```
-
-**Auto-inference:**
-- If `--days` specified without `--frequency`: Frequency auto-set to number of days
-- If `--frequency` specified without `--days`: Auto-marked as flexible scheduling
 
 ---
 
 ## sce profile remove-sport
 
-Remove a sport commitment (case-insensitive).
-
-**Usage:**
+Remove a sport commitment.
 
 ```bash
 sce profile remove-sport --sport climbing
@@ -206,81 +109,82 @@ sce profile remove-sport --sport climbing
 
 ---
 
+## sce profile pause-sport
+
+Temporarily pause a sport commitment (keeps it in profile history).
+
+**Required:**
+- `--sport` - Sport name
+- `--reason` - `focus_running|injury|illness|off_season|other`
+
+**Optional:**
+- `--paused-at` - Date `YYYY-MM-DD` (default: today)
+
+**Examples:**
+
+```bash
+sce profile pause-sport --sport climbing --reason focus_running
+sce profile pause-sport --sport cycling --reason injury --paused-at 2026-02-09
+```
+
+---
+
+## sce profile resume-sport
+
+Resume a paused sport commitment.
+
+```bash
+sce profile resume-sport --sport climbing
+```
+
+---
+
 ## sce profile list-sports
 
-List all sport commitments.
-
-**Usage:**
+List all sport commitments with scheduling and pause state.
 
 ```bash
 sce profile list-sports
 ```
 
-**Returns:**
-
-```json
-{
-  "ok": true,
-  "message": "Found 2 sport commitment(s)",
-  "data": {
-    "sports": [
-      {
-        "sport": "climbing",
-        "days": ["tuesday", "thursday"],
-        "duration_minutes": 120,
-        "intensity": "moderate_to_hard",
-        "fixed": true,
-        "notes": "Bouldering gym 6-7pm"
-      },
-      {
-        "sport": "yoga",
-        "days": ["monday"],
-        "duration_minutes": 60,
-        "intensity": "easy",
-        "fixed": false,
-        "notes": null
-      }
-    ]
-  }
-}
-```
+Returns each sport with fields such as:
+- `sport`
+- `unavailable_days`
+- `frequency_per_week`
+- `duration_minutes`
+- `intensity`
+- `active`
+- `pause_reason`
+- `paused_at`
+- `notes`
 
 ---
 
 ## sce profile edit
 
-Open profile YAML in $EDITOR for direct editing (power-user feature).
-
-**Environment Variables:**
-- `EDITOR` - Your preferred editor (default: nano). Supports: nano, vim, emacs, code, etc.
-
-**Usage:**
+Open profile YAML in `$EDITOR`.
 
 ```bash
-sce profile edit                    # Uses $EDITOR (default: nano)
-EDITOR=vim sce profile edit         # Use vim
-EDITOR=code sce profile edit        # Use VS Code
+sce profile edit
+EDITOR=vim sce profile edit
 ```
-
-After editing, the profile is validated. If validation fails, you'll see the error message and can re-edit.
 
 ---
 
 ## sce profile analyze
 
-Analyze synced activity history to suggest profile values.
-
-**Usage:**
+Analyze synced activities and suggest profile setup values.
 
 ```bash
 sce profile analyze
 ```
 
-This analyzes your Strava activity history (last 6 months / 180 days) to suggest:
-- `max_hr` - Observed peak heart rate
-- `weekly_km` - 4-week average volume
-- `available_run_days` - Days you typically train
-- `running_priority` - Based on sport distribution
+Typical outputs include:
+- `max_hr_observed`
+- `weekly_run_km_recent_4wk`
+- `suggested_run_days`
+- `suggested_running_priority`
+- `sport_distribution`
 
 ---
 

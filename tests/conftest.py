@@ -33,7 +33,7 @@ def sample_profile():
         "primary_sport": "bouldering",
         "conflict_policy": "ask_each_time",
         "constraints": {
-            "available_run_days": ["tuesday", "saturday"],
+            "unavailable_run_days": ["monday", "wednesday", "thursday", "friday", "sunday"],
             "min_run_days_per_week": 2,
             "max_run_days_per_week": 3,
         },

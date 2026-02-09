@@ -990,7 +990,7 @@ def run_plan_generation(
             # Constraints summary
             "constraints_applied": [
                 f"runs_per_week: {profile.constraints.min_run_days_per_week}-{profile.constraints.max_run_days_per_week}",
-                f"available_days: {len(profile.constraints.available_run_days)}",
+                f"available_days: {7 - len(profile.constraints.unavailable_run_days)}",
                 f"max_session_minutes: {profile.constraints.max_time_per_session_minutes}",
             ] if profile.constraints else [],
         }

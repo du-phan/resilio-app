@@ -13,9 +13,23 @@ from sports_coach_engine.api.profile import (
     get_profile,
     update_profile,
     set_goal,
+    add_sport_to_profile,
+    remove_sport_from_profile,
+    pause_sport_in_profile,
+    resume_sport_in_profile,
     ProfileError,
 )
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType
+from sports_coach_engine.schemas.profile import (
+    AthleteProfile,
+    Goal,
+    GoalType,
+    Weekday,
+    TrainingConstraints,
+    RunningPriority,
+    ConflictPolicy,
+    OtherSport,
+    PauseReason,
+)
 from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
 
 
@@ -241,8 +255,7 @@ class TestUpdateProfile:
 class TestSetGoal:
     """Test set_goal() function."""
     @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.regenerate_plan")
-    def test_set_goal_success(self, mock_regenerate, mock_repo_cls, mock_log, mock_profile):
+    def test_set_goal_success(self, mock_repo_cls, mock_log, mock_profile):
         """Test successful goal setting."""
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -250,11 +263,6 @@ class TestSetGoal:
         # Mock loading and saving profile
         mock_repo.read_yaml.return_value = mock_profile
         mock_repo.write_yaml.return_value = None
-
-        # Mock plan regeneration
-        mock_plan = Mock()
-        mock_plan.total_weeks = 12
-        mock_regenerate.return_value = mock_plan
 
         target_date = date.today() + timedelta(weeks=12)
         result = set_goal(
@@ -268,9 +276,6 @@ class TestSetGoal:
         assert result.type == GoalType.HALF_MARATHON
         assert result.target_date == target_date.isoformat()  # Goal stores as ISO string
         assert result.target_time == "1:45:00"
-
-        # Verify plan was regenerated
-        mock_regenerate.assert_called_once()
 
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_set_goal_invalid_race_type(self, mock_repo_cls, mock_log):
@@ -329,39 +334,30 @@ class TestSetGoal:
         assert "Failed to save profile" in result.message
 
     @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.regenerate_plan")
     def test_set_goal_plan_generation_error(
-        self, mock_regenerate, mock_repo_cls, mock_log, mock_profile
+        self, mock_repo_cls, mock_log, mock_profile
     ):
-        """Test setting goal when plan generation fails."""
-        from sports_coach_engine.api.plan import PlanError
+        """Goal setting no longer performs plan generation in profile API."""
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
 
         mock_repo.read_yaml.return_value = mock_profile
-        mock_repo.write_yaml.return_value = None
-
-        # Mock plan generation failure
-        mock_regenerate.return_value = PlanError(
-            error_type="unknown",
-            message="Plan generation failed",
-        )
+        mock_repo.write_yaml.return_value = RepoError(RepoErrorType.WRITE_ERROR, "write failed")
 
         result = set_goal(
             race_type="half_marathon",
             target_date=date.today() + timedelta(weeks=12),
         )
 
-        # Should return ProfileError
+        # Should return save error from profile write
         assert isinstance(result, ProfileError)
         assert result.error_type == "unknown"
-        assert "plan generation failed" in result.message.lower()
+        assert "failed to save profile" in result.message.lower()
 
     @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.regenerate_plan")
     def test_set_goal_without_target_time(
-        self, mock_regenerate, mock_repo_cls, mock_log, mock_profile
+        self, mock_repo_cls, mock_log, mock_profile
     ):
         """Test setting goal without target time."""
         mock_repo = Mock()
@@ -369,10 +365,6 @@ class TestSetGoal:
 
         mock_repo.read_yaml.return_value = mock_profile
         mock_repo.write_yaml.return_value = None
-
-        mock_plan = Mock()
-        mock_plan.total_weeks = 12
-        mock_regenerate.return_value = mock_plan
 
         target_date = date.today() + timedelta(weeks=12)
         result = set_goal(
@@ -501,8 +493,8 @@ class TestPR1NewFields:
 class TestPR2ConstraintFields:
     """Test constraint fields added in PR2."""
     @patch("sports_coach_engine.api.profile.RepositoryIO")
-    def test_create_profile_with_blocked_days(self, mock_repo_cls, mock_log):
-        """Test creating profile with blocked_run_days constraint."""
+    def test_create_profile_with_unavailable_days(self, mock_repo_cls, mock_log):
+        """Test creating profile with unavailable_run_days constraint."""
         from sports_coach_engine.schemas.profile import Weekday
 
         mock_repo = Mock()
@@ -510,17 +502,17 @@ class TestPR2ConstraintFields:
         mock_repo.read_yaml.return_value = None  # No existing profile
         mock_repo.write_yaml.return_value = None
 
-        blocked_days = [Weekday.TUESDAY, Weekday.THURSDAY]
+        unavailable_days = [Weekday.TUESDAY, Weekday.THURSDAY]
 
         result = create_profile(
             name="Test Athlete",
-            blocked_run_days=blocked_days,
+            unavailable_run_days=unavailable_days,
         )
 
         # Should return AthleteProfile
         assert isinstance(result, AthleteProfile)
         assert result.name == "Test Athlete"
-        assert result.constraints.blocked_run_days == blocked_days
+        assert result.constraints.unavailable_run_days == unavailable_days
 
     @patch("sports_coach_engine.api.profile.RepositoryIO")
     def test_create_profile_constraint_defaults(self, mock_repo_cls, mock_log):
@@ -536,8 +528,134 @@ class TestPR2ConstraintFields:
 
         # Should return AthleteProfile with defaults
         assert isinstance(result, AthleteProfile)
-        # Default: no blocked days (all days available)
-        assert len(result.constraints.blocked_run_days) == 0
-        # Preferred long run days default
-        assert Weekday.SATURDAY in result.constraints.preferred_long_run_days
-        assert Weekday.SUNDAY in result.constraints.preferred_long_run_days
+        # Default: no unavailable days (all days available)
+        assert len(result.constraints.unavailable_run_days) == 0
+
+
+class TestSportCommitments:
+    """Tests for add/remove/pause/resume sport profile APIs."""
+
+    @staticmethod
+    def _base_profile() -> AthleteProfile:
+        return AthleteProfile(
+            name="Test Athlete",
+            created_at="2026-02-09",
+            constraints=TrainingConstraints(
+                unavailable_run_days=[Weekday.TUESDAY],
+                min_run_days_per_week=3,
+                max_run_days_per_week=5,
+            ),
+            running_priority=RunningPriority.PRIMARY,
+            conflict_policy=ConflictPolicy.RUNNING_GOAL_WINS,
+            goal=Goal(type=GoalType.GENERAL_FITNESS),
+            other_sports=[],
+        )
+
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_add_sport_with_unavailable_days(self, mock_repo_cls, mock_log):
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        profile = self._base_profile()
+        mock_repo.read_yaml.return_value = profile
+        mock_repo.write_yaml.return_value = None
+
+        result = add_sport_to_profile(
+            sport="climbing",
+            frequency=2,
+            unavailable_days=[Weekday.TUESDAY, Weekday.THURSDAY],
+            duration=90,
+        )
+
+        assert isinstance(result, AthleteProfile)
+        assert len(result.other_sports) == 1
+        sport = result.other_sports[0]
+        assert sport.sport == "climbing"
+        assert sport.unavailable_days == [Weekday.TUESDAY, Weekday.THURSDAY]
+        assert sport.frequency_per_week == 2
+
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_add_sport_frequency_only(self, mock_repo_cls, mock_log):
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        profile = self._base_profile()
+        mock_repo.read_yaml.return_value = profile
+        mock_repo.write_yaml.return_value = None
+
+        result = add_sport_to_profile(
+            sport="cycling",
+            frequency=3,
+            duration=75,
+        )
+
+        assert isinstance(result, AthleteProfile)
+        added = result.other_sports[0]
+        assert added.frequency_per_week == 3
+        assert added.unavailable_days is None
+
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_add_sport_missing_profile_returns_not_found(self, mock_repo_cls, mock_log):
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "missing")
+
+        result = add_sport_to_profile(sport="climbing", frequency=2)
+
+        assert isinstance(result, ProfileError)
+        assert result.error_type == "not_found"
+
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_add_sport_requires_frequency(self, mock_repo_cls, mock_log):
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        profile = self._base_profile()
+        mock_repo.read_yaml.return_value = profile
+
+        result = add_sport_to_profile(sport="climbing")
+        assert isinstance(result, ProfileError)
+        assert result.error_type == "validation"
+        assert "Missing required frequency" in result.message
+
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_remove_sport_missing_profile_returns_not_found(self, mock_repo_cls, mock_log):
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+        mock_repo.read_yaml.return_value = RepoError(RepoErrorType.FILE_NOT_FOUND, "missing")
+
+        result = remove_sport_from_profile(sport="climbing")
+
+        assert isinstance(result, ProfileError)
+        assert result.error_type == "not_found"
+
+    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    def test_pause_and_resume_sport(self, mock_repo_cls, mock_log):
+        mock_repo = Mock()
+        mock_repo_cls.return_value = mock_repo
+
+        profile = self._base_profile()
+        profile.other_sports = [
+            OtherSport(
+                sport="climbing",
+                frequency_per_week=1,
+                unavailable_days=[Weekday.MONDAY],
+                typical_duration_minutes=120,
+            )
+        ]
+
+        mock_repo.read_yaml.return_value = profile
+        mock_repo.write_yaml.return_value = None
+
+        paused = pause_sport_in_profile(
+            sport="climbing",
+            reason="focus_running",
+            paused_at="2026-02-09",
+        )
+        assert isinstance(paused, AthleteProfile)
+        assert paused.other_sports[0].active is False
+        assert paused.other_sports[0].pause_reason == PauseReason.FOCUS_RUNNING
+        assert paused.other_sports[0].paused_at == "2026-02-09"
+
+        resumed = resume_sport_in_profile(sport="climbing")
+        assert isinstance(resumed, AthleteProfile)
+        assert resumed.other_sports[0].active is True
+        assert resumed.other_sports[0].pause_reason is None
+        assert resumed.other_sports[0].paused_at is None

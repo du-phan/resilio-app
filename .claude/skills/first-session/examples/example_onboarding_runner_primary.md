@@ -172,30 +172,29 @@ How many days per week can you run?"
 
 **Athlete**: "I can do 5 days comfortably, maybe 6 if needed"
 
-**Coach**: "Your Strava shows you typically run Tues/Thurs/Sat/Sun. Are those fixed or flexible?"
+**Coach**: "Any days you absolutely cannot run?"
 
-**Athlete**: "Pretty consistent. Tuesday is my track club day, so that's fixed. The others are flexible."
+**Athlete**: "Mondays and Wednesdays are tough with work."
 
 **Coach**: "Got it. What's the longest time you can spend on a long run?"
 
 **Athlete**: "90 minutes max on weekends"
 
-**Coach**: "And your cycling - is that on specific days or whenever you have time?"
+**Coach**: "And your cycling - how many times per week? Any days you can’t do it?"
 
-**Athlete**: "Usually Wednesdays or Fridays for 45-60 minutes. Just easy spinning for recovery."
+**Athlete**: "Twice a week, usually Wednesdays or Fridays. Easy spinning for recovery."
 
 **Coach**:
 ```bash
-sce profile set --max-run-days 5 --available-days "tuesday,thursday,friday,saturday,sunday" --preferred-days "saturday,sunday" --max-session-minutes 90
+sce profile set --max-run-days 5 --unavailable-days "monday,wednesday" --max-session-minutes 90
 
-sce profile add-sport --sport cycling --days "wednesday,friday" --duration 60 --intensity easy
+sce profile add-sport --sport cycling --frequency 2 --duration 60 --intensity easy
 ```
 
 "Perfect. I have everything I need:
 - 5 run days/week (Tue/Thu/Fri/Sat/Sun)
-- Tuesday track club fixed
 - Long runs Saturday or Sunday (max 90 min)
-- Easy cycling Wed/Fri for recovery"
+- Easy cycling 2x/week for recovery"
 
 ---
 
@@ -217,7 +216,7 @@ Quick defs (first mention only): CTL is your long-term training load—think of 
 
 **Your Constraints**:
 - 5 run days/week
-- Tuesday track club (fixed)
+- Tuesday track club (typical)
 - Max 90-min long runs
 - Easy cycling Wed/Fri
 
@@ -236,7 +235,7 @@ Would you like me to design your full 12-week plan now?"
 [Runs `vdot-baseline-proposal`, then `macro-plan-create` with context:
 - Profile data
 - Goal (10K, 2026-03-15, 39:59)
-- Constraints (5 days, 90min max, Tues fixed)
+- Constraints (5 days, 90min max, Tues track club)
 - Current fitness (CTL 52, VDOT 51.2)
 ]
 
@@ -246,7 +245,7 @@ Would you like me to design your full 12-week plan now?"
 
 1. **Authentication first**: Always check auth before proceeding
 2. **Data-driven questions**: Referenced actual numbers (48 km/week, CTL 52, peak HR 194)
-3. **Natural conversation**: All inputs via conversation, not AskUserQuestion
+3. **Natural conversation**: All inputs via conversation, not chat-based numbered options
 4. **Context awareness**: Used activity gaps to check for injuries
 5. **Sport priority clarity**: Running primary, cycling secondary
 6. **Conflict policy**: Running_goal_wins (auto-prioritize race prep)
@@ -262,7 +261,7 @@ Would you like me to design your full 12-week plan now?"
 - ✅ Profile created (name, age, max HR, priority, conflict policy)
 - ✅ No injury history (confirmed via activity gap check)
 - ✅ Goal set (10K, March 15th, sub-40)
-- ✅ Constraints captured (5 days, 90min max, Tues fixed, Wed/Fri cycling)
+- ✅ Constraints captured (5 days, 90min max, Tues track club, Wed/Fri cycling)
 - ✅ VDOT calculated (51.2 current, 53.5 target)
 - ✅ Ready for plan generation
 

@@ -80,6 +80,16 @@ class IntensityMetric(str, Enum):
     RPE = "rpe"
 
 
+class PauseReason(str, Enum):
+    """Reason a sport commitment is temporarily paused."""
+
+    FOCUS_RUNNING = "focus_running"
+    INJURY = "injury"
+    ILLNESS = "illness"
+    OFF_SEASON = "off_season"
+    OTHER = "other"
+
+
 # ============================================================
 # CORE MODELS
 # ============================================================
@@ -107,13 +117,9 @@ class TrainingConstraints(BaseModel):
     rather than listing all days you CAN run.
     """
 
-    blocked_run_days: List[Weekday] = Field(
+    unavailable_run_days: List[Weekday] = Field(
         default_factory=list,
         description="Days you absolutely cannot run (e.g., fixed climbing/yoga commitments)"
-    )
-    preferred_long_run_days: List[Weekday] = Field(
-        default_factory=lambda: [Weekday.SATURDAY, Weekday.SUNDAY],
-        description="Preferred days for long runs (soft preference)"
     )
     min_run_days_per_week: int = Field(ge=0, le=7)
     max_run_days_per_week: int = Field(ge=0, le=7)
@@ -124,38 +130,31 @@ class OtherSport(BaseModel):
     """Other sport commitment."""
 
     sport: str
-    days: Optional[List[Weekday]] = None  # Preferred/fixed days (None = flexible)
-    frequency_per_week: Optional[int] = Field(
-        default=None, ge=1, le=7, description="How many times per week (required if days not specified)"
+    frequency_per_week: int = Field(
+        ge=1,
+        le=7,
+        description="How many times per week"
     )
+    unavailable_days: Optional[List[Weekday]] = None  # Days the athlete cannot do this sport
     typical_duration_minutes: int = Field(default=60, ge=0)
     typical_intensity: str = "moderate"  # easy, moderate, hard, moderate_to_hard
-    is_flexible: bool = False  # Can this commitment be rescheduled?
+    active: bool = True
+    pause_reason: Optional[PauseReason] = None
+    paused_at: Optional[str] = None  # ISO date string
     notes: Optional[str] = None
 
     @model_validator(mode="after")
-    def validate_frequency_and_days(self) -> "OtherSport":
-        """
-        Validate and auto-fill frequency_per_week and is_flexible fields.
+    def validate_other_sport(self) -> "OtherSport":
+        """Validate other sport fields."""
+        if self.unavailable_days is not None and len(self.unavailable_days) == 0:
+            self.unavailable_days = None
 
-        Rules:
-        - If days provided and frequency not set → auto-set frequency = len(days)
-        - If frequency provided without days → auto-set is_flexible = True
-        - At least one of days or frequency_per_week must be provided
-        """
-        if self.days is not None and self.frequency_per_week is None:
-            # Auto-set frequency from days length
-            self.frequency_per_week = len(self.days)
-
-        if self.frequency_per_week is not None and self.days is None:
-            # Frequency without specific days means flexible scheduling
-            self.is_flexible = True
-
-        # Validate: at least one must be provided
-        if self.days is None and self.frequency_per_week is None:
+        if self.active:
+            self.pause_reason = None
+            self.paused_at = None
+        elif self.pause_reason is None:
             raise ValueError(
-                "Either 'days' or 'frequency_per_week' must be provided. "
-                "Specify fixed days (--days monday,wednesday) or frequency (--frequency 3)."
+                "Paused sport commitments must include a pause_reason."
             )
 
         return self
@@ -287,7 +286,8 @@ class AthleteProfile(BaseModel):
                 "Profile has empty other_sports. If you have any regular non-running "
                 "activities (climbing, cycling, yoga, etc.), add them for accurate load "
                 "calculations. Run 'sce profile analyze' to see your sport distribution, "
-                "then: sce profile add-sport --sport <name> --days <days> --duration <mins>",
+                "then: sce profile add-sport --sport <name> --frequency <times_per_week> "
+                "--unavailable-days <days> --duration <mins>",
                 UserWarning
             )
         return self

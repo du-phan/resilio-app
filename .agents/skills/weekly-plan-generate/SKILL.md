@@ -74,7 +74,7 @@ sce profile get  # Load athlete profile including other_sports
 - What other sports they do (climbing, cycling, surfing, etc.)
 - Expected frequency/volume for each sport
 - Running priority (PRIMARY/EQUAL/SECONDARY)
-- **Specific day constraints**: Extract the `days` field for each sport (e.g., climbing on tue,thu). Mark these days as BLOCKED for quality running sessions. Only schedule easy/recovery runs on other-sport days, or rest entirely.
+- **Day constraints**: Use `constraints.unavailable_run_days` for run-day blocking. Other sports inform load and intensity distribution, not day blocking, in v0.
 
 Optionally export and analyze recent intensity distribution:
 

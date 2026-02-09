@@ -1978,7 +1978,7 @@ def generate_month_plan(
         target_volumes_km: List of weekly volume targets (AI-designed, one per week)
         macro_plan: Macro plan dict with phases and recovery weeks
         current_vdot: Current VDOT value (30.0-85.0)
-        profile: Athlete profile dict with constraints, sports, preferences
+        profile: Athlete profile dict with constraints, other_sports, preferences
         volume_adjustment: Multiplier for volume targets (0.5-1.5 reasonable range)
 
     Returns:

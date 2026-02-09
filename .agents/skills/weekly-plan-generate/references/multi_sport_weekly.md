@@ -66,31 +66,31 @@ lower_body_load_au = base_effort_au × lower_body_multiplier
 
 ## Placing Running Workouts Around Other Sports
 
-### Step 1: Identify Fixed Commitments
+### Step 1: Identify Unavailable Run Days + Other Sport Frequency
 **Check athlete's profile or ask**:
-- "Which days are non-negotiable for [other sport]?"
-- "Are [other sport] sessions fixed or flexible?"
+- "Any days you absolutely cannot run?"
+- "How many sessions per week for [other sport]? Any days you can’t do it?"
 
 **Example**:
-- Climbing: Tuesday evenings (team night), Thursday (comp prep), Saturday (comp or outdoor)
-- → Fixed: Tuesday, Thursday, Saturday for climbing
+- Unavailable for running: Tuesday, Thursday (work + climbing)
+- Other sport frequency: Climbing 2x/week
 
-### Step 2: Map Running Around Fixed Days
+### Step 2: Map Running Around Unavailable Days
 **Running placement principles**:
 - Easy runs: Can be 24 hours after non-running activity (systemic load moderate, lower-body fresh)
 - Quality runs: Need 48 hours after high-intensity non-running activity (both channels recovered)
 - Long runs: Need 48+ hours after high lower-body load activity (cumulative leg fatigue risk)
 
-**Example schedule (given fixed climbing days above)**:
-- **Monday**: Rest or yoga
-- **Tuesday**: Climbing (fixed)
-- **Wednesday**: Easy run (24 hours after Tuesday climbing - systemic OK, legs fresh)
-- **Thursday**: Climbing (fixed)
-- **Friday**: Easy run (24 hours after Thursday climbing)
-- **Saturday**: Climbing (fixed)
-- **Sunday**: Long run (24 hours after Saturday climbing - low lower-body carryover)
+**Example schedule (given unavailable Tue/Thu)**:
+- **Monday**: Easy run
+- **Tuesday**: Rest / other sport
+- **Wednesday**: Quality run
+- **Thursday**: Rest / other sport
+- **Friday**: Easy run
+- **Saturday**: Long run
+- **Sunday**: Easy run or rest
 
-**Quality workout placement**: Monday tempo/intervals (48 hours after Saturday climbing, fresh for week ahead)
+**Quality workout placement**: Use available days with at least 48 hours between hard sessions.
 
 ### Step 3: Consider Lower-Body Load Interactions
 
@@ -179,7 +179,7 @@ sce analysis load --activities activities.json --days 7 --priority equal
 - `primary_sport_wins`: Keep comp, adjust running
 
 ### Scenario 2: Back-to-Back High Intensity
-**Problem**: Tuesday intervals (planned) + Wednesday climbing comp (fixed)
+**Problem**: Tuesday intervals (planned) + Wednesday climbing comp (known event)
 
 **Resolution**:
 - **Option A**: Move intervals to Monday (give 48 hours before comp)
@@ -199,7 +199,7 @@ sce today
 **Returns adaptation triggers including multi-sport warnings**:
 - `lower_body_fatigue_high`: Recent cycling/strength → quality run compromised
 - `session_density_high`: Too many hard sessions (running + other sport) in 7 days
-- `multi_sport_conflict`: Today's planned workout conflicts with other sport session
+- `multi_sport_conflict`: Today's planned workout conflicts with athlete's unavailable run day
 
 **Response to triggers**:
 - **Lower-body fatigue high**: Replace quality run with easy run
@@ -210,9 +210,9 @@ sce today
 
 ## Common Multi-Sport Mistakes (Weekly Level)
 
-### 1. Not checking other sport's schedule before generating workouts
-❌ **Bad**: Generate week's running plan without knowing athlete has climbing comp Saturday
-✅ **Good**: Check profile for fixed commitments, ask about upcoming events, then place workouts
+### 1. Not checking unavailable run days before generating workouts
+❌ **Bad**: Generate week's running plan without capturing days the athlete cannot run
+✅ **Good**: Confirm unavailable run days and upcoming events, then place workouts
 
 ### 2. Ignoring lower-body load accumulation
 ❌ **Bad**: Planning quality run Thursday after Wednesday cycling (moderate lower-body load)
@@ -244,8 +244,8 @@ sce analysis load --activities activities.json --days 7 --priority equal
 # Check today's readiness considering other sports
 sce today
 
-# View upcoming other sport commitments (from profile)
-sce profile get | jq -r '.sports'
+# View other sport commitments (from profile)
+sce profile get | jq -r '.other_sports'
 
 # Forecast multi-sport load for next week
 sce risk forecast --weeks 1 --metrics metrics.json --plan plan.json

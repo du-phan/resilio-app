@@ -2335,7 +2335,7 @@ def generate_monthly_plan(
 
     Creates complete workout prescriptions for specified weeks using:
     - AI-designed volume targets (validated by guardrails)
-    - Profile constraints (run days, sports, long run max)
+    - Profile constraints (run days, long run max)
     - VDOT-based pace zones
     - Phase-appropriate workout distribution
     - Multi-sport integration
@@ -2349,7 +2349,7 @@ def generate_monthly_plan(
         target_volumes_km: List of weekly volume targets (AI-designed, one per week)
         macro_plan: Macro plan dict with phases and recovery weeks
         current_vdot: Current VDOT value (may be recalibrated from previous month)
-        profile: Athlete profile dict with constraints, sports, preferences
+        profile: Athlete profile dict with constraints, other_sports, preferences
         volume_adjustment: Multiplier for volume targets (0.9 = reduce 10%, 1.0 = as planned)
 
     Returns:
@@ -2361,7 +2361,7 @@ def generate_monthly_plan(
 
     Example:
         >>> macro_plan = {"phases": [...], "recovery_weeks": [4, 8], ...}
-        >>> profile = {"max_run_days": 4, "sports": [...], ...}
+        >>> profile = {"max_run_days": 4, "other_sports": [...], ...}
         >>> monthly = generate_monthly_plan(
         ...     month_number=1,
         ...     week_numbers=[1, 2, 3, 4],
@@ -2536,23 +2536,34 @@ def determine_weekly_workouts(
         run_days_per_week: Number of run days (3-5)
         is_recovery_week: Whether this is a recovery week
         week_number: Week number in plan
-        profile: Athlete profile with sports schedule
+        profile: Athlete profile (unused for day blocking in v0)
 
     Returns:
         List of WorkoutType for each day of the week (7 days)
     """
-    # Get other sports schedule from profile
-    other_sports_days = set()
-    if "sports" in profile:
-        for sport in profile["sports"]:
-            if sport.get("sport") != "running":
-                days_str = sport.get("days", "")
-                if days_str:
-                    day_map = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
-                    for day in days_str.lower().split(","):
-                        day = day.strip()
-                        if day in day_map:
-                            other_sports_days.add(day_map[day])
+    day_map = {
+        "mon": 0, "monday": 0,
+        "tue": 1, "tuesday": 1,
+        "wed": 2, "wednesday": 2,
+        "thu": 3, "thursday": 3,
+        "fri": 4, "friday": 4,
+        "sat": 5, "saturday": 5,
+        "sun": 6, "sunday": 6,
+    }
+
+    # Parse unavailable run days from profile constraints (if present)
+    unavailable_days = set()
+    constraints = profile.get("constraints") if isinstance(profile, dict) else None
+    raw_unavailable = []
+    if isinstance(constraints, dict):
+        raw_unavailable = constraints.get("unavailable_run_days", []) or []
+    for item in raw_unavailable:
+        if isinstance(item, str):
+            key = item.strip().lower()
+        else:
+            key = str(getattr(item, "value", item)).strip().lower()
+        if key in day_map:
+            unavailable_days.add(day_map[key])
 
     # Build 7-day schedule
     schedule = [WorkoutType.REST] * 7
@@ -2580,7 +2591,7 @@ def determine_weekly_workouts(
         quality_workouts = quality_workouts[:1]  # Keep only long run
 
     # Place long run on Sunday (day 6) if possible
-    available_days = [d for d in range(7) if d not in other_sports_days]
+    available_days = [d for d in range(7) if d not in unavailable_days]
 
     if 6 in available_days and WorkoutType.LONG_RUN in quality_workouts:
         schedule[6] = WorkoutType.LONG_RUN

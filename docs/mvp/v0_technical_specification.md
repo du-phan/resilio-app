@@ -256,10 +256,10 @@ On profile save, M4 must validate:
 
 | Validation                                                      | Action                                                                                                                            |
 | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `max_run_days < min_run_days`                                   | Error: "Max run days cannot be less than min run days"                                                                            |
-| `len(available_run_days) < min_run_days`                        | Warning: "Insufficient available run days to meet min_run_days_per_week. Consider adjusting constraints."                         |
-| `len(available_run_days) = 0` AND `goal.type ≠ general_fitness` | Error: "Cannot create a race-focused plan with 0 available run days. Add at least one run day or switch to general_fitness goal." |
-| All `available_run_days` are consecutive (e.g., Sat+Sun only)   | Warning: "Back-to-back run days detected. Plan will enforce hard/easy separation (one day must be easy)."                         |
+| `max_run_days < min_run_days`                                                | Error: "Max run days cannot be less than min run days"                                                                            |
+| `available_days = 7 - len(unavailable_run_days)` is `< min_run_days`             | Warning: "Insufficient available run days to meet min_run_days_per_week. Consider adjusting constraints."                         |
+| `len(unavailable_run_days) = 7` AND `goal.type ≠ general_fitness`                | Error: "Cannot create a race-focused plan with all days unavailable. Remove some unavailable days or switch to general_fitness goal."     |
+| All `available_days` are consecutive (e.g., Sat+Sun only)                     | Warning: "Back-to-back run days detected. Plan will enforce hard/easy separation (one day must be easy)."                         |
 
 **Depends on**
 
@@ -806,7 +806,7 @@ _schema:
 - `running_priority: enum(primary|secondary|equal)`
 - `primary_sport: str`
 - `conflict_policy: enum(primary_sport_wins|running_goal_wins|ask_each_time)`
-- `constraints.available_run_days: list[weekday]`
+- `constraints.unavailable_run_days: list[weekday]`
 - `constraints.min_run_days_per_week: int`
 - `constraints.max_run_days_per_week: int`
 - `goal.type: enum(5k|10k|half_marathon|marathon|general_fitness)`
@@ -1187,9 +1187,9 @@ When a plan decision conflicts with the athlete's primary sport or reality:
 
 | Policy               | Plan Generation Behavior                                                                                                                                            |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `primary_sport_wins` | When scheduling running workouts, check for collisions with `other_sports[]` commitments. If collision: move running workout to a different day.                    |
-| `running_goal_wins`  | Protect key running workouts (long run, quality run). Schedule them first, then fit other sports around them.                                                       |
-| `ask_each_time`      | Generate plan assuming ideal running days (ignore conflicts). When Claude detects a conflict at runtime, ask user to choose. Store user's choice in adaptation log. |
+| `primary_sport_wins` | If athlete reports a conflict, keep primary sport and mark running as unavailable on those days, then reschedule runs within remaining days.                       |
+| `running_goal_wins`  | Protect key running workouts (long run, quality run). If conflicts arise, suggest moving or pausing other sports.                                                    |
+| `ask_each_time`      | Generate plan assuming ideal running days. When conflicts arise at runtime, ask user to choose and update unavailable run days as needed.                            |
 
 ### 8.4 Goal Change Mid-Plan
 

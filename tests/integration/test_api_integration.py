@@ -51,7 +51,7 @@ def integration_repo(tmp_path):
         name="Integration Test Athlete",
         created_at=today.isoformat(),
         constraints=TrainingConstraints(
-            available_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SATURDAY],
+            unavailable_run_days=[Weekday.TUESDAY, Weekday.THURSDAY, Weekday.SUNDAY],
             min_run_days_per_week=3,
             max_run_days_per_week=4,
         ),
@@ -107,7 +107,7 @@ class TestProfileIntegration:
         # Update constraints (must include all required fields)
         updated = update_profile(
             constraints={
-                "available_run_days": [Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.FRIDAY, Weekday.SUNDAY],
+                "unavailable_run_days": [Weekday.TUESDAY, Weekday.THURSDAY, Weekday.SATURDAY],
                 "min_run_days_per_week": 4,
                 "max_run_days_per_week": 5,
             }

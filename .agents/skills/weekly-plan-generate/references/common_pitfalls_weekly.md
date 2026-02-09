@@ -207,10 +207,10 @@ sce dates validate --date 2026-01-20 --must-be monday
 **Options**:
 1. Long run Sunday as planned (quality runs highest priority) ✓
 2. Long run Monday (48h after climbing, lower-body recovered)
-3. Climbing Friday instead (if flexible)
+3. Climbing Friday instead (if athlete confirms it can move)
 4. Downgrade to easy run Sunday, shift long run next week
 
-**Recommendation**: Option 3 if climbing flexible, Option 2 if fixed.
+**Recommendation**: Option 3 if athlete confirms climbing can move, otherwise Option 2.
 
 ### Q: No recent race time (unknown VDOT)
 
@@ -228,7 +228,7 @@ sce dates validate --date 2026-01-20 --must-be monday
 ## Essential Checklist (Before Presenting Weekly Plan)
 
 **Week being generated** (e.g., week 1, 2, 3...):
-- [ ] Multi-sport schedule checked (fixed commitments identified)
+- [ ] Unavailable run days confirmed (and upcoming events noted)
 - [ ] Volume target from macro plan: X km
 - [ ] Quality volume validated: T≤10%, I≤8%, R≤5%
 - [ ] Long run validated: ≤30% of weekly volume, ≤150 min

@@ -1654,3 +1654,48 @@ class TestVolumeDistributionMinimums:
 
         # Easy runs will be below minimum (validation will catch this)
         # Easy runs will be below minimum (validation will catch this)workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
+
+
+class TestOtherSportScheduling:
+    """Other sports should not block run scheduling in v0."""
+
+    def test_other_sports_do_not_block_sunday_long_run(self):
+        from sports_coach_engine.core.plan import determine_weekly_workouts
+
+        schedule = determine_weekly_workouts(
+            phase=PlanPhase.BASE,
+            run_days_per_week=4,
+            is_recovery_week=False,
+            week_number=2,
+            profile={
+                "other_sports": [
+                    {
+                        "sport": "climbing",
+                        "frequency_per_week": 2,
+                        "unavailable_days": ["sunday"],
+                        "active": True,
+                    }
+                ]
+            },
+        )
+
+        assert schedule[6] == WorkoutType.LONG_RUN
+
+
+class TestUnavailableRunDaysScheduling:
+    """Unavailable run days should be respected in plan scheduling."""
+
+    def test_unavailable_days_block_sunday_long_run(self):
+        from sports_coach_engine.core.plan import determine_weekly_workouts
+
+        schedule = determine_weekly_workouts(
+            phase=PlanPhase.BASE,
+            run_days_per_week=4,
+            is_recovery_week=False,
+            week_number=2,
+            profile={
+                "constraints": {"unavailable_run_days": ["sunday"]},
+            },
+        )
+
+        assert schedule[6] != WorkoutType.LONG_RUN

@@ -184,9 +184,9 @@ sce profile set --running-priority secondary
 
 ---
 
-## Step 4d: Conflict Policy (AskUserQuestion - ONLY USE HERE)
+## Step 4d: Conflict Policy (chat-based numbered options - ONLY USE HERE)
 
-**This is a decision with trade-offs** - appropriate for AskUserQuestion.
+**This is a decision with trade-offs** - appropriate for chat-based numbered options.
 
 ### Prompt
 
@@ -358,19 +358,19 @@ I need to track your climbing/yoga schedule to:
 
 **Climbing (40%)**:
 ```
-Coach: "What days do you typically climb?"
-Athlete: "Tuesdays and Thursdays, usually 2-hour sessions."
+Coach: "How many times per week do you climb? Any days you can’t do it?"
+Athlete: "Twice a week. I can’t climb Sundays."
 Coach: "Intensity? Light technique work or full sending?"
-Athlete: "Moderate to hard - I push pretty hard both days."
+Athlete: "Moderate to hard - I push pretty hard both sessions."
 ```
 
 ```bash
-sce profile add-sport --sport climbing --days tue,thu --duration 120 --intensity moderate_to_hard
+sce profile add-sport --sport climbing --frequency 2 --unavailable-days sun --duration 120 --intensity moderate_to_hard
 ```
 
 **Yoga (19%)**:
 ```bash
-sce profile add-sport --sport yoga --days sun --duration 60 --intensity easy
+sce profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
 ```
 
 ### Handle Edge Cases

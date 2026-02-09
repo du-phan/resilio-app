@@ -2,7 +2,7 @@
 
 ## Overview
 
-The profile system supports 28 fields accessible via `sce profile set` and `sce profile get`. Use natural conversation to gather most values, not AskUserQuestion.
+The profile system supports 28 fields accessible via `sce profile set` and `sce profile get`. Use natural conversation to gather most values, not chat-based numbered options.
 
 ---
 
@@ -78,27 +78,22 @@ Athlete: "About 2 hours max"
 Command: sce profile set --max-session-minutes 120
 ```
 
-### blocked-days (comma-separated)
+### unavailable-days (comma-separated)
 **What**: Days athlete CANNOT run (subtractive model)
 **Format**: Lowercase, comma-separated (e.g., "tuesday,thursday")
-**Default**: Empty list (no blocked days)
+**Default**: Empty list (no unavailable days)
 **Philosophy**: Ask for exceptions, not exhaustive lists
 
 **Example**:
 ```
 Coach: "Are there any days you absolutely CANNOT run?"
 Athlete: "Tuesdays and Thursdays - that's climbing night"
-Command: sce profile set --blocked-days "tuesday,thursday"
+Command: sce profile set --unavailable-days "tuesday,thursday"
 ```
 
-**If athlete says "all days work"**: Don't specify --blocked-days (defaults to empty)
+**If athlete says "all days work"**: Don't specify --unavailable-days (defaults to empty)
 
-### preferred-long-run-days (comma-separated, optional)
-**What**: Preferred days for long runs (soft preference, not constraint)
-**Default**: "saturday,sunday"
-**Example**: `sce profile set --preferred-long-run-days "saturday,sunday"`
-
-**Note**: This is a preference, not a constraint. The planner will try to place long runs on these days but can deviate if needed.
+**Long-run placement note (v0)**: The planner assumes long runs are on weekends by default. No explicit profile field is needed.
 
 ---
 
@@ -126,7 +121,7 @@ Command: sce profile set --run-priority equal
 - `"primary_sport_wins"`: Prioritize primary sport automatically
 - `"running_goal_wins"`: Keep key running workouts unless injury risk
 
-**How to gather**: **AskUserQuestion** (ONLY appropriate use)
+**How to gather**: **chat-based numbered options** (ONLY appropriate use)
 **Example**: See main SKILL.md Step 4d
 
 ---
@@ -134,35 +129,35 @@ Command: sce profile set --run-priority equal
 ## Additional Sport Constraints
 
 ### sport (via add-sport command)
-**What**: Add non-running sport with flexible scheduling support
+**What**: Add non-running sport with frequency + unavailable days
 **Fields per sport**:
 - `--sport`: Sport name (e.g., "climbing", "cycling")
-- `--days`: Specific days (comma-separated) - optional for flexible scheduling
-- `--frequency`: Times per week (1-7) - use when days vary but frequency is consistent
+- `--frequency`: Times per week (1-7) - required
+- `--unavailable-days`: Days athlete cannot do this sport (comma-separated, optional)
 - `--duration`: Typical session duration (minutes)
 - `--intensity`: easy, moderate, hard, moderate_to_hard
-- `--fixed` or `--flexible`: Whether days can be swapped
 
-**Three scheduling patterns**:
+**Two patterns**:
 
-1. **Fixed days** (always same days):
-```bash
-sce profile add-sport --sport climbing --days "tuesday,thursday" --duration 120 --intensity moderate_to_hard --fixed
-```
-
-2. **Frequency-based** (days vary, frequency consistent):
+1. **Frequency only** (fully flexible):
 ```bash
 sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
 # "I climb 3x/week but the days change"
 ```
 
-3. **Preferred days with flexibility** (usual pattern but can swap):
+2. **Frequency + unavailable days**:
 ```bash
-sce profile add-sport --sport yoga --days "monday,wednesday,friday" --duration 60 --intensity easy --flexible
-# "Usually Mon/Wed/Fri but sometimes I swap days"
+sce profile add-sport --sport yoga --frequency 2 --unavailable-days "sunday" --duration 60 --intensity easy
+# "I do yoga twice a week, but not Sundays"
 ```
 
-**Auto-inference**: If you specify `--days` without `--frequency`, frequency is auto-set to the number of days. If you specify `--frequency` without `--days`, the system auto-marks it as flexible.
+### Pause/Resume sport commitments
+Use this when an athlete temporarily stops a sport (e.g., focus on running, injury, illness).
+
+```bash
+sce profile pause-sport --sport climbing --reason focus_running
+sce profile resume-sport --sport climbing
+```
 
 **List all sports**:
 ```bash
@@ -269,7 +264,7 @@ sce profile set --max-hr 185
 
 ### Optional But Recommended
 - `max-session-minutes` (defaults to 180 if not set)
-- `available-days` (defaults to all days if not set)
+- `unavailable-days` (defaults to empty list if not set)
 - `conflict-policy` (defaults to "ask_each_time" if multi-sport)
 
 ### Auto-Populated (Don't Ask)
@@ -290,10 +285,9 @@ sce profile set --max-hr 185
 | max-run-days | integer | Yes | Natural conversation |
 | min-run-days | integer | No | Natural conversation |
 | max-session-minutes | integer | Recommended | Natural conversation |
-| blocked-days | csv | No (default: empty) | Natural conversation |
-| preferred-long-run-days | csv | No (default: sat/sun) | Natural conversation |
+| unavailable-days | csv | No (default: empty) | Natural conversation |
 | run-priority | string | Yes if multi-sport | Natural conversation |
-| conflict-policy | string | Yes if multi-sport | **AskUserQuestion** |
+| conflict-policy | string | Yes if multi-sport | **chat-based numbered options** |
 | current-goal-distance | string | Yes | `sce goal` command |
 | current-goal-date | date | Yes | `sce goal` command |
 | current-goal-time | string | No | `sce goal` command |

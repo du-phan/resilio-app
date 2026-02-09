@@ -205,21 +205,22 @@ class DerivedPaces(BaseModel):
 
 class TrainingConstraints(BaseModel):
     """Training schedule constraints."""
-    available_run_days: list[Weekday]
-    preferred_run_days: Optional[list[Weekday]] = None
+    unavailable_run_days: list[Weekday] = Field(default_factory=list)
     min_run_days_per_week: int
     max_run_days_per_week: int
     max_time_per_session_minutes: Optional[int] = None
-    time_preference: Optional[Literal["morning", "evening", "flexible"]] = None
 
 
 class OtherSport(BaseModel):
     """Other sport commitment."""
     sport: str              # "bouldering", "cycling", etc.
-    days: list[Weekday]
+    frequency_per_week: int
+    unavailable_days: Optional[list[Weekday]] = None
     typical_duration_minutes: int
     typical_intensity: SportIntensity
-    is_flexible: bool       # Can this be rescheduled?
+    active: bool = True
+    pause_reason: Optional[Literal["focus_running", "injury", "illness", "off_season", "other"]] = None
+    paused_at: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -521,8 +522,9 @@ def validate_constraints(
 
     Validation rules:
         - max_run_days >= min_run_days
-        - available_run_days.length >= min_run_days
-        - Cannot have race goal with 0 available_run_days
+        - available_days = 7 - len(unavailable_run_days)
+        - available_days >= min_run_days
+        - Cannot have race goal with all days unavailable
         - Warns if all available days are consecutive
     """
     ...
@@ -742,18 +744,17 @@ def remove_other_sport(sport_name: str) -> Union[AthleteProfile, ProfileError]:
     ...
 
 
-def get_fixed_sports_on_day(day: Weekday) -> list[OtherSport]:
+def get_other_sport_unavailable_days() -> dict[str, list[Weekday]]:
     """
-    Get fixed sports for a specific day.
-    Used for scheduling conflict detection.
+    Return unavailable_days for each active other sport.
+
+    Note: v0 does not use other_sports for run-day blocking; this data is
+    informational for coach decisions and athlete communication.
 
     Algorithm:
         1. Load profile with load_profile()
-        2. If profile is None or error, return []
-        3. Filter profile.other_sports where:
-           - sport.is_flexible == False  # Fixed commitments
-           - day in sport.days
-        4. Return filtered list
+        2. If profile is None or error, return {}
+        3. For each active sport, return sport.unavailable_days (or [])
     """
     ...
 ```
@@ -813,20 +814,19 @@ derived_paces:
 
 # Training Constraints
 constraints:
-  available_run_days: [tuesday, wednesday, saturday, sunday]
-  preferred_run_days: [tuesday, saturday]
+  unavailable_run_days: [monday, thursday, friday]
   min_run_days_per_week: 2
   max_run_days_per_week: 4
   max_time_per_session_minutes: 75
-  time_preference: "morning"
 
 # Other Sport Commitments
 other_sports:
   - sport: "bouldering"
-    days: [monday, thursday]
+    frequency_per_week: 2
+    unavailable_days: [sunday]
     typical_duration_minutes: 120
     typical_intensity: "moderate_to_hard"
-    is_flexible: false  # Fixed commitment
+    active: true
 
 # Priority Settings
 running_priority: "secondary"
@@ -1031,24 +1031,25 @@ def validate_constraints(
         ))
 
     # 2. Check available days sufficiency
-    if len(constraints.available_run_days) < constraints.min_run_days_per_week:
+    available_days = [day for day in Weekday if day not in constraints.unavailable_run_days]
+    if len(available_days) < constraints.min_run_days_per_week:
         warnings.append(ConstraintWarning(
-            field="available_run_days",
+            field="unavailable_run_days",
             message="Insufficient available run days to meet minimum",
-            suggestion="Consider adding more available days or reducing min_run_days"
+            suggestion="Consider removing some unavailable days or reducing min_run_days"
         ))
 
     # 3. Check race goal feasibility
-    if goal.type != GoalType.GENERAL_FITNESS and len(constraints.available_run_days) == 0:
+    if goal.type != GoalType.GENERAL_FITNESS and len(available_days) == 0:
         errors.append(ConstraintError(
-            field="available_run_days",
-            message="Cannot create race plan with 0 available run days"
+            field="unavailable_run_days",
+            message="Cannot create race plan with all days unavailable"
         ))
 
     # 4. Check consecutive days
-    if _all_days_consecutive(constraints.available_run_days):
+    if _all_days_consecutive(available_days):
         warnings.append(ConstraintWarning(
-            field="available_run_days",
+            field="unavailable_run_days",
             message="Back-to-back run days detected",
             suggestion="Plan will enforce hard/easy separation (one day must be easy)"
         ))
@@ -1237,7 +1238,7 @@ class TestValidateConstraints:
     def test_valid_constraints(self):
         """Should validate correct constraints."""
         constraints = TrainingConstraints(
-            available_run_days=[Weekday.TUESDAY, Weekday.SATURDAY, Weekday.SUNDAY],
+            unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY],
             min_run_days_per_week=2,
             max_run_days_per_week=3
         )
@@ -1251,7 +1252,7 @@ class TestValidateConstraints:
     def test_error_when_max_less_than_min(self):
         """Should error when max < min."""
         constraints = TrainingConstraints(
-            available_run_days=[Weekday.TUESDAY, Weekday.SATURDAY],
+            unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
             min_run_days_per_week=3,
             max_run_days_per_week=2
         )
@@ -1264,7 +1265,15 @@ class TestValidateConstraints:
     def test_error_when_race_goal_with_zero_available_days(self):
         """Should error when race goal with no available days."""
         constraints = TrainingConstraints(
-            available_run_days=[],
+            unavailable_run_days=[
+                Weekday.MONDAY,
+                Weekday.TUESDAY,
+                Weekday.WEDNESDAY,
+                Weekday.THURSDAY,
+                Weekday.FRIDAY,
+                Weekday.SATURDAY,
+                Weekday.SUNDAY,
+            ],
             min_run_days_per_week=0,
             max_run_days_per_week=0
         )
@@ -1273,12 +1282,18 @@ class TestValidateConstraints:
         result = validate_constraints(constraints, goal)
 
         assert not result.valid
-        assert any(e.field == "available_run_days" for e in result.errors)
+        assert any(e.field == "unavailable_run_days" for e in result.errors)
 
     def test_warning_for_marathon_with_low_frequency(self):
         """Should warn for marathon with < 3 days per week."""
         constraints = TrainingConstraints(
-            available_run_days=[Weekday.SATURDAY, Weekday.SUNDAY],
+            unavailable_run_days=[
+                Weekday.MONDAY,
+                Weekday.TUESDAY,
+                Weekday.WEDNESDAY,
+                Weekday.THURSDAY,
+                Weekday.FRIDAY,
+            ],
             min_run_days_per_week=2,
             max_run_days_per_week=2
         )
@@ -1326,7 +1341,7 @@ class TestProfileCRUD:
             name="Test Athlete",
             goal=Goal(type=GoalType.TEN_K),
             constraints=TrainingConstraints(
-                available_run_days=[Weekday.TUESDAY, Weekday.SATURDAY],
+                unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
                 min_run_days_per_week=2,
                 max_run_days_per_week=2
             ),
@@ -1414,10 +1429,10 @@ class TestOtherSports:
         """Should add new sport commitment."""
         sport = OtherSport(
             sport="cycling",
-            days=[Weekday.WEDNESDAY, Weekday.FRIDAY],
+            frequency_per_week=2,
+            unavailable_days=[Weekday.SUNDAY],
             typical_duration_minutes=90,
             typical_intensity=SportIntensity.MODERATE,
-            is_flexible=False  # Fixed commitment
         )
 
         result = upsert_other_sport(sport)
@@ -1430,20 +1445,20 @@ class TestOtherSports:
         # First add
         sport1 = OtherSport(
             sport="cycling",
-            days=[Weekday.WEDNESDAY],
+            frequency_per_week=1,
+            unavailable_days=[Weekday.SUNDAY],
             typical_duration_minutes=60,
             typical_intensity=SportIntensity.EASY,
-            is_flexible=True  # Flexible scheduling
         )
         upsert_other_sport(sport1)
 
         # Then update
         sport2 = OtherSport(
             sport="cycling",
-            days=[Weekday.WEDNESDAY, Weekday.FRIDAY],
+            frequency_per_week=2,
+            unavailable_days=[Weekday.SUNDAY],
             typical_duration_minutes=90,
             typical_intensity=SportIntensity.MODERATE,
-            is_flexible=False  # Fixed commitment
         )
         result = upsert_other_sport(sport2)
 
@@ -1459,15 +1474,11 @@ class TestOtherSports:
         assert not isinstance(result, ProfileError)
         assert not any(s.sport == "cycling" for s in result.other_sports)
 
-    def test_get_fixed_sports_on_day(self):
-        """Should return only fixed sports on specified day."""
-        # Assumes profile has some sports
-        fixed = get_fixed_sports_on_day(Weekday.MONDAY)
+    def test_get_other_sport_unavailable_days(self):
+        """Should return unavailable_days for active sports."""
+        unavailable = get_other_sport_unavailable_days()
 
-        # All returned sports should be fixed (not flexible) and include Monday
-        for sport in fixed:
-            assert sport.is_flexible == False  # Fixed commitment
-            assert Weekday.MONDAY in sport.days
+        assert isinstance(unavailable, dict)
 ```
 
 ---

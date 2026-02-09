@@ -293,6 +293,24 @@ def plan_status_command(ctx: typer.Context) -> None:
     if isinstance(profile_result, AthleteProfile):
         profile = profile_result
 
+    run_days = None
+    max_run_days_per_week = None
+    if profile and getattr(profile, "constraints", None):
+        unavailable_days = {
+            day.value for day in getattr(profile.constraints, "unavailable_run_days", [])
+        }
+        day_to_idx = {
+            "monday": 0,
+            "tuesday": 1,
+            "wednesday": 2,
+            "thursday": 3,
+            "friday": 4,
+            "saturday": 5,
+            "sunday": 6,
+        }
+        run_days = [idx for name, idx in day_to_idx.items() if name not in unavailable_days]
+        max_run_days_per_week = getattr(profile.constraints, "max_run_days_per_week", None)
+
     data = {
         "plan_start": plan.start_date,
         "plan_end": plan.end_date,
@@ -304,8 +322,8 @@ def plan_status_command(ctx: typer.Context) -> None:
         "phases": plan.phases,
         "recovery_weeks": recovery_weeks,
         "conflict_policy": plan.conflict_policy,
-        "run_days": getattr(getattr(profile, "training_constraints", None), "available_run_days", None),
-        "max_run_days_per_week": getattr(getattr(profile, "training_constraints", None), "max_run_days_per_week", None),
+        "run_days": run_days,
+        "max_run_days_per_week": max_run_days_per_week,
     }
 
     envelope = api_result_to_envelope(

@@ -396,9 +396,9 @@ sce week  # Track recovery progression
 **Constraints to Discuss**:
 
 1. **Run frequency**: "How many runs per week are realistic for you?"
-2. **Available days**: "Which days can you typically run? Work commitments, family, other sports?"
+2. **Unavailable days**: "Any days you absolutely cannot run? Work, family, other sports?"
 3. **Session duration**: "What's the longest run you can do? Marathon training means 2-3hr long runs."
-4. **Other sport commitments**: "I see you climb. Which days/times? Fixed or flexible?"
+4. **Other sport commitments**: "How many times per week do you climb? Any days you can't do that sport?"
 5. **Time of day**: "Morning or evening runs? Any preference?"
 
 ### Example Dialogue
@@ -409,14 +409,12 @@ Coach: "Before I design your marathon plan, let me understand your schedule.
 
 Athlete: "I can do 3-4 runs consistently. Maybe 5 on a good week, but let's plan for 4."
 
-Coach: "Perfect, 4 runs/week is solid for marathon training. Which days work best?
-       I know you climb - when are those sessions?"
+Coach: "Perfect, 4 runs/week is solid for marathon training. Any days you cannot run?
+       I know you climb - how many sessions per week, and any days you can't climb?"
 
-Athlete: "I climb Friday evenings at the gym. Weekends usually open.
-       Weekdays I can run Tuesday and Thursday mornings before work."
+Athlete: "I climb twice a week. I can’t climb Sundays. For running, I can’t run on Monday or Wednesday."
 
-Coach: "Got it. Tentatively: Tuesday, Thursday, Saturday, Sunday for runs,
-       Friday reserved for climbing. Does that work?"
+Coach: "Got it. I’ll avoid Monday and Wednesday for runs. We’ll keep climbing at 2x/week and not schedule it on Sundays."
 
 Athlete: "Yes, that's ideal."
 
@@ -434,28 +432,28 @@ Coach: "Excellent! Let me update your profile with these constraints."
 sce profile set \
   --min-run-days 4 \
   --max-run-days 4 \
-  --available-days "tuesday,thursday,saturday,sunday" \
+  --unavailable-days "monday,wednesday,friday" \
   --max-session-minutes 120
 ```
 
 ### Common Constraint Patterns
 
-| Athlete Type | Run Days/Week | Available Days | Max Session | Notes |
-|--------------|---------------|----------------|-------------|-------|
-| Full-time worker, climbing Fridays | 4 | Tue, Thu, Sat, Sun | 180min weekend | Protect Friday climbing |
-| Parent, evenings only | 3 | Mon, Wed, Sat | 120min | Early morning long run Saturday |
-| Multi-sport (cycling Sat) | 3-4 | Mon, Wed, Thu, Sun | 90min weekday, 150min Sun | Sunday long run only |
-| Flexible schedule | 4-5 | Any 5 days | 180min | Optimize for recovery |
+| Athlete Type | Run Days/Week | Unavailable Days | Max Session | Notes |
+|--------------|---------------|--------------|-------------|-------|
+| Full-time worker, climbing Fridays | 4 | Fri | 180min weekend | Protect Friday climbing |
+| Parent, evenings only | 3 | Tue, Thu, Sun | 120min | Early morning long run Saturday |
+| Multi-sport (cycling Sat) | 3-4 | Tue, Fri, Sat | 90min weekday, 150min Sun | Sunday long run only |
+| Flexible schedule | 4-5 | None | 180min | Optimize for recovery |
 
 ### Integration with Conflict Policy
 
 Constraints + conflict policy = complete scheduling system:
 
-- **Constraints**: Define WHEN athlete CAN train
-- **Conflict policy**: Define WHAT HAPPENS when conflicts arise within available days
+- **Constraints**: Define WHEN athlete CANNOT run
+- **Conflict policy**: Define WHAT HAPPENS when conflicts arise in remaining available days
 
 Example:
-- Constraint: "Can run Tue/Thu/Sat/Sun, Friday climbing"
+- Constraint: "Cannot run Mon/Wed, Friday climbing"
 - Conflict policy: "ask_each_time"
 - Result: Coach proposes runs on available days, asks when conflicts occur within those days
 
@@ -780,7 +778,7 @@ Week 5 workouts will reflect these updated paces. Your fitness is improving!"
 # Athlete: "I have a work trip Thursday-Friday next week, can we shift workouts?"
 
 # Option 1: Regenerate with profile update
-sce profile set --available-days "monday,tuesday,saturday,sunday"  # Remove Thu/Fri
+sce profile set --unavailable-days "wednesday,thursday,friday"  # Keep Mon/Tue/Sat/Sun
 
 sce plan generate-week \
   --week 5 \
@@ -838,7 +836,7 @@ not separate "analysis" and "planning" sessions.
 **Why This Matters**:
 - **Accurate load tracking**: Missing sports = systematic underestimation of training load
 - **Injury prevention**: ACWR/CTL calculations require ALL activities, not just running
-- **Intelligent scheduling**: Can't avoid conflicts without knowing all commitments
+- **Intelligent scheduling**: Can't avoid conflicts without clear run-unavailable days
 - **Complete athlete picture**: Need full context for personalized coaching
 
 **Problem**: Athlete has significant non-running activities (e.g., climbing 40%, yoga 15%) but `other_sports = []` in profile.
@@ -846,7 +844,7 @@ not separate "analysis" and "planning" sessions.
 **Impact**:
 - CTL calculation misses ~40% of actual training load
 - ACWR shows 0.9 (safe) when actual is 1.4 (danger zone)
-- Weekly plans schedule hard runs on climbing days → injury risk
+- Weekly plans schedule hard runs on days athlete later can't train → injury risk
 - Readiness scores show "fresh" when athlete is fatigued
 - Total training days: 7 (4 runs + 3 climbs) but coach thinks it's only 4
 
@@ -878,10 +876,10 @@ load in my fatigue calculations. That's why you feel tired but my metrics say yo
 **Step 4: Collect missing data**:
 ```bash
 # Climbing (42% - significant)
-sce profile add-sport --sport climbing --days mon,wed,fri --duration 120 --intensity hard
+sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity hard
 
 # Yoga (15% - just above threshold)
-sce profile add-sport --sport yoga --days sun --duration 60 --intensity easy
+sce profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
 ```
 
 **Step 5: Verify fix**:
@@ -917,7 +915,7 @@ for your Monday climbing session - I'll move the tempo run to Wednesday instead.
 **Common scenarios**:
 1. **Primary runner who climbs**: Still need to track climbing for accurate CTL
 2. **Equal priority athlete**: Obvious - track everything
-3. **Athlete with flexible other sports**: Even if days vary, track average duration/intensity
+3. **Athlete with variable other sports**: Even if days vary, track average duration/intensity
 
 **Prevention**:
 - Make Step 4f-validation mandatory in first-session workflow

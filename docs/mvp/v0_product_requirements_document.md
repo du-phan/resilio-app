@@ -12,7 +12,7 @@
 
 This document defines a lean v0 for an AI-powered adaptive running coach. The product runs entirely within **Claude Code terminal**—no web interface, no database server. All data is stored in **local files** within the repository.
 
-**v0 Core Promise:** Generate a personalized running plan based on user-defined constraints (available days, other sports, priorities) and continuously adapt it in response to actual training load across all tracked activities.
+**v0 Core Promise:** Generate a personalized running plan based on user-defined constraints (unavailable days, other sports, priorities) and continuously adapt it in response to actual training load across all tracked activities.
 
 **Interaction Model:** User chats with Claude Code in terminal. Claude reads/writes local files (YAML, JSON, Markdown) to persist state, plans, and history.
 
@@ -361,27 +361,25 @@ derived_paces:
 
 # Training Constraints
 constraints:
-  available_run_days: [tuesday, wednesday, saturday, sunday] # Days user CAN run
-  preferred_run_days: [tuesday, saturday] # Ideal days if flexible
+  unavailable_run_days: [monday, thursday, friday] # Days user CANNOT run (subtractive scheduling)
   min_run_days_per_week: 2
   max_run_days_per_week: 4
   max_time_per_session_minutes: 75
-  time_preference: "morning" # morning, evening, flexible
 
 # Other Sport Commitments
 other_sports:
   - sport: "bouldering"
-    days: [monday, thursday]
+    frequency_per_week: 2
+    unavailable_days: [sunday]
     typical_duration_minutes: 120
     typical_intensity: "moderate_to_hard" # easy, moderate, hard, moderate_to_hard
-    is_flexible: false # Fixed commitment - won't move these
     notes: "Indoor gym, Arkose Montmartre"
 
   - sport: "cycling"
-    days: [sunday]
+    frequency_per_week: 2
+    unavailable_days: null
     typical_duration_minutes: 90
     typical_intensity: "easy_to_moderate"
-    is_flexible: true # Can reschedule based on weather
     notes: "Weather dependent, outdoor"
 
 # Priority Setting

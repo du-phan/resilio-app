@@ -28,6 +28,7 @@ from sports_coach_engine.schemas.profile import (
     DetailLevel,
     CoachingStyle,
     IntensityMetric,
+    PauseReason,
     PBEntry,
 )
 from sports_coach_engine.schemas.activity import NormalizedActivity
@@ -64,7 +65,7 @@ def create_profile(
     conflict_policy: str = "ask_each_time",
     min_run_days: int = 2,
     max_run_days: int = 4,
-    blocked_run_days: Optional[List[Weekday]] = None,
+    unavailable_run_days: Optional[List[Weekday]] = None,
     detail_level: Optional["DetailLevel"] = None,
     coaching_style: Optional["CoachingStyle"] = None,
     intensity_metric: Optional["IntensityMetric"] = None,
@@ -95,7 +96,7 @@ def create_profile(
         conflict_policy: "primary_sport_wins", "running_goal_wins", or "ask_each_time" (default: "ask_each_time")
         min_run_days: Minimum run days per week (default: 2)
         max_run_days: Maximum run days per week (default: 4)
-        blocked_run_days: List of blocked weekdays (defaults to empty list - no blocked days)
+        unavailable_run_days: List of days you cannot run (defaults to empty list)
 
     Returns:
         Created AthleteProfile
@@ -108,7 +109,7 @@ def create_profile(
         ...     age=32,
         ...     max_hr=190,
         ...     running_priority="equal",
-        ...     blocked_run_days=[Weekday.TUESDAY, Weekday.THURSDAY]
+        ...     unavailable_run_days=[Weekday.TUESDAY, Weekday.THURSDAY]
         ... )
         >>> if isinstance(profile, ProfileError):
         ...     print(f"Error: {profile.message}")
@@ -158,14 +159,14 @@ def create_profile(
         )
 
     # Create constraints
-    # Schema provides default for blocked_run_days (empty list)
+    # Schema provides default for unavailable_run_days (empty list)
     # Only pass if explicitly provided
     constraint_kwargs = {
         "min_run_days_per_week": min_run_days,
         "max_run_days_per_week": max_run_days,
     }
-    if blocked_run_days is not None:
-        constraint_kwargs["blocked_run_days"] = blocked_run_days
+    if unavailable_run_days is not None:
+        constraint_kwargs["unavailable_run_days"] = unavailable_run_days
 
     constraints = TrainingConstraints(**constraint_kwargs)
 
@@ -292,7 +293,7 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
         ...     constraints={
         ...         "min_run_days_per_week": 3,
         ...         "max_run_days_per_week": 5,
-        ...         "blocked_run_days": ["tuesday", "thursday"]
+        ...         "unavailable_run_days": ["tuesday", "thursday"]
         ...     }
         ... )
         >>> if isinstance(profile, ProfileError):
@@ -982,47 +983,15 @@ def _auto_update_profile_patterns(workout_patterns: Dict, volume_data: Dict) -> 
 # ============================================================
 
 
-def add_sport_to_profile(
-    sport: str,
-    days: Optional[List[Weekday]] = None,
-    frequency: Optional[int] = None,
-    duration: int = 60,
-    intensity: str = "moderate",
-    flexible: bool = False,
-    notes: Optional[str] = None
+def _load_profile_for_sport_update(
+    repo: RepositoryIO, profile_path: str
 ) -> Union[AthleteProfile, ProfileError]:
-    """
-    Add a sport commitment to the athlete's profile.
-
-    Args:
-        sport: Name of the sport (e.g., "climbing", "yoga", "cycling")
-        days: Days of the week for this sport (optional)
-        frequency: Times per week (optional, 1-7). Use when days vary but frequency is consistent.
-        duration: Typical session duration in minutes (default: 60)
-        intensity: Intensity level (easy, moderate, hard, moderate_to_hard) (default: moderate)
-        flexible: Whether this commitment is flexible (True) or fixed (False)
-        notes: Optional notes about the commitment
-
-    Returns:
-        Updated AthleteProfile or ProfileError
-
-    Examples:
-        >>> add_sport_to_profile("climbing", days=[Weekday.TUESDAY, Weekday.THURSDAY], duration=120, intensity="moderate_to_hard")
-        >>> add_sport_to_profile("climbing", frequency=3, duration=120, intensity="moderate_to_hard")  # 3x/week, flexible days
-        >>> add_sport_to_profile("yoga", frequency=2, intensity="easy")  # 2x/week, flexible scheduling
-    """
-    from sports_coach_engine.schemas.profile import OtherSport
-
-    repo = RepositoryIO()
-    profile_path = athlete_profile_path()
-
-    # Load current profile
+    """Load profile for sport update operations with consistent error mapping."""
     result = repo.read_yaml(
         profile_path, AthleteProfile, ReadOptions(should_validate=True)
     )
-
     if isinstance(result, RepoError):
-        if result.error_type == RepoErrorType.NOT_FOUND:
+        if result.error_type == RepoErrorType.FILE_NOT_FOUND:
             return ProfileError(
                 error_type="not_found",
                 message="Profile not found. Create a profile first using 'sce profile create'",
@@ -1031,19 +1000,66 @@ def add_sport_to_profile(
             error_type="unknown",
             message=f"Failed to load profile: {result.message}",
         )
+    return result
 
-    profile = result
+
+def add_sport_to_profile(
+    sport: str,
+    frequency: Optional[int] = None,
+    unavailable_days: Optional[List[Weekday]] = None,
+    duration: int = 60,
+    intensity: str = "moderate",
+    notes: Optional[str] = None
+) -> Union[AthleteProfile, ProfileError]:
+    """
+    Add a sport commitment to the athlete's profile.
+
+    Args:
+        sport: Name of the sport (e.g., "climbing", "yoga", "cycling")
+        frequency: Times per week (required, 1-7)
+        unavailable_days: Days the athlete cannot do this sport (optional)
+        duration: Typical session duration in minutes (default: 60)
+        intensity: Intensity level (easy, moderate, hard, moderate_to_hard) (default: moderate)
+        notes: Optional notes about the commitment
+
+    Returns:
+        Updated AthleteProfile or ProfileError
+
+    Examples:
+        >>> add_sport_to_profile("climbing", frequency=3, duration=120, intensity="moderate_to_hard")
+        >>> add_sport_to_profile("yoga", frequency=2, unavailable_days=[Weekday.SUNDAY], intensity="easy")
+    """
+    from sports_coach_engine.schemas.profile import OtherSport
+
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+
+    # Load current profile
+    profile = _load_profile_for_sport_update(repo, profile_path)
+    if isinstance(profile, ProfileError):
+        return profile
 
     # Create new sport commitment
-    new_sport = OtherSport(
-        sport=sport,
-        days=days,
-        frequency_per_week=frequency,
-        typical_duration_minutes=duration,
-        typical_intensity=intensity,
-        is_flexible=flexible,
-        notes=notes
-    )
+    if frequency is None:
+        return ProfileError(
+            error_type="validation",
+            message="Missing required frequency. Provide --frequency <times_per_week>.",
+        )
+
+    try:
+        new_sport = OtherSport(
+            sport=sport,
+            frequency_per_week=frequency,
+            unavailable_days=unavailable_days,
+            typical_duration_minutes=duration,
+            typical_intensity=intensity,
+            notes=notes,
+        )
+    except Exception as exc:
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid sport commitment: {exc}",
+        )
 
     # Add to profile's other_sports list
     if profile.other_sports is None:
@@ -1078,22 +1094,9 @@ def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]
     profile_path = athlete_profile_path()
 
     # Load current profile
-    result = repo.read_yaml(
-        profile_path, AthleteProfile, ReadOptions(should_validate=True)
-    )
-
-    if isinstance(result, RepoError):
-        if result.error_type == RepoErrorType.NOT_FOUND:
-            return ProfileError(
-                error_type="not_found",
-                message="Profile not found. Create a profile first using 'sce profile create'",
-            )
-        return ProfileError(
-            error_type="unknown",
-            message=f"Failed to load profile: {result.message}",
-        )
-
-    profile = result
+    profile = _load_profile_for_sport_update(repo, profile_path)
+    if isinstance(profile, ProfileError):
+        return profile
 
     # Check if any sports configured
     if not profile.other_sports:
@@ -1116,6 +1119,104 @@ def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]
     profile.other_sports = updated_sports
 
     # Save updated profile
+    write_result = repo.write_yaml(profile_path, profile)
+    if isinstance(write_result, RepoError):
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to save profile: {write_result.message}",
+        )
+    return profile
+
+
+def pause_sport_in_profile(
+    sport: str,
+    reason: str,
+    paused_at: Optional[str] = None,
+) -> Union[AthleteProfile, ProfileError]:
+    """Pause one sport commitment while preserving its schedule history."""
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+    profile = _load_profile_for_sport_update(repo, profile_path)
+    if isinstance(profile, ProfileError):
+        return profile
+
+    if not profile.other_sports:
+        return ProfileError(
+            error_type="validation",
+            message="No sports configured in profile",
+        )
+
+    try:
+        pause_reason = PauseReason(reason.lower())
+    except ValueError:
+        valid = ", ".join([r.value for r in PauseReason])
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid pause reason '{reason}'. Valid values: {valid}",
+        )
+
+    pause_date = paused_at or date.today().isoformat()
+    try:
+        date.fromisoformat(pause_date)
+    except ValueError:
+        return ProfileError(
+            error_type="validation",
+            message=f"Invalid paused_at '{pause_date}'. Use YYYY-MM-DD.",
+        )
+
+    sport_lower = sport.lower()
+    matched = False
+    for commitment in profile.other_sports:
+        if commitment.sport.lower() == sport_lower and commitment.active:
+            commitment.active = False
+            commitment.pause_reason = pause_reason
+            commitment.paused_at = pause_date
+            matched = True
+
+    if not matched:
+        return ProfileError(
+            error_type="validation",
+            message=f"Active sport '{sport}' not found in profile. Use 'sce profile list-sports' to inspect configured sports.",
+        )
+
+    write_result = repo.write_yaml(profile_path, profile)
+    if isinstance(write_result, RepoError):
+        return ProfileError(
+            error_type="unknown",
+            message=f"Failed to save profile: {write_result.message}",
+        )
+    return profile
+
+
+def resume_sport_in_profile(sport: str) -> Union[AthleteProfile, ProfileError]:
+    """Resume a paused sport commitment."""
+    repo = RepositoryIO()
+    profile_path = athlete_profile_path()
+    profile = _load_profile_for_sport_update(repo, profile_path)
+    if isinstance(profile, ProfileError):
+        return profile
+
+    if not profile.other_sports:
+        return ProfileError(
+            error_type="validation",
+            message="No sports configured in profile",
+        )
+
+    sport_lower = sport.lower()
+    matched = False
+    for commitment in profile.other_sports:
+        if commitment.sport.lower() == sport_lower and not commitment.active:
+            commitment.active = True
+            commitment.pause_reason = None
+            commitment.paused_at = None
+            matched = True
+
+    if not matched:
+        return ProfileError(
+            error_type="validation",
+            message=f"Paused sport '{sport}' not found in profile. Use 'sce profile list-sports' to inspect configured sports.",
+        )
+
     write_result = repo.write_yaml(profile_path, profile)
     if isinstance(write_result, RepoError):
         return ProfileError(
@@ -1180,7 +1281,10 @@ def validate_profile_completeness() -> Union[Dict, ProfileError]:
                         f"Your Strava data shows {sport} as {percentage:.1f}% of activities "
                         f"({analysis_result.sport_distribution.get(sport, 0)} sessions in last 120 days), "
                         f"but it's not in other_sports. Add it for accurate load calculations: "
-                        f"sce profile add-sport --sport {sport} --days <days> --duration <mins> --intensity <level>"
+                        f"sce profile add-sport --sport {sport} "
+                        f"--frequency <times/week> "
+                        f"--unavailable-days <days> "
+                        f"--duration <mins> --intensity <level>"
                     )
                 })
 

@@ -14,7 +14,7 @@ from sports_coach_engine.api import create_profile, get_profile, update_profile
 from sports_coach_engine.api.profile import ProfileError
 from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from sports_coach_engine.cli.output import create_error_envelope, output_json, OutputEnvelope
-from sports_coach_engine.schemas.profile import Weekday, DetailLevel, CoachingStyle, IntensityMetric
+from sports_coach_engine.schemas.profile import Weekday, DetailLevel, CoachingStyle, IntensityMetric, PauseReason
 
 # Create subcommand app
 app = typer.Typer(help="Manage athlete profile")
@@ -39,9 +39,9 @@ def profile_create_command(
     ),
     min_run_days: int = typer.Option(2, "--min-run-days", help="Minimum run days per week"),
     max_run_days: int = typer.Option(4, "--max-run-days", help="Maximum run days per week"),
-    blocked_days: Optional[str] = typer.Option(
+    unavailable_days: Optional[str] = typer.Option(
         None,
-        "--blocked-days",
+        "--unavailable-days",
         help="Days you cannot run (comma-separated, e.g., 'tuesday,thursday' for climbing nights)"
     ),
     detail_level: Optional[str] = typer.Option(
@@ -68,17 +68,17 @@ def profile_create_command(
     Examples:
         sce profile create --name "Alex" --age 32 --max-hr 190
         sce profile create --name "Sam" --run-priority primary
-        sce profile create --name "Alex" --blocked-days "tuesday,thursday"
+        sce profile create --name "Alex" --unavailable-days "tuesday,thursday"
     """
     # Parse constraint fields (comma-separated days to List[Weekday])
-    blocked_days_list = None
-    if blocked_days:
+    unavailable_days_list = None
+    if unavailable_days:
         try:
-            blocked_days_list = [Weekday(d.strip().lower()) for d in blocked_days.split(',')]
+            unavailable_days_list = [Weekday(d.strip().lower()) for d in unavailable_days.split(',')]
         except ValueError as e:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"Invalid day in --blocked-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                message=f"Invalid day in --unavailable-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
                 data={}
             )
             output_json(envelope)
@@ -134,7 +134,7 @@ def profile_create_command(
         conflict_policy=conflict_policy,
         min_run_days=min_run_days,
         max_run_days=max_run_days,
-        blocked_run_days=blocked_days_list,
+        unavailable_run_days=unavailable_days_list,
         detail_level=detail_level_enum,
         coaching_style=coaching_style_enum,
         intensity_metric=intensity_metric_enum,
@@ -161,7 +161,7 @@ def profile_get_command(ctx: typer.Context) -> None:
     Returns profile including:
     - Basic info: name, age, max_hr, resting_hr
     - Goal: Current race goal (if set)
-    - Constraints: Fixed commitments (e.g., climbing on Tuesdays)
+    - Constraints: Days you cannot run
     - Preferences: Run priorities, conflict policies
     - History: Injury patterns, PRs
 
@@ -218,9 +218,9 @@ def profile_set_command(
         "--max-session-minutes",
         help="Maximum session duration in minutes (e.g., 90, 180)"
     ),
-    blocked_days: Optional[str] = typer.Option(
+    unavailable_days: Optional[str] = typer.Option(
         None,
-        "--blocked-days",
+        "--unavailable-days",
         help="Days you cannot run (comma-separated, e.g., 'tuesday,thursday' for climbing nights)"
     ),
     detail_level: Optional[str] = typer.Option(
@@ -251,7 +251,7 @@ def profile_set_command(
         sce profile set --conflict-policy ask_each_time
         sce profile set --min-run-days 3 --max-run-days 4
         sce profile set --max-session-minutes 180
-        sce profile set --blocked-days "tuesday,thursday"
+        sce profile set --unavailable-days "tuesday,thursday"
     """
     # Collect non-None fields
     fields = {}
@@ -284,14 +284,14 @@ def profile_set_command(
         constraint_updates["max_time_per_session_minutes"] = max_session_minutes
 
     # Parse new constraint fields
-    if blocked_days is not None:
+    if unavailable_days is not None:
         try:
-            blocked_days_list = [Weekday(d.strip().lower()) for d in blocked_days.split(',')]
-            constraint_updates["blocked_run_days"] = blocked_days_list
+            unavailable_days_list = [Weekday(d.strip().lower()) for d in unavailable_days.split(',')]
+            constraint_updates["unavailable_run_days"] = unavailable_days_list
         except ValueError as e:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"Invalid day in --blocked-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                message=f"Invalid day in --unavailable-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
                 data={}
             )
             output_json(envelope)
@@ -450,7 +450,7 @@ def profile_analyze_command(ctx: typer.Context) -> None:
         Output includes suggestions for:
         - max_hr: 199 (observed peak)
         - weekly_km: 22.5 (4-week average)
-        - available_run_days: [tuesday, thursday, saturday, sunday]
+        - suggested_run_days: [tuesday, thursday, saturday, sunday]
         - running_priority: equal (40% running, 60% other sports)
     """
     from sports_coach_engine.api.profile import analyze_profile_from_activities
@@ -476,11 +476,10 @@ def profile_analyze_command(ctx: typer.Context) -> None:
 def profile_add_sport_command(
     ctx: typer.Context,
     sport: str = typer.Option(..., "--sport", help="Sport name (e.g., climbing, yoga, cycling)"),
-    days: Optional[str] = typer.Option(None, "--days", help="Days (comma-separated, e.g., 'tuesday,thursday'). Optional for flexible scheduling."),
-    frequency: Optional[int] = typer.Option(None, "--frequency", help="Times per week (e.g., 3). Use when days vary but frequency is consistent."),
+    frequency: int = typer.Option(..., "--frequency", help="Times per week (e.g., 3). Required."),
+    unavailable_days: Optional[str] = typer.Option(None, "--unavailable-days", help="Days you cannot do this sport (comma-separated)."),
     duration: int = typer.Option(60, "--duration", help="Typical session duration in minutes (default: 60)"),
     intensity: str = typer.Option("moderate", "--intensity", help="Intensity: easy, moderate, hard, moderate_to_hard (default: moderate)"),
-    flexible: bool = typer.Option(False, "--flexible/--fixed", help="Flexible scheduling (True) or fixed commitment (False)"),
     notes: Optional[str] = typer.Option(None, "--notes", help="Optional notes about the commitment"),
 ) -> None:
     """Add a sport commitment to your profile.
@@ -489,26 +488,20 @@ def profile_add_sport_command(
     so the coach can account for multi-sport training load.
 
     Examples:
-        # Fixed days commitment
-        sce profile add-sport --sport climbing --days tuesday,thursday --duration 120 --intensity moderate_to_hard --fixed
-
-        # Flexible scheduling with frequency
-        sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
-
-        # Fixed days with flexible scheduling (can swap days within the week)
-        sce profile add-sport --sport yoga --days monday,wednesday,friday --duration 60 --flexible
+        # Frequency with unavailable days
+        sce profile add-sport --sport climbing --frequency 3 --unavailable-days tuesday,thursday --duration 120 --intensity moderate_to_hard
     """
     from sports_coach_engine.api.profile import add_sport_to_profile
 
-    # Parse days if provided
+    # Parse unavailable days if provided
     day_list = None
-    if days:
+    if unavailable_days:
         try:
-            day_list = [Weekday(d.strip().lower()) for d in days.split(',')]
+            day_list = [Weekday(d.strip().lower()) for d in unavailable_days.split(',')]
         except ValueError as e:
             envelope = create_error_envelope(
                 error_type="validation",
-                message=f"Invalid day in --days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
+                message=f"Invalid day in --unavailable-days: {str(e)}. Use: monday, tuesday, wednesday, thursday, friday, saturday, sunday",
                 data={}
             )
             output_json(envelope)
@@ -517,21 +510,18 @@ def profile_add_sport_command(
     # Call API
     result = add_sport_to_profile(
         sport=sport,
-        days=day_list,
         frequency=frequency,
+        unavailable_days=day_list,
         duration=duration,
         intensity=intensity,
-        flexible=flexible,
         notes=notes
     )
 
     # Build success message
-    if days:
-        success_msg = f"Added sport commitment: {sport} on {days}"
-    elif frequency:
-        success_msg = f"Added sport commitment: {sport} ({frequency}x/week, flexible days)"
+    if unavailable_days:
+        success_msg = f"Added sport commitment: {sport} ({frequency}x/week, unavailable: {unavailable_days})"
     else:
-        success_msg = f"Added sport commitment: {sport} (flexible scheduling)"
+        success_msg = f"Added sport commitment: {sport} ({frequency}x/week)"
 
     # Convert to envelope
     envelope = api_result_to_envelope(
@@ -576,11 +566,75 @@ def profile_remove_sport_command(
     raise typer.Exit(code=exit_code)
 
 
+@app.command(name="pause-sport")
+def profile_pause_sport_command(
+    ctx: typer.Context,
+    sport: str = typer.Option(..., "--sport", help="Sport name to pause (case-insensitive)"),
+    reason: str = typer.Option(
+        ...,
+        "--reason",
+        help="Pause reason: focus_running, injury, illness, off_season, other"
+    ),
+    paused_at: Optional[str] = typer.Option(
+        None,
+        "--paused-at",
+        help="Pause start date in YYYY-MM-DD format (default: today)",
+    ),
+) -> None:
+    """Pause a sport commitment while keeping history in profile."""
+    from sports_coach_engine.api.profile import pause_sport_in_profile
+
+    # Validate reason early for cleaner CLI feedback
+    try:
+        PauseReason(reason.lower())
+    except ValueError:
+        valid = ", ".join([r.value for r in PauseReason])
+        envelope = create_error_envelope(
+            error_type="validation",
+            message=f"Invalid --reason: {reason}. Use one of: {valid}",
+            data={}
+        )
+        output_json(envelope)
+        raise typer.Exit(code=5)
+
+    result = pause_sport_in_profile(
+        sport=sport,
+        reason=reason,
+        paused_at=paused_at,
+    )
+
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Paused sport commitment: {sport}",
+    )
+    output_json(envelope)
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
+@app.command(name="resume-sport")
+def profile_resume_sport_command(
+    ctx: typer.Context,
+    sport: str = typer.Option(..., "--sport", help="Sport name to resume (case-insensitive)"),
+) -> None:
+    """Resume a paused sport commitment."""
+    from sports_coach_engine.api.profile import resume_sport_in_profile
+
+    result = resume_sport_in_profile(sport=sport)
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Resumed sport commitment: {sport}",
+    )
+    output_json(envelope)
+    exit_code = get_exit_code_from_envelope(envelope)
+    raise typer.Exit(code=exit_code)
+
+
 @app.command(name="list-sports")
 def profile_list_sports_command(ctx: typer.Context) -> None:
     """List all sport commitments in your profile.
 
-    Shows all configured sport commitments with days, duration, and intensity.
+    Shows all configured sport commitments with constraints, duration, and intensity.
 
     Example:
         sce profile list-sports
@@ -611,10 +665,13 @@ def profile_list_sports_command(ctx: typer.Context) -> None:
     for sport_commitment in profile.other_sports:
         sports_data.append({
             "sport": sport_commitment.sport,
-            "days": [d.value for d in sport_commitment.days] if sport_commitment.days else [],
+            "unavailable_days": [d.value for d in sport_commitment.unavailable_days] if sport_commitment.unavailable_days else [],
+            "frequency_per_week": sport_commitment.frequency_per_week,
             "duration_minutes": sport_commitment.typical_duration_minutes,
             "intensity": sport_commitment.typical_intensity,
-            "flexible": sport_commitment.is_flexible,
+            "active": sport_commitment.active,
+            "pause_reason": sport_commitment.pause_reason.value if sport_commitment.pause_reason else None,
+            "paused_at": sport_commitment.paused_at,
             "notes": sport_commitment.notes
         })
 
@@ -769,7 +826,7 @@ def profile_edit_command(ctx: typer.Context) -> None:
     )
 
     if isinstance(result, RepoError):
-        if result.error_type == RepoErrorType.NOT_FOUND:
+        if result.error_type == RepoErrorType.FILE_NOT_FOUND:
             envelope = create_error_envelope(
                 error_type="not_found",
                 message="Profile not found. Create a profile first using 'sce profile create'",

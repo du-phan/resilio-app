@@ -12,7 +12,7 @@ This skill guides complete athlete onboarding from authentication to goal settin
 
 **Prerequisites**: This skill assumes your environment is ready (Python 3.11+, `sce` CLI available). If you haven't set up your environment yet, use the `complete-setup` skill first to install Python and the package.
 
-**Communication guideline**: When talking to athletes, never mention skills or internal tools. Say "Let me help you get started" not "I'll run the first-session skill." See AGENTS.md "Athlete-Facing Communication Guidelines."
+**Communication guideline**: When talking to athletes, never mention skills, slash commands, or internal tools. Say "Let me help you get started" not "I'll run the first-session skill." See AGENTS.md / CLAUDE.md "Athlete-Facing Communication Guidelines."
 
 **Why historical data matters**: ask "I see you average 35km/week over the last X weeks/months - should we maintain this?" instead of "How much do you run?" (no context).
 
@@ -168,13 +168,24 @@ sce profile analyze       # Profile suggestions from synced data
 
 ### Step 4: Profile Setup (Natural Conversation)
 
-**Use natural conversation for text/number inputs. Use chat-based numbered options ONLY for conflict policy.**
+**Use natural conversation for text/number inputs. Use chat-based numbered options for decisions with distinct trade-offs (conflict policy, goal feasibility).**
 
 **For complete field-by-field guidance**: See [references/profile_setup_workflow.md](references/profile_setup_workflow.md)
 
-#### Quick Overview
+#### Multi-Sport Branching Logic
+
+**Check sport distribution** from `sce profile analyze` → `sport_percentages`:
+
+- **If >1 sport at >15%**: Use full sequence (steps 4a-4d-4e-4f)
+- **If mostly running (>80%)**: Use standard sequence (steps 4a-4d-4e), add 4f only if athlete reports regular non-running commitments
+
+This ensures we understand the athlete's complete training picture before asking about constraints.
+
+#### Quick Overview (Multi-Sport Sequence)
 
 **Step 4a - Basic Info**: Name, age, max HR (reference Strava peak), resting HR, running experience (years)
+
+**Why this matters**: "I need your complete training picture. Climbing loads your cardiovascular system even though it doesn't stress your legs the same way. If I ignore it, I'll over-prescribe running and you'll burn out."
 
 **Step 4b - Injury History**: Search activities for gaps/pain mentions → Store in memory system with tags
 
@@ -185,34 +196,47 @@ sce profile analyze       # Profile suggestions from synced data
 
 - Options: `"running"` (PRIMARY), `"equal"` (EQUAL), other sport name (SECONDARY)
 
-**Step 4d - Conflict Policy**: Use chat-based numbered options (ONLY use here - trade-offs exist)
+**Step 4d - Conflict Policy** (from sport picture): Use chat-based numbered options (trade-offs with distinct options)
 
 - Options: Ask each time | Primary sport wins | Running goal wins
+- Context: "Your week has climbing 3x/week and yoga 2x/week. When training conflicts arise..."
 
 **Step 4e - Create Profile**:
 
 ```bash
-sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
+sce profile create --name "Alex" --age 32 --max-hr 190 --run-priority equal --conflict-policy ask_each_time
 ```
 
-**Step 4.5 - Personal Bests (Race History)**:
-
-- CRITICAL: Manual entry FIRST (Sync defaults to 365 days, but old PBs may still be missing)
-- Ask directly: "What are your PBs for 5K, 10K, half, marathon?"
-- Enter each: `sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15`
-- Verify: `sce profile get` (check `personal_bests` section)
-
-**Step 4f - Other Sports Collection**:
+**Step 4f - Other Sports Collection** (AFTER profile creation):
 
 - Check distribution: `sce profile analyze` → sport_percentages
-- Collect ALL sports >15%: `sce profile add-sport --sport climbing --days tue,thu --duration 120`
-- running_priority determines CONFLICT RESOLUTION, not whether to track sports
+- Collect ALL sports >15%
+- **Frequency + unavailable days model**:
+  - **Option 1**: Frequency only → `sce profile add-sport --sport climbing --frequency 3 --duration 120`
+  - **Option 2**: Frequency + unavailable days → `sce profile add-sport --sport climbing --frequency 3 --unavailable-days tue,thu --duration 120`
+
+**Temporary break handling**:
+- If athlete pauses a sport to focus on running or due to injury/illness:
+  - Pause: `sce profile pause-sport --sport climbing --reason focus_running`
+  - Resume later: `sce profile resume-sport --sport climbing`
+
+**Coaching conversation**:
+- "How many times per week do you climb? Any days you can’t do it?"
+- If athlete says "3 times a week, days vary" → Use `--frequency 3`
+- If athlete says "I can’t climb Sundays" → Add `--unavailable-days sunday`
 
 **Step 4f-validation - Data Alignment**:
 
 - Verify: `sce profile validate`
 - Check: All sports >15% from analyze are in other_sports
 - Only proceed when alignment confirmed
+
+**Step 4.5 - Personal Bests**:
+
+- Ask directly: "What are your PBs for 5K, 10K, half, marathon?"
+- Enter each: `sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15`
+- After sync, cross-check standout activities conversationally: "I see a strong 43:15 10K on Dec 15 — was that a race?" If yes, update PB if faster.
+- Verify: `sce profile get` (PBs section)
 
 **Step 4g - Communication Preferences** (optional):
 
@@ -231,16 +255,13 @@ See [profile_setup_workflow.md](references/profile_setup_workflow.md) for detail
 - "What are you training for?"
 - "When is your race?" (date)
 - "What's your goal time?" (optional)
-- "Do you have a race or time-trial date? If not, how many weeks do you want to focus on this goal?"
 
 ```bash
 sce goal set --type half_marathon --date 2026-06-01
 # Optional: --time "1:30:00" if specific goal
-sce goal set --type 10k --horizon-weeks 12
-sce goal set --type general_fitness
 ```
 
-**Goal types**: `5k`, `10k`, `half_marathon`, `marathon`, `general_fitness` (use benchmark date or horizon when no race)
+**Goal types**: `5k`, `10k`, `half_marathon`, `marathon`
 
 ---
 
@@ -248,82 +269,21 @@ sce goal set --type general_fitness
 
 **CRITICAL: Always validate goal against current fitness before committing to plan.**
 
-#### Get Performance Baseline
+Run `sce performance baseline` and `sce goal set` (which includes automatic feasibility validation). Respond based on the verdict (VERY_REALISTIC → UNREALISTIC).
 
-```bash
-sce performance baseline
-```
+**For complete verdict handling, coaching responses, and edge cases**: See [references/goal_validation.md](references/goal_validation.md)
 
-**Present context to athlete**:
-
-- Current VDOT estimate: XX (from recent workouts)
-- Peak VDOT: YY (from ZZ race on [date])
-- Goal requires VDOT: ZZ
-- Gap: +/- N VDOT points
-
-#### Set Goal (Automatic Validation)
-
-The `sce goal set` command automatically validates feasibility:
-
-```bash
-sce goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
-# Automatically returns: goal saved + feasibility verdict + recommendations
-```
-
-**Output includes**:
-
-- Feasibility verdict: VERY_REALISTIC / REALISTIC / AMBITIOUS_BUT_REALISTIC / AMBITIOUS / UNREALISTIC
-- VDOT gap (current vs. required)
-- Weeks available for training
-- Recommendations for achieving goal
-
-#### Coaching Response Based on Verdict
-
-**VERY_REALISTIC / REALISTIC:**
-
-- Build confidence: "Your goal is well within reach based on your current fitness (VDOT 48) and training history."
-- Set expectations: "We'll design a plan that maintains fitness and sharpens your speed."
-
-**AMBITIOUS_BUT_REALISTIC:**
-
-- Acknowledge challenge: "This is a stretch goal requiring VDOT improvement from 48 → 52 (+8.3%) over 20 weeks."
-- Build commitment: "It's achievable with strong adherence. Are you ready to commit to 4 quality runs/week?"
-
-**AMBITIOUS:**
-
-- Use chat-based numbered options to present options:
-  - **Option 1**: Keep ambitious goal, design aggressive plan, acknowledge 40-50% success probability
-  - **Option 2**: Adjust goal to realistic range (suggest alternative: 1:35:00 = VDOT 49)
-  - **Option 3**: Target a later race (suggest +8 weeks for better preparation)
-
-**UNREALISTIC:**
-
-- Present reality: "Your goal requires VDOT 52, but current fitness is VDOT 45. That's a 15.6% improvement in 12 weeks."
-- Show math: "Typical VDOT gains are 1.5 points/month. You'd need 7 points in 3 months = 2.3 points/month (50% faster than typical)."
-- Recommend alternatives:
-  - Alternative time: "Based on current fitness, 1:38:00 is realistic (VDOT 48)"
-  - Alternative timeline: "For your 1:30:00 goal, I recommend targeting a race 5 months out"
-
-**Decision point**: Wait for athlete confirmation before proceeding to Step 6 (Constraints Discussion).
-
-#### Edge Case: No Current VDOT Estimate
-
-If `sce performance baseline` returns no VDOT estimate (no recent quality workouts):
-
-```
-Coach: "I don't have enough recent quality workout data to estimate your current fitness.
-Your goal is half marathon 1:30:00 (VDOT 52 required).
-
-Let's take a conservative approach initially and reassess after your first tempo run gives us a VDOT estimate."
-```
-
-**Proceed with goal set**, but flag that validation will improve after first quality workout.
+**Decision point**: Wait for athlete confirmation before proceeding to Step 6.
 
 ---
 
-### Step 6: Constraints Discussion (Before Plan Generation)
+### Step 6: Running Constraints (Subtractive Model)
 
-**CRITICAL: Discuss constraints before designing plan.**
+**CRITICAL: Discuss constraints AFTER other sports are configured. This step is now informed by the athlete's complete training picture.**
+
+**Context-aware conversation**: For multi-sport athletes, reference their other sports when discussing constraints.
+
+Example: "Your week has climbing 3x/week and yoga 2x/week. Given your half marathon goal, 3 quality run days fits well alongside everything else. Does that sound manageable?"
 
 **Questions** (natural conversation):
 
@@ -335,35 +295,35 @@ Let's take a conservative approach initially and reassess after your first tempo
 
    - Store as: `--max-run-days N`
 
-3. **Available days (reverse logic)**: "Are there any days you absolutely CANNOT run?"
+3. **Unavailable days (subtractive model)**: "Are there any days you absolutely CANNOT run?"
 
-   - **If athlete says "No" or "All days work"**: Keep default (all 7 days available)
-   - **If athlete says "Tuesdays and Thursdays"**: Remove those from available_run_days
-   - **Example**: If "cannot run Tue/Thu" → `--available-days "monday,wednesday,friday,saturday,sunday"`
-   - **Default assumes all 7 days available** - ask only for exceptions
+   - **NEW APPROACH**: Ask for exceptions, not exhaustive lists
+   - **If athlete says "No" or "All days work"**: No unavailable days (default)
+   - **If athlete says "Tuesdays and Thursdays - that's climbing night"**: Mark those as unavailable
+   - **Example**: "Cannot run Tue/Thu" → `--unavailable-days "tuesday,thursday"`
+   - **Default is empty** - only specify days that are UNAVAILABLE
 
 4. **Session duration**: "What's the longest time for a long run?" (90-180 min typical)
 
    - Store as: `--max-session-minutes N`
 
-5. **Other sports schedule**: "Are climbing days fixed or flexible?" (if applicable)
-   - Context for workout scheduling around other sports
-
 **Store constraints**:
 
 ```bash
-# Example: Cannot run Tue/Thu, 3-4 days/week, max 120 min sessions
+# Example: Cannot run Tue/Thu (climbing nights), 3-4 days/week, max 120 min sessions
 sce profile set --min-run-days 3 --max-run-days 4 \
-  --available-days "monday,wednesday,friday,saturday,sunday" \
+  --unavailable-days "tuesday,thursday" \
   --max-session-minutes 120
 ```
 
-**If athlete says "all days work"**:
+**If athlete says "all days work"** (no unavailable days):
 
 ```bash
-# No need to specify --available-days (defaults to all 7 days)
+# No need to specify --unavailable-days (defaults to empty - no unavailable days)
 sce profile set --min-run-days 3 --max-run-days 4 --max-session-minutes 120
 ```
+
+**Auto-derive suggestion**: If the athlete says they cannot run on certain days because of other sports, set those as `--unavailable-days` for running. But don’t assume - some athletes can do both on the same day.
 
 ---
 
@@ -393,18 +353,16 @@ Would you like me to create a personalized plan now?"
 
 **Adjustments**: Ask directly "How much have you been running weekly?" (no data to reference)
 
-### Q: Athlete refuses Strava auth
+### Q: Athlete doesn't have a Strava account
 
-**Response**: "No problem - you can still use the system, but I won't have historical context. CTL starts at 0, you'll manually log via `sce log`. We can still create a great plan."
-
-**Proceed**: Rely on stated values instead of synced data
+**Response**: Strava authentication is required. Guide the athlete to create a free account at strava.com before proceeding. They'll need to record at least a few activities before we can provide data-driven coaching.
 
 ### Q: Multiple sports with complex schedule
 
 **Approach**:
 
-1. Identify fixed commitments: "Which days non-negotiable for climbing/cycling?"
-2. Map running around fixed days
+1. Identify sport frequency and hard no-go days
+2. Map running around unavailable days
 3. Consider lower-body load: "Climbing doesn't impact legs, cycling does"
 4. Set conflict policy carefully (likely `ask_each_time`)
 
@@ -424,7 +382,7 @@ Would you like me to create a personalized plan now?"
 ❌ **Bad**: chat-based numbered options for "What's your name?"
 ✅ **Good**: Natural conversation for all text/number inputs
 
-**chat-based numbered options ONLY for conflict policy**
+**chat-based numbered options ONLY for decisions with distinct trade-offs (conflict policy, goal feasibility)**
 
 ### 3. Skipping auth check
 
@@ -452,12 +410,12 @@ Would you like me to create a personalized plan now?"
 
 **Use activity gaps as conversation starters**
 
-### 7. Only relying on Strava auto-import for PBs
+### 7. Not asking for PBs directly
 
-❌ **Bad**: Skipping PB collection (misses old PBs outside sync window)
-✅ **Good**: Ask directly for PBs first, enter via `sce profile set-pb`
+❌ **Bad**: Only looking at synced data for PBs (misses pre-Strava performances)
+✅ **Good**: Ask directly for PBs first, then cross-check synced data conversationally
 
-**Manual entry is primary** - Automatic sync targets 365 days, but doesn't replace historical context for old PBs.
+**Ask first, verify second** - Most runners know their PBs. Sync data is supplementary, not primary.
 
 ---
 
@@ -480,7 +438,7 @@ Would you like me to create a personalized plan now?"
 **Quality checks**:
 
 - All data referenced from `sce profile analyze`
-- chat-based numbered options used ONLY for conflict policy
+- chat-based numbered options used ONLY for decisions with distinct trade-offs (conflict policy, goal feasibility)
 - Natural conversation for text/number inputs
 - Injury history in memory system with proper tags
 - Multi-sport athletes have other_sports populated based on actual Strava data
