@@ -52,7 +52,7 @@ sce guardrails feasible-volume \
   --target-volume <PLANNED_PEAK>
 ```
 
-If the planned peak exceeds feasibility, **block** and reduce peak volume or adjust constraints.
+If the planned peak exceeds feasibility, return a **blocking checklist** with feasibility data (required vs available, max feasible volume). The main agent will use this data to guide a coaching conversation about adjusting constraints or goals (see `.claude/skills/macro-plan-create/SKILL.md` Step 2b for detailed implementation).
 
 If historical activity JSON is available, check proven capacity (cap at 120%):
 

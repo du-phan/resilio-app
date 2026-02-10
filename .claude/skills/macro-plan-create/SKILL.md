@@ -46,6 +46,52 @@ sce memory list --type INJURY_HISTORY
 sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECENT>
 ```
 
+2b. Validate volume feasibility against session duration constraints:
+
+```bash
+# Get easy pace (slower end for conservative estimate)
+EASY_PACE=$(sce vdot paces --vdot <VDOT> | jq -r '.data.E.max_min_per_km')
+
+# Check if peak is achievable
+FEASIBILITY=$(sce guardrails feasible-volume \
+  --run-days <max_run_days_per_week> \
+  --max-session-minutes <max_time_per_session_minutes> \
+  --easy-pace-min-per-km $EASY_PACE \
+  --target-volume <recommended_peak_km>)
+
+OVERALL_OK=$(echo "$FEASIBILITY" | jq -r '.data.overall_ok')
+```
+
+**If `OVERALL_OK` is `false`**: Return blocking checklist with:
+- Problem statement: "Peak volume infeasible with current constraints"
+- Math: Required session distance/time vs available (extract from `$FEASIBILITY`)
+- Max feasible volume: `max_weekly_volume_km` from validation
+- Context data for main agent to use in coaching conversation
+
+**Format the blocking response as**:
+```json
+{
+  "blocking_checklist": [
+    "Peak volume is infeasible with current constraints",
+    "Data: Required <X>km per session (<Y> min at easy pace), available <Z>km per session (<W> min)",
+    "Max feasible weekly volume: <max_feasible>km (vs <recommended>km recommended based on CTL)",
+    "Main agent: Use this data to discuss options with athlete (increase time/frequency, adjust goal, or accept lower volume)"
+  ],
+  "feasibility_data": {
+    "recommended_peak_km": <value>,
+    "max_feasible_km": <value>,
+    "required_session_km": <value>,
+    "max_session_km": <value>,
+    "required_minutes": <value>,
+    "available_minutes": <value>,
+    "current_run_days": <value>,
+    "easy_pace_min_per_km": <value>
+  }
+}
+```
+
+**Fallback**: If VDOT paces fails, use conservative estimates (VDOT 30-40: 7.0, 41-50: 6.0, 51-60: 5.5, 61+: 5.0 min/km).
+
 3. Create a macro template JSON at `/tmp/macro_template.json` using the CLI:
 
 ```bash
@@ -55,6 +101,7 @@ sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 Fill the template (replace all nulls) with AI-coach decisions:
 
 - **Starting volume**: Use `sce guardrails safe-volume` output as the baseline for week 1.
+- **Peak volume**: Use the recommended peak from `sce guardrails safe-volume` (Step 2b validation blocks if infeasible).
 - **Weekly progression**: 5-10% volume increase per non-recovery week, respecting guardrails.
 - **Recovery weeks**: Every 3rd-4th week at ~70% of the prior week's volume.
 - **Phase-specific patterns**: See `references/volume_progression_macro.md` for base/build/peak/taper guidance.
