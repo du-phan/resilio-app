@@ -1,7 +1,11 @@
 ---
 name: macro-plan-create
-description: Creates a macro plan skeleton from an approved baseline VDOT and writes a review doc with an approval prompt for the coach. Use after baseline VDOT approval.
-compatibility: Codex CLI/IDE; requires local sce CLI and repo context
+description: Creates a macro plan skeleton from an approved baseline VDOT and writes a review doc with an approval prompt for the main agent. Use after baseline VDOT approval.
+disable-model-invocation: false
+context: fork
+agent: macro-planner
+allowed-tools: Bash, Read, Write
+argument-hint: "baseline_vdot=<number>"
 ---
 
 # Macro Plan Create (Executor)
@@ -11,7 +15,7 @@ Use CLI only.
 ## Preconditions (block if missing)
 
 - Approved baseline VDOT provided via arguments
-- Goal present (type; date or horizon; time optional)
+- Goal present (race type/date/time)
 - Profile constraints present
 - Metrics available (`sce status`)
 
@@ -20,9 +24,10 @@ If missing, return a blocking checklist and stop.
 ## Interactivity & Feedback
 
 - Non-interactive: do not ask the athlete questions or call approval commands.
-- Include an `athlete_prompt` for the coach to ask and capture approval.
-- If the athlete declines or requests changes, the coach will re-run this skill with notes; treat notes as hard constraints and generate a new plan + review doc.
-- If new constraints are provided (injury, schedule limits), assume the coach updated profile/memory before re-run.
+- Include an `athlete_prompt` for the main agent to ask and capture approval.
+- If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new plan + review doc.
+- If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
+- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
 ## Workflow
 
@@ -31,35 +36,78 @@ If missing, return a blocking checklist and stop.
 ```bash
 sce dates next-monday
 sce profile get
-sce profile analyze
 sce status
 sce memory list --type INJURY_HISTORY
 ```
 
-2. Determine starting/peak volumes and weekly targets:
+2. Extract profile context and determine volumes:
 
 ```bash
-sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECENT>
+# Get running priority from profile
+PRIORITY=$(sce profile get | jq -r '.data.running_priority')
+
+# If priority is null/empty, BLOCK - profile incomplete
+if [ -z "$PRIORITY" ] || [ "$PRIORITY" == "null" ]; then
+  echo '{"blocking_checklist": ["Profile missing running_priority field. Run: sce profile set --run-priority [primary|equal|secondary]"]}'
+  exit 1
+fi
+
+# Get safe volume with priority context
+sce guardrails safe-volume \
+  --ctl <CTL> \
+  --priority "$PRIORITY" \
+  --goal <GOAL_TYPE> \
+  --age <AGE> \
+  --recent-volume <RECENT_VOLUME_KM>
 ```
 
-Also validate feasibility vs. max session constraint (use conservative easy pace):
+2b. Validate volume feasibility against session duration constraints:
 
 ```bash
-sce guardrails feasible-volume \
-  --run-days <MAX_RUN_DAYS> \
-  --max-session-minutes <MAX_SESSION_MIN> \
-  --easy-pace-min-per-km <EASY_PACE_SLOW> \
-  --target-volume <PLANNED_PEAK>
+# Get easy pace (slower end for conservative estimate)
+EASY_PACE=$(sce vdot paces --vdot <VDOT> | jq -r '.data.E.max_min_per_km')
+
+# Check if peak is achievable
+FEASIBILITY=$(sce guardrails feasible-volume \
+  --run-days <max_run_days_per_week> \
+  --max-session-minutes <max_time_per_session_minutes> \
+  --easy-pace-min-per-km $EASY_PACE \
+  --target-volume <recommended_peak_km>)
+
+OVERALL_OK=$(echo "$FEASIBILITY" | jq -r '.data.overall_ok')
+MAX_FEASIBLE=$(echo "$FEASIBILITY" | jq -r '.data.max_weekly_volume_km')
+RECOMMENDED_PEAK=$(echo "$SAFE_VOL" | jq -r '.data.recommended_peak_km')
 ```
 
-If the planned peak exceeds feasibility, return a **blocking checklist** with feasibility data (required vs available, max feasible volume). The main agent will use this data to guide a coaching conversation about adjusting constraints or goals (see `.claude/skills/macro-plan-create/SKILL.md` Step 2b for detailed implementation).
+**Priority-aware feasibility handling**:
 
-If historical activity JSON is available, check proven capacity (cap at 120%):
+The CLI has provided priority-adjusted volumes and feasibility data. Decision logic:
+
+- **If PRIMARY + infeasible**: BLOCK - athlete needs to increase time/days or adjust goal
+- **If EQUAL/SECONDARY + infeasible**: PROCEED with max_feasible - legitimate multi-sport constraint
 
 ```bash
-sce analysis capacity --week <PEAK_WEEK> --volume <PLANNED_PEAK> --load <PLANNED_SYSTEMIC> \
-  --historical /tmp/all_activities.json
+# For PRIMARY athletes, enforce feasibility strictly
+if [ "$PRIORITY" == "primary" ] && [ "$OVERALL_OK" == "false" ]; then
+  echo '{"blocking_checklist": ["Peak volume infeasible for PRIMARY priority athlete", "Data: [extract from FEASIBILITY]", "Main agent: Discuss increasing session time/frequency or adjusting goal"]}'
+  exit 1
+fi
+
+# For EQUAL/SECONDARY, max_feasible is appropriate
+if [ "$OVERALL_OK" == "false" ]; then
+  USE_PEAK=$MAX_FEASIBLE
+else
+  USE_PEAK=$RECOMMENDED_PEAK
+fi
 ```
+
+**Context for AI coach**: The skill provides data; AI coach in main agent makes final judgment based on:
+- Priority (EQUAL/SECONDARY can legitimately use lower volumes)
+- Athlete's other sports commitments
+- Goal importance vs sustainability
+- Multi-sport load patterns
+
+**Fallback**: If VDOT paces fails, use conservative estimates (VDOT 30-40: 7.0, 41-50: 6.0, 51-60: 5.5, 61+: 5.0 min/km).
 
 3. Create a macro template JSON at `/tmp/macro_template.json` using the CLI:
 
@@ -67,7 +115,31 @@ sce analysis capacity --week <PEAK_WEEK> --volume <PLANNED_PEAK> --load <PLANNED
 sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 ```
 
-Fill the template (replace all nulls) with AI-coach decisions.
+Fill the template (replace all nulls) with AI-coach decisions:
+
+**NOTE**: The CLI has provided priority-adjusted volumes and feasibility data. YOU (the AI coach) now make the final coaching decisions:
+
+- **Starting volume**: Consider recommended_start_km from safe-volume (already priority-adjusted)
+- **Peak volume**: Choose between recommended_peak and max_feasible based on:
+  - Priority (EQUAL/SECONDARY can use lower volumes legitimately)
+  - Athlete's other sports commitments (climbing frequency, intensity)
+  - Goal importance vs sustainability
+  - Time constraints are real - respect them
+- **Weekly progression**: 5-10% guideline, but adjust based on:
+  - Multi-sport load patterns (climbing weeks, yoga frequency)
+  - Historical adaptation rates
+  - Injury history
+- **Recovery weeks**: Every 3-4 weeks at ~70%, but consider:
+  - Climbing trips or other sport intensification
+  - Life stress, travel
+- **Coaching notes**: Explain WHY you chose this peak/progression
+  - Don't just cite the numbers - explain the judgment call
+  - If using max_feasible < recommended_peak, explain why that's appropriate for this athlete
+  - Reference priority and multi-sport context
+
+**PHILOSOPHY**: The CLI gives you data. You provide wisdom.
+
+See `references/volume_progression_macro.md` for base/build/peak/taper guidance.
 
 **Example 1: Single-sport runner (4-week generic block)**
 
@@ -154,17 +226,31 @@ sce plan validate-structure \
   --race-week <RACE_WEEK>
 ```
 
-6. Write `/tmp/macro_plan_review_YYYY_MM_DD.md` with:
+6. Generate review document:
 
-- Start/end dates and phase breakdown
-- Volume table (weeks, phase, target volume, recovery flag)
-- Baseline VDOT + pace table
-- Approval prompt text for the athlete
-- Handoff note: coach must record approval via
-  `sce approvals approve-macro`
+**Structure**: Follow `references/review_doc_template.md` exactly.
+
+**Critical requirements**:
+- Complete volume table (all weeks, no omissions)
+- Coaching rationale explains WHY these decisions (build trust)
+- Multi-sport section ONLY if `other_sports` in profile (check with `sce profile get`)
+- Systemic load column:
+  - Multi-sport: Show total load targets (running + other sports)
+  - Single-sport: Use 0.0 or omit column
+- Pace zones from VDOT using `sce vdot paces --vdot {value}`
+- Storage note: temporary in `/tmp/`, permanent in `data/plans/` after approval
+
+Write to: `/tmp/macro_plan_review_YYYY_MM_DD.md`
+
+**Validation**: After writing, verify:
+- All weeks have entries (count rows = total_weeks)
+- Recovery weeks clearly marked
+- Phase transitions align with table
+- Approval prompt is athlete-facing (no CLI commands exposed)
 
 ## References (load only if needed)
 
+- Review doc structure: `references/review_doc_template.md`
 - Macro volume progression: `references/volume_progression_macro.md`
 - Macro guardrails: `references/guardrails_macro.md`
 - Periodization: `references/periodization.md`

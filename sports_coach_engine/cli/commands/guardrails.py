@@ -406,6 +406,11 @@ def safe_volume_command(
         "--ctl",
         help="Current chronic training load"
     ),
+    priority: str = typer.Option(
+        ...,
+        "--priority",
+        help="Running priority: primary (100% volume), equal (75% volume), secondary (50% volume)"
+    ),
     goal: str = typer.Option(
         "fitness",
         "--goal",
@@ -437,14 +442,24 @@ def safe_volume_command(
     - 35-50 (Competitive): 40-65 km/week
     - >50 (Advanced): 55-80+ km/week
 
+    Multi-sport priority adjustments:
+    - PRIMARY: Standard volumes (100%) - running is main focus
+    - EQUAL: Reduced 25% - running balanced with other sports
+    - SECONDARY: Reduced 50% - maintenance only, other sport is primary
+
     IMPORTANT: If --recent-volume is provided, the recommendation will start near that
     volume to avoid dangerous jumps, even if CTL suggests higher capacity. Use this to
     prevent violating the 10% rule when recent running volume differs from overall CTL.
 
     Examples:
-        sce guardrails safe-volume --ctl 44.0 --goal half_marathon --age 52
-        sce guardrails safe-volume --ctl 27.0 --goal marathon --recent-volume 18.0
-        sce guardrails safe-volume --ctl 22.0 --goal 10k
+        # Single-sport runner
+        sce guardrails safe-volume --ctl 44.0 --priority primary --goal half_marathon --age 52
+
+        # Multi-sport athlete (running balanced with climbing)
+        sce guardrails safe-volume --ctl 30.0 --priority equal --goal 10k --recent-volume 20.7
+
+        # Runner maintaining fitness while focused on another sport
+        sce guardrails safe-volume --ctl 27.0 --priority secondary --goal fitness
 
     Returns:
         - ctl_zone: Fitness level category
@@ -454,9 +469,16 @@ def safe_volume_command(
         - recommended_peak_km: Recommended peak weekly volume
         - recommendation: Structured guidance
     """
+    # Validate priority value
+    if priority.lower() not in ["primary", "equal", "secondary"]:
+        raise typer.BadParameter(
+            "priority must be 'primary', 'equal', or 'secondary'"
+        )
+
     # Call API
     result = calculate_safe_volume_range(
         current_ctl=ctl,
+        running_priority=priority,
         goal_type=goal,
         athlete_age=age,
         recent_weekly_volume_km=recent_volume,

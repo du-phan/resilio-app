@@ -40,10 +40,25 @@ sce status
 sce memory list --type INJURY_HISTORY
 ```
 
-2. Determine starting/peak volumes and weekly targets:
+2. Extract profile context and determine volumes:
 
 ```bash
-sce guardrails safe-volume --ctl <CTL> --goal-type <GOAL> --recent-volume <RECENT>
+# Get running priority from profile
+PRIORITY=$(sce profile get | jq -r '.data.running_priority')
+
+# If priority is null/empty, BLOCK - profile incomplete
+if [ -z "$PRIORITY" ] || [ "$PRIORITY" == "null" ]; then
+  echo '{"blocking_checklist": ["Profile missing running_priority field. Run: sce profile set --run-priority [primary|equal|secondary]"]}'
+  exit 1
+fi
+
+# Get safe volume with priority context
+sce guardrails safe-volume \
+  --ctl <CTL> \
+  --priority "$PRIORITY" \
+  --goal <GOAL_TYPE> \
+  --age <AGE> \
+  --recent-volume <RECENT_VOLUME_KM>
 ```
 
 2b. Validate volume feasibility against session duration constraints:
@@ -60,35 +75,37 @@ FEASIBILITY=$(sce guardrails feasible-volume \
   --target-volume <recommended_peak_km>)
 
 OVERALL_OK=$(echo "$FEASIBILITY" | jq -r '.data.overall_ok')
+MAX_FEASIBLE=$(echo "$FEASIBILITY" | jq -r '.data.max_weekly_volume_km')
+RECOMMENDED_PEAK=$(echo "$SAFE_VOL" | jq -r '.data.recommended_peak_km')
 ```
 
-**If `OVERALL_OK` is `false`**: Return blocking checklist with:
-- Problem statement: "Peak volume infeasible with current constraints"
-- Math: Required session distance/time vs available (extract from `$FEASIBILITY`)
-- Max feasible volume: `max_weekly_volume_km` from validation
-- Context data for main agent to use in coaching conversation
+**Priority-aware feasibility handling**:
 
-**Format the blocking response as**:
-```json
-{
-  "blocking_checklist": [
-    "Peak volume is infeasible with current constraints",
-    "Data: Required <X>km per session (<Y> min at easy pace), available <Z>km per session (<W> min)",
-    "Max feasible weekly volume: <max_feasible>km (vs <recommended>km recommended based on CTL)",
-    "Main agent: Use this data to discuss options with athlete (increase time/frequency, adjust goal, or accept lower volume)"
-  ],
-  "feasibility_data": {
-    "recommended_peak_km": <value>,
-    "max_feasible_km": <value>,
-    "required_session_km": <value>,
-    "max_session_km": <value>,
-    "required_minutes": <value>,
-    "available_minutes": <value>,
-    "current_run_days": <value>,
-    "easy_pace_min_per_km": <value>
-  }
-}
+The CLI has provided priority-adjusted volumes and feasibility data. Decision logic:
+
+- **If PRIMARY + infeasible**: BLOCK - athlete needs to increase time/days or adjust goal
+- **If EQUAL/SECONDARY + infeasible**: PROCEED with max_feasible - legitimate multi-sport constraint
+
+```bash
+# For PRIMARY athletes, enforce feasibility strictly
+if [ "$PRIORITY" == "primary" ] && [ "$OVERALL_OK" == "false" ]; then
+  echo '{"blocking_checklist": ["Peak volume infeasible for PRIMARY priority athlete", "Data: [extract from FEASIBILITY]", "Main agent: Discuss increasing session time/frequency or adjusting goal"]}'
+  exit 1
+fi
+
+# For EQUAL/SECONDARY, max_feasible is appropriate
+if [ "$OVERALL_OK" == "false" ]; then
+  USE_PEAK=$MAX_FEASIBLE
+else
+  USE_PEAK=$RECOMMENDED_PEAK
+fi
 ```
+
+**Context for AI coach**: The skill provides data; AI coach in main agent makes final judgment based on:
+- Priority (EQUAL/SECONDARY can legitimately use lower volumes)
+- Athlete's other sports commitments
+- Goal importance vs sustainability
+- Multi-sport load patterns
 
 **Fallback**: If VDOT paces fails, use conservative estimates (VDOT 30-40: 7.0, 41-50: 6.0, 51-60: 5.5, 61+: 5.0 min/km).
 
@@ -100,11 +117,29 @@ sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 
 Fill the template (replace all nulls) with AI-coach decisions:
 
-- **Starting volume**: Use `sce guardrails safe-volume` output as the baseline for week 1.
-- **Peak volume**: Use the recommended peak from `sce guardrails safe-volume` (Step 2b validation blocks if infeasible).
-- **Weekly progression**: 5-10% volume increase per non-recovery week, respecting guardrails.
-- **Recovery weeks**: Every 3rd-4th week at ~70% of the prior week's volume.
-- **Phase-specific patterns**: See `references/volume_progression_macro.md` for base/build/peak/taper guidance.
+**NOTE**: The CLI has provided priority-adjusted volumes and feasibility data. YOU (the AI coach) now make the final coaching decisions:
+
+- **Starting volume**: Consider recommended_start_km from safe-volume (already priority-adjusted)
+- **Peak volume**: Choose between recommended_peak and max_feasible based on:
+  - Priority (EQUAL/SECONDARY can use lower volumes legitimately)
+  - Athlete's other sports commitments (climbing frequency, intensity)
+  - Goal importance vs sustainability
+  - Time constraints are real - respect them
+- **Weekly progression**: 5-10% guideline, but adjust based on:
+  - Multi-sport load patterns (climbing weeks, yoga frequency)
+  - Historical adaptation rates
+  - Injury history
+- **Recovery weeks**: Every 3-4 weeks at ~70%, but consider:
+  - Climbing trips or other sport intensification
+  - Life stress, travel
+- **Coaching notes**: Explain WHY you chose this peak/progression
+  - Don't just cite the numbers - explain the judgment call
+  - If using max_feasible < recommended_peak, explain why that's appropriate for this athlete
+  - Reference priority and multi-sport context
+
+**PHILOSOPHY**: The CLI gives you data. You provide wisdom.
+
+See `references/volume_progression_macro.md` for base/build/peak/taper guidance.
 
 **Example 1: Single-sport runner (4-week generic block)**
 

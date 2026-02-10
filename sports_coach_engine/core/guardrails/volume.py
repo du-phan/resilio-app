@@ -643,6 +643,7 @@ def validate_weekly_volume_feasibility(
 
 def calculate_safe_volume_range(
     current_ctl: float,
+    running_priority: str,
     goal_type: str = "fitness",
     athlete_age: Optional[int] = None,
     recent_weekly_volume_km: Optional[float] = None,
@@ -659,6 +660,11 @@ def calculate_safe_volume_range(
     - 35-50 (Competitive): 40-65 km/week
     - >50 (Advanced): 55-80+ km/week
 
+    Multi-sport priority adjustments:
+    - PRIMARY: Standard volumes (100%) - running is main focus
+    - EQUAL: Reduced 25% - running balanced with other sports
+    - SECONDARY: Reduced 50% - maintenance only, other sport is primary
+
     CRITICAL: If recent_weekly_volume_km is provided, this function will recommend
     starting at or near that volume to avoid dangerous jumps, even if CTL suggests
     the athlete could handle more. The 10% rule applies to running-specific volume,
@@ -666,17 +672,22 @@ def calculate_safe_volume_range(
 
     Args:
         current_ctl: Current chronic training load
+        running_priority: Running priority ("primary", "equal", "secondary")
         goal_type: Race goal ("5k", "10k", "half_marathon", "marathon", "fitness")
         athlete_age: Age for masters adjustments (optional)
         recent_weekly_volume_km: Actual recent running volume (last 4 weeks avg) (optional)
+        run_days_per_week: Number of run days per week (optional)
 
     Returns:
         SafeVolumeRange with recommendations
 
-    Example:
-        >>> # With recent volume data
-        >>> range_info = calculate_safe_volume_range(27.0, "marathon", recent_weekly_volume_km=18.0)
-        >>> # Recommends starting at ~18km, not 32km (CTL-based), to avoid 78% jump
+    Examples:
+        >>> # Single-sport runner
+        >>> range_info = calculate_safe_volume_range(44.0, "primary", "half_marathon", 52)
+
+        >>> # Multi-sport athlete (running balanced with climbing)
+        >>> range_info = calculate_safe_volume_range(30.0, "equal", "10k", recent_weekly_volume_km=20.7)
+        >>> # Recommends ~30km peak (40km × 0.75 for EQUAL priority)
     """
     # Determine CTL zone and base volume range
     if current_ctl < 20:
@@ -721,10 +732,32 @@ def calculate_safe_volume_range(
             int(goal_adjusted_range[1] * masters_factor),
         )
 
+    # Step 3: Apply priority-based volume adjustment
+    # Multi-sport athletes need reduced running volume to balance total systemic load
+    # Reference: multi_sport_macro.md lines 158-173
+    PRIORITY_MULTIPLIERS = {
+        "primary": 1.0,      # Standard volumes (100%)
+        "equal": 0.75,       # 25% reduction (multi-sport balance)
+        "secondary": 0.50,   # 50% reduction (maintenance focus)
+    }
+
+    # Validate priority
+    normalized_priority = running_priority.lower()
+    if normalized_priority not in PRIORITY_MULTIPLIERS:
+        raise ValueError(
+            f"Invalid running_priority '{running_priority}'. Must be 'primary', 'equal', or 'secondary'."
+        )
+
+    multiplier = PRIORITY_MULTIPLIERS[normalized_priority]
+
+    # Apply priority adjustment to the working range (after masters if applicable)
+    working_range = masters_adjusted_range if masters_adjusted_range else goal_adjusted_range
+    priority_adjusted_start = int(working_range[0] * multiplier)
+    priority_adjusted_peak = int(working_range[1] * multiplier)
+
     # Recommendations
-    final_range = masters_adjusted_range if masters_adjusted_range else goal_adjusted_range
-    ctl_based_start = final_range[0]
-    ctl_based_peak = final_range[1]
+    ctl_based_start = priority_adjusted_start
+    ctl_based_peak = priority_adjusted_peak
 
     # CRITICAL: Adjust for recent volume if provided
     volume_gap_pct = None
@@ -753,6 +786,14 @@ def calculate_safe_volume_range(
             recommended_start = int(recent_weekly_volume_km)
             recommendation = f"Start at {recommended_start}km/week, build to {ctl_based_peak}km over 8-12 weeks"
 
+        # Add priority note if not PRIMARY
+        if normalized_priority != "primary":
+            reduction_pct = int((1 - multiplier) * 100)
+            recommendation += (
+                f" Multi-sport adjustment: {reduction_pct}% volume reduction for "
+                f"'{normalized_priority.upper()}' priority athletes."
+            )
+
         recommended_peak = ctl_based_peak
     else:
         # No recent volume data - use CTL-based recommendation
@@ -760,13 +801,20 @@ def calculate_safe_volume_range(
         recommended_peak = ctl_based_peak
 
         # Build recommendation string
+        recommendation_parts = [f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks"]
+
         if masters_adjusted_range:
-            recommendation = (
-                f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks. "
-                f"Masters adjustment (age {athlete_age}): Reduced volume by 10% for recovery."
+            recommendation_parts.append(f"Masters adjustment (age {athlete_age}): Reduced volume by 10% for recovery.")
+
+        if normalized_priority != "primary":
+            reduction_pct = int((1 - multiplier) * 100)
+            recommendation_parts.append(
+                f"Multi-sport adjustment: {reduction_pct}% volume reduction for "
+                f"'{normalized_priority.upper()}' priority athletes. Running volume balanced "
+                f"with other sports' systemic load contributions."
             )
-        else:
-            recommendation = f"Start at {recommended_start}km/week, build to {recommended_peak}km over 8-12 weeks"
+
+        recommendation = " ".join(recommendation_parts)
 
     # Calculate minimum volume warning if run days are provided
     warning = None

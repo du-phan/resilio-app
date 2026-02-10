@@ -406,6 +406,7 @@ class TestSafeVolumeRange:
     def test_beginner_ctl_volume_range(self):
         """CTL <20 should map to beginner range (15-25 km)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=15.0,
             goal_type="fitness",
         )
@@ -418,6 +419,7 @@ class TestSafeVolumeRange:
     def test_recreational_ctl_volume_range(self):
         """CTL 20-35 should map to recreational range (25-40 km)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=28.0,
             goal_type="10k",
         )
@@ -428,6 +430,7 @@ class TestSafeVolumeRange:
     def test_competitive_ctl_volume_range(self):
         """CTL 35-50 should map to competitive range (40-65 km)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=44.0,
             goal_type="half_marathon",
         )
@@ -438,6 +441,7 @@ class TestSafeVolumeRange:
     def test_advanced_ctl_volume_range(self):
         """CTL >50 should map to advanced range (55-80 km)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=58.0,
             goal_type="marathon",
         )
@@ -448,6 +452,7 @@ class TestSafeVolumeRange:
     def test_5k_goal_adjustment(self):
         """5K goal should reduce volume by 10% (0.9 factor)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=30.0,              # recreational
             goal_type="5k",
         )
@@ -458,6 +463,7 @@ class TestSafeVolumeRange:
     def test_half_marathon_goal_adjustment(self):
         """Half marathon goal should increase volume by 15% (1.15 factor)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=30.0,              # recreational
             goal_type="half_marathon",
         )
@@ -468,6 +474,7 @@ class TestSafeVolumeRange:
     def test_marathon_goal_adjustment(self):
         """Marathon goal should increase volume by 30% (1.3 factor)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=44.0,              # competitive
             goal_type="marathon",
         )
@@ -478,6 +485,7 @@ class TestSafeVolumeRange:
     def test_masters_adjustment_age_50_plus(self):
         """Age 50+ should reduce volume by 10% (0.9 factor)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=30.0,              # recreational
             goal_type="10k",
             athlete_age=52,
@@ -491,6 +499,7 @@ class TestSafeVolumeRange:
     def test_masters_adjustment_under_50(self):
         """Age <50 should not apply masters adjustment."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=30.0,
             goal_type="10k",
             athlete_age=45,
@@ -503,6 +512,7 @@ class TestSafeVolumeRange:
     def test_combined_goal_and_masters_adjustments(self):
         """Marathon goal + masters age should apply both adjustments."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=44.0,              # competitive: (40, 65)
             goal_type="marathon",          # 1.3x: (52, 84)
             athlete_age=52,                # 0.9x: (46, 75)
@@ -517,6 +527,7 @@ class TestSafeVolumeRange:
     def test_zero_ctl_beginner_range(self):
         """CTL of 0 (complete beginner) should use beginner range."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=0.0,
             goal_type="fitness",
         )
@@ -527,11 +538,75 @@ class TestSafeVolumeRange:
     def test_fitness_goal_no_adjustment(self):
         """General fitness goal should use base volume (1.0 factor)."""
         result = calculate_safe_volume_range(
+            running_priority="primary",
             current_ctl=30.0,
             goal_type="fitness",
         )
 
         assert result.goal_adjusted_range_km == result.base_volume_range_km
+
+    def test_priority_primary_no_reduction(self):
+        """PRIMARY priority should not reduce volume (1.0 multiplier)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,
+            running_priority="primary",
+            goal_type="10k",
+        )
+
+        # Base: (25, 40), no priority adjustment
+        assert result.recommended_start_km == 25
+        assert result.recommended_peak_km == 40
+
+    def test_priority_equal_25_percent_reduction(self):
+        """EQUAL priority should reduce volume by 25% (0.75 multiplier)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,
+            running_priority="equal",
+            goal_type="10k",
+        )
+
+        # Base: (25, 40), equal priority: (18, 30)
+        assert result.recommended_start_km == 18
+        assert result.recommended_peak_km == 30
+        assert "25% volume reduction" in result.recommendation
+        assert "EQUAL" in result.recommendation
+
+    def test_priority_secondary_50_percent_reduction(self):
+        """SECONDARY priority should reduce volume by 50% (0.50 multiplier)."""
+        result = calculate_safe_volume_range(
+            current_ctl=30.0,
+            running_priority="secondary",
+            goal_type="10k",
+        )
+
+        # Base: (25, 40), secondary priority: (12, 20)
+        assert result.recommended_start_km == 12
+        assert result.recommended_peak_km == 20
+        assert "50% volume reduction" in result.recommendation
+        assert "SECONDARY" in result.recommendation
+
+    def test_priority_with_masters_stacking(self):
+        """Priority and masters adjustments should stack correctly."""
+        result = calculate_safe_volume_range(
+            current_ctl=44.0,              # competitive: (40, 65)
+            running_priority="equal",
+            goal_type="half_marathon",     # 1.15x: (46, 74)
+            athlete_age=52,                # 0.9x: (41, 66)
+                                           # 0.75x: (30, 49)
+        )
+
+        # Final: equal priority on top of masters
+        assert result.recommended_start_km == 30
+        assert result.recommended_peak_km == 49
+
+    def test_invalid_priority_raises_error(self):
+        """Invalid priority value should raise ValueError."""
+        with pytest.raises(ValueError, match="Invalid running_priority"):
+            calculate_safe_volume_range(
+                current_ctl=30.0,
+                running_priority="high",  # Invalid
+                goal_type="10k",
+            )
 
 
 # ============================================================

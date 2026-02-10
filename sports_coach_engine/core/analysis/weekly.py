@@ -320,10 +320,38 @@ def analyze_load_distribution_by_sport(
     # Sport priority adherence
     running_systemic_pct = (systemic_by_sport.get("run", 0) / total_systemic * 100) if total_systemic > 0 else 0.0
 
+    # Define expected ranges per priority (from multi_sport_balance.md)
+    PRIORITY_RANGES = {
+        "primary": (60, 70),      # Running should be 60-70% of systemic load
+        "equal": (40, 50),        # Running ~40-50% of systemic load
+        "secondary": (25, 35),    # Running ~25-35% of systemic load
+    }
+
+    expected_range = PRIORITY_RANGES.get(sport_priority, (40, 60))  # Default to balanced
+    running_pct = round(running_systemic_pct, 1)
+
+    # Check if actual running % is within expected range for priority
+    on_track = expected_range[0] <= running_pct <= expected_range[1]
+
+    # Provide helpful context if off-track
+    if not on_track:
+        if running_pct > expected_range[1]:
+            deviation = "running_heavy"
+            note = f"Running is {running_pct}% of load (expected {expected_range[0]}-{expected_range[1]}% for {sport_priority.upper()} priority)"
+        else:
+            deviation = "running_light"
+            note = f"Running is {running_pct}% of load (expected {expected_range[0]}-{expected_range[1]}% for {sport_priority.upper()} priority)"
+    else:
+        deviation = None
+        note = f"Running load ({running_pct}%) aligns with {sport_priority.upper()} priority target"
+
     sport_priority_adherence = {
         "profile_priority": sport_priority,
-        "actual_running_pct": round(running_systemic_pct, 1),
-        "on_track": True,  # Simplified - actual would check against preference thresholds
+        "expected_range_pct": expected_range,
+        "actual_running_pct": running_pct,
+        "on_track": on_track,
+        "deviation": deviation,
+        "note": note,
     }
 
     # Fatigue risk flags

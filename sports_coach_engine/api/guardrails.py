@@ -412,6 +412,7 @@ def validate_weekly_volume_feasibility(
 
 def calculate_safe_volume_range(
     current_ctl: float,
+    running_priority: str,
     goal_type: str = "fitness",
     athlete_age: Optional[int] = None,
     recent_weekly_volume_km: Optional[float] = None,
@@ -428,6 +429,11 @@ def calculate_safe_volume_range(
     - 35-50 (Competitive): 40-65 km/week
     - >50 (Advanced): 55-80+ km/week
 
+    Multi-sport priority adjustments:
+    - PRIMARY: Standard volumes (100%) - running is main focus
+    - EQUAL: Reduced 25% - running balanced with other sports
+    - SECONDARY: Reduced 50% - maintenance only, other sport is primary
+
     IMPORTANT: If recent_weekly_volume_km is provided, this function will recommend
     starting at or near that volume to avoid dangerous jumps, even if CTL suggests
     the athlete could handle more. The 10% rule applies to running-specific volume,
@@ -435,25 +441,38 @@ def calculate_safe_volume_range(
 
     Args:
         current_ctl: Current chronic training load
+        running_priority: Running priority ("primary", "equal", "secondary")
         goal_type: Race goal ("5k", "10k", "half_marathon", "marathon", "fitness")
         athlete_age: Age for masters adjustments (optional)
         recent_weekly_volume_km: Actual recent running volume (last 4 weeks avg) (optional)
+        run_days_per_week: Number of run days per week (optional)
 
     Returns:
         SafeVolumeRange on success, GuardrailsError on failure
 
     Examples:
-        >>> calculate_safe_volume_range(44.0, "half_marathon", 52)
+        >>> # Single-sport runner
+        >>> calculate_safe_volume_range(44.0, "primary", "half_marathon", 52)
         SafeVolumeRange(recommended_start_km=30, recommended_peak_km=45, ...)
 
-        >>> calculate_safe_volume_range(27.0, "marathon", recent_weekly_volume_km=18.0)
-        SafeVolumeRange(recommended_start_km=20, ..., volume_gap_pct=78.0)
+        >>> # Multi-sport athlete (running balanced with climbing)
+        >>> calculate_safe_volume_range(30.0, "equal", "10k", recent_weekly_volume_km=20.7)
+        SafeVolumeRange(recommended_start_km=22, recommended_peak_km=30, ...)
     """
     try:
         # Validate CTL
         if current_ctl < 0:
             return GuardrailsError(
                 error_type="invalid_input", message=f"CTL must be non-negative, got {current_ctl}"
+            )
+
+        # Validate and normalize priority
+        normalized_priority = running_priority.lower()
+        valid_priorities = {"primary", "equal", "secondary"}
+        if normalized_priority not in valid_priorities:
+            return GuardrailsError(
+                error_type="invalid_input",
+                message=f"Invalid running_priority '{running_priority}'. Must be 'primary', 'equal', or 'secondary'.",
             )
 
         # Normalize goal type
@@ -487,7 +506,7 @@ def calculate_safe_volume_range(
 
         # Call core function
         result = core_calculate_safe_range(
-            current_ctl, normalized_goal, athlete_age, recent_weekly_volume_km, run_days_per_week
+            current_ctl, normalized_priority, normalized_goal, athlete_age, recent_weekly_volume_km, run_days_per_week
         )
         return result
 
