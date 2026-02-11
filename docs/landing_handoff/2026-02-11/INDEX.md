@@ -11,7 +11,7 @@ This folder contains the active core handoff package for the official website re
 6. `06-qa-and-acceptance.md`
 
 ## Implementation Note
-The current file `docs/getting_started_non_coders.html` remains a reference prototype for clarity and validation, not a final visual mandate.
+The current file `docs/getting_started.html` remains a reference prototype for clarity and validation, not a final visual mandate.
 
 ## Authoritative Product Sources
 1. `docs/long_term_vision/[Run app] Product Vision Doc.md`

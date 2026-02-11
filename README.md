@@ -9,7 +9,7 @@ Codex or Claude Code terminal sessions with local YAML/JSON persistence.
 - `CLAUDE.md` - Claude Code usage, coaching protocols
 - `docs/coaching/cli/index.md` - CLI command index
 - `docs/coaching/methodology.md` - Training methodology
-- `docs/getting_started_non_coders.html` - Reference landing page + guided start flow
+- `docs/getting_started.html` - Reference landing page + guided start flow
 
 ## Coach Quickstart (Codex/Claude)
 

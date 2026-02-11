@@ -86,5 +86,5 @@ Visitor starts a coaching session by using the starter prompt.
 
 This core brief governs both:
 
-1. the reference prototype (`docs/getting_started_non_coders.html`)
+1. the reference prototype (`docs/getting_started.html`)
 2. the external website implementation contract.
