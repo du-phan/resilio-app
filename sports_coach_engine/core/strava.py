@@ -40,6 +40,7 @@ from sports_coach_engine.core.config import load_config, ConfigError
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.activity import (
     ActivitySource,
+    LapData,
     RawActivity,
     SyncResult,
 )
@@ -460,6 +461,74 @@ def fetch_athlete_profile(config: Config) -> Optional[dict]:
         raise StravaAPIError(f"HTTP error: {e}")
 
 
+@retry(
+    stop=stop_after_attempt(DEFAULT_RETRY_ATTEMPTS),
+    wait=wait_exponential(multiplier=2, min=2, max=8),
+    retry=retry_if_exception_type((httpx.HTTPError, StravaAPIError)),
+)
+def fetch_activity_laps(config: Config, activity_id: str) -> Optional[list[dict]]:
+    """
+    Fetch lap data for an activity from Strava.
+
+    Laps enable workout verification (did they hit target pace?), pacing analysis
+    (even split vs fade), and HR drift detection. This addresses the most common
+    training mistakes documented in Daniels and Pfitzinger: running intervals too fast,
+    easy runs too hard, and poor pacing discipline.
+
+    Args:
+        config: Configuration with Strava credentials
+        activity_id: Strava activity ID
+
+    Returns:
+        List of lap dicts from Strava API, or None if no laps or error
+
+    Raises:
+        StravaRateLimitError: If rate limited (propagates to caller)
+        StravaAPIError: If API request fails after retries
+
+    Note:
+        - 404 responses are normal (activity has no laps) and return None
+        - Non-fatal errors are logged and return None (graceful degradation)
+        - Activities save successfully even if lap fetch fails
+    """
+    access_token = get_valid_token(config)
+    logger = logging.getLogger(__name__)
+
+    try:
+        with httpx.Client() as client:
+            response = client.get(
+                f"{STRAVA_API_BASE}/activities/{activity_id}/laps",
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=30.0,
+            )
+
+            if response.status_code == 401:
+                raise StravaAuthError("Invalid or expired token")
+            elif response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                raise StravaRateLimitError(
+                    "Rate limit exceeded",
+                    retry_after=int(retry_after) if retry_after else None,
+                )
+            elif response.status_code == 404:
+                # Activity exists but has no laps (normal case)
+                logger.debug(f"No laps found for activity {activity_id}")
+                return None
+            elif response.status_code != 200:
+                # Non-fatal error: log and continue without laps
+                logger.warning(
+                    f"Failed to fetch laps for {activity_id}: "
+                    f"{response.status_code} - {response.text}"
+                )
+                return None
+
+            laps = response.json()
+            return laps if laps else None
+
+    except httpx.HTTPError as e:
+        logger.warning(f"HTTP error fetching laps for {activity_id}: {e}")
+        return None
+
 
 # ============================================================
 # SYNC WORKFLOW
@@ -527,6 +596,7 @@ def sync_strava_generator(
     activities_yielded = 0
     errors = []
     skipped_count = 0
+    lap_fetch_failures = 0  # Track lap fetch failures for user visibility
 
     # Pagination loop (Newest -> Oldest)
     page = 1
@@ -576,8 +646,23 @@ def sync_strava_generator(
                         # Respect rate limits between calls
                         time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
 
+                        # Fetch laps for running activities
+                        laps_data = None
+                        if _is_running_activity(activity_detail):
+                            try:
+                                laps_data = fetch_activity_laps(config, str(activity_summary["id"]))
+                                time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
+                            except StravaRateLimitError:
+                                logger.warning(f"Rate limit on laps for {activity_summary['id']}")
+                                lap_fetch_failures += 1
+                                laps_data = None
+                            except Exception as e:
+                                logger.debug(f"No laps for {activity_summary['id']}: {e}")
+                                lap_fetch_failures += 1
+                                laps_data = None
+
                         # Map to RawActivity
-                        raw_activity = map_strava_to_raw(activity_detail)
+                        raw_activity = map_strava_to_raw(activity_detail, laps_data=laps_data)
                         activities_yielded += 1
                         yield raw_activity  # Stream immediately
 
@@ -625,6 +710,13 @@ def sync_strava_generator(
         if rate_limit_hit:
             sync_result.errors.append("Strava API Rate Limit Reached - Sync Paused")
 
+        # Surface lap fetch failures to user
+        if lap_fetch_failures > 0:
+            sync_result.errors.append(
+                f"Lap data fetch failed for {lap_fetch_failures} running activities "
+                "(activities saved successfully without lap data)"
+            )
+
         # Return via generator protocol
         return sync_result
 
@@ -638,22 +730,124 @@ def sync_strava_generator(
 # ============================================================
 
 
-def map_strava_to_raw(strava_activity: dict) -> RawActivity:
+def _is_running_activity(activity_detail: dict) -> bool:
+    """
+    Check if activity is a running activity.
+
+    Running activities benefit most from lap data analysis (pacing, intervals, HR drift).
+    During testing phase, we fetch laps for ALL running activities (simple implementation).
+
+    Args:
+        activity_detail: Strava activity detail dict
+
+    Returns:
+        True if sport_type indicates running
+    """
+    sport_type = activity_detail.get("sport_type", "").lower()
+    return sport_type in ["run", "trailrun", "trackrun"]
+
+
+def _map_strava_lap(lap_dict: dict) -> LapData:
+    """
+    Map Strava lap dict to LapData schema.
+
+    Computes pace string for running (mm:ss per km) and handles missing fields gracefully.
+
+    Args:
+        lap_dict: Lap data from Strava /activities/{id}/laps endpoint
+
+    Returns:
+        LapData with all fields mapped and pace computed
+
+    Raises:
+        ValueError: If required fields missing
+    """
+    # Validate required fields
+    required_fields = [
+        "lap_index",
+        "elapsed_time",
+        "moving_time",
+        "distance",
+        "start_date",
+        "start_date_local",
+    ]
+    missing = [f for f in required_fields if f not in lap_dict]
+    if missing:
+        raise ValueError(f"Missing required lap fields: {missing}")
+
+    # Parse timestamps
+    start_date = datetime.fromisoformat(
+        lap_dict["start_date"].replace("Z", "+00:00")
+    )
+    start_date_local = datetime.fromisoformat(
+        lap_dict["start_date_local"].replace("Z", "+00:00")
+    )
+
+    # Compute pace for running (mm:ss per km)
+    pace_per_km = None
+    distance_m = lap_dict.get("distance", 0)
+    moving_time_s = lap_dict.get("moving_time", 0)
+    if distance_m > 0 and moving_time_s > 0:
+        # Pace in seconds per km
+        pace_seconds = (moving_time_s / distance_m) * 1000
+        minutes = int(pace_seconds // 60)
+        seconds = int(round(pace_seconds % 60))  # Round instead of truncate for accuracy
+        pace_per_km = f"{minutes}:{seconds:02d}"
+
+    return LapData(
+        lap_index=lap_dict["lap_index"],
+        name=lap_dict.get("name"),
+        elapsed_time_seconds=lap_dict["elapsed_time"],
+        moving_time_seconds=lap_dict["moving_time"],
+        start_date=start_date,
+        start_date_local=start_date_local,
+        distance_meters=lap_dict["distance"],
+        average_speed_mps=lap_dict.get("average_speed"),
+        max_speed_mps=lap_dict.get("max_speed"),
+        pace_per_km=pace_per_km,
+        average_hr=lap_dict.get("average_heartrate"),
+        max_hr=lap_dict.get("max_heartrate"),
+        total_elevation_gain_meters=lap_dict.get("total_elevation_gain"),
+        average_watts=lap_dict.get("average_watts"),
+        max_watts=lap_dict.get("max_watts"),
+        average_cadence=lap_dict.get("average_cadence"),
+        start_index=lap_dict.get("start_index"),
+        end_index=lap_dict.get("end_index"),
+        split_type="auto",  # Strava doesn't distinguish; assume auto-lap
+    )
+
+
+def map_strava_to_raw(strava_activity: dict, laps_data: Optional[list[dict]] = None) -> RawActivity:
     """
     Map Strava activity JSON to RawActivity schema.
 
     Args:
         strava_activity: Strava activity dict from API
+        laps_data: Optional list of lap dicts from /activities/{id}/laps endpoint
 
     Returns:
-        RawActivity with all fields mapped
+        RawActivity with all fields mapped, including laps if provided
 
     Raises:
         ValueError: If required fields missing
     """
+    logger = logging.getLogger(__name__)
+
     # Parse start date
     start_date_str = strava_activity["start_date_local"]
     start_datetime = datetime.fromisoformat(start_date_str.replace("Z", "+00:00"))
+
+    # Map laps if provided
+    laps = []
+    has_laps = False
+    if laps_data:
+        try:
+            laps = [_map_strava_lap(lap) for lap in laps_data]
+            has_laps = True
+        except Exception as e:
+            logger.warning(f"Failed to map laps for activity {strava_activity.get('id')}: {e}")
+            laps = []
+            has_laps = False
 
     return RawActivity(
         # Identity
@@ -693,6 +887,9 @@ def map_strava_to_raw(strava_activity: dict) -> RawActivity:
         strava_updated_at=datetime.fromisoformat(
             strava_activity["start_date"].replace("Z", "+00:00")
         ),  # Strava doesn't provide updated_at
+        # Lap data
+        laps=laps,
+        has_laps=has_laps,
     )
 
 

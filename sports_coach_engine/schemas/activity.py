@@ -20,6 +20,52 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 # ============================================================
 
 
+class LapData(BaseModel):
+    """
+    Individual lap/split from Strava (manual or auto-lap).
+
+    Laps enable workout verification, pacing analysis, and HR drift detection.
+    Used by analytical CLI tools to validate execution against planned workouts.
+    """
+
+    # Identity
+    lap_index: int  # 1-based sequence number
+    name: Optional[str] = None  # "Lap 1", "Warmup" (if athlete labels)
+
+    # Time
+    elapsed_time_seconds: int  # Total including stops
+    moving_time_seconds: int  # Active time only
+    start_date: datetime
+    start_date_local: datetime
+
+    # Distance
+    distance_meters: float
+
+    # Pace (pre-computed for display)
+    average_speed_mps: Optional[float] = None  # m/s
+    max_speed_mps: Optional[float] = None
+    pace_per_km: Optional[str] = None  # "5:23" format for running
+
+    # Heart Rate
+    average_hr: Optional[float] = None
+    max_hr: Optional[float] = None
+
+    # Elevation
+    total_elevation_gain_meters: Optional[float] = None
+
+    # Power & Cadence (cycling, future use)
+    average_watts: Optional[float] = None
+    max_watts: Optional[float] = None
+    average_cadence: Optional[float] = None
+
+    # Stream indices (for future GPS overlay)
+    start_index: Optional[int] = None
+    end_index: Optional[int] = None
+
+    # Split type
+    split_type: str = "auto"  # "auto" | "manual" (Strava doesn't distinguish; assume auto)
+
+
 class ActivitySource(str, Enum):
     """Source of activity data."""
 
@@ -78,6 +124,10 @@ class RawActivity(BaseModel):
     # Timestamps
     strava_created_at: Optional[datetime] = None
     strava_updated_at: Optional[datetime] = None
+
+    # Lap data (fetched from /activities/{id}/laps endpoint)
+    laps: list[LapData] = Field(default_factory=list)
+    has_laps: bool = False
 
     # Metadata
     raw_data: dict = Field(default_factory=dict)  # Full API response
@@ -216,6 +266,10 @@ class NormalizedActivity(BaseModel):
 
     # GPS data
     has_gps_data: bool = False
+
+    # Lap data (from Strava laps endpoint)
+    laps: list[LapData] = Field(default_factory=list)
+    has_laps: bool = False
 
     # Equipment
     gear_id: Optional[str] = None

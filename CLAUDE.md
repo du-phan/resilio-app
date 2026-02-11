@@ -103,6 +103,13 @@ sce goal set --type 10k --date 2026-06-01 --time 00:45:00
 sce approvals status
 ```
 
+**Lap data analysis** (workout verification):
+```bash
+sce activity laps <activity-id>  # Display lap-by-lap breakdown
+```
+
+Use this to verify workout execution quality, detect pacing errors, and analyze interval consistency. See weekly-analysis skill for interpretation guidelines.
+
 **Complete reference**: `docs/coaching/cli/index.md`
 
 ---

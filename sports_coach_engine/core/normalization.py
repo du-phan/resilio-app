@@ -214,6 +214,9 @@ def normalize_activity(
         data_quality=data_quality,
         # GPS data
         has_gps_data=raw.has_polyline,
+        # Lap data (preserve from raw)
+        laps=raw.laps,
+        has_laps=raw.has_laps,
         # Equipment
         gear_id=raw.gear_id,
         # Timestamps

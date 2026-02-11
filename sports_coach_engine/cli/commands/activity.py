@@ -468,7 +468,149 @@ def activity_export_command(
     raise typer.Exit(code=0)
 
 
+def activity_laps_command(
+    ctx: typer.Context,
+    activity_id: str = typer.Argument(..., help="Activity ID (e.g., strava_12345678901)"),
+    format: str = typer.Option("table", help="Output format: table|json"),
+) -> None:
+    """
+    Display lap-by-lap breakdown for a workout.
+
+    Useful for verifying workout execution:
+    - Did warmup stay easy? (HR < 140)
+    - Were intervals at target pace? (e.g., 5:02-5:14)
+    - How much elevation per lap?
+
+    Examples:
+        sce activity laps strava_12345678901
+        sce activity laps strava_12345678901 --format json
+    """
+    try:
+        repo = RepositoryIO()
+
+        # Load activity by searching through all activities
+        # NOTE: This is O(N) linear scan - acceptable for testing phase (<100 activities)
+        # but will become slow as data grows:
+        # - 100 activities: <1s
+        # - 1000 activities: ~5-10s
+        # - 5000+ activities: 30+ seconds
+        # TODO: Build activity index (id -> file_path) for O(1) lookup when scaling
+        activity_files = repo.list_files("data/activities/**/*.yaml")
+
+        activity = None
+        for file_path in activity_files:
+            result = repo.read_yaml(file_path, NormalizedActivity)
+            if isinstance(result, NormalizedActivity) and result.id == activity_id:
+                activity = result
+                break
+
+        if not activity:
+            envelope = create_error_envelope(
+                error_type="not_found",
+                message=f"Activity {activity_id} not found",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=4)
+
+        if not activity.has_laps or not activity.laps:
+            envelope = create_error_envelope(
+                error_type="not_available",
+                message=f"No lap data available for {activity.name}. This activity doesn't have lap markers from Strava.",
+            )
+            output_json(envelope)
+            raise typer.Exit(code=4)
+
+        # Format output
+        if format == "json":
+            laps_data = [lap.model_dump(mode="json") for lap in activity.laps]
+            envelope = create_success_envelope(
+                message=f"Lap data for {activity.name}",
+                data={
+                    "activity_id": activity.id,
+                    "activity_name": activity.name,
+                    "activity_date": activity.date.isoformat(),
+                    "laps": laps_data,
+                    "lap_count": len(activity.laps),
+                },
+            )
+            output_json(envelope)
+        else:
+            # Human-readable table format
+            _display_laps_table(activity)
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        envelope = create_error_envelope(
+            error_type="unknown",
+            message=f"Failed to display laps: {str(e)}",
+        )
+        output_json(envelope)
+        raise typer.Exit(code=1)
+
+    if format == "json":
+        raise typer.Exit(code=0)
+
+
+def _display_laps_table(activity: NormalizedActivity) -> None:
+    """Display laps in human-readable table format using Rich."""
+    from rich.console import Console
+    from rich.table import Table
+
+    console = Console()
+    table = Table(title=f"Laps: {activity.name} ({activity.date})")
+
+    table.add_column("Lap", justify="right", style="cyan")
+    table.add_column("Distance", justify="right")
+    table.add_column("Time", justify="right")
+    table.add_column("Pace", justify="right", style="yellow")
+    table.add_column("Avg HR", justify="right")
+    table.add_column("Max HR", justify="right")
+    table.add_column("Elev+", justify="right")
+
+    for lap in activity.laps:
+        # Format values
+        dist_km = f"{lap.distance_meters / 1000:.2f} km"
+        time_str = _format_duration(lap.moving_time_seconds)
+        pace = lap.pace_per_km or "—"
+        avg_hr = f"{int(lap.average_hr)}" if lap.average_hr else "—"
+        max_hr = f"{int(lap.max_hr)}" if lap.max_hr else "—"
+        elev = f"{int(lap.total_elevation_gain_meters)}m" if lap.total_elevation_gain_meters else "—"
+
+        table.add_row(
+            str(lap.lap_index),
+            dist_km,
+            time_str,
+            pace,
+            avg_hr,
+            max_hr,
+            elev,
+        )
+
+    console.print(table)
+
+    # Summary
+    total_dist = sum(lap.distance_meters for lap in activity.laps) / 1000
+    total_time = sum(lap.moving_time_seconds for lap in activity.laps)
+    avg_pace_s = (total_time / total_dist / 60) if total_dist > 0 else 0
+
+    console.print(f"\n[bold]Total:[/bold] {total_dist:.2f} km in {_format_duration(total_time)}")
+    console.print(f"[bold]Avg Pace:[/bold] {int(avg_pace_s)}:{int((avg_pace_s % 1) * 60):02d} /km")
+
+
+def _format_duration(seconds: int) -> str:
+    """Format seconds as HH:MM:SS or MM:SS."""
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+
+    if hours > 0:
+        return f"{hours}:{minutes:02d}:{secs:02d}"
+    return f"{minutes}:{secs:02d}"
+
+
 # Register commands
 app.command(name="list", help="List activities in a date range")(activity_list_command)
 app.command(name="search", help="Search activities by text content")(activity_search_command)
 app.command(name="export", help="Export activities as JSON for analysis commands")(activity_export_command)
+app.command(name="laps", help="Display lap-by-lap breakdown for a workout")(activity_laps_command)

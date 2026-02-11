@@ -154,6 +154,14 @@ sce week                  # Recent training patterns
 sce profile analyze       # Profile suggestions from synced data
 ```
 
+**Activity analysis commands** (for workout verification):
+```bash
+sce activity list --since 7d        # List recent activities
+sce activity laps <activity-id>     # View lap-by-lap breakdown (for workout verification)
+```
+
+Lap data enables the AI coach to verify workout execution quality and detect common pacing mistakes.
+
 **Extract from analysis**:
 
 - `max_hr_observed`: Suggests max HR

@@ -107,7 +107,31 @@ Focus on training quality without plan reference:
 3. Assess frequency, sport distribution, consistency
 4. Check if training supports stated goals
 
-### Step 3: Intensity Distribution Analysis
+### Step 3: Verify Key Workouts with Lap Data (if structured workouts present)
+
+**When reviewing structured workouts** (intervals, tempo, threshold), use lap data to verify execution quality:
+
+```bash
+sce activity laps <activity-id>
+```
+
+**Quick checks** (see [lap_data_analysis.md](references/lap_data_analysis.md) for complete methodology):
+
+1. **Warmup verification**: HR < 140, pace within easy range (avoid Fitzgerald's "moderate-intensity rut")
+2. **Interval consistency**: Check pace variation across work intervals (CV < 3% = excellent)
+3. **Tempo execution**: Pace within prescribed T-pace range, HR in threshold zone
+4. **Pacing patterns**: Even pacing good, fade pattern = started too fast (FIRST's documented mistake)
+5. **HR drift**: HR increasing at constant pace indicates heat stress or dehydration
+
+**When lap data missing**: Fall back to aggregate metrics, note limitation in analysis.
+
+**Common training mistakes detected via lap data** (Daniels, Pfitzinger, Fitzgerald, FIRST):
+- Intervals too fast (defeats VO2max aerobic purpose)
+- Easy runs at moderate intensity (compromises recovery)
+- Tempo too fast (causes lactate accumulation vs. threshold stimulus)
+- Starting long runs too fast (fade in later miles)
+
+### Step 4: Intensity Distribution Analysis
 
 First, export activities for analysis (if not already done):
 
@@ -137,7 +161,7 @@ sce analysis intensity --activities /tmp/week_activities.json --days 7
 
 **For detailed 80/20 philosophy and violation handling**: See [references/intensity_guidelines.md](references/intensity_guidelines.md)
 
-### Step 4: Multi-Sport Load Breakdown
+### Step 5: Multi-Sport Load Breakdown
 
 ```bash
 sce analysis load --activities /tmp/week_activities.json --days 7 --priority [PRIORITY]
@@ -158,7 +182,7 @@ sce analysis load --activities /tmp/week_activities.json --days 7 --priority [PR
 
 **For complete multi-sport load model and conflict handling**: See [references/multi_sport_balance.md](references/multi_sport_balance.md)
 
-### Step 5: Pattern Detection
+### Step 6: Pattern Detection
 
 **Review activity notes for qualitative signals**:
 
@@ -181,7 +205,7 @@ sce activity search --query "pain sore tight discomfort" --since 7d
 4. **Volume**: Weekly volume increased 59% (too aggressive)
 5. **Adaptation**: ACWR trended from 1.1 → 1.4 (approaching caution)
 
-### Step 5.5: Capture Significant Patterns as Memories
+### Step 6.5: Capture Significant Patterns as Memories
 
 **When a pattern appears 3+ times or is highly significant**, persist as memory:
 
@@ -205,7 +229,7 @@ sce memory add --type TRAINING_RESPONSE \
 - Use HIGH confidence for 3+, MEDIUM for 2 occurrences
 - Tag for future retrieval
 
-### Step 6: Synthesize and Communicate
+### Step 7: Synthesize and Communicate
 
 **Structure**:
 
@@ -230,7 +254,7 @@ Great week! You completed 7/8 planned workouts (88% completion) and your CTL inc
 - [Multi-sport conflict](examples/example_week_multi_sport.md)
 - [Plan adherence comparison](#example-plan-adherence-comparison-week-2-of-marathon-plan) (inline below)
 
-### Step 7: Log Weekly Summary to Training Log
+### Step 8: Log Weekly Summary to Training Log
 
 **After presenting analysis**, append summary to training log:
 
@@ -267,7 +291,7 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 
 ---
 
-### Step 8: Plan Next Week (Weekly Executor Flow)
+### Step 9: Plan Next Week (Weekly Executor Flow)
 
 **After completing weekly analysis**, transition to planning next week's workouts for adaptive training.
 
@@ -301,7 +325,7 @@ Run the executor flow:
 "No problem! When you're ready to plan next week, just let me know."
 ```
 
-**Alternative**: If athlete only wants weekly analysis (not planning), you're done after Step 7.
+**Alternative**: If athlete only wants weekly analysis (not planning), you're done after Step 8.
 
 ---
 
@@ -312,7 +336,7 @@ Run the executor flow:
 ```
 Athlete: "How was my week?"
 
-Coach: [Runs Steps 1-7: Weekly Analysis]
+Coach: [Runs Steps 1-8: Weekly Analysis]
   → 7/8 workouts completed (88% completion)
   → 82% easy, 18% hard (80/20 compliant ✓)
   → CTL increased 42 → 44 (healthy progression)
@@ -321,7 +345,7 @@ Coach: [Runs Steps 1-7: Weekly Analysis]
 Coach: "Great week! You completed all runs except Saturday's easy run,
 maintained excellent 80/20 intensity, and your CTL increased safely."
 
-Coach: [Step 8] "Ready to plan next week's workouts?"
+Coach: [Step 9] "Ready to plan next week's workouts?"
 
 Athlete: "Yes"
 

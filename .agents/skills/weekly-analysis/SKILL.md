@@ -49,6 +49,21 @@ sce sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
 
 **Note**: Without `--since`, `sce sync` uses smart detection (incremental sync from last activity).
 
+### Step 0.5: Check for Active Training Plan (MANDATORY)
+
+**Before analyzing the week, determine if the athlete has a structured plan:**
+
+```bash
+sce plan week
+```
+
+This returns the current week's planned workouts (date, workout_type, distance_km, target_rpe, pace_range, intensity_zone) plus plan context (week number, phase, total weeks, goal).
+
+**If plan exists** → the weekly analysis MUST compare actual vs planned (Step 2 Option A)
+**If no plan / error** → proceed with freeform analysis (Step 2 Option B)
+
+**Why this matters:** Without this step, the coach may analyze a week as freeform training when the athlete is actually on a structured plan — missing critical adherence insights.
+
 ### Step 1: Get Weekly Summary
 
 ```bash
@@ -61,21 +76,84 @@ sce week
 - Running volume vs. other activities
 - CTL/ATL/TSB/ACWR/readiness changes
 
-### Step 2: Weekly Completion Check
+### Step 2: Plan Adherence (if on plan) OR Activity Summary (if freeform)
 
-Use the `sce week` summary to compare planned vs completed workouts and volume.
+#### Option A: Athlete on Structured Plan
 
-**Interpretation zones** (by completion rate or volume match):
+Cross-reference planned workouts (from Step 0.5) with actual activities (from `sce week`):
+
+1. **Map planned → actual by date:**
+   - **Match**: Correct workout type on planned date
+   - **Day shift**: Correct type/volume but different day (e.g., Wed→Thu)
+   - **Volume variance**: Right day but >15% over/under planned distance
+   - **Missed**: Planned workout not completed
+   - **Extra**: Activity not in the plan (including cross-training)
+
+2. **Assess adherence:**
+   - **Workout completion**: How many planned workouts were completed (count day-shifts as completed)
+   - **Volume adherence**: Actual running km vs planned km — flag if >115% or <80%
+   - **Quality session check**: Were tempo/interval/long run sessions completed as prescribed? (highest priority)
+
+3. **Flag critical patterns:**
+   - ⚠️ Quality sessions missed or downgraded (tempo→easy) — high priority
+   - ⚠️ Long run >20% over/under planned distance
+   - ⚠️ Easy runs at moderate pace (80/20 violation risk)
+   - ⚠️ Unplanned high-load activities on rest days or before quality sessions
+
+**Context matters:** A day shift (Wed→Thu) is usually fine. Volume variance needs coaching judgment — was it intentional, terrain-driven, or loss of discipline?
+
+**Interpretation zones** (by completion rate):
 
 - ≥90%: Excellent completion
 - 70-89%: Good, minor adjustments needed
 - 50-69%: Fair, discuss barriers
 - <50%: Poor, major replanning needed
 
-### Step 3: Intensity Distribution Analysis
+#### Option B: Freeform Training (No Structured Plan)
+
+Focus on training quality without plan reference:
+
+1. List all activities by date with sport/distance/duration
+2. Compare volume to recent 4-week average
+3. Assess frequency, sport distribution, consistency
+4. Check if training supports stated goals
+
+### Step 3: Verify Key Workouts with Lap Data (if structured workouts present)
+
+**When reviewing structured workouts** (intervals, tempo, threshold), use lap data to verify execution quality:
 
 ```bash
-sce analysis intensity --activities [ACTIVITIES_FILE] --days 7
+sce activity laps <activity-id>
+```
+
+**Quick checks** (see [lap_data_analysis.md](references/lap_data_analysis.md) for complete methodology):
+
+1. **Warmup verification**: HR < 140, pace within easy range (avoid Fitzgerald's "moderate-intensity rut")
+2. **Interval consistency**: Check pace variation across work intervals (CV < 3% = excellent)
+3. **Tempo execution**: Pace within prescribed T-pace range, HR in threshold zone
+4. **Pacing patterns**: Even pacing good, fade pattern = started too fast (FIRST's documented mistake)
+5. **HR drift**: HR increasing at constant pace indicates heat stress or dehydration
+
+**When lap data missing**: Fall back to aggregate metrics, note limitation in analysis.
+
+**Common training mistakes detected via lap data** (Daniels, Pfitzinger, Fitzgerald, FIRST):
+- Intervals too fast (defeats VO2max aerobic purpose)
+- Easy runs at moderate intensity (compromises recovery)
+- Tempo too fast (causes lactate accumulation vs. threshold stimulus)
+- Starting long runs too fast (fade in later miles)
+
+### Step 4: Intensity Distribution Analysis
+
+First, export activities for analysis (if not already done):
+
+```bash
+sce activity export --since 7d --out /tmp/week_activities.json
+```
+
+Then analyze intensity distribution:
+
+```bash
+sce analysis intensity --activities /tmp/week_activities.json --days 7
 ```
 
 **Returns**:
@@ -87,13 +165,14 @@ sce analysis intensity --activities [ACTIVITIES_FILE] --days 7
 
 **Quick interpretation**:
 
-- ≥75% low intensity: Compliant ✅
-- 60-74% low intensity: Moderate-intensity rut ⚠️
-- <60% low intensity: Severe imbalance ❌
+- ≥80% low intensity: Compliant ✅ (80/20 target met)
+- 75-79% low intensity: Acceptable but watch the trend ⚠️ (close — tighten easy pace)
+- 60-74% low intensity: Moderate-intensity rut ❌ (gray zone problem — too hard to recover, not hard enough to adapt)
+- <60% low intensity: Severe imbalance ❌❌ (injury/overtraining risk)
 
 **For detailed 80/20 philosophy and violation handling**: See [references/intensity_guidelines.md](references/intensity_guidelines.md)
 
-### Step 4: Multi-Sport Load Breakdown
+### Step 5: Multi-Sport Load Breakdown
 
 ```bash
 sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
@@ -114,7 +193,7 @@ sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
 
 **For complete multi-sport load model and conflict handling**: See [references/multi_sport_balance.md](references/multi_sport_balance.md)
 
-### Step 5: Pattern Detection
+### Step 6: Pattern Detection
 
 **Review activity notes for qualitative signals**:
 
@@ -137,7 +216,7 @@ sce activity search --query "pain sore tight discomfort" --since 7d
 4. **Volume**: Weekly volume increased 59% (too aggressive)
 5. **Adaptation**: ACWR trended from 1.1 → 1.4 (approaching caution)
 
-### Step 5.5: Capture Significant Patterns as Memories
+### Step 6.5: Capture Significant Patterns as Memories
 
 **When a pattern appears 3+ times or is highly significant**, persist as memory:
 
@@ -161,7 +240,7 @@ sce memory add --type TRAINING_RESPONSE \
 - Use HIGH confidence for 3+, MEDIUM for 2 occurrences
 - Tag for future retrieval
 
-### Step 6: Synthesize and Communicate
+### Step 7: Synthesize and Communicate
 
 **Structure**:
 
@@ -185,7 +264,7 @@ Great week! You completed 7/8 planned workouts (88% completion) and your CTL inc
 - [80/20 intensity violation](examples/example_week_80_20_violation.md)
 - [Multi-sport conflict](examples/example_week_multi_sport.md)
 
-### Step 7: Log Weekly Summary to Training Log
+### Step 8: Log Weekly Summary to Training Log
 
 **After presenting analysis**, append summary to training log:
 
@@ -222,7 +301,7 @@ sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
 
 ---
 
-### Step 8: Plan Next Week (Weekly Executor Flow)
+### Step 9: Plan Next Week (Weekly Executor Flow)
 
 **After completing weekly analysis**, transition to planning next week's workouts for adaptive training.
 
@@ -254,7 +333,7 @@ Run the executor flow:
 "No problem! When you're ready to plan next week, just let me know."
 ```
 
-**Alternative**: If athlete only wants weekly analysis (not planning), you're done after Step 7.
+**Alternative**: If athlete only wants weekly analysis (not planning), you're done after Step 8.
 
 ---
 
@@ -265,7 +344,7 @@ Run the executor flow:
 ```
 Athlete: "How was my week?"
 
-Coach: [Runs Steps 1-7: Weekly Analysis]
+Coach: [Runs Steps 1-8: Weekly Analysis]
   → 7/8 workouts completed (88% completion)
   → 82% easy, 18% hard (80/20 compliant ✓)
   → CTL increased 42 → 44 (healthy progression)
@@ -274,7 +353,7 @@ Coach: [Runs Steps 1-7: Weekly Analysis]
 Coach: "Great week! You completed all runs except Saturday's easy run,
 maintained excellent 80/20 intensity, and your CTL increased safely."
 
-Coach: [Step 8] "Ready to plan next week's workouts?"
+Coach: [Step 9] "Ready to plan next week's workouts?"
 
 Athlete: "Yes"
 

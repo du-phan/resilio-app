@@ -317,6 +317,8 @@ I'll record your approval with:
 
 **Handoff note**: main agent must record approval via the command above.
 
+**Note on workout verification**: After workouts are completed, use `sce activity laps <activity-id>` to verify execution quality and adjust future weeks if pacing discipline issues emerge.
+
 ## References (load only if needed)
 
 - Workout structure & session mechanics: `references/workout_structure.md`
