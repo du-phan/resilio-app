@@ -3,273 +3,510 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Getting Started - Sports Coach Engine</title>
+  <title>Sports Coach Engine | Adaptive AI Coach for Hybrid Training</title>
+  <meta name="description" content="Conversation-first coaching for athletes who train across multiple sports. Coordinate your week, manage fatigue, and adapt plans with clear setup and data boundaries.">
+  <meta property="og:title" content="Sports Coach Engine: Adaptive AI Coach for Hybrid Training">
+  <meta property="og:description" content="Train across sports without living in silos. Coordinate your week, manage fatigue, and adapt with clear tradeoffs. Start guided setup in Claude Code or Codex.">
+  <meta property="og:type" content="website">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Sports Coach Engine | Hybrid Training Coach">
+  <meta name="twitter:description" content="Conversation-first AI coaching for athletes who train across sports. Coordinate your week and adapt with clear tradeoffs. Start guided setup now.">
   <style>
     :root {
-      --bg: #f4efe6;
-      --bg-2: #efe5d6;
-      --card: #fffaf2;
-      --ink: #1f2a24;
-      --muted: #4d5b52;
-      --accent: #c4612c;
-      --accent-2: #2f5d4e;
-      --border: #e2d5c2;
-      --shadow: 0 16px 40px rgba(31, 42, 36, 0.12);
-      --radius: 16px;
+      --bg: #fcfcfa;
+      --surface: #ffffff;
+      --surface-soft: #f6f8f7;
+      --text: #17211e;
+      --text-muted: #4a5752;
+      --line: #dee5e2;
+      --accent: #0f766e;
+      --accent-hover: #0b5f59;
+      --focus: #1f6feb;
+      --warning-bg: #fff4e5;
+      --warning-line: #cc8b2f;
+      --success-bg: #e9f7ef;
+      --success-line: #3a8b59;
+      --radius: 10px;
+      --radius-sm: 7px;
+      --space-1: 0.4rem;
+      --space-2: 0.7rem;
+      --space-3: 1rem;
+      --space-4: 1.2rem;
+      --space-5: 1.6rem;
+      --max-w: 960px;
     }
 
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
 
     body {
-      font-family: "Avenir Next", "Gill Sans", "Noto Sans", "Helvetica Neue", sans-serif;
-      line-height: 1.6;
-      color: var(--ink);
-      background: radial-gradient(circle at top left, var(--bg-2), var(--bg));
-      min-height: 100vh;
-      padding: 32px 20px 48px;
+      background: radial-gradient(1100px 520px at 50% -260px, #ecf6f3 0%, var(--bg) 68%);
+      color: var(--text);
+      font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      line-height: 1.56;
+      padding: 0 var(--space-3) var(--space-5);
     }
 
-    .page {
-      max-width: 900px;
-      margin: 0 auto;
-      display: grid;
-      gap: 20px;
+    a { color: inherit; text-decoration: none; }
+
+    .wrap { margin: 0 auto; max-width: var(--max-w); }
+
+    .topbar {
+      align-items: center;
+      display: flex;
+      justify-content: space-between;
+      padding: var(--space-3) 0;
     }
 
-    header {
-      background: linear-gradient(135deg, #fff6e7 0%, #f6e7d2 100%);
-      border: 1px solid var(--border);
+    .brand {
+      color: var(--accent);
+      font-size: 0.87rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    nav {
+      display: none;
+      gap: var(--space-2);
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    nav a { padding: 0.25rem 0.45rem; border-radius: 6px; }
+    nav a:hover { background: #e8eeec; }
+
+    main { display: grid; gap: var(--space-3); }
+
+    section {
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: var(--radius);
-      padding: 28px 28px 22px;
-      box-shadow: var(--shadow);
+      padding: var(--space-4);
+    }
+
+    .hero { padding: var(--space-5) var(--space-4); }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.84rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: var(--space-2);
+    }
+
+    h1, h2, h3 {
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      line-height: 1.2;
     }
 
     h1 {
-      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-      font-size: clamp(2rem, 1.4rem + 2vw, 3rem);
-      font-weight: 600;
-      letter-spacing: 0.2px;
-      margin-bottom: 8px;
-    }
-
-    .subtitle {
-      font-size: 1.1rem;
-      color: var(--muted);
-      max-width: 42rem;
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 16px;
-    }
-
-    .pill {
-      border: 1px solid var(--border);
-      background: #ffffffd9;
-      color: var(--accent-2);
-      padding: 6px 12px;
-      border-radius: 999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      letter-spacing: 0.3px;
-    }
-
-    section {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px 26px;
-      box-shadow: var(--shadow);
+      font-size: clamp(1.95rem, 1.7rem + 1.7vw, 2.95rem);
+      margin-bottom: var(--space-2);
+      max-width: 21ch;
     }
 
     h2 {
-      font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-      font-size: clamp(1.4rem, 1.1rem + 1vw, 2rem);
-      margin-bottom: 10px;
+      font-size: clamp(1.35rem, 1.2rem + 0.8vw, 1.95rem);
+      margin-bottom: 0.55rem;
     }
 
-    p {
-      margin-bottom: 12px;
-      color: var(--muted);
-      font-size: 1.02rem;
+    h3 {
+      font-size: 1.07rem;
+      margin-bottom: 0.3rem;
     }
 
-    ul, ol {
-      margin-left: 1.2rem;
-      margin-bottom: 12px;
-      color: var(--muted);
+    .lead {
+      color: var(--text-muted);
+      max-width: 62ch;
     }
 
-    li {
-      margin-bottom: 6px;
+    .actions {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.7rem;
+      margin-top: var(--space-3);
     }
 
-    .callout {
-      background: #fff1dc;
-      border-left: 4px solid var(--accent);
-      padding: 14px 16px;
-      border-radius: 10px;
-      margin: 14px 0;
-      color: #4a3a2e;
+    .btn {
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      display: inline-flex;
+      font-size: 0.95rem;
+      font-weight: 700;
+      justify-content: center;
+      min-height: 2.55rem;
+      padding: 0.58rem 0.95rem;
+      transition: background-color 140ms ease;
     }
 
-    .grid {
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+
+    .btn-link {
+      color: var(--accent);
+      font-weight: 700;
+      padding: 0;
+      min-height: auto;
+      border: 0;
+      background: transparent;
+    }
+
+    .btn-link:hover { text-decoration: underline; }
+
+    .meta {
+      color: var(--text-muted);
+      display: flex;
+      flex-wrap: wrap;
+      font-size: 0.86rem;
+      gap: 0.65rem;
+      margin-top: var(--space-2);
+    }
+
+    .meta span {
+      background: #edf4f2;
+      border-radius: 999px;
+      padding: 0.2rem 0.6rem;
+    }
+
+    .intro { color: var(--text-muted); margin-bottom: var(--space-2); }
+
+    .list {
       display: grid;
-      gap: 16px;
+      gap: 0.65rem;
     }
 
-    @media (min-width: 720px) {
-      .grid-2 {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
+    .item {
+      border-left: 3px solid #d8e5e1;
+      padding: 0.25rem 0 0.25rem 0.7rem;
     }
+
+    .item p { color: var(--text-muted); font-size: 0.95rem; }
+
+    .steps {
+      color: var(--text-muted);
+      margin-left: 1.1rem;
+      margin-bottom: 0.7rem;
+    }
+
+    .steps li { margin-bottom: 0.36rem; }
+
+    .prompt {
+      border: 1px solid #cad8d3;
+      border-radius: var(--radius-sm);
+      overflow: hidden;
+      margin-top: 0.35rem;
+    }
+
+    .prompt-head {
+      align-items: center;
+      background: #edf4f2;
+      color: #1c2b26;
+      display: flex;
+      justify-content: space-between;
+      padding: 0.5rem 0.65rem;
+    }
+
+    .prompt-head span {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .copy-btn {
+      background: #fff;
+      border: 1px solid #c2d2cc;
+      border-radius: 6px;
+      color: #173a32;
+      cursor: pointer;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 0.3rem 0.5rem;
+    }
+
+    .copy-btn:hover { background: #f2f7f5; }
+
+    .prompt-text {
+      background: #fbfdfc;
+      color: #1d2d27;
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      font-size: 0.91rem;
+      line-height: 1.55;
+      padding: 0.72rem;
+      white-space: pre-wrap;
+    }
+
+    .status {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      display: inline-block;
+      font-size: 0.88rem;
+      margin-top: 0.55rem;
+      min-height: 1.3rem;
+      padding: 0.1rem 0.35rem;
+      color: var(--text-muted);
+    }
+
+    .status.success {
+      background: var(--success-bg);
+      border-color: var(--success-line);
+      color: #225339;
+    }
+
+    .status.error {
+      background: var(--warning-bg);
+      border-color: var(--warning-line);
+      color: #6e4510;
+    }
+
+	    .callout {
+	      background: #fffaf2;
+	      border: 1px solid #e0c39b;
+	      border-radius: var(--radius-sm);
+	      color: #6e4510;
+	      font-size: 0.94rem;
+	      margin-top: var(--space-2);
+	      padding: 0.65rem 0.7rem;
+	    }
+
+	    .callout strong { display: block; margin-bottom: 0.25rem; }
+
+	    .callout ul {
+	      margin-left: 1.1rem;
+	      margin-top: 0.25rem;
+	    }
+
+	    .callout li { margin-bottom: 0.28rem; }
+
+	    ul.bullets {
+	      color: var(--text-muted);
+	      margin-left: 1.1rem;
+	    }
+
+    ul.bullets li { margin-bottom: 0.32rem; }
 
     details {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 14px 16px;
-      background: #fffdfa;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-sm);
+      margin-bottom: 0.48rem;
+      padding: 0.52rem 0.6rem;
+      background: #fff;
     }
 
     summary {
       cursor: pointer;
-      font-weight: 600;
-      color: var(--accent-2);
+      font-weight: 700;
+      list-style: none;
     }
 
-    summary:hover {
-      color: var(--accent);
+    summary::-webkit-details-marker { display: none; }
+
+    details p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 0.4rem;
     }
 
-    pre {
-      background: #222724;
-      color: #f7f3eb;
-      padding: 12px 14px;
-      border-radius: 10px;
-      overflow-x: auto;
-      margin-bottom: 12px;
-      font-size: 0.92rem;
-    }
-
-    code {
-      background: #efe7da;
-      padding: 2px 6px;
-      border-radius: 6px;
-      font-family: "SFMono-Regular", "Courier New", monospace;
-      font-size: 0.95em;
-      color: #7a2f14;
-    }
-
-    a {
-      color: var(--accent-2);
-      text-decoration: none;
-      font-weight: 600;
-    }
-
-    a:hover {
-      color: var(--accent);
-      text-decoration: underline;
+    .end-note {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 0.25rem;
+      text-align: center;
     }
 
     footer {
+      color: var(--text-muted);
+      font-size: 0.84rem;
+      padding-top: var(--space-4);
       text-align: center;
-      color: var(--muted);
-      font-size: 0.9rem;
-      padding: 8px 0 0;
+    }
+
+    a:focus-visible,
+    button:focus-visible,
+    summary:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+
+    @media (min-width: 780px) {
+      body { padding: 0 1.4rem var(--space-5); }
+      nav { display: flex; }
+      .dual { display: grid; grid-template-columns: 1fr 1fr; gap: 0.7rem; }
+      .tri { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.7rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      * { transition: none !important; }
     }
   </style>
 </head>
 <body>
-  <div class="page">
-    <header>
-      <h1>Getting Started</h1>
-      <p class="subtitle">Your AI coach runs inside Claude Code or Codex and guides every step. You don’t need to know the terminal.</p>
-      <div class="pill-row">
-        <span class="pill">15–25 minutes</span>
-        <span class="pill">Local data only</span>
-        <span class="pill">Beginner friendly</span>
-      </div>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">Sports Coach Engine</div>
+      <nav aria-label="Section navigation">
+        <a href="#who-its-for">Problem</a>
+        <a href="#why-different">Why different</a>
+        <a href="#start-now">Start now</a>
+        <a href="#privacy">Privacy</a>
+      </nav>
     </header>
 
-    <section id="quick-start">
-      <h2>Quick Start</h2>
-      <ol>
-        <li>Open Claude Code or Codex.</li>
-        <li>Open this project folder inside the app.</li>
-        <li>Send any message like: <code>Help me get started</code> or <code>I’m not technical, please guide me</code></li>
-      </ol>
-      <p>If you are unsure how to open the folder, just say so. The coach will walk you through it.</p>
-    </section>
-
-    <section id="what-you-need">
-      <h2>What You Need</h2>
-      <ul>
-        <li>A Strava account (free is fine).</li>
-        <li>15–25 minutes for first-time setup.</li>
-        <li>Internet access for Strava connection.</li>
-      </ul>
-      <p>You will create a Strava app one time and copy two values. The coach will explain exactly how.</p>
-    </section>
-
-    <section id="coach-does">
-      <h2>What the Coach Will Do</h2>
-      <ul>
-        <li>Check your setup and install anything missing.</li>
-        <li>Connect your Strava account.</li>
-        <li>Sync your recent activities.</li>
-        <li>Create your profile and goals.</li>
-        <li>Propose a training plan and adapt it weekly.</li>
-      </ul>
-    </section>
-
-    <section id="strava">
-      <h2>Strava Authorization (What to Expect)</h2>
-      <p>You will be asked to log in to Strava and approve access. Strava will show a link that includes a short <strong>code</strong>. You paste that code back to the coach.</p>
-      <div class="callout">
-        This is normal and safe. The code simply lets the coach read your activities.
-      </div>
-      <p>Keep your Strava Client Secret private. Do not share it with anyone except the local coach.</p>
-    </section>
-
-    <section id="privacy">
-      <h2>Your Data Stays Local</h2>
-      <p>Your data lives on your computer. The only external service used is Strava for syncing activities.</p>
-    </section>
-
-    <section id="troubleshooting">
-      <h2>Troubleshooting</h2>
-      <p>Tell the coach what you see. It will diagnose the problem and guide you through a fix.</p>
-      <div class="grid grid-2">
-        <div>
-          <p><strong>“I don’t see my activities.”</strong></p>
-          <p>Ask the coach to re-sync your recent activities.</p>
+    <main>
+	      <section id="hero" class="hero" aria-labelledby="hero-title">
+	        <p class="eyebrow">Sports Coach Engine</p>
+	        <h1 id="hero-title">Hybrid training, finally supported.</h1>
+	        <p class="lead">If you lift, climb, pilates, HIIT, surf, cycle, and run, many plans still live in silos. Start in chat: the coach coordinates your training week, adapts as life shifts, and explains every tradeoff.</p>
+	        <div class="actions">
+	          <a class="btn btn-primary" href="#start-now">Start with the AI coach now</a>
+	          <a class="btn btn-link" href="#privacy">Privacy and boundary</a>
+	        </div>
+        <div class="meta" aria-label="Key highlights">
+          <span>Coordinate across sports</span>
+          <span>Manage fatigue smarter</span>
+          <span>Clear why behind every change</span>
         </div>
-        <div>
-          <p><strong>“I get a Strava error.”</strong></p>
-          <p>Ask the coach to walk you through the Strava connection again.</p>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section id="after-setup">
-      <h2>After Setup</h2>
-      <p>Just chat with the coach. Example prompts:</p>
-      <ul>
-        <li>“How was my week?”</li>
-        <li>“What’s my workout today?”</li>
-        <li>“Adjust next week.”</li>
-      </ul>
-    </section>
+	      <section id="who-its-for" aria-labelledby="fit-title">
+	        <h2 id="fit-title">Sound familiar?</h2>
+	        <p class="intro">You're not training for a triathlon. You're trying to make progress across a real mix of sports. If you see yourself here, this is what Sports Coach Engine is built to fix.</p>
+	        <div class="tri list">
+	          <article class="item">
+	            <h3>"I wish my running app could plan around my other workouts"</h3>
+	            <p>Most running plans still treat other sessions as invisible when deciding what your next run should be.</p>
+          </article>
+          <article class="item">
+            <h3>"Hard run days wreck my legs for everything else"</h3>
+            <p>Intervals and long runs can leave you too sore to lift or climb, but your plan doesn't adjust.</p>
+          </article>
+          <article class="item">
+            <h3>"One missed run and the whole plan feels broken"</h3>
+            <p>Static schedules punish real life instead of adapting around it.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="why-different" aria-labelledby="diff-title">
+        <h2 id="diff-title">Why this is different</h2>
+        <p class="intro">Instead of forcing compliance, the coach adapts around your real load, priorities, and recovery.</p>
+        <div class="tri list">
+          <article class="item">
+            <h3>Conversation-first start</h3>
+            <p>You start in chat immediately, with guided setup and clear next actions.</p>
+          </article>
+          <article class="item">
+            <h3>AI reasoning + toolkit</h3>
+            <p>Quantitative signals support decisions, while the coach handles judgment and tradeoffs.</p>
+          </article>
+          <article class="item">
+            <h3>Hybrid life, not triathlon framing</h3>
+            <p>Built for real sport mixes, not only run-only templates or triathlon-style plans.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="start-now" aria-labelledby="start-title">
+        <h2 id="start-title">Start in under a minute</h2>
+        <p class="intro">If the problem above is your problem, test it now with one prompt.</p>
+        <ol class="steps">
+          <li>Open Claude Code or Codex.</li>
+          <li>Open this project folder.</li>
+          <li>Paste this message to begin guided setup.</li>
+        </ol>
+
+        <div class="prompt" aria-label="Starter prompt">
+          <div class="prompt-head">
+            <span>Starter prompt</span>
+            <button class="copy-btn" type="button" aria-describedby="copy-status" data-copy-trigger="primary">Copy starter prompt</button>
+          </div>
+          <p id="starter-prompt" class="prompt-text">Help me get started. I train across multiple sports. Guide me step by step.</p>
+	        </div>
+	        <p id="copy-status" class="status" aria-live="polite"></p>
+
+	        <div class="callout" role="note" aria-label="Quick reality check">
+	          <strong>Quick reality check</strong>
+	          <ul>
+	            <li>Supported: macOS, Linux.</li>
+	            <li>Not supported in the current setup workflow: Windows, WSL.</li>
+	            <li>Strava required for authorization and sync (Client ID/Secret, one-time).</li>
+	            <li>First sync may hit Strava API rate limits; higher-volume histories may need 15-minute resume windows.</li>
+	          </ul>
+	        </div>
+	      </section>
+
+      <section id="how-it-works" aria-labelledby="flow-title">
+        <h2 id="flow-title">What happens next</h2>
+        <ol class="steps">
+          <li>The coach guides environment setup and Strava authorization.</li>
+          <li>The coach syncs history and explains your baseline context.</li>
+          <li>The coach builds a goal-based plan (v0 is running-first) and adapts it using your total training load.</li>
+        </ol>
+      </section>
+
+      <section id="privacy" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">Privacy and data boundary</h2>
+        <p class="intro">Project data stays in your local workspace. Strava is only used for authorization and activity sync.</p>
+        <ul class="bullets">
+          <li>Keep your Strava Client Secret private.</li>
+          <li>This page is a reference prototype, not the final official site design.</li>
+        </ul>
+      </section>
+
+      <p class="end-note">Ready to begin? Use the starter prompt above.</p>
+    </main>
 
     <footer>
-      Sports Coach Engine — AI‑Powered Adaptive Running Coach
+      Sports Coach Engine - reference landing prototype for official website handoff.
     </footer>
   </div>
+
+  <script>
+    (function () {
+      var promptText = "Help me get started. I train across multiple sports. Guide me step by step.";
+      var successMessage = "Prompt copied. Paste it into Claude Code or Codex to begin.";
+      var errorMessage = "Copy did not work. Select the prompt text manually and paste it into Claude Code or Codex.";
+
+      function setStatus(node, message, type) {
+        if (!node) return;
+        node.textContent = message;
+        node.classList.remove("success", "error");
+        if (type) node.classList.add(type);
+      }
+
+      function copyPrompt(statusNode) {
+        if (!navigator.clipboard || !navigator.clipboard.writeText) {
+          setStatus(statusNode, errorMessage, "error");
+          return;
+        }
+
+        navigator.clipboard.writeText(promptText)
+          .then(function () {
+            setStatus(statusNode, successMessage, "success");
+          })
+          .catch(function () {
+            setStatus(statusNode, errorMessage, "error");
+          });
+      }
+
+      var trigger = document.querySelector("[data-copy-trigger='primary']");
+      var statusNode = document.getElementById("copy-status");
+      if (trigger) {
+        trigger.addEventListener("click", function () {
+          copyPrompt(statusNode);
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
