@@ -49,11 +49,6 @@ def profile_create_command(
         "--detail-level",
         help="Coaching detail level: brief, moderate, or detailed"
     ),
-    coaching_style: Optional[str] = typer.Option(
-        None,
-        "--coaching-style",
-        help="Coaching style: supportive, direct, or analytical"
-    ),
     intensity_metric: Optional[str] = typer.Option(
         None,
         "--intensity-metric",
@@ -98,19 +93,6 @@ def profile_create_command(
             output_json(envelope)
             raise typer.Exit(code=5)
 
-    coaching_style_enum = None
-    if coaching_style:
-        try:
-            coaching_style_enum = CoachingStyle(coaching_style.lower())
-        except ValueError:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid --coaching-style: {coaching_style}. Use: supportive, direct, or analytical",
-                data={}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
     intensity_metric_enum = None
     if intensity_metric:
         try:
@@ -136,7 +118,6 @@ def profile_create_command(
         max_run_days=max_run_days,
         unavailable_run_days=unavailable_days_list,
         detail_level=detail_level_enum,
-        coaching_style=coaching_style_enum,
         intensity_metric=intensity_metric_enum,
     )
 
@@ -192,6 +173,7 @@ def profile_set_command(
     max_hr: Optional[int] = typer.Option(None, "--max-hr", help="Maximum heart rate"),
     resting_hr: Optional[int] = typer.Option(None, "--resting-hr", help="Resting heart rate"),
     vdot: Optional[int] = typer.Option(None, "--vdot", help="VDOT (running fitness level)"),
+    running_experience_years: Optional[float] = typer.Option(None, "--running-experience-years", help="Years of consistent running training"),
     run_priority: Optional[str] = typer.Option(
         None, "--run-priority", help="Running priority: primary, secondary, or equal"
     ),
@@ -228,11 +210,6 @@ def profile_set_command(
         "--detail-level",
         help="Coaching detail level: brief, moderate, or detailed"
     ),
-    coaching_style: Optional[str] = typer.Option(
-        None,
-        "--coaching-style",
-        help="Coaching style: supportive, direct, or analytical"
-    ),
     intensity_metric: Optional[str] = typer.Option(
         None,
         "--intensity-metric",
@@ -268,6 +245,8 @@ def profile_set_command(
         fields["resting_hr"] = resting_hr
     if vdot is not None:
         fields["vdot"] = vdot
+    if running_experience_years is not None:
+        fields["running_experience_years"] = running_experience_years
     if run_priority is not None:
         fields["running_priority"] = run_priority
     if primary_sport is not None:
@@ -308,19 +287,6 @@ def profile_set_command(
             envelope = create_error_envelope(
                 error_type="validation",
                 message=f"Invalid --detail-level: {detail_level}. Use: brief, moderate, or detailed",
-                data={}
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-    if coaching_style is not None:
-        try:
-            coaching_style_enum = CoachingStyle(coaching_style.lower())
-            preference_updates["coaching_style"] = coaching_style_enum
-        except ValueError:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid --coaching-style: {coaching_style}. Use: supportive, direct, or analytical",
                 data={}
             )
             output_json(envelope)
@@ -405,6 +371,8 @@ def profile_set_command(
         updated_fields.append("resting_hr")
     if vdot is not None:
         updated_fields.append("vdot")
+    if running_experience_years is not None:
+        updated_fields.append("running_experience_years")
     if run_priority is not None:
         updated_fields.append("running_priority")
     if primary_sport is not None:

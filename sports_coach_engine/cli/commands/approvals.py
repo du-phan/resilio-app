@@ -93,6 +93,17 @@ def approvals_approve_vdot_command(
         output_json(envelope)
         raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
+    # Sync approved VDOT to athlete profile
+    try:
+        from sports_coach_engine.api.profile import update_profile
+        from rich.console import Console
+
+        console = Console()
+        update_profile(vdot=float(value))
+    except Exception as e:
+        # Log warning but don't fail the approval
+        console.print(f"[yellow]Warning: Failed to sync VDOT to profile: {e}[/yellow]")
+
     envelope = create_success_envelope(
         message="Baseline VDOT approved",
         data={"approved_baseline_vdot": value, "vdot_approval_ts": state.vdot_approval_ts},

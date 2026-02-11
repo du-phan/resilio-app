@@ -67,8 +67,6 @@ class DetailLevel(str, Enum):
 class CoachingStyle(str, Enum):
     """Coaching communication style."""
 
-    SUPPORTIVE = "supportive"
-    DIRECT = "direct"
     ANALYTICAL = "analytical"
 
 
@@ -164,7 +162,7 @@ class CommunicationPreferences(BaseModel):
     """Communication and coaching preferences."""
 
     detail_level: DetailLevel = DetailLevel.MODERATE
-    coaching_style: CoachingStyle = CoachingStyle.SUPPORTIVE
+    coaching_style: CoachingStyle = CoachingStyle.ANALYTICAL
     intensity_metric: IntensityMetric = IntensityMetric.PACE
 
 

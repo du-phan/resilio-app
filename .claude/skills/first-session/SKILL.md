@@ -185,6 +185,15 @@ This ensures we understand the athlete's complete training picture before asking
 
 **Step 4a - Basic Info**: Name, age, max HR (reference Strava peak), resting HR, running experience (years)
 
+**CRITICAL**: After collecting running_experience_years in conversation, you MUST persist it to the profile immediately after profile creation (Step 4e):
+
+```bash
+# After sce profile create, if running_experience_years was collected:
+sce profile set --running-experience-years <value>
+```
+
+This ensures the value is stored in profile.yaml and available for future coaching decisions.
+
 **Why this matters**: "I need your complete training picture. Climbing loads your cardiovascular system even though it doesn't stress your legs the same way. If I ignore it, I'll over-prescribe running and you'll burn out."
 
 **Step 4b - Injury History**: Search activities for gaps/pain mentions → Store in memory system with tags
