@@ -1,57 +1,24 @@
 {
   "skills": ["complete-setup"],
-  "query": "I started setting up the coach but my terminal crashed. I have Python 3.11 installed. Can you help me finish?",
+  "query": "My terminal crashed during setup. I already have Python installed. Can you help me finish?",
   "files": [],
   "expected_behavior": [
-    "Runs Phase 1 environment detection (all checks run in parallel)",
-    "Detects platform (macOS or Linux)",
-    "Checks Python version (python3 --version)",
-    "Finds Python 3.11+ already present (exit 0, version ≥3.11)",
-    "Checks sce command availability (command -v sce, sce --help)",
-    "Finds sce not installed (exit 127 - command not found)",
-    "Checks config directory (ls -la config/)",
-    "Provides summary showing Python ✓, Package ✗, Config ✗",
-    "SKIPS Phase 2 entirely (Python already present)",
-    "Proceeds directly to Phase 3 (package installation)",
-    "Checks for Poetry availability",
-    "Uses appropriate installation method (Poetry or venv)",
-    "Does NOT re-install or re-configure Python",
-    "Installs package efficiently",
-    "Verifies sce command works",
-    "Proceeds to Phase 4 (config initialization)",
-    "Runs sce init only if config/ doesn't exist",
-    "Validates final environment state",
-    "Demonstrates adaptive workflow correctly (skipping completed steps)"
+    "Runs full detection gates",
+    "Finds valid Python (>=3.11) and skips Python installation",
+    "Determines package/config state accurately",
+    "Executes only missing phases",
+    "Does not claim Python was installed if it was skipped",
+    "Validates each phase before moving forward"
+  ],
+  "decision_tree_validation": [
+    "Python gate passed -> skip Phase 2",
+    "Package missing -> run Phase 3",
+    "Config missing -> run Phase 4",
+    "All ready -> direct handoff"
   ],
   "quality_criteria": {
-    "adaptive_intelligence": "Correctly identifies completed steps and skips them",
-    "efficiency": "No redundant work (doesn't reinstall Python)",
-    "resume_capability": "Picks up where setup left off without repeating work",
-    "detection_accuracy": "Phase 1 detection correctly identifies environment state",
-    "user_communication": "Explains which steps are being skipped and why"
-  },
-  "decision_tree_validation": [
-    "Python check: Exit 0 + version ≥3.11 → Skip Phase 2 ✓",
-    "Package check: Exit 127 → Execute Phase 3 ✓",
-    "Config check: Exit 2 (not found) → Execute Phase 4 ✓",
-    "Overall: Should execute Phases 1, 3, 4 only (skip Phase 2)"
-  ],
-  "anti_patterns_to_avoid": [
-    "Re-installing Python when it's already present",
-    "Not running Phase 1 detection before proceeding",
-    "Ignoring exit codes from detection commands",
-    "Assuming all phases need to run (not adaptive)",
-    "Not explaining to user which steps are being skipped and why"
-  ],
-  "edge_cases_to_test": [
-    "Python 3.11 present but sce command already works (exit 0) - should skip to Phase 4 or 5",
-    "Python 3.11 present and sce works but config missing (exit 2) - should skip to Phase 4 only",
-    "All checks pass (Python + sce + config) - should skip directly to Phase 5 handoff",
-    "Python 3.12 present (not just 3.11) - should still skip Phase 2"
-  ],
-  "success_message_validation": {
-    "should_acknowledge_existing_setup": "Message recognizes Python was already installed",
-    "should_list_what_was_done": "Lists only the phases that were executed (e.g., 'Installed package, initialized config')",
-    "should_not_claim_installing_python": "Does not say 'Installed Python' if it was skipped"
+    "efficiency": "No redundant work",
+    "accuracy": "State detection matches real environment",
+    "safety": "No forbidden command guidance"
   }
 }

@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment Setup
 
-If `sce` is not available, use the **complete-setup** skill or follow the README. Do **not** mix Poetry and venv in the same session.
+If `sce` is not available, use the **complete-setup** skill (macOS-only in current iteration) or follow the README. Do **not** mix Poetry and venv in the same session.
 
 **Credentials (first session)**:
 
@@ -52,7 +52,7 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 
 **Interactive skills** (main agent asks questions):
 
-1. **complete-setup** - Environment bootstrap
+1. **complete-setup** - Environment bootstrap (macOS-only, safety-first)
 2. **first-session** - Athlete onboarding
 3. **weekly-analysis** - Weekly review + insights
 
@@ -77,7 +77,10 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 
 ## CLI Essentials
 
-> If using Poetry, prefix commands with `poetry run`.
+> Command runner rule:
+> - If using Poetry: prefix commands with `poetry run`
+> - If using venv: activate `.venv` and run `sce ...` directly
+> - Do not mix Poetry and venv in the same session
 
 **Session initialization (always start here)**:
 

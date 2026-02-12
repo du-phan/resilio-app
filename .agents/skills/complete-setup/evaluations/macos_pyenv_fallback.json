@@ -1,0 +1,19 @@
+{
+  "skills": ["complete-setup"],
+  "query": "I'm on a managed Mac and Homebrew Python install is blocked. Can we still set this up safely?",
+  "files": [],
+  "expected_behavior": [
+    "Runs detection gates and confirms macOS",
+    "Identifies that primary Homebrew Python path is blocked",
+    "Switches to pyenv as fallback (not default path)",
+    "Installs/selects supported Python via pyenv",
+    "Uses selected interpreter for venv/package flow",
+    "Avoids system Python rewiring and forbidden commands",
+    "Completes package + config + final verification"
+  ],
+  "quality_criteria": {
+    "fallback_policy": "pyenv used only after primary path is blocked",
+    "safety": "No symlink/alias/alternatives mutation",
+    "completeness": "End-to-end setup still succeeds"
+  }
+}

@@ -1,327 +1,213 @@
 ---
 name: complete-setup
-description: Conversational environment setup for non-technical users on macOS and Linux. Handles Python 3.11+ verification, package installation via Poetry or venv, config initialization, and seamless handoff to first-session. Activates when user requests "help me get started", "I'm not technical", "setup from scratch", or "I need to install this".
+description: Sets up the Sports Coach Engine environment for non-technical users on macOS with safe, gated validation. Use when users ask to get started, install dependencies, or recover an interrupted setup session.
 allowed-tools: Bash, Read, Write, AskUserQuestion
 argument-hint: ""
 ---
 
-# Complete Setup Skill
+# Complete Setup (macOS only)
 
-## Overview
+## Scope
 
-**Purpose**: Conversational environment setup for non-technical users.
+This skill performs safe environment setup for beginners on **macOS only**.
 
-**What this skill does**:
+If the platform is not macOS, stop and explain that non-macOS setup is deferred in this iteration.
 
-- Verifies Python 3.11+ (guides install if needed)
-- Installs Sports Coach Engine package (Poetry or venv)
-- Initializes config structure (`sce init`)
-- Validates environment readiness
-- Hands off to `first-session` for Strava auth and profile
+Python support target: `>=3.11,<4.0`.
 
-**Platform support**: macOS, Linux (Ubuntu/Debian, CentOS/RHEL). **NOT supported**: Windows (including WSL)
+## Safety Rules (hard)
 
-**Adaptive workflow**: Detects environment state and only executes necessary phases. Skips completed steps (e.g., if Python 3.11+ present, skip Phase 2).
+Never do these during onboarding:
 
-**What first-session handles**: Strava credentials, OAuth flow, profile setup (not duplicated here)
+- Replace or delete system Python binaries/symlinks
+- Change OS-managed default Python interpreter mapping
+- Require global shell aliases for `python3`
+- Use `sudo pip`
+- Advance to the next phase before validation passes
 
----
+Always prefer explicit interpreter usage (`python3.12` or `python3.11`) over system mutation.
 
-## Workflow - Phase 1: Environment Detection
+## Workflow Checklist
 
-**Goal**: Determine which phases needed based on environment state.
+Copy and update this checklist while running setup:
 
-### WSL Detection (Critical - MUST run first)
-
-```bash
-# Block WSL1 and WSL2 before platform detection
-if [ -f /proc/sys/fs/binfmt_misc/WSLInterop ] || [ -d /mnt/c ] && grep -qiE '(microsoft|WSL)' /proc/version 2>/dev/null; then
-  echo "❌ Windows Subsystem for Linux (WSL) detected but not supported"
-  echo "Please use native Linux or macOS"
-  exit 1
-fi
+```text
+Setup Progress:
+- [ ] Phase 1: Detection gates passed
+- [ ] Phase 2: Python available (>=3.11)
+- [ ] Phase 3: Package installed and `sce` runnable
+- [ ] Phase 4: Config initialized
+- [ ] Phase 5: Final verification + handoff
 ```
 
-### Repo Root Check (Required)
+## Phase 1: Detection Gates (must run in order)
+
+### Gate 1: Repo root
 
 ```bash
-# Ensure we're in the repo root before running setup
 if [ ! -f pyproject.toml ] || [ ! -d sports_coach_engine ]; then
-  echo "❌ Not in repo root (pyproject.toml not found)"
-  echo "Please cd into the sports-coach-engine repo and retry"
+  echo "Not in repo root. cd into sports-coach-engine and retry."
   exit 1
 fi
 ```
 
-### Detection Commands (run after WSL + repo checks)
+### Gate 2: Platform
 
 ```bash
-uname                  # Platform: "Darwin" (macOS) or "Linux"
-python3 --version      # Exit 0 + ≥3.11 → skip Phase 2 | Exit 127 → run Phase 2
-command -v sce         # Exit 0 → sce available | Exit 1 → run Phase 3
-sce status             # Exit 0 → config present | Exit 2 → config missing (run Phase 4)
-ls -la config/         # Optional: confirm config files if needed
+uname
 ```
 
-### Decision Logic
+- `Darwin` -> continue
+- anything else -> stop with defer message
 
-- **Python**: Exit 0 + ≥3.11 → skip Phase 2 | Otherwise → run Phase 2
-- **Package**: `command -v sce` exit 0 → skip Phase 3 | exit 1 → run Phase 3
-- **Config**: `sce status` exit 0 → skip Phase 4 | exit 2 → run Phase 4
-
-### Output Summary
-
-```
-Environment Check:
-✓ Platform: macOS (Apple Silicon)
-✗ Python: Not found (need to install)
-✗ Package: Not installed
-✗ Config: Not initialized
-```
-
----
-
-## Workflow - Phase 2: Python Setup
-
-**Conditional**: Skip if Python ≥3.11 detected in Phase 1.
-
-### Install Python 3.11+
-
-**macOS**:
-
-- **Recommended**: Use Homebrew for Python installation
-  - Check availability: `which brew` (exit 0 = available)
-  - If missing: Install Homebrew first → [python_setup.md#macos-installation](references/python_setup.md#macos-installation)
-  - Install Python: `brew install python@3.11`
-  - Common issues: Xcode CLT missing (`xcode-select --install`), PATH updates
-- **Alternative**: Python.org official installer (simpler but less flexible)
-
-**Linux**:
-
-- **Ubuntu/Debian**: deadsnakes PPA → `sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt install python3.11 python3.11-venv`
-  - See [python_setup.md#linux-installation](references/python_setup.md#linux-installation) for full commands
-- **CentOS/RHEL**: `sudo yum install python311 python311-devel`
-- Common issues: python3-venv missing, permission errors, symlink conflicts
-
-### Validation
+### Gate 3: Interpreter selection (safe)
 
 ```bash
-python3 --version  # Must show ≥3.11.0
-python3 -m pip --version  # Verify pip available
+PYTHON_CMD=""
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'; then
+  PYTHON_CMD="python3"
+elif command -v python3.12 >/dev/null 2>&1; then
+  PYTHON_CMD="python3.12"
+elif command -v python3.11 >/dev/null 2>&1; then
+  PYTHON_CMD="python3.11"
+fi
 ```
 
-**If fails - see specific sections**:
+- `PYTHON_CMD` set -> Python gate passed
+- empty -> run Phase 2
 
-- Python not found: [troubleshooting.md#python-installed-but-not-in-path](references/troubleshooting.md#python-installed-but-not-in-path)
-- Wrong version: [troubleshooting.md#wrong-python-version-installed](references/troubleshooting.md#wrong-python-version-installed)
-- Multiple versions: [troubleshooting.md#multiple-python-installations-causing-conflicts](references/troubleshooting.md#multiple-python-installations-causing-conflicts)
-
----
-
-## Workflow - Phase 3: Package Installation
-
-**Conditional**: Skip if `command -v sce` returns exit 0.
-
-### Determine Installation Method
+### Gate 4: Install path discovery
 
 ```bash
-poetry --version
-# Exit 0 → Use Poetry | Exit 127 → Use venv
+poetry --version >/dev/null 2>&1
 ```
 
-### Path A: Poetry
+- success -> Poetry path available
+- failure -> venv path
+
+### Gate 5: Package runnable check
 
 ```bash
-poetry install  # Creates venv, installs dependencies, installs sce
-poetry run sce --help  # Verify (exit 0)
+PACKAGE_READY=false
+if command -v sce >/dev/null 2>&1; then
+  sce --help >/dev/null 2>&1 && PACKAGE_READY=true
+elif poetry --version >/dev/null 2>&1; then
+  poetry run sce --help >/dev/null 2>&1 && PACKAGE_READY=true
+fi
 ```
 
-**Success**: Output shows "Installing dependencies", no errors, `poetry run sce --help` works (exit 0)
+### Gate 6: Config check (only after package runnable)
 
-**Common issues**: See [package_installation.md#path-a-poetry-installation](references/package_installation.md#path-a-poetry-installation)
-
-- poetry.lock out of sync → `poetry lock --no-update && poetry install`
-- Dependency conflicts → Check Python ≥3.11, update Poetry
-- sce not found → Try `poetry run sce --help` or restart terminal
-
-### Path B: venv
+If package is runnable:
 
 ```bash
-python3 -m venv .venv            # Create virtual environment
-source .venv/bin/activate        # Activate (CRITICAL - check for (.venv) prefix in prompt)
-pip install --upgrade pip        # Upgrade pip
-pip install -e .                 # Install package in editable mode
-sce --help                       # Verify (exit 0)
+if command -v sce >/dev/null 2>&1; then
+  sce status
+else
+  poetry run sce status
+fi
 ```
 
-**CRITICAL**: `source .venv/bin/activate` is essential. Without it:
+- exit `0` -> config ready
+- exit `2` -> config missing (run Phase 4)
 
-- sce not found (exit 127)
-- Permission errors during pip install
+## Phase 2: Python setup (macOS)
 
-**Teaching moment**: "The (.venv) prefix means the virtual environment is active - like a sandbox for dependencies. Activate each time you open a new terminal: `source .venv/bin/activate`"
+Run only when `PYTHON_CMD` is empty.
 
-**Common issues**: See [package_installation.md#path-b-venv-installation](references/package_installation.md#path-b-venv-installation)
+### Primary path: Homebrew
 
-- Permission denied → venv not activated (check prompt for (.venv) prefix)
-- sce not found → Check `echo $VIRTUAL_ENV` shows path, retry activation
-- No module named venv (Linux) → `sudo apt install python3.11-venv`
-
-### Validation Loop
+1. Ensure Homebrew exists (`which brew`)
+2. Install Python (prefer 3.12, accept 3.11)
 
 ```bash
-# Validate installation
-# If using Poetry path:
-poetry run sce --help  # MUST return exit 0
-
-# If using venv path:
-sce --help  # MUST return exit 0
-
-# If validation fails (exit ≠ 0):
-# 1. Identify issue (see diagnostic commands in package_installation.md)
-# 2. Apply fix (activate venv, retry install, check PATH)
-# 3. Re-validate (loop until exit 0)
-# 4. Only proceed to Phase 4 when validation passes
+brew install python@3.12 || brew install python@3.11
 ```
 
-**Diagnostic commands**:
+3. Re-run interpreter selection (Gate 3)
+
+### Fallback path: pyenv (fallback only)
+
+Use only if Homebrew/system install is blocked (managed device, no admin rights, persistent conflicts).
 
 ```bash
-which sce         # Check if sce in PATH
-echo $VIRTUAL_ENV # Check venv active (venv path only)
+brew install pyenv
+pyenv install 3.12.8
+pyenv local 3.12.8
+PYTHON_CMD="$(pyenv which python)"
 ```
 
-**If validation fails - see specific sections**:
-
-- sce not found: [package_installation.md#troubleshooting-command-not-found](references/package_installation.md#troubleshooting-command-not-found)
-- Permission errors: [package_installation.md#issue-1-permission-errors-during-pip-install](references/package_installation.md#issue-1-permission-errors-during-pip-install)
-- Dependency conflicts: [package_installation.md#issue-2-dependency-conflicts](references/package_installation.md#issue-2-dependency-conflicts)
-
----
-
-## Workflow - Phase 4: Configuration Initialization
-
-**Conditional**: Skip if `config/settings.yaml` and `config/secrets.local.yaml` exist.
-
-### Run sce init
+### Phase 2 validation
 
 ```bash
-sce init  # Creates config/, data/ directories and YAML templates
+"$PYTHON_CMD" --version
+"$PYTHON_CMD" -m pip --version
 ```
 
-**Expected output**: Confirmation message showing created files (secrets.local.yaml, settings.yaml)
+Do not continue unless both succeed.
 
-### Verification
+## Phase 3: Package installation
+
+Run only when package is not runnable.
+
+### Path A: Poetry available
 
 ```bash
-ls -la config/  # Should show settings.yaml and secrets.local.yaml
-grep -q "YOUR_CLIENT_ID" config/secrets.local.yaml && echo "Placeholders present" || echo "Credentials set"
+poetry install
+poetry run sce --help
+SCE_CMD="poetry run sce"
 ```
 
-**If secrets.local.yaml has real credentials** (not placeholders): Skip this phase (don't overwrite)
-
-**If validation fails - see specific sections**:
-
-- Config init failed: [troubleshooting.md#config-directory-not-created](references/troubleshooting.md#config-directory-not-created)
-- YAML malformed: [troubleshooting.md#secretslocalyaml-malformed](references/troubleshooting.md#secretslocalyaml-malformed)
-
----
-
-## Workflow - Phase 5: Verification & Handoff
-
-### Final Validation
+### Path B: venv (explicit interpreter)
 
 ```bash
-python3 --version      # ✓ Python 3.11+
-sce status             # ✓ Package installed + config present (exit 0)
-ls -la config/         # ✓ Config directory exists
-echo $VIRTUAL_ENV      # ✓ venv active (if using venv path)
+"$PYTHON_CMD" -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -e .
+sce --help
+SCE_CMD="sce"
 ```
 
-**Success message**:
+Validation gate: `SCE_CMD --help` must pass before Phase 4.
 
+## Phase 4: Config initialization
+
+Run only when config is missing.
+
+```bash
+$SCE_CMD init
+$SCE_CMD status
+ls -la config/
 ```
-✓ Environment Setup Complete!
 
-Your coaching environment is ready:
-  ✓ Python 3.11+ installed
-  ✓ Sports Coach Engine package installed
-  ✓ Configuration initialized
+Config is ready only when both files exist:
 
-Next: Let's connect to Strava and set up your athlete profile...
+- `config/settings.yaml`
+- `config/secrets.local.yaml`
+
+## Phase 5: Final verification + handoff
+
+```bash
+"$PYTHON_CMD" --version
+$SCE_CMD --help
+$SCE_CMD status
+ls -la config/
 ```
 
-### Seamless Handoff to first-session
+Successful completion message should include:
 
-**Transition**: "Now that your environment is ready, let's get your Strava data connected. I'll need your Strava API credentials - have you created a Strava API application yet?"
+- Python ready (`>=3.11`)
+- `sce` runnable
+- config initialized
 
-**If no**: Guide to https://www.strava.com/settings/api → Create application → Copy Client ID/Secret
+Then hand off to `first-session` for Strava credentials/auth + profile setup.
 
-**What first-session handles**:
+## References
 
-1. Credential collection and save to config/secrets.local.yaml
-2. OAuth flow (`sce auth url`)
-3. Activity sync (`sce sync`) — then a brief overview: activities synced, time span (weeks/months), and whether rate limit was hit
-4. Profile setup (name, age, max HR, sports)
-5. Goal setting and constraints
-
----
-
-## Adaptive Workflow Logic
-
-Phase 1 detection determines which phases run:
-
-- **Python ≥3.11** → Skip Phase 2
-- **sce available** → Skip Phase 3
-- **config files exist / sce status exit 0** → Skip Phase 4
-- **All ready** → Direct to Phase 5 handoff
-
----
-
-## Common Issues
-
-For troubleshooting, see [Quick Fixes](references/troubleshooting.md#quick-fixes) for the top 5 issues, or browse the full [Troubleshooting Reference](references/troubleshooting.md).
-
----
-
-## Success Criteria
-
-**Environment is ready when all these are true**:
-
-1. ✓ Python 3.11+ responds to `python3 --version` (exit code 0)
-2. ✓ `sce status` returns exit code 0
-3. ✓ `config/` directory exists with settings.yaml and secrets.local.yaml
-4. ✓ Virtual environment active (if using venv path) - prompt shows `(.venv)`
-5. ✓ User understands next steps (Strava credentials)
-
-**Ready to hand off to first-session when**:
-
-- User asks about Strava connection
-- User is ready to provide API credentials
-- All environment checks pass
-
----
-
-## Additional Resources
-
-**Reference Files** (for deep dives):
-
-- `references/environment_checks.md` - Validation commands and troubleshooting
-- `references/python_setup.md` - Platform-specific Python installation details
-- `references/troubleshooting.md` - Comprehensive error resolution guide
-
-**Example Workflows**:
-
-- `examples/example_macos_homebrew.md` - Complete macOS setup transcript (Homebrew + Poetry)
-- `examples/example_ubuntu_apt.md` - Complete Ubuntu setup transcript (APT + venv)
-
-**Related Skills**:
-
-- `first-session` - Strava authentication and athlete profile setup (automatic handoff)
-
-**External Documentation**:
-
-- Python installation: https://www.python.org/downloads/
-- Homebrew (macOS): https://brew.sh/
-- Poetry: https://python-poetry.org/docs/
-- Strava API setup: https://www.strava.com/settings/api
+- `references/environment_checks.md`
+- `references/python_setup.md`
+- `references/package_installation.md`
+- `references/troubleshooting.md`
+- `examples/example_macos_homebrew.md`
+- `evaluations/`
