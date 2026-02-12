@@ -6,7 +6,10 @@ one-by-one instead of buffering, enabling partial progress on
 rate limits and errors.
 """
 
+import json
+
 import pytest
+import yaml
 from datetime import date, datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
@@ -15,6 +18,7 @@ from sports_coach_engine.core.workflows import run_sync_workflow
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.schemas.config import Config, Secrets, Settings
 from sports_coach_engine.schemas.config import StravaSecrets
+from sports_coach_engine.schemas.sync import SyncPhase, SyncReport
 
 
 @pytest.fixture
@@ -127,8 +131,8 @@ class TestIncrementalSync:
         result = run_sync_workflow(repo_with_activities, mock_config)
 
         # All activities should be imported
-        assert result.success
-        assert len(result.activities_imported) == 3
+        assert result.phase == SyncPhase.DONE
+        assert result.activities_imported == 3
 
         # Verify each activity was saved (files exist)
         assert repo_with_activities.file_exists(
@@ -156,7 +160,6 @@ class TestIncrementalSync:
         from sports_coach_engine.schemas.activity import (
             RawActivity,
             ActivitySource,
-            SyncResult,
         )
 
         # First sync: 2 activities, then rate limit
@@ -196,16 +199,18 @@ class TestIncrementalSync:
                     self.index += 1
                     return activity
                 else:
-                    # Raise StopIteration with SyncResult value
+                    # Raise StopIteration with SyncReport value
                     raise StopIteration(
-                        SyncResult(
-                            success=True,
-                            activities_fetched=0,
-                            activities_new=2,
-                            activities_updated=0,
+                        SyncReport(
+                            activities_imported=2,
                             activities_skipped=1,  # Existing activity skipped
+                            activities_failed=0,
+                            laps_fetched=0,
+                            laps_skipped_age=0,
+                            lap_fetch_failures=0,
+                            phase=SyncPhase.PAUSED_RATE_LIMIT,
+                            rate_limited=True,
                             errors=["Strava API Rate Limit Reached - Sync Paused"],
-                            sync_duration_seconds=1.0,
                         )
                     )
 
@@ -217,10 +222,8 @@ class TestIncrementalSync:
         result1 = run_sync_workflow(repo_with_activities, mock_config)
 
         # Should succeed with 2 activities
-        assert result1.success
-        assert len(result1.activities_imported) == 2
-        # Note: Rate limit warnings may not propagate to result in mocked tests
-        # The key behavior is that activities were persisted
+        assert result1.phase == SyncPhase.PAUSED_RATE_LIMIT
+        assert result1.activities_imported == 2
 
         # Verify activities were saved
         assert repo_with_activities.file_exists(
@@ -249,9 +252,193 @@ class TestIncrementalSync:
         result2 = run_sync_workflow(repo_with_activities, mock_config)
 
         # Should only import the new activity
-        assert result2.success
-        assert len(result2.activities_imported) == 1
-        assert result2.activities_imported[0].id == "strava_202"
+        assert result2.phase == SyncPhase.DONE
+        assert result2.activities_imported == 1
+
+    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
+    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    def test_rate_limit_persists_resume_cursor_state(
+        self,
+        mock_metrics,
+        mock_profile,
+        mock_generator,
+        repo_with_activities,
+        mock_config,
+    ):
+        """Rate-limit pause should persist backfill/resume cursor state."""
+        from sports_coach_engine.schemas.activity import ActivitySource, RawActivity
+
+        raw_activity = RawActivity(
+            id="strava_300",
+            source=ActivitySource.STRAVA,
+            sport_type="Run",
+            name="Activity RL",
+            date=date(2026, 1, 18),
+            start_time=datetime(2026, 1, 18, 7, 0, tzinfo=timezone.utc),
+            duration_seconds=1800,
+        )
+
+        def generator_factory(*args, **kwargs):
+            progress_hook = kwargs.get("progress_hook")
+
+            class _Gen:
+                def __init__(self):
+                    self._idx = 0
+
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    if self._idx == 0:
+                        if progress_hook:
+                            progress_hook(
+                                {
+                                    "phase": "fetching",
+                                    "current_page": 1,
+                                    "activities_seen": 0,
+                                    "cursor_before_timestamp": 1736500000,
+                                }
+                            )
+                        self._idx += 1
+                        return raw_activity
+                    raise StopIteration(
+                        SyncReport(
+                            activities_imported=1,
+                            activities_skipped=0,
+                            activities_failed=0,
+                            laps_fetched=0,
+                            laps_skipped_age=0,
+                            lap_fetch_failures=0,
+                            phase=SyncPhase.PAUSED_RATE_LIMIT,
+                            rate_limited=True,
+                            errors=["Strava API Rate Limit Reached - Sync Paused"],
+                        )
+                    )
+
+            return _Gen()
+
+        mock_generator.side_effect = generator_factory
+        mock_profile.return_value = []
+        mock_metrics.return_value = {"metrics_computed": 1}
+
+        since = datetime(2025, 2, 12, tzinfo=timezone.utc)
+        result = run_sync_workflow(repo_with_activities, mock_config, since=since)
+
+        assert result.phase == SyncPhase.PAUSED_RATE_LIMIT
+
+        training_history = yaml.safe_load(
+            (repo_with_activities.repo_root / "data" / "athlete" / "training_history.yaml").read_text()
+        )
+        assert training_history["backfill_in_progress"] is True
+        assert training_history["target_start_date"] == "2025-02-12"
+        assert training_history["resume_before_timestamp"] == 1736500000
+        assert training_history["last_progress_at"] is not None
+
+        progress_file = repo_with_activities.repo_root / "config" / ".sync_progress.json"
+        assert progress_file.exists()
+        progress_payload = json.loads(progress_file.read_text())
+        assert progress_payload["phase"] == "paused_rate_limit"
+        assert progress_payload["cursor_before_timestamp"] == 1736500000
+        assert progress_payload["updated_at"] is not None
+
+    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
+    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    def test_completion_clears_resume_state_and_progress_file(
+        self,
+        mock_metrics,
+        mock_profile,
+        mock_generator,
+        repo_with_activities,
+        mock_config,
+    ):
+        """Successful completion after paused state should clear resume cursor/progress."""
+        from sports_coach_engine.schemas.activity import ActivitySource, RawActivity
+
+        # Seed a paused backfill state + heartbeat progress file.
+        repo_with_activities.write_yaml(
+            "data/athlete/training_history.yaml",
+            {
+                "backfill_in_progress": True,
+                "target_start_date": "2025-02-12",
+                "resume_before_timestamp": 1736500000,
+                "last_progress_at": "2026-02-12T12:00:00+00:00",
+            },
+        )
+        repo_with_activities.write_json(
+            "config/.sync_progress.json",
+            {
+                "phase": "paused_rate_limit",
+                "activities_seen": 10,
+                "activities_imported": 8,
+                "activities_skipped": 2,
+                "activities_failed": 0,
+                "updated_at": "2026-02-12T12:00:00+00:00",
+            },
+        )
+
+        raw_activity = RawActivity(
+            id="strava_400",
+            source=ActivitySource.STRAVA,
+            sport_type="Run",
+            name="Activity Done",
+            date=date(2026, 1, 19),
+            start_time=datetime(2026, 1, 19, 7, 0, tzinfo=timezone.utc),
+            duration_seconds=1800,
+        )
+
+        def generator_factory(*args, **kwargs):
+            progress_hook = kwargs.get("progress_hook")
+            if progress_hook:
+                progress_hook(
+                    {
+                        "phase": "fetching",
+                        "current_page": 1,
+                        "activities_seen": 0,
+                        "cursor_before_timestamp": 1736400000,
+                    }
+                )
+
+            class _Gen:
+                def __iter__(self):
+                    return self
+
+                def __next__(self):
+                    if not hasattr(self, "_done"):
+                        self._done = True
+                        return raw_activity
+                    raise StopIteration(
+                        SyncReport(
+                            activities_imported=1,
+                            activities_skipped=0,
+                            activities_failed=0,
+                            laps_fetched=0,
+                            laps_skipped_age=0,
+                            lap_fetch_failures=0,
+                            phase=SyncPhase.DONE,
+                            rate_limited=False,
+                            errors=[],
+                        )
+                    )
+
+            return _Gen()
+
+        mock_generator.side_effect = generator_factory
+        mock_profile.return_value = []
+        mock_metrics.return_value = {"metrics_computed": 1}
+
+        result = run_sync_workflow(repo_with_activities, mock_config)
+        assert result.phase == SyncPhase.DONE
+
+        training_history = yaml.safe_load(
+            (repo_with_activities.repo_root / "data" / "athlete" / "training_history.yaml").read_text()
+        )
+        assert training_history["backfill_in_progress"] is False
+        assert training_history["target_start_date"] is None
+        assert training_history["resume_before_timestamp"] is None
+        assert training_history["last_progress_at"] is not None
+        assert repo_with_activities.file_exists("config/.sync_progress.json") is False
 
     @patch("sports_coach_engine.core.workflows.sync_strava_generator")
     @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
@@ -290,10 +477,10 @@ class TestIncrementalSync:
         result = run_sync_workflow(repo_with_activities, mock_config)
 
         # Should succeed despite profile failure
-        assert result.success
-        assert len(result.activities_imported) == 1
-        # Profile failure should be in warnings
-        assert any("Profile update failed" in w for w in result.warnings)
+        assert result.phase == SyncPhase.DONE
+        assert result.activities_imported == 1
+        # Profile failure should be surfaced as sync errors
+        assert any("Profile update failed" in e for e in result.errors)
 
     @patch("sports_coach_engine.core.workflows.sync_strava_generator")
     @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
@@ -332,10 +519,10 @@ class TestIncrementalSync:
         result = run_sync_workflow(repo_with_activities, mock_config)
 
         # Activities should be saved despite metrics failure
-        assert result.success
-        assert len(result.activities_imported) == 1
-        # Metrics failure should be in warnings
-        assert any("Failed to recompute metrics" in w for w in result.warnings)
+        assert result.phase == SyncPhase.DONE
+        assert result.activities_imported == 1
+        # Metrics failure should be surfaced as sync errors
+        assert any("Failed to recompute metrics" in e for e in result.errors)
 
         # Activity file should exist
         assert repo_with_activities.file_exists(
@@ -373,14 +560,14 @@ class TestIncrementalSync:
         # First sync
         mock_generator.return_value = iter([activity])
         result1 = run_sync_workflow(repo_with_activities, mock_config)
-        assert result1.success
-        assert len(result1.activities_imported) == 1
+        assert result1.phase == SyncPhase.DONE
+        assert result1.activities_imported == 1
 
         # Second sync (same activity)
         mock_generator.return_value = iter([activity])
         result2 = run_sync_workflow(repo_with_activities, mock_config)
-        assert result2.success
-        assert len(result2.activities_imported) == 0  # Skipped
+        assert result2.phase == SyncPhase.DONE
+        assert result2.activities_imported == 0  # Skipped
         assert result2.activities_skipped == 1
 
         # Verify only one file exists

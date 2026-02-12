@@ -32,7 +32,6 @@ from typing import Any, Optional
 
 from sports_coach_engine.core.config import load_config, Config
 from sports_coach_engine.core.paths import (
-    athlete_training_history_path,
     athlete_profile_path,
     daily_metrics_path,
     current_plan_path,
@@ -40,19 +39,20 @@ from sports_coach_engine.core.paths import (
     weekly_metrics_summary_path,
     get_plans_dir,
 )
+from sports_coach_engine.core.sync_state import (
+    read_resume_state,
+    read_training_history,
+    write_training_history,
+)
 from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
 from sports_coach_engine.core.profile import ProfileService
 from sports_coach_engine.schemas.repository import RepoError
 from sports_coach_engine.core.strava import (
-    fetch_activities,
-    fetch_activity_details,
     fetch_athlete_profile,
     sync_strava_generator,
-    map_strava_to_raw,
     StravaAuthError,
     StravaRateLimitError,
     StravaAPIError,
-    DEFAULT_WAIT_BETWEEN_REQUESTS,
 )
 from sports_coach_engine.core.normalization import normalize_activity
 from sports_coach_engine.core.notes import analyze_activity
@@ -73,6 +73,7 @@ from sports_coach_engine.schemas.activity import (
 )
 from sports_coach_engine.schemas.metrics import DailyMetrics
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, StravaConnection
+from sports_coach_engine.schemas.sync import SyncPhase, SyncProgress, SyncReport, SyncResumeState
 # ProfileError import removed to avoid circular dependency - using duck typing instead
 from sports_coach_engine.schemas.plan import WeekPlan, MasterPlan, PlanPhase
 
@@ -169,19 +170,6 @@ class WorkflowResult:
     success: bool
     warnings: list[str] = field(default_factory=list)
     partial_failure: bool = False
-
-
-@dataclass
-class SyncWorkflowResult(WorkflowResult):
-    """Result from run_sync_workflow."""
-
-    activities_imported: list[NormalizedActivity] = field(default_factory=list)
-    activities_skipped: int = 0
-    activities_failed: int = 0
-    metrics_updated: Optional[DailyMetrics] = None
-    suggestions_generated: list[Any] = field(default_factory=list)
-    memories_extracted: list[Memory] = field(default_factory=list)
-    profile_fields_updated: Optional[list[str]] = None  # Fields updated from Strava athlete profile
 
 
 @dataclass
@@ -518,11 +506,46 @@ def _fetch_and_update_athlete_profile(
         return None
 
 
+SYNC_PROGRESS_FILE = "config/.sync_progress.json"
+
+
+def _apply_resume_state_to_history(history: dict, resume_state: SyncResumeState) -> None:
+    """Write resume state into training history dict in-place."""
+    history["backfill_in_progress"] = resume_state.backfill_in_progress
+    history["target_start_date"] = (
+        resume_state.target_start_date.isoformat()
+        if resume_state.target_start_date is not None
+        else None
+    )
+    history["resume_before_timestamp"] = resume_state.resume_before_timestamp
+    history["last_progress_at"] = (
+        resume_state.last_progress_at.isoformat()
+        if resume_state.last_progress_at is not None
+        else None
+    )
+
+
+def _write_sync_progress(repo: RepositoryIO, progress: SyncProgress) -> None:
+    """Persist sync heartbeat progress for observability."""
+    repo.write_json(SYNC_PROGRESS_FILE, progress.model_dump(mode="json"))
+
+
+def _clear_sync_progress(repo: RepositoryIO) -> None:
+    """Remove sync heartbeat file if present."""
+    if repo.file_exists(SYNC_PROGRESS_FILE):
+        repo.delete_file(SYNC_PROGRESS_FILE)
+
+
+def _has_existing_activities(repo: RepositoryIO) -> bool:
+    """Check if at least one activity file exists."""
+    return len(repo.list_files("data/activities/**/*.yaml")) > 0
+
+
 def run_sync_workflow(
     repo: RepositoryIO,
     config: Config,
     since: Optional[datetime] = None,
-) -> SyncWorkflowResult:
+) -> SyncReport:
     """
     Execute full Strava sync pipeline.
 
@@ -546,39 +569,66 @@ def run_sync_workflow(
                last_strava_sync_at from training_history.yaml
 
     Returns:
-        SyncWorkflowResult containing:
-        - activities_imported: List of processed activities
-        - metrics_updated: Updated metrics snapshot
-        - suggestions_generated: Any adaptation suggestions
-        - memories_extracted: Insights extracted from notes
-        - warnings: Non-fatal errors that occurred
+        SyncReport with canonical sync counters and phase.
 
     Raises:
         WorkflowLockError: If lock cannot be acquired
         StravaAuthError: If Strava authentication fails
         StravaRateLimitError: If rate limited (includes retry_after)
     """
-    result = SyncWorkflowResult(success=False)
+    result = SyncReport(phase=SyncPhase.FETCHING)
+    imported_activities: list[NormalizedActivity] = []
 
     # Acquire lock
     with WorkflowLock(operation="sync", repo=repo):
         try:
+            history = read_training_history(repo)
+            resume_state = read_resume_state(repo)
+
+            requested_since_date = since.date() if since else None
+
+            # Explicit since override resets any previous in-progress backfill targeting another date.
+            if (
+                since is not None
+                and resume_state.backfill_in_progress
+                and resume_state.target_start_date is not None
+                and requested_since_date != resume_state.target_start_date
+            ):
+                resume_state = SyncResumeState()
+
+            # First historical pull initializes deterministic backfill state.
+            if (
+                since is not None
+                and requested_since_date is not None
+                and not _has_existing_activities(repo)
+                and (date.today() - requested_since_date).days >= 360
+            ):
+                resume_state.backfill_in_progress = True
+                resume_state.target_start_date = requested_since_date
+                resume_state.resume_before_timestamp = None
+
+            effective_since = since
+            resume_before = None
+            if resume_state.backfill_in_progress and resume_state.target_start_date is not None:
+                effective_since = datetime.combine(
+                    resume_state.target_start_date,
+                    datetime.min.time(),
+                    tzinfo=timezone.utc,
+                )
+                resume_before = resume_state.resume_before_timestamp
+
             # Step 0: Fetch and update athlete profile from Strava (best-effort)
             # Profile has its own transaction - failures don't block activity sync
             try:
                 profile_txn = TransactionLog(repo)
-                profile_fields_updated = _fetch_and_update_athlete_profile(
-                    config, repo, profile_txn
-                )
-                if profile_fields_updated:
-                    result.profile_fields_updated = profile_fields_updated
+                _fetch_and_update_athlete_profile(config, repo, profile_txn)
             except Exception as e:
                 # Profile update failures don't block activity sync
-                result.warnings.append(f"Profile update failed: {e}")
+                result.errors.append(f"Profile update failed: {e}")
                 logger.warning("[Sync] Profile update failed, continuing with activities: %s", e)
 
             # Load existing activities to prevent duplicates
-            since_date = since.date() if since else None
+            since_date = effective_since.date() if effective_since else None
             existing_ids, existing_by_date = _load_existing_activity_index(
                 repo,
                 "data/activities",
@@ -589,91 +639,118 @@ def run_sync_workflow(
             # Build existing IDs set for skipping
             existing_strava_ids = {id for id in existing_ids if id.startswith("strava_")}
 
-            logger.info("[Sync] Syncing with Strava (since=%s)...", since)
+            logger.info(
+                "[Sync] Syncing with Strava (since=%s, before=%s)...",
+                effective_since,
+                resume_before,
+            )
+
+            def progress_hook(payload: dict) -> None:
+                phase_raw = payload.get("phase", result.phase)
+                try:
+                    phase = SyncPhase(phase_raw)
+                except ValueError:
+                    phase = result.phase
+
+                result.phase = phase
+                cursor_before_timestamp = payload.get("cursor_before_timestamp")
+                if cursor_before_timestamp is not None:
+                    resume_state.resume_before_timestamp = int(cursor_before_timestamp)
+                resume_state.last_progress_at = datetime.now(timezone.utc)
+
+                progress = SyncProgress(
+                    phase=phase,
+                    activities_seen=int(payload.get("activities_seen", result.activities_imported)),
+                    activities_imported=result.activities_imported,
+                    activities_skipped=result.activities_skipped,
+                    activities_failed=result.activities_failed,
+                    current_page=payload.get("current_page"),
+                    current_month=payload.get("current_month"),
+                    cursor_before_timestamp=resume_state.resume_before_timestamp,
+                    updated_at=resume_state.last_progress_at,
+                )
+                _write_sync_progress(repo, progress)
 
             # Use generator for streaming - activities processed as they're fetched
             gen = sync_strava_generator(
                 config,
-                since=since,
-                existing_ids=existing_strava_ids
+                since=effective_since,
+                before=resume_before,
+                existing_ids=existing_strava_ids,
+                progress_hook=progress_hook,
             )
 
             # Show progress: starting sync
             print("[Sync] Starting activity sync...", flush=True)
 
-            # Step 2-8: Process activities incrementally as they're fetched
-            activities_processed = 0
-            sync_cmd_result = None
+            # Step 2-8: Process activities incrementally as they're fetched.
+            # Use explicit next() to capture the generator's final SyncReport.
+            sync_cmd_result = SyncReport(phase=SyncPhase.FAILED, errors=["Sync generator did not return a report"])
 
-            try:
-                for raw_activity in gen:
-                    # Process and save immediately (no buffering)
-                    _process_and_save_activity(
-                        raw_activity,
-                        existing_ids,
-                        existing_by_date,
-                        repo,
-                        result,
-                    )
-                    activities_processed += 1
-                    # Interim metrics removed - compute once at end for efficiency
+            while True:
+                try:
+                    raw_activity = next(gen)
+                except StopIteration as e:
+                    # Defensive check: e.value can be None if generator exits abnormally
+                    if isinstance(e.value, SyncReport):
+                        sync_cmd_result = e.value
+                    else:
+                        sync_cmd_result = SyncReport(
+                            phase=SyncPhase.FAILED,
+                            errors=["Generator completed abnormally without returning SyncReport"],
+                        )
+                    break
 
-            except StopIteration as e:
-                # Generator returns SyncResult via StopIteration
-                # Defensive check: e.value can be None if generator exits abnormally
-                sync_cmd_result = e.value or SyncResult(
-                    success=False,
-                    activities_fetched=0,
-                    activities_new=activities_processed,
-                    activities_updated=0,
-                    activities_skipped=0,
-                    errors=["Generator completed abnormally without returning SyncResult"],
-                    sync_duration_seconds=0.0,
+                result.phase = SyncPhase.PROCESSING
+                # Process and save immediately (no buffering)
+                _process_and_save_activity(
+                    raw_activity,
+                    existing_ids,
+                    existing_by_date,
+                    repo,
+                    imported_activities,
+                    result,
+                )
+                progress_hook(
+                    {
+                        "phase": SyncPhase.PROCESSING.value,
+                        "activities_seen": result.activities_imported + result.activities_failed,
+                    }
                 )
 
-            # Show progress: processing phase
-            if activities_processed > 0:
-                print(f"[Sync] Processing {activities_processed} activities...", flush=True)
-
-            # Merge errors/warnings from sync
-            if sync_cmd_result and sync_cmd_result.errors:
-                result.warnings.extend(sync_cmd_result.errors)
+            # Merge fetch-layer report counters/errors
+            result.activities_skipped += sync_cmd_result.activities_skipped
+            result.activities_failed += sync_cmd_result.activities_failed
+            result.laps_fetched = sync_cmd_result.laps_fetched
+            result.laps_skipped_age = sync_cmd_result.laps_skipped_age
+            result.lap_fetch_failures = sync_cmd_result.lap_fetch_failures
+            result.rate_limited = sync_cmd_result.rate_limited
+            if sync_cmd_result.errors:
+                result.errors.extend(sync_cmd_result.errors)
 
             # Check for rate limit pause
-            rate_limit_paused = False
-            if sync_cmd_result:
-                rate_limit_paused = any(
-                    "Rate Limit" in str(e) for e in sync_cmd_result.errors
-                )
-                if rate_limit_paused:
-                    logger.warning("[Sync] Paused due to Strava rate limits")
-
-            # Handle empty sync
-            if activities_processed == 0:
-                if not sync_cmd_result or not sync_cmd_result.errors or rate_limit_paused:
-                    # Successful (but maybe empty or paused)
-                    result.success = True
-                    if not rate_limit_paused:
-                        result.warnings.append("No new activities found")
-                    return result
+            if result.rate_limited:
+                result.phase = SyncPhase.PAUSED_RATE_LIMIT
+                logger.warning("[Sync] Paused due to Strava rate limits")
 
             logger.info(
                 "[Sync] Processed %s activities (%s imported, %s failed, %s skipped)",
-                activities_processed,
-                len(result.activities_imported),
+                result.activities_imported,
+                result.activities_imported,
                 result.activities_failed,
                 result.activities_skipped,
             )
 
             # Step 9: Recompute all metrics (including rest days and weekly summary)
-            # This is now delegated to a standalone function for better separation of concerns
-            if result.activities_imported:
+            if imported_activities:
                 # Show progress: metrics calculation phase
                 print("[Sync] Calculating training metrics (CTL/ATL/TSB)...", flush=True)
+                result.phase = SyncPhase.METRICS
+                progress_hook({"phase": SyncPhase.METRICS.value})
 
                 try:
                     # Get earliest activity date to start metrics computation
-                    earliest = min(act.date for act in result.activities_imported)
+                    earliest = min(act.date for act in imported_activities)
 
                     # Recompute metrics from earliest imported activity to today
                     # This includes activity days, rest days, and weekly summary
@@ -687,59 +764,89 @@ def run_sync_workflow(
                         "[Sync] Computed %s days of metrics",
                         metrics_result["metrics_computed"],
                     )
-                    metrics_path = daily_metrics_path(date.today())
-                    metrics = repo.read_yaml(
-                        metrics_path,
-                        DailyMetrics,
-                        ReadOptions(allow_missing=True, should_validate=True),
-                    )
-                    if metrics is None or isinstance(metrics, RepoError):
-                        result.warnings.append(
-                            "Metrics recomputed but latest daily metrics could not be loaded"
-                        )
-                    else:
-                        result.metrics_updated = metrics
                 except Exception as e:
-                    result.warnings.append(f"Failed to recompute metrics: {e}")
+                    result.errors.append(f"Failed to recompute metrics: {e}")
 
-            # Step 10: Update last_sync_at (even on partial success)
-            # This allows automatic resume after rate limits
-            training_history_path = athlete_training_history_path()
-            if repo.file_exists(training_history_path):
-                history = repo.read_yaml(training_history_path, schema=None)
-                # If read failed (RepoError), start fresh
-                if isinstance(history, RepoError) or history is None:
-                    history = {}
+            # Persist sync state and resume cursor
+            now = datetime.now(timezone.utc)
+            history["last_strava_sync_at"] = now.isoformat()
+            if imported_activities:
+                history["last_strava_activity_id"] = imported_activities[-1].id
+
+            if result.rate_limited:
+                if not resume_state.backfill_in_progress:
+                    resume_state.backfill_in_progress = True
+                    if effective_since is not None:
+                        resume_state.target_start_date = effective_since.date()
             else:
-                history = {}
+                resume_state.backfill_in_progress = False
+                resume_state.target_start_date = None
+                resume_state.resume_before_timestamp = None
 
-            history["last_strava_sync_at"] = datetime.now(timezone.utc).isoformat()
-            if result.activities_imported:
-                # Store last imported activity ID for debugging
-                history["last_strava_activity_id"] = result.activities_imported[-1].id
+            resume_state.last_progress_at = now
+            _apply_resume_state_to_history(history, resume_state)
+            write_training_history(repo, history)
 
-            repo.write_yaml(training_history_path, history)
-
-            # Success
-            result.success = True
-            result.partial_failure = result.activities_failed > 0
+            if result.rate_limited:
+                result.phase = SyncPhase.PAUSED_RATE_LIMIT
+                _write_sync_progress(
+                    repo,
+                    SyncProgress(
+                        phase=SyncPhase.PAUSED_RATE_LIMIT,
+                        activities_seen=(
+                            result.activities_imported
+                            + result.activities_skipped
+                            + result.activities_failed
+                        ),
+                        activities_imported=result.activities_imported,
+                        activities_skipped=result.activities_skipped,
+                        activities_failed=result.activities_failed,
+                        cursor_before_timestamp=resume_state.resume_before_timestamp,
+                        updated_at=now,
+                    ),
+                )
+            else:
+                result.phase = SyncPhase.DONE
+                _clear_sync_progress(repo)
 
             logger.info(
                 "[Sync] Complete: %s imported, %s failed",
-                len(result.activities_imported),
+                result.activities_imported,
                 result.activities_failed,
             )
 
             return result
 
         except (StravaAuthError, StravaRateLimitError, StravaAPIError):
-            # Don't rollback on Strava errors - activities already persisted
-            # User should re-run sync to continue from where it stopped
+            result.phase = SyncPhase.FAILED
+            result.errors.append("Fatal Strava API/auth error")
+            _write_sync_progress(
+                repo,
+                SyncProgress(
+                    phase=SyncPhase.FAILED,
+                    activities_seen=result.activities_imported + result.activities_failed,
+                    activities_imported=result.activities_imported,
+                    activities_skipped=result.activities_skipped,
+                    activities_failed=result.activities_failed,
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            )
             raise
 
         except Exception as e:
-            # Fatal error: Activities already persisted (no rollback needed)
-            # Incremental architecture means partial progress is preserved
+            result.phase = SyncPhase.FAILED
+            result.errors.append(f"Sync workflow failed: {e}")
+            _write_sync_progress(
+                repo,
+                SyncProgress(
+                    phase=SyncPhase.FAILED,
+                    activities_seen=result.activities_imported + result.activities_failed,
+                    activities_imported=result.activities_imported,
+                    activities_skipped=result.activities_skipped,
+                    activities_failed=result.activities_failed,
+                    updated_at=datetime.now(timezone.utc),
+                ),
+            )
             logger.error("[Sync] Fatal error (partial progress preserved): %s", e)
             raise WorkflowError(f"Sync workflow failed: {e}") from e
 
@@ -835,10 +942,17 @@ def run_plan_generation(
             timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
             archive_path = f"{get_plans_dir()}/archive_plan_{timestamp}.yaml"
 
-            old_plan = repo.read_yaml(plan_path, schema=None)
-            repo.write_yaml(archive_path, old_plan)
-            result.archived_plan_path = archive_path
-            logger.info("[PlanGen] Archived old plan to %s", archive_path)
+            old_plan = repo.read_yaml(
+                plan_path,
+                schema=MasterPlan,
+                options=ReadOptions(allow_missing=True, should_validate=True),
+            )
+            if isinstance(old_plan, RepoError):
+                logger.warning("[PlanGen] Skipping archive: failed to read current plan: %s", old_plan)
+            elif old_plan is not None:
+                repo.write_yaml(archive_path, old_plan)
+                result.archived_plan_path = archive_path
+                logger.info("[PlanGen] Archived old plan to %s", archive_path)
 
         # Create minimal valid plan skeleton (Claude Code will fill in weeks)
         # Generate unique plan ID
@@ -1376,7 +1490,8 @@ def _process_and_save_activity(
     existing_ids: set[str],
     existing_by_date: dict[date, list[NormalizedActivity]],
     repo: RepositoryIO,
-    result: "SyncWorkflowResult",
+    imported_activities: list[NormalizedActivity],
+    result: SyncReport,
 ) -> bool:
     """
     Process and save a single activity through the pipeline.
@@ -1399,7 +1514,8 @@ def _process_and_save_activity(
         existing_ids: Set of activity IDs to check for duplicates (updated in-place)
         existing_by_date: Dict mapping dates to activities (updated in-place)
         repo: Repository for file operations
-        result: Workflow result to update (updated in-place)
+        imported_activities: Imported activity records (updated in-place)
+        result: Sync report to update (updated in-place)
 
     Returns:
         True if activity saved successfully, False if skipped or failed
@@ -1439,7 +1555,8 @@ def _process_and_save_activity(
         # This ensures consistency even if Step 8 fails
         existing_ids.add(normalized.id)
         existing_by_date.setdefault(normalized.date, []).append(normalized)
-        result.activities_imported.append(normalized)
+        imported_activities.append(normalized)
+        result.activities_imported += 1
 
         # Step 8: Extract memories from notes (M13)
         # Failures here won't corrupt existing_ids since we updated it in Step 7
@@ -1464,14 +1581,15 @@ def _process_and_save_activity(
                     updated_at=now,
                 )
                 saved_memory, _ = save_memory(memory, repo)
-                result.memories_extracted.append(saved_memory)
+                # Memory extraction success does not affect sync report counters.
+                _ = saved_memory
 
         return True
 
     except Exception as e:
         result.activities_failed += 1
         activity_id = raw_activity.id if raw_activity else "unknown"
-        result.warnings.append(f"Failed to process activity {activity_id}: {e}")
+        result.errors.append(f"Failed to process activity {activity_id}: {e}")
         return False
 
 

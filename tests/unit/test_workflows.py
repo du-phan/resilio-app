@@ -5,6 +5,7 @@ Tests workflow orchestration, transaction management, and error handling.
 """
 
 import pytest
+import yaml
 from datetime import date, datetime, timedelta
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
@@ -22,6 +23,10 @@ from sports_coach_engine.core.workflows import (
     run_manual_activity_workflow,
 )
 from sports_coach_engine.core.repository import RepositoryIO
+from sports_coach_engine.core.paths import current_plan_path
+from sports_coach_engine.schemas.plan import MasterPlan
+from sports_coach_engine.schemas.profile import ConflictPolicy, Goal, GoalType, TrainingConstraints
+from sports_coach_engine.schemas.sync import SyncPhase
 
 
 # ============================================================
@@ -186,8 +191,8 @@ class TestRunSyncWorkflow:
 
         result = run_sync_workflow(mock_repo, mock_config)
 
-        assert result.success
-        assert result.activities_imported == []
+        assert result.phase == SyncPhase.DONE
+        assert result.activities_imported == 0
         mock_generator.assert_called_once()
 
     @patch("sports_coach_engine.core.workflows.sync_strava_generator")
@@ -213,7 +218,35 @@ class TestRunSyncWorkflow:
         result = run_sync_workflow(mock_repo, mock_config)
 
         # Verify lock was used (indirectly through successful completion)
-        assert result.success
+        assert result.phase == SyncPhase.DONE
+
+    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
+    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    def test_sync_workflow_malformed_history_does_not_crash(
+        self, mock_profile, mock_generator, mock_repo
+    ):
+        """Malformed training_history fields should not crash sync startup."""
+        history_path = mock_repo.resolve_path("data/athlete/training_history.yaml")
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        history_path.write_text(
+            "backfill_in_progress: maybe\n"
+            "target_start_date: not-a-date\n"
+            "resume_before_timestamp: nope\n"
+            "last_progress_at: bad-time\n"
+        )
+
+        mock_generator.return_value = iter([])
+        mock_profile.return_value = []
+
+        config = Mock()
+        result = run_sync_workflow(mock_repo, config)
+
+        assert result.phase == SyncPhase.DONE
+        saved_history = yaml.safe_load(history_path.read_text())
+        assert saved_history["backfill_in_progress"] is False
+        assert saved_history["target_start_date"] is None
+        assert saved_history["resume_before_timestamp"] is None
+        assert saved_history["last_progress_at"] is not None
 
 
 class TestRunMetricsRefresh:
@@ -320,6 +353,112 @@ class TestRunAdaptationCheck:
 
 class TestRunPlanGeneration:
     """Test run_plan_generation workflow."""
+
+    def _mock_profile(self):
+        profile = Mock()
+        profile.goal = Goal(
+            type=GoalType.GENERAL_FITNESS,
+            target_date=(date.today() + timedelta(weeks=12)).isoformat(),
+            target_time=None,
+        )
+        profile.constraints = TrainingConstraints(
+            min_run_days_per_week=3,
+            max_run_days_per_week=5,
+            unavailable_run_days=[],
+            max_time_per_session_minutes=90,
+        )
+        profile.conflict_policy = ConflictPolicy.ASK_EACH_TIME
+        return profile
+
+    def _minimal_master_plan(self):
+        today = date.today()
+        return MasterPlan.model_validate(
+            {
+                "id": "plan_old",
+                "created_at": today.isoformat(),
+                "goal": {"type": "general_fitness", "target_date": None, "target_time": None},
+                "start_date": today.isoformat(),
+                "end_date": (today + timedelta(weeks=4)).isoformat(),
+                "total_weeks": 4,
+                "phases": [
+                    {
+                        "phase": "base",
+                        "start_week": 0,
+                        "end_week": 3,
+                        "start_date": today.isoformat(),
+                        "end_date": (today + timedelta(weeks=4, days=-1)).isoformat(),
+                        "weeks": 4,
+                    }
+                ],
+                "weeks": [],
+                "starting_volume_km": 20.0,
+                "peak_volume_km": 30.0,
+                "conflict_policy": "ask_each_time",
+                "constraints_applied": [],
+            }
+        )
+
+    @patch("sports_coach_engine.core.workflows.suggest_volume_adjustment")
+    @patch("sports_coach_engine.core.workflows.calculate_periodization")
+    @patch("sports_coach_engine.core.workflows.ProfileService")
+    def test_plan_generation_archives_valid_current_plan(
+        self, mock_profile_service_cls, mock_periodization, mock_volume, mock_repo
+    ):
+        """Valid current plan should be archived without crashing."""
+        old_plan = self._minimal_master_plan()
+        mock_repo.write_yaml(current_plan_path(), old_plan)
+
+        profile_service = Mock()
+        profile_service.load_profile.return_value = self._mock_profile()
+        mock_profile_service_cls.return_value = profile_service
+        mock_periodization.return_value = [
+            {
+                "phase": "base",
+                "start_week": 0,
+                "end_week": 11,
+                "start_date": date.today(),
+                "end_date": date.today() + timedelta(weeks=12, days=-1),
+                "weeks": 12,
+            }
+        ]
+        mock_volume.return_value = Mock(start_range_km=(20.0, 24.0), peak_range_km=(40.0, 48.0))
+
+        result = run_plan_generation(mock_repo)
+
+        assert result.success is True
+        assert result.archived_plan_path is not None
+        assert mock_repo.file_exists(result.archived_plan_path)
+
+    @patch("sports_coach_engine.core.workflows.suggest_volume_adjustment")
+    @patch("sports_coach_engine.core.workflows.calculate_periodization")
+    @patch("sports_coach_engine.core.workflows.ProfileService")
+    def test_plan_generation_skips_archive_for_malformed_current_plan(
+        self, mock_profile_service_cls, mock_periodization, mock_volume, mock_repo
+    ):
+        """Malformed current plan should not crash plan generation."""
+        plan_path = mock_repo.resolve_path(current_plan_path())
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        plan_path.write_text("invalid: [")
+
+        profile_service = Mock()
+        profile_service.load_profile.return_value = self._mock_profile()
+        mock_profile_service_cls.return_value = profile_service
+        mock_periodization.return_value = [
+            {
+                "phase": "base",
+                "start_week": 0,
+                "end_week": 11,
+                "start_date": date.today(),
+                "end_date": date.today() + timedelta(weeks=12, days=-1),
+                "weeks": 12,
+            }
+        ]
+        mock_volume.return_value = Mock(start_range_km=(20.0, 24.0), peak_range_km=(40.0, 48.0))
+
+        result = run_plan_generation(mock_repo)
+
+        assert result.success is True
+        assert result.archived_plan_path is None
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
     @patch("sports_coach_engine.core.workflows.load_profile")
