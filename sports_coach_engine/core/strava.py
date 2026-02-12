@@ -616,6 +616,10 @@ def sync_strava_generator(
     laps_fetched = 0  # Track successful lap fetches
     laps_skipped_age = 0  # Track laps skipped due to age filter
 
+    # Track monthly progress (activities come in reverse chronological order)
+    current_month = None  # Will be set to (year, month) tuple
+    month_activity_count = 0
+
     # Pagination loop (Newest -> Oldest)
     page = 1
     stop_sync = False
@@ -707,9 +711,22 @@ def sync_strava_generator(
                         activities_yielded += 1
                         yield raw_activity  # Stream immediately
 
-                        # Show progress every 20 activities
-                        if activities_yielded % 20 == 0:
-                            print(f"[Sync] Fetched {activities_yielded} activities...", flush=True)
+                        # Show progress when moving to a new month (reverse chronological: newest → oldest)
+                        activity_month = (act_date.year, act_date.month)
+                        if current_month is None:
+                            # First activity - initialize tracking
+                            current_month = activity_month
+                            month_activity_count = 1
+                        elif activity_month != current_month:
+                            # Month boundary crossed - show progress for completed month
+                            month_name = datetime(current_month[0], current_month[1], 1).strftime("%B %Y")
+                            print(f"[Sync] Fetched {month_activity_count} activities from {month_name}", flush=True)
+                            # Reset for new month
+                            current_month = activity_month
+                            month_activity_count = 1
+                        else:
+                            # Same month - increment counter
+                            month_activity_count += 1
 
                     except StravaRateLimitError:
                         logger.warning(f"Strava rate limit hit during detail fetch for {activity_summary['id']}. Pausing sync.")
@@ -741,6 +758,11 @@ def sync_strava_generator(
                 break
 
     finally:
+        # Output final month's progress if we fetched any activities
+        if current_month is not None and month_activity_count > 0:
+            month_name = datetime(current_month[0], current_month[1], 1).strftime("%B %Y")
+            print(f"[Sync] Fetched {month_activity_count} activities from {month_name}", flush=True)
+
         # Calculate duration
         end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
