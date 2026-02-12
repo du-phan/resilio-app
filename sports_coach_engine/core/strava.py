@@ -592,11 +592,29 @@ def sync_strava_generator(
     else:
         logger.info("Syncing Strava history (no time limit)...")
 
+    # Determine sync mode for adaptive lap fetching
+    if cutoff_date:
+        cutoff_age_days = (datetime.now(timezone.utc).date() - cutoff_date).days
+        is_incremental_sync = cutoff_age_days <= 90
+    else:
+        # No cutoff = full historical sync
+        is_incremental_sync = False
+
+    # Select appropriate lap fetch threshold
+    if is_incremental_sync:
+        lap_max_age = config.settings.strava.lap_fetch_incremental_days
+        logger.info("Incremental sync mode: fetching laps for all running activities")
+    else:
+        lap_max_age = config.settings.strava.lap_fetch_historical_days
+        logger.info(f"Historical sync mode: fetching laps for activities <{lap_max_age} days old")
+
     start_time = datetime.now(timezone.utc)
     activities_yielded = 0
     errors = []
     skipped_count = 0
     lap_fetch_failures = 0  # Track lap fetch failures for user visibility
+    laps_fetched = 0  # Track successful lap fetches
+    laps_skipped_age = 0  # Track laps skipped due to age filter
 
     # Pagination loop (Newest -> Oldest)
     page = 1
@@ -646,28 +664,57 @@ def sync_strava_generator(
                         # Respect rate limits between calls
                         time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
 
-                        # Fetch laps for running activities
+                        # Fetch laps for running activities (adaptive strategy)
                         laps_data = None
                         if _is_running_activity(activity_detail):
-                            try:
-                                laps_data = fetch_activity_laps(config, str(activity_summary["id"]))
-                                time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
-                            except StravaRateLimitError:
-                                logger.warning(f"Rate limit on laps for {activity_summary['id']}")
-                                lap_fetch_failures += 1
-                                laps_data = None
-                            except Exception as e:
-                                logger.debug(f"No laps for {activity_summary['id']}: {e}")
-                                lap_fetch_failures += 1
-                                laps_data = None
+                            # Calculate activity age
+                            activity_date = datetime.fromisoformat(
+                                activity_detail["start_date"].replace("Z", "+00:00")
+                            )
+                            activity_age_days = (datetime.now(timezone.utc) - activity_date).days
+
+                            if activity_age_days <= lap_max_age:
+                                # Fetch lap data (within threshold for current sync mode)
+                                try:
+                                    laps_data = fetch_activity_laps(config, str(activity_summary["id"]))
+                                    time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
+                                    laps_fetched += 1
+                                except StravaRateLimitError:
+                                    # Make error message user-friendly with date and activity name
+                                    activity_name = activity_detail.get("name", "Unknown")
+                                    activity_date_str = activity_date.strftime("%Y-%m-%d")
+                                    logger.warning(
+                                        f"Rate limit hit while fetching laps for: {activity_name} "
+                                        f"({activity_date_str})"
+                                    )
+                                    lap_fetch_failures += 1
+                                    laps_data = None
+                                except Exception as e:
+                                    logger.debug(f"No laps for {activity_summary['id']}: {e}")
+                                    lap_fetch_failures += 1
+                                    laps_data = None
+                            else:
+                                # Skip lap fetch (outside threshold for historical sync)
+                                laps_skipped_age += 1
+                                logger.debug(
+                                    f"Skipping lap fetch for {activity_summary['id']} "
+                                    f"(age: {activity_age_days} days, mode: {'incremental' if is_incremental_sync else 'historical'}, "
+                                    f"threshold: {lap_max_age} days)"
+                                )
 
                         # Map to RawActivity
                         raw_activity = map_strava_to_raw(activity_detail, laps_data=laps_data)
                         activities_yielded += 1
                         yield raw_activity  # Stream immediately
 
+                        # Show progress every 20 activities
+                        if activities_yielded % 20 == 0:
+                            print(f"[Sync] Fetched {activities_yielded} activities...", flush=True)
+
                     except StravaRateLimitError:
                         logger.warning(f"Strava rate limit hit during detail fetch for {activity_summary['id']}. Pausing sync.")
+                        print(f"[Sync] Rate limit reached at {activities_yielded} activities. Pausing sync.", flush=True)
+                        print(f"[Sync] Data saved successfully. Run 'sce sync' again in 15 minutes to continue.", flush=True)
                         rate_limit_hit = True
                         stop_sync = True
                         break
@@ -684,6 +731,8 @@ def sync_strava_generator(
 
             except StravaRateLimitError:
                  logger.warning(f"Strava rate limit hit during page {page} fetch. Pausing sync.")
+                 print(f"[Sync] Rate limit reached at {activities_yielded} activities. Pausing sync.", flush=True)
+                 print(f"[Sync] Data saved successfully. Run 'sce sync' again in 15 minutes to continue.", flush=True)
                  rate_limit_hit = True
                  stop_sync = True
                  break
@@ -705,17 +754,13 @@ def sync_strava_generator(
             activities_skipped=skipped_count,
             errors=errors,
             sync_duration_seconds=duration,
+            laps_fetched=laps_fetched,
+            laps_skipped_age=laps_skipped_age,
+            lap_fetch_failures=lap_fetch_failures,
         )
 
         if rate_limit_hit:
             sync_result.errors.append("Strava API Rate Limit Reached - Sync Paused")
-
-        # Surface lap fetch failures to user
-        if lap_fetch_failures > 0:
-            sync_result.errors.append(
-                f"Lap data fetch failed for {lap_fetch_failures} running activities "
-                "(activities saved successfully without lap data)"
-            )
 
         # Return via generator protocol
         return sync_result

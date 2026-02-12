@@ -170,6 +170,47 @@ Safe to run multiple times:
 
 ---
 
+## Lap Data Fetching (Adaptive Strategy)
+
+**Lap data fetching adapts to your sync pattern:**
+
+**Incremental sync** (regular usage):
+- Fetches lap data for ALL new running activities
+- No age filter applied (new activities are always recent)
+- Perfect for weekly/daily sync habits
+
+**Historical sync** (first-time or large backfill):
+- Fetches lap data for running activities from last 60 days only
+- Optimizes rate limit usage for large imports
+- Prioritizes coaching-critical data (current training block)
+
+**Why adaptive?**
+- **Best UX**: Regular users get full lap data with zero overhead
+- **Rate limit safety**: First-time sync doesn't exhaust API quota
+- **Coaching-aligned**: Focuses on data that drives training decisions
+
+**What's included:**
+
+| Sync Type | Lap Data Coverage |
+|-----------|-------------------|
+| Incremental (<90 days) | ✓ All running activities |
+| Historical (>90 days) | ✓ Last 60 days only |
+
+**Coaching impact:**
+- Weekly analysis: ✓ Full lap data always available
+- Pattern detection: ✓ 8 weeks of lap history
+- Historical archive: ⚠ Lap data limited to 60 days on first sync
+
+**Configuration:**
+Override in `config/settings.local.yaml`:
+```yaml
+strava:
+  lap_fetch_incremental_days: 999999  # Fetch all laps (incremental sync)
+  lap_fetch_historical_days: 90       # Extend historical window to 3 months
+```
+
+---
+
 ## Examples
 
 ### Smart sync (first-time)

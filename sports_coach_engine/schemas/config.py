@@ -50,6 +50,8 @@ class StravaSettings(BaseModel):
     auth_url: str = "https://www.strava.com/oauth/authorize"
     scopes: list[str] = Field(default_factory=lambda: ["read", "activity:read_all"])
     history_import_weeks: int = 12
+    lap_fetch_incremental_days: int = 999999  # Fetch all laps for incremental sync (effectively unlimited)
+    lap_fetch_historical_days: int = 60  # 60-day limit for historical/backfill sync
 
 
 class TrainingDefaults(BaseModel):

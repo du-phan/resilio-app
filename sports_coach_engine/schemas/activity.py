@@ -153,6 +153,9 @@ class SyncResult(BaseModel):
     activities_skipped: int
     errors: list[str] = Field(default_factory=list)
     sync_duration_seconds: float
+    laps_fetched: int = 0  # Laps successfully fetched
+    laps_skipped_age: int = 0  # Laps skipped due to age filter (historical sync)
+    lap_fetch_failures: int = 0  # Laps fetch attempts that failed
 
 
 class ManualActivityInput(BaseModel):

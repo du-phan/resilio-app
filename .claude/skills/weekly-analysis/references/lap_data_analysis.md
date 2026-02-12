@@ -142,11 +142,16 @@ Not all activities have lap markers:
 - GPS issues during activity
 - Athlete didn't use lap function on watch
 - Non-running activities (climbing, strength)
+- Historical activities >60 days old (adaptive sync strategy)
 
 **Fallback approach**:
 - Use aggregate metrics (total distance, average pace/HR)
 - Note limitation in analysis
 - Can still assess overall intensity, but can't verify execution quality
+
+**Note on sync strategy**: During first-time sync (>90 days), lap data is only fetched for activities from the last 60 days (rate limit optimization). Regular incremental syncs fetch all laps. This means:
+- Weekly analysis: Always has lap data (activities are recent)
+- Historical analysis: May lack lap data for older activities (limited coaching value anyway)
 
 **Example response**: "This tempo run shows good aggregate pace (5:08/km avg), but I can't verify lap-by-lap execution without lap data. In future workouts, ensure your watch is set to record laps so we can analyze pacing consistency."
 

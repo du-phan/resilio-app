@@ -598,6 +598,9 @@ def run_sync_workflow(
                 existing_ids=existing_strava_ids
             )
 
+            # Show progress: starting sync
+            print("[Sync] Starting activity sync...", flush=True)
+
             # Step 2-8: Process activities incrementally as they're fetched
             activities_processed = 0
             sync_cmd_result = None
@@ -627,6 +630,10 @@ def run_sync_workflow(
                     errors=["Generator completed abnormally without returning SyncResult"],
                     sync_duration_seconds=0.0,
                 )
+
+            # Show progress: processing phase
+            if activities_processed > 0:
+                print(f"[Sync] Processing {activities_processed} activities...", flush=True)
 
             # Merge errors/warnings from sync
             if sync_cmd_result and sync_cmd_result.errors:
@@ -661,6 +668,9 @@ def run_sync_workflow(
             # Step 9: Recompute all metrics (including rest days and weekly summary)
             # This is now delegated to a standalone function for better separation of concerns
             if result.activities_imported:
+                # Show progress: metrics calculation phase
+                print("[Sync] Calculating training metrics (CTL/ATL/TSB)...", flush=True)
+
                 try:
                     # Get earliest activity date to start metrics computation
                     earliest = min(act.date for act in result.activities_imported)

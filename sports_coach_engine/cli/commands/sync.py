@@ -187,6 +187,20 @@ def _build_success_message(result: any) -> str:
 
     msg = f"Synced {result.activities_new} new activities from Strava."
 
+    # Add lap statistics
+    if hasattr(result, 'laps_fetched') and result.laps_fetched > 0:
+        msg += f"\nLap data fetched for {result.laps_fetched} running activities."
+
+    if hasattr(result, 'laps_skipped_age') and result.laps_skipped_age > 0:
+        # Only show in historical sync mode
+        msg += (
+            f"\n{result.laps_skipped_age} older activities synced without lap data "
+            f"(>60 days old, limited coaching value)."
+        )
+
+    if hasattr(result, 'lap_fetch_failures') and result.lap_fetch_failures > 0:
+        msg += f"\n⚠ Lap fetch failed for {result.lap_fetch_failures} activities."
+
     # Add rate limit tip if hit
     if result.errors and any("Rate Limit" in str(e) for e in result.errors):
         msg += (
