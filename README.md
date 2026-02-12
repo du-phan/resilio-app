@@ -1,4 +1,4 @@
-# Sports Coach Engine
+# Resilio
 
 AI-powered adaptive running coach for multi-sport athletes, designed to run entirely inside
 Codex or Claude Code terminal sessions with local YAML/JSON persistence.
