@@ -12,7 +12,7 @@ References:
 """
 
 from typing import Dict, List, Optional
-from sports_coach_engine.schemas.vdot import RaceDistance, VDOTTableEntry
+from resilio.schemas.vdot import RaceDistance, VDOTTableEntry
 
 
 # ============================================================

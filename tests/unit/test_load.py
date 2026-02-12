@@ -7,7 +7,7 @@ multiplier adjustments, and session type classification.
 
 import pytest
 from datetime import date, datetime
-from sports_coach_engine.core.load import (
+from resilio.core.load import (
     compute_load,
     calculate_base_effort,
     get_multipliers,
@@ -17,8 +17,8 @@ from sports_coach_engine.core.load import (
     validate_load,
     InvalidLoadInputError,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.activity import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.activity import (
     NormalizedActivity,
     SessionType,
     SportType,
@@ -400,7 +400,7 @@ class TestLoadValidation:
         """Session type inconsistent with RPE should trigger warning."""
         # Force an inconsistency by manually creating LoadCalculation
         # (This shouldn't happen in practice, but tests validation logic)
-        from sports_coach_engine.schemas.activity import LoadCalculation
+        from resilio.schemas.activity import LoadCalculation
 
         load = LoadCalculation(
             activity_id="test",
@@ -423,7 +423,7 @@ class TestLoadValidation:
 
     def test_extreme_multipliers_trigger_warning(self, basic_run_activity):
         """Multipliers outside reasonable range should trigger warning."""
-        from sports_coach_engine.schemas.activity import LoadCalculation
+        from resilio.schemas.activity import LoadCalculation
 
         load = LoadCalculation(
             activity_id="test",

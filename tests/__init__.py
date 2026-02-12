@@ -1,3 +1,3 @@
 """
-Test suite for Sports Coach Engine.
+Test suite for Resilio.
 """

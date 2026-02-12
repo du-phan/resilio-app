@@ -19,7 +19,7 @@ from typing import Union, Optional
 from dataclasses import dataclass
 from datetime import date as dt_date
 
-from sports_coach_engine.schemas.guardrails import (
+from resilio.schemas.guardrails import (
     QualityVolumeValidation,
     WeeklyProgressionValidation,
     LongRunValidation,
@@ -32,7 +32,7 @@ from sports_coach_engine.schemas.guardrails import (
     IllnessSeverity,
     ProgressionContext,
 )
-from sports_coach_engine.core.guardrails.volume import (
+from resilio.core.guardrails.volume import (
     validate_quality_volume as core_validate_quality,
     validate_weekly_progression as core_validate_progression,
     validate_long_run_limits as core_validate_long_run,
@@ -40,7 +40,7 @@ from sports_coach_engine.core.guardrails.volume import (
     calculate_safe_volume_range as core_calculate_safe_range,
     analyze_weekly_progression_context as core_analyze_progression_context,
 )
-from sports_coach_engine.core.guardrails.recovery import (
+from resilio.core.guardrails.recovery import (
     calculate_break_return_plan as core_break_return,
     calculate_masters_recovery as core_masters_recovery,
     calculate_race_recovery as core_race_recovery,

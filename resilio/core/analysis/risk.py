@@ -8,7 +8,7 @@ training stress forecasting, and taper status tracking.
 from typing import List, Dict, Optional
 from datetime import date, timedelta
 
-from sports_coach_engine.schemas.analysis import (
+from resilio.schemas.analysis import (
     CurrentRiskAssessment,
     RecoveryWindowEstimate,
     TrainingStressForecast,

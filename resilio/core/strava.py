@@ -36,15 +36,15 @@ from tenacity import (
     retry_if_exception_type,
 )
 
-from sports_coach_engine.core.config import load_config, ConfigError
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.activity import (
+from resilio.core.config import load_config, ConfigError
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.activity import (
     ActivitySource,
     LapData,
     RawActivity,
 )
-from sports_coach_engine.schemas.config import Config
-from sports_coach_engine.schemas.sync import SyncPhase, SyncReport
+from resilio.schemas.config import Config
+from resilio.schemas.sync import SyncPhase, SyncReport
 
 
 # ============================================================
@@ -795,7 +795,7 @@ def sync_strava_generator(
                     except StravaRateLimitError:
                         logger.warning(f"Strava rate limit hit during detail fetch for {activity_summary['id']}. Pausing sync.")
                         print(f"[Sync] Rate limit reached at {activities_yielded} activities. Pausing sync.", flush=True)
-                        print(f"[Sync] Data saved successfully. Run 'sce sync' again in 15 minutes to continue.", flush=True)
+                        print(f"[Sync] Data saved successfully. Run 'resilio sync' again in 15 minutes to continue.", flush=True)
                         rate_limit_hit = True
                         stop_sync = True
                         break
@@ -831,7 +831,7 @@ def sync_strava_generator(
             except StravaRateLimitError:
                 logger.warning(f"Strava rate limit hit during page {page} fetch. Pausing sync.")
                 print(f"[Sync] Rate limit reached at {activities_yielded} activities. Pausing sync.", flush=True)
-                print(f"[Sync] Data saved successfully. Run 'sce sync' again in 15 minutes to continue.", flush=True)
+                print(f"[Sync] Data saved successfully. Run 'resilio sync' again in 15 minutes to continue.", flush=True)
                 rate_limit_hit = True
                 stop_sync = True
                 break

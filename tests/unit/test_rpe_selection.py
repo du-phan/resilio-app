@@ -9,8 +9,8 @@ estimates over low-confidence ones, not just take the first estimate.
 """
 
 import pytest
-from sports_coach_engine.core.workflows import select_best_rpe_estimate
-from sports_coach_engine.schemas.activity import RPEEstimate, RPESource
+from resilio.core.workflows import select_best_rpe_estimate
+from resilio.schemas.activity import RPEEstimate, RPESource
 
 
 # ============================================================

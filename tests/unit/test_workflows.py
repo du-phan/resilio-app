@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 from unittest.mock import Mock, MagicMock, patch
 from pathlib import Path
 
-from sports_coach_engine.core.workflows import (
+from resilio.core.workflows import (
     WorkflowLock,
     TransactionLog,
     WorkflowError,
@@ -22,11 +22,11 @@ from sports_coach_engine.core.workflows import (
     run_adaptation_check,
     run_manual_activity_workflow,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.paths import current_plan_path
-from sports_coach_engine.schemas.plan import MasterPlan
-from sports_coach_engine.schemas.profile import ConflictPolicy, Goal, GoalType, TrainingConstraints
-from sports_coach_engine.schemas.sync import SyncPhase
+from resilio.core.repository import RepositoryIO
+from resilio.core.paths import current_plan_path
+from resilio.schemas.plan import MasterPlan
+from resilio.schemas.profile import ConflictPolicy, Goal, GoalType, TrainingConstraints
+from resilio.schemas.sync import SyncPhase
 
 
 # ============================================================
@@ -181,8 +181,8 @@ class TestTransactionLog:
 class TestRunSyncWorkflow:
     """Test run_sync_workflow orchestration."""
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
     def test_sync_workflow_success(self, mock_profile, mock_generator, mock_repo, mock_config):
         """Test successful sync workflow."""
         # Mock successful sync with no activities (empty generator)
@@ -195,8 +195,8 @@ class TestRunSyncWorkflow:
         assert result.activities_imported == 0
         mock_generator.assert_called_once()
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
     def test_sync_workflow_fetch_failure(self, mock_profile, mock_generator, mock_repo, mock_config):
         """Test sync workflow with fetch failure."""
         # Generator raises exception (note: profile failures don't block sync)
@@ -207,8 +207,8 @@ class TestRunSyncWorkflow:
         with pytest.raises(WorkflowError, match="API error"):
             run_sync_workflow(mock_repo, mock_config)
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
     def test_sync_workflow_lock_required(self, mock_profile, mock_generator, mock_repo, mock_config, tmp_path):
         """Test that sync workflow acquires lock."""
         mock_repo.repo_root = tmp_path
@@ -220,8 +220,8 @@ class TestRunSyncWorkflow:
         # Verify lock was used (indirectly through successful completion)
         assert result.phase == SyncPhase.DONE
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
     def test_sync_workflow_malformed_history_does_not_crash(
         self, mock_profile, mock_generator, mock_repo
     ):
@@ -253,10 +253,10 @@ class TestRunMetricsRefresh:
     """Test run_metrics_refresh workflow."""
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.compute_daily_metrics")
+    @patch("resilio.core.workflows.compute_daily_metrics")
     def test_metrics_refresh_success(self, mock_compute, mock_repo):
         """Test successful metrics refresh."""
-        from sports_coach_engine.schemas.metrics import DailyMetrics
+        from resilio.schemas.metrics import DailyMetrics
 
         mock_metrics = Mock(spec=DailyMetrics)
         mock_compute.return_value = mock_metrics
@@ -267,7 +267,7 @@ class TestRunMetricsRefresh:
         assert result.metrics == mock_metrics
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.compute_daily_metrics")
+    @patch("resilio.core.workflows.compute_daily_metrics")
     def test_metrics_refresh_failure(self, mock_compute, mock_repo):
         """Test metrics refresh with computation failure."""
         mock_compute.side_effect = Exception("Computation error")
@@ -282,14 +282,14 @@ class TestRunManualActivityWorkflow:
     """Test run_manual_activity_workflow."""
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.normalize_activity")
-    @patch("sports_coach_engine.core.workflows.analyze_notes_and_rpe")
-    @patch("sports_coach_engine.core.workflows.calculate_loads")
+    @patch("resilio.core.workflows.normalize_activity")
+    @patch("resilio.core.workflows.analyze_notes_and_rpe")
+    @patch("resilio.core.workflows.calculate_loads")
     def test_manual_activity_success(
         self, mock_loads, mock_analyze, mock_normalize, mock_repo
     ):
         """Test successful manual activity logging."""
-        from sports_coach_engine.schemas.activity import NormalizedActivity
+        from resilio.schemas.activity import NormalizedActivity
 
         mock_activity = Mock(spec=NormalizedActivity)
         mock_normalize.return_value = mock_activity
@@ -323,9 +323,9 @@ class TestRunAdaptationCheck:
     """Test run_adaptation_check workflow."""
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.load_workout_for_date")
-    @patch("sports_coach_engine.core.workflows.load_daily_metrics")
-    @patch("sports_coach_engine.core.workflows.detect_adaptation_triggers")
+    @patch("resilio.core.workflows.load_workout_for_date")
+    @patch("resilio.core.workflows.load_daily_metrics")
+    @patch("resilio.core.workflows.detect_adaptation_triggers")
     def test_adaptation_check_success(
         self, mock_triggers, mock_metrics, mock_workout, mock_repo
     ):
@@ -340,7 +340,7 @@ class TestRunAdaptationCheck:
         assert result.workout is not None
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.load_workout_for_date")
+    @patch("resilio.core.workflows.load_workout_for_date")
     def test_adaptation_check_no_workout(self, mock_workout, mock_repo):
         """Test adaptation check when no workout is scheduled."""
         mock_workout.return_value = None
@@ -398,9 +398,9 @@ class TestRunPlanGeneration:
             }
         )
 
-    @patch("sports_coach_engine.core.workflows.suggest_volume_adjustment")
-    @patch("sports_coach_engine.core.workflows.calculate_periodization")
-    @patch("sports_coach_engine.core.workflows.ProfileService")
+    @patch("resilio.core.workflows.suggest_volume_adjustment")
+    @patch("resilio.core.workflows.calculate_periodization")
+    @patch("resilio.core.workflows.ProfileService")
     def test_plan_generation_archives_valid_current_plan(
         self, mock_profile_service_cls, mock_periodization, mock_volume, mock_repo
     ):
@@ -429,9 +429,9 @@ class TestRunPlanGeneration:
         assert result.archived_plan_path is not None
         assert mock_repo.file_exists(result.archived_plan_path)
 
-    @patch("sports_coach_engine.core.workflows.suggest_volume_adjustment")
-    @patch("sports_coach_engine.core.workflows.calculate_periodization")
-    @patch("sports_coach_engine.core.workflows.ProfileService")
+    @patch("resilio.core.workflows.suggest_volume_adjustment")
+    @patch("resilio.core.workflows.calculate_periodization")
+    @patch("resilio.core.workflows.ProfileService")
     def test_plan_generation_skips_archive_for_malformed_current_plan(
         self, mock_profile_service_cls, mock_periodization, mock_volume, mock_repo
     ):
@@ -461,15 +461,15 @@ class TestRunPlanGeneration:
         assert result.archived_plan_path is None
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.load_profile")
-    @patch("sports_coach_engine.core.workflows.load_daily_metrics")
-    @patch("sports_coach_engine.core.workflows.calculate_periodization")
-    @patch("sports_coach_engine.core.workflows.suggest_volume_adjustment")
+    @patch("resilio.core.workflows.load_profile")
+    @patch("resilio.core.workflows.load_daily_metrics")
+    @patch("resilio.core.workflows.calculate_periodization")
+    @patch("resilio.core.workflows.suggest_volume_adjustment")
     def test_plan_generation_success(
         self, mock_volume, mock_periodization, mock_metrics, mock_profile, mock_repo
     ):
         """Test successful plan generation."""
-        from sports_coach_engine.schemas.profile import Goal, GoalType
+        from resilio.schemas.profile import Goal, GoalType
 
         mock_profile.return_value = Mock()
         mock_metrics.return_value = Mock()
@@ -488,7 +488,7 @@ class TestRunPlanGeneration:
         # Full implementation would generate actual plan
 
     @pytest.mark.skip(reason="Complex workflow test - covered by API integration tests")
-    @patch("sports_coach_engine.core.workflows.load_profile")
+    @patch("resilio.core.workflows.load_profile")
     def test_plan_generation_no_goal(self, mock_profile, mock_repo):
         """Test plan generation when no goal is set."""
         profile = Mock()

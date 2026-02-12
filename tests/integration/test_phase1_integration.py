@@ -8,10 +8,10 @@ import pytest
 import yaml
 from pathlib import Path
 
-from sports_coach_engine.core.config import load_config, ConfigError
-from sports_coach_engine.core.repository import RepositoryIO, RepoError
-from sports_coach_engine.core.profile import ProfileService, ProfileError, validate_constraints, calculate_vdot, RaceDistance
-from sports_coach_engine.schemas.profile import (
+from resilio.core.config import load_config, ConfigError
+from resilio.core.repository import RepositoryIO, RepoError
+from resilio.core.profile import ProfileService, ProfileError, validate_constraints, calculate_vdot, RaceDistance
+from resilio.schemas.profile import (
     AthleteProfile,
     Goal,
     GoalType,

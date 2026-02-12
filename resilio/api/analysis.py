@@ -9,7 +9,7 @@ from typing import List, Dict, Optional, Union, Any
 from dataclasses import dataclass
 from datetime import date
 
-from sports_coach_engine.core.analysis import (
+from resilio.core.analysis import (
     validate_intensity_distribution,
     detect_activity_gaps,
     analyze_load_distribution_by_sport,
@@ -20,7 +20,7 @@ from sports_coach_engine.core.analysis import (
     assess_taper_status,
 )
 
-from sports_coach_engine.schemas.analysis import (
+from resilio.schemas.analysis import (
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,

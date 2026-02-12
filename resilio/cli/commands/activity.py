@@ -1,5 +1,5 @@
 """
-sce activity - List and search activities.
+resilio activity - List and search activities.
 
 Simple CLI commands to surface activity data including notes (description, private_note).
 These tools compute/gather data - the AI coach interprets and decides.
@@ -12,9 +12,9 @@ import re
 
 import typer
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.cli.output import output_json, create_success_envelope, create_error_envelope
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.activity import NormalizedActivity
+from resilio.cli.output import output_json, create_success_envelope, create_error_envelope
 
 
 # Create activity subcommand app
@@ -220,9 +220,9 @@ def activity_list_command(
     fields for AI coach to analyze.
 
     Examples:
-        sce activity list --since 30d
-        sce activity list --since 60d --sport run
-        sce activity list --since 14d --has-notes
+        resilio activity list --since 30d
+        resilio activity list --since 60d --sport run
+        resilio activity list --since 14d --has-notes
     """
     try:
         # Parse since parameter
@@ -303,9 +303,9 @@ def activity_search_command(
     Multiple keywords are OR-matched (any match returns the activity).
 
     Examples:
-        sce activity search --query "ankle"
-        sce activity search --query "tired fatigue" --since 60d
-        sce activity search --query "pain" --sport run
+        resilio activity search --query "ankle"
+        resilio activity search --query "tired fatigue" --since 60d
+        resilio activity search --query "pain" --sport run
     """
     try:
         # Parse since parameter
@@ -386,13 +386,13 @@ def activity_export_command(
 ) -> None:
     """Export activities as JSON for use with analysis commands.
 
-    Creates a JSON file that can be passed to sce analysis commands
+    Creates a JSON file that can be passed to resilio analysis commands
     (intensity, load, gaps, capacity, risk-assess).
 
     Examples:
-        sce activity export --since 28d --out /tmp/activities.json
-        sce activity export --since 7d --out /tmp/week_activities.json --sport run
-        sce analysis intensity --activities /tmp/activities.json --days 28
+        resilio activity export --since 28d --out /tmp/activities.json
+        resilio activity export --since 7d --out /tmp/week_activities.json --sport run
+        resilio analysis intensity --activities /tmp/activities.json --days 28
     """
     import json as json_module
 
@@ -482,8 +482,8 @@ def activity_laps_command(
     - How much elevation per lap?
 
     Examples:
-        sce activity laps strava_12345678901
-        sce activity laps strava_12345678901 --format json
+        resilio activity laps strava_12345678901
+        resilio activity laps strava_12345678901 --format json
     """
     try:
         repo = RepositoryIO()

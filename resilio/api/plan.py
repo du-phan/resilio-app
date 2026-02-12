@@ -10,19 +10,19 @@ from typing import Optional, Union
 from dataclasses import dataclass
 import uuid
 
-from sports_coach_engine.core.paths import current_plan_path, athlete_profile_path
-from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.core.workflows import run_plan_generation, WorkflowError
-from sports_coach_engine.schemas.plan import MasterPlan
-from sports_coach_engine.schemas.profile import Goal, AthleteProfile
-from sports_coach_engine.schemas.adaptation import Suggestion
+from resilio.core.paths import current_plan_path, athlete_profile_path
+from resilio.core.repository import RepositoryIO, ReadOptions
+from resilio.schemas.repository import RepoError
+from resilio.core.workflows import run_plan_generation, WorkflowError
+from resilio.schemas.plan import MasterPlan
+from resilio.schemas.profile import Goal, AthleteProfile
+from resilio.schemas.adaptation import Suggestion
 
 # Import for populate_plan_workouts validation
-from sports_coach_engine.api.profile import get_profile, ProfileError
+from resilio.api.profile import get_profile, ProfileError
 
 # Import toolkit functions from core modules
-from sports_coach_engine.core.plan import (
+from resilio.core.plan import (
     calculate_periodization,
     calculate_volume_progression,
     suggest_volume_adjustment,
@@ -32,7 +32,7 @@ from sports_coach_engine.core.plan import (
     initialize_training_log,
     append_weekly_summary,
 )
-from sports_coach_engine.core.adaptation import (
+from resilio.core.adaptation import (
     detect_adaptation_triggers,
     assess_override_risk,
 )
@@ -804,7 +804,7 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
         return PlanError(
             error_type="no_plan",
             message="No training plan found. Create a macro plan first with:\n"
-                    "sce plan create-macro --goal-type <type> --race-date <date> "
+                    "resilio plan create-macro --goal-type <type> --race-date <date> "
                     "--total-weeks <N> --start-date <YYYY-MM-DD> "
                     "--current-ctl <X> --baseline-vdot <VDOT> "
                     "--macro-template-json /tmp/macro_template.json"
@@ -882,7 +882,7 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
 
     # 3. Validate weeks_data structure
     try:
-        from sports_coach_engine.schemas.plan import WeekPlan
+        from resilio.schemas.plan import WeekPlan
         validated_weeks = [WeekPlan.model_validate(w) for w in processed_weeks_data]
     except Exception as e:
         return PlanError(
@@ -891,7 +891,7 @@ def populate_plan_workouts(weeks_data: list[dict]) -> Union[MasterPlan, PlanErro
         )
 
     # 3b. Validate business logic for each week
-    from sports_coach_engine.core.plan import validate_week
+    from resilio.core.plan import validate_week
 
     all_violations = []
     for week in validated_weeks:
@@ -997,7 +997,7 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
         return PlanError(
             error_type="no_plan",
             message="No training plan found. Create a macro plan first with:\n"
-                    "sce plan create-macro --goal-type <type> --race-date <date> "
+                    "resilio plan create-macro --goal-type <type> --race-date <date> "
                     "--total-weeks <N> --start-date <YYYY-MM-DD> "
                     "--current-ctl <X> --baseline-vdot <VDOT> "
                     "--macro-template-json /tmp/macro_template.json"
@@ -1013,7 +1013,7 @@ def update_plan_from_week(start_week: int, weeks_data: list[dict]) -> Union[Mast
 
     # 2. Validate weeks_data structure
     try:
-        from sports_coach_engine.schemas.plan import WeekPlan
+        from resilio.schemas.plan import WeekPlan
         validated_weeks = [WeekPlan.model_validate(w) for w in weeks_data]
     except Exception as e:
         return PlanError(
@@ -1082,7 +1082,7 @@ def _auto_log_plan_change(change_description: str) -> None:
     Example:
         _auto_log_plan_change("Replanned weeks 5-10 due to illness")
     """
-    from sports_coach_engine.core.paths import current_plan_review_path
+    from resilio.core.paths import current_plan_review_path
     from datetime import datetime
     import logging
 
@@ -1577,8 +1577,8 @@ def create_macro_plan(
     """
     try:
         # Import here to avoid circular dependency
-        from sports_coach_engine.core.repository import RepositoryIO
-        from sports_coach_engine.schemas.plan import GoalType, MasterPlan, WeekPlan, WorkoutStructureHints
+        from resilio.core.repository import RepositoryIO
+        from resilio.schemas.plan import GoalType, MasterPlan, WeekPlan, WorkoutStructureHints
         from datetime import timedelta
         import uuid
 
@@ -1686,8 +1686,8 @@ def create_macro_plan(
 
         # Create stub weeks WITHOUT automatic volume calculation
         # AI Coach will determine volumes using guardrails during macro planning:
-        # - sce guardrails safe-volume (CTL-based capacity)
-        # - sce guardrails analyze-progression (phase-aware progression rates)
+        # - resilio guardrails safe-volume (CTL-based capacity)
+        # - resilio guardrails analyze-progression (phase-aware progression rates)
         # - Training methodology (Pfitzinger phase rates, minimum volume constraints)
         stub_weeks = []
         for week_num in range(1, total_weeks + 1):
@@ -1755,7 +1755,7 @@ def create_macro_plan(
 
         # Persist to disk
         repo = RepositoryIO()
-        from sports_coach_engine.core.paths import current_plan_path
+        from resilio.core.paths import current_plan_path
         write_result = repo.write_yaml(current_plan_path(), plan)
         if write_result is not None:
             return PlanError(
@@ -1851,7 +1851,7 @@ def assess_month_completion(
     """
     try:
         # Import here to avoid circular dependency
-        from sports_coach_engine.core.plan import assess_monthly_completion
+        from resilio.core.plan import assess_monthly_completion
 
         # Validate inputs
         if not week_numbers:
@@ -1923,7 +1923,7 @@ def validate_month_plan(
     """
     try:
         # Import here to avoid circular dependency
-        from sports_coach_engine.core.plan import validate_monthly_plan
+        from resilio.core.plan import validate_monthly_plan
 
         # Validate inputs
         if len(monthly_plan_weeks) != 4:
@@ -1996,7 +1996,7 @@ def generate_month_plan(
         >>> if isinstance(result, dict):
         ...     print(f"Generated {result['num_weeks']} weeks")
     """
-    from sports_coach_engine.core.plan import generate_monthly_plan
+    from resilio.core.plan import generate_monthly_plan
 
     # Validation
     if month_number < 1:
@@ -2193,7 +2193,7 @@ def suggest_optimal_run_count(
     if profile:
         # Use 80% of athlete's typical distances as minimum
         # IMPORTANT: If these are missing, the calling code (skills) should:
-        # 1. Try `sce profile analyze` to detect from Strava activities
+        # 1. Try `resilio profile analyze` to detect from Strava activities
         # 2. If still missing, ask athlete directly using AskUserQuestion
         # 3. Never proceed with hardcoded defaults - that's poor coaching
         typical_easy = profile.get("typical_easy_distance_km")
@@ -2420,7 +2420,7 @@ def validate_week_plan(
         # Enforce max session duration if profile provides a limit
         max_session_minutes = None
         try:
-            from sports_coach_engine.api.profile import get_profile, ProfileError
+            from resilio.api.profile import get_profile, ProfileError
             profile_result = get_profile()
             if not isinstance(profile_result, ProfileError) and profile_result.constraints:
                 max_session_minutes = profile_result.constraints.max_time_per_session_minutes
@@ -2581,7 +2581,7 @@ def revert_week_plan(week_number: int) -> Union[dict, PlanError]:
     if result is None:
         return PlanError(
             error_type="not_found",
-            message="No plan found. Run 'sce plan regen' first."
+            message="No plan found. Run 'resilio plan regen' first."
         )
 
     if isinstance(result, RepoError):

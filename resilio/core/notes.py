@@ -19,14 +19,14 @@ from qualitative reasoning (Claude Code with athlete context).
 from datetime import datetime, timezone
 from typing import Optional
 
-from sports_coach_engine.schemas.activity import (
+from resilio.schemas.activity import (
     AnalysisResult,
     NormalizedActivity,
     RPEEstimate,
     RPESource,
     TreadmillDetection,
 )
-from sports_coach_engine.schemas.profile import AthleteProfile
+from resilio.schemas.profile import AthleteProfile
 
 
 # ============================================================

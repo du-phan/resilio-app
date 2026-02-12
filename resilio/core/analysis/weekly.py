@@ -12,7 +12,7 @@ from typing import List, Dict, Optional
 from datetime import date, timedelta
 from collections import defaultdict
 
-from sports_coach_engine.schemas.analysis import (
+from resilio.schemas.analysis import (
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,

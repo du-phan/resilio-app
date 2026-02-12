@@ -1,5 +1,5 @@
 """
-Integration tests for sce plan create-macro CLI command.
+Integration tests for resilio plan create-macro CLI command.
 """
 
 import json
@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
-from sports_coach_engine.cli.commands.plan import app
+from resilio.cli.commands.plan import app
 
 
 runner = CliRunner()
@@ -42,7 +42,7 @@ def test_create_macro_derives_benchmark_date(tmp_path, monkeypatch):
 
     # Mock approvals state to allow baseline VDOT
     monkeypatch.setattr(
-        "sports_coach_engine.core.state.load_approval_state",
+        "resilio.core.state.load_approval_state",
         lambda: SimpleNamespace(approved_baseline_vdot=48.0),
     )
 
@@ -57,7 +57,7 @@ def test_create_macro_derives_benchmark_date(tmp_path, monkeypatch):
         return DummyPlan(phases=[{"phase": "base"}])
 
     monkeypatch.setattr(
-        "sports_coach_engine.api.plan.create_macro_plan",
+        "resilio.api.plan.create_macro_plan",
         fake_create_macro_plan,
     )
 

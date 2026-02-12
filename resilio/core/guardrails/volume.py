@@ -6,7 +6,7 @@ weekly progression (10% rule), and long run limits.
 """
 
 from typing import Optional, Tuple
-from sports_coach_engine.schemas.guardrails import (
+from resilio.schemas.guardrails import (
     QualityVolumeValidation,
     WeeklyProgressionValidation,
     LongRunValidation,
@@ -246,7 +246,7 @@ def analyze_weekly_progression_context(
         ... )
         >>> # Claude Code interprets volume_context, protective_factors, etc.
     """
-    from sports_coach_engine.schemas.guardrails import (
+    from resilio.schemas.guardrails import (
         ProgressionContext,
         VolumeCategory,
         AbsoluteLoadAnalysis,

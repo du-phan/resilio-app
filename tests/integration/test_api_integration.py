@@ -8,22 +8,22 @@ import pytest
 from datetime import date, timedelta, datetime
 from pathlib import Path
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.paths import (
+from resilio.core.repository import RepositoryIO
+from resilio.core.paths import (
     get_athlete_dir,
     get_activities_dir,
     get_metrics_dir,
     get_plans_dir,
     athlete_profile_path,
 )
-from sports_coach_engine.schemas.config import Config, Settings, Secrets, StravaSecrets
-from sports_coach_engine.api.sync import sync_strava, log_activity, SyncError
-from sports_coach_engine.api.coach import get_todays_workout, get_weekly_status, get_training_status, CoachError
-from sports_coach_engine.api.metrics import get_current_metrics, get_readiness, get_intensity_distribution, MetricsError
-from sports_coach_engine.api.plan import get_current_plan, regenerate_plan, PlanError
-from sports_coach_engine.api.profile import get_profile, update_profile, set_goal, ProfileError
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, TrainingConstraints, ConflictPolicy, Weekday, RunningPriority
-from sports_coach_engine.schemas.activity import NormalizedActivity
+from resilio.schemas.config import Config, Settings, Secrets, StravaSecrets
+from resilio.api.sync import sync_strava, log_activity, SyncError
+from resilio.api.coach import get_todays_workout, get_weekly_status, get_training_status, CoachError
+from resilio.api.metrics import get_current_metrics, get_readiness, get_intensity_distribution, MetricsError
+from resilio.api.plan import get_current_plan, regenerate_plan, PlanError
+from resilio.api.profile import get_profile, update_profile, set_goal, ProfileError
+from resilio.schemas.profile import AthleteProfile, Goal, GoalType, TrainingConstraints, ConflictPolicy, Weekday, RunningPriority
+from resilio.schemas.activity import NormalizedActivity
 
 
 # ============================================================
@@ -95,7 +95,7 @@ class TestProfileIntegration:
     def test_get_and_update_profile_flow(self, integration_repo, tmp_path, monkeypatch):
         """Test complete profile get/update flow."""
         # Switch to integration repo
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Get profile
         profile = get_profile()
@@ -118,10 +118,10 @@ class TestProfileIntegration:
     def test_set_goal_flow(self, integration_repo, tmp_path, monkeypatch):
         """Test setting a goal (without plan generation in integration test)."""
         # Note: Full plan generation requires more setup, so we test goal setting only
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Mock regenerate_plan to avoid complex setup
-        from sports_coach_engine import api
+        from resilio import api
         from unittest.mock import Mock
 
         mock_plan = Mock()
@@ -162,11 +162,11 @@ class TestManualActivityIntegration:
     def test_log_activity_full_pipeline(self, integration_repo, tmp_path, monkeypatch):
         """Test logging an activity through full pipeline."""
         # Mock necessary components
-        monkeypatch.setattr("sports_coach_engine.api.sync.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.sync.RepositoryIO", lambda: integration_repo)
 
         # Mock workflow functions to simplify test
-        from sports_coach_engine.core.workflows import ManualActivityResult
-        from sports_coach_engine.schemas.activity import NormalizedActivity, LoadCalculation, SessionType
+        from resilio.core.workflows import ManualActivityResult
+        from resilio.schemas.activity import NormalizedActivity, LoadCalculation, SessionType
 
         def mock_manual_workflow(repo, sport_type, duration_minutes, **kwargs):
             # Create a realistic activity result
@@ -202,7 +202,7 @@ class TestManualActivityIntegration:
             )
 
         # Patch at the import location in sync.py
-        monkeypatch.setattr("sports_coach_engine.api.sync.run_manual_activity_workflow", mock_manual_workflow)
+        monkeypatch.setattr("resilio.api.sync.run_manual_activity_workflow", mock_manual_workflow)
 
         result = log_activity(
             sport_type="run",
@@ -228,7 +228,7 @@ class TestMetricsIntegration:
 
     def test_metrics_not_found_flow(self, integration_repo, tmp_path, monkeypatch):
         """Test metrics API when no data exists yet."""
-        monkeypatch.setattr("sports_coach_engine.api.metrics.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.metrics.RepositoryIO", lambda: integration_repo)
 
         # No metrics exist yet
         result = get_current_metrics()
@@ -239,7 +239,7 @@ class TestMetricsIntegration:
 
     def test_readiness_insufficient_data(self, integration_repo, tmp_path, monkeypatch):
         """Test readiness when insufficient data."""
-        monkeypatch.setattr("sports_coach_engine.api.metrics.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.metrics.RepositoryIO", lambda: integration_repo)
 
         result = get_readiness()
 
@@ -249,7 +249,7 @@ class TestMetricsIntegration:
 
     def test_intensity_distribution_no_data(self, integration_repo, tmp_path, monkeypatch):
         """Test intensity distribution with no data."""
-        monkeypatch.setattr("sports_coach_engine.api.metrics.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.metrics.RepositoryIO", lambda: integration_repo)
 
         result = get_intensity_distribution(days=7)
 
@@ -268,10 +268,10 @@ class TestCoachIntegration:
 
     def test_get_todays_workout_no_plan(self, integration_repo, tmp_path, monkeypatch):
         """Test getting workout when no plan exists."""
-        monkeypatch.setattr("sports_coach_engine.api.coach.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.coach.RepositoryIO", lambda: integration_repo)
 
         # Mock workflow to avoid complex setup
-        from sports_coach_engine.core.workflows import AdaptationCheckResult
+        from resilio.core.workflows import AdaptationCheckResult
 
         def mock_adaptation_check(repo, target_date):
             return AdaptationCheckResult(
@@ -282,7 +282,7 @@ class TestCoachIntegration:
             )
 
         # Patch at the import location in coach.py
-        monkeypatch.setattr("sports_coach_engine.api.coach.run_adaptation_check", mock_adaptation_check)
+        monkeypatch.setattr("resilio.api.coach.run_adaptation_check", mock_adaptation_check)
 
         result = get_todays_workout()
 
@@ -292,7 +292,7 @@ class TestCoachIntegration:
 
     def test_get_weekly_status_no_plan(self, integration_repo, tmp_path, monkeypatch):
         """Test getting weekly status when no plan exists."""
-        monkeypatch.setattr("sports_coach_engine.api.coach.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.coach.RepositoryIO", lambda: integration_repo)
 
         result = get_weekly_status()
 
@@ -302,7 +302,7 @@ class TestCoachIntegration:
 
     def test_get_training_status_no_data(self, integration_repo, tmp_path, monkeypatch):
         """Test getting training status when no data exists."""
-        monkeypatch.setattr("sports_coach_engine.api.coach.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.coach.RepositoryIO", lambda: integration_repo)
 
         result = get_training_status()
 
@@ -321,7 +321,7 @@ class TestPlanIntegration:
 
     def test_get_current_plan_not_found(self, integration_repo, tmp_path, monkeypatch):
         """Test getting plan when none exists."""
-        monkeypatch.setattr("sports_coach_engine.api.plan.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.plan.RepositoryIO", lambda: integration_repo)
 
         result = get_current_plan()
 
@@ -331,10 +331,10 @@ class TestPlanIntegration:
 
     def test_regenerate_plan_no_goal(self, integration_repo, tmp_path, monkeypatch):
         """Test regenerating plan when no goal is set."""
-        monkeypatch.setattr("sports_coach_engine.api.plan.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.plan.RepositoryIO", lambda: integration_repo)
 
         # Mock workflow
-        from sports_coach_engine.core.workflows import PlanGenerationResult
+        from resilio.core.workflows import PlanGenerationResult
 
         def mock_plan_generation(repo, goal):
             return PlanGenerationResult(
@@ -344,7 +344,7 @@ class TestPlanIntegration:
             )
 
         # Patch at the import location in plan.py
-        monkeypatch.setattr("sports_coach_engine.api.plan.run_plan_generation", mock_plan_generation)
+        monkeypatch.setattr("resilio.api.plan.run_plan_generation", mock_plan_generation)
 
         result = regenerate_plan()
 
@@ -363,7 +363,7 @@ class TestCrossModuleIntegration:
 
     def test_profile_update_persistence(self, integration_repo, tmp_path, monkeypatch):
         """Test that profile updates persist across API calls."""
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Get initial profile
         profile1 = get_profile()
@@ -388,7 +388,7 @@ class TestErrorPropagation:
 
     def test_invalid_yaml_propagates_as_validation_error(self, integration_repo, tmp_path, monkeypatch):
         """Test that invalid YAML files result in validation errors."""
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Write invalid YAML
         profile_path = tmp_path / "data" / "athlete" / "profile.yaml"
@@ -402,7 +402,7 @@ class TestErrorPropagation:
 
     def test_missing_required_field_propagates(self, integration_repo, tmp_path, monkeypatch):
         """Test that missing required fields in profile result in errors."""
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         # Write profile missing required fields
         profile_path = tmp_path / "data" / "athlete" / "profile.yaml"
@@ -426,7 +426,7 @@ class TestPerformance:
         """Test that API calls complete in reasonable time."""
         import time
 
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         start = time.time()
         get_profile()
@@ -439,7 +439,7 @@ class TestPerformance:
         """Test that multiple API calls don't have cumulative slowdown."""
         import time
 
-        monkeypatch.setattr("sports_coach_engine.api.profile.RepositoryIO", lambda: integration_repo)
+        monkeypatch.setattr("resilio.api.profile.RepositoryIO", lambda: integration_repo)
 
         start = time.time()
         for _ in range(10):

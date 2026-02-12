@@ -1,5 +1,5 @@
 """
-sce memory - Manage athlete memories and insights.
+resilio memory - Manage athlete memories and insights.
 
 Memories are durable facts about the athlete that persist across coaching sessions.
 Types: INJURY_HISTORY, PREFERENCE, CONTEXT, INSIGHT, TRAINING_RESPONSE.
@@ -11,16 +11,16 @@ import uuid
 
 import typer
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.memory import (
+from resilio.core.repository import RepositoryIO
+from resilio.core.memory import (
     save_memory,
     load_memories,
     get_memories_by_type,
     get_relevant_memories,
 )
-from sports_coach_engine.schemas.memory import Memory, MemoryType, MemorySource, MemoryConfidence
-from sports_coach_engine.cli.errors import create_error_envelope, create_success_envelope
-from sports_coach_engine.cli.output import output_json
+from resilio.schemas.memory import Memory, MemoryType, MemorySource, MemoryConfidence
+from resilio.cli.errors import create_error_envelope, create_success_envelope
+from resilio.cli.output import output_json
 
 
 # Create memory subcommand app
@@ -60,17 +60,17 @@ def memory_add_command(
     will be incremented instead of creating a duplicate.
 
     Examples:
-        sce memory add --type INJURY_HISTORY \\
+        resilio memory add --type INJURY_HISTORY \\
             --content "Left knee pain after long runs over 18km" \\
             --tags "body:knee,trigger:long-run" \\
             --confidence high
 
-        sce memory add --type TRAINING_RESPONSE \\
+        resilio memory add --type TRAINING_RESPONSE \\
             --content "Consistently skips Tuesday runs" \\
             --tags "schedule:tuesday,pattern:skip" \\
             --confidence high
 
-        sce memory add --type CONTEXT \\
+        resilio memory add --type CONTEXT \\
             --content "Works late Mondays, prefers morning runs Tue-Fri" \\
             --tags "schedule:work" \\
             --confidence medium
@@ -165,9 +165,9 @@ def memory_list_command(
     """List all memories, optionally filtered by type or tag.
 
     Examples:
-        sce memory list
-        sce memory list --type INJURY_HISTORY
-        sce memory list --tag "body:knee"
+        resilio memory list
+        resilio memory list --type INJURY_HISTORY
+        resilio memory list --tag "body:knee"
     """
     try:
         repo = RepositoryIO()
@@ -229,8 +229,8 @@ def memory_search_command(
     Uses keyword-based relevance scoring to find matching memories.
 
     Examples:
-        sce memory search --query "knee pain"
-        sce memory search --query "injury" --limit 5
+        resilio memory search --query "knee pain"
+        resilio memory search --query "injury" --limit 5
     """
     try:
         repo = RepositoryIO()

@@ -7,7 +7,7 @@ and Pfitzinger's masters/race recovery guidelines.
 
 from typing import Optional
 from datetime import date, timedelta
-from sports_coach_engine.schemas.guardrails import (
+from resilio.schemas.guardrails import (
     BreakReturnPlan,
     MastersRecoveryAdjustment,
     RaceRecoveryPlan,

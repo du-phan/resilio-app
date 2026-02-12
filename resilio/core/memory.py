@@ -22,9 +22,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from sports_coach_engine.core.paths import athlete_memories_path
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.memory import (
+from resilio.core.paths import athlete_memories_path
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.memory import (
     ArchivedMemory,
     Memory,
     MemoryConfidence,

@@ -1,5 +1,5 @@
 """
-sce today - Get today's recommended workout.
+resilio today - Get today's recommended workout.
 
 Returns the workout recommendation for today (or specified date) with full coaching
 context including metrics, triggers, and rationale.
@@ -10,9 +10,9 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api import get_todays_workout
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, output_json
+from resilio.api import get_todays_workout
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import create_error_envelope, output_json
 
 
 def today_command(
@@ -34,8 +34,8 @@ def today_command(
     This gives Claude Code everything needed to provide personalized coaching.
 
     Examples:
-        sce today                    # Today's workout
-        sce today --date 2026-01-20  # Workout for specific date
+        resilio today                    # Today's workout
+        resilio today --date 2026-01-20  # Workout for specific date
     """
     # Parse date if provided
     target_date: Optional[date] = None

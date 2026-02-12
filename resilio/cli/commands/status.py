@@ -1,5 +1,5 @@
 """
-sce status - Get current training metrics.
+resilio status - Get current training metrics.
 
 Shows CTL (fitness), ATL (fatigue), TSB (form), ACWR (load spike), and readiness
 with interpretations and trends.
@@ -7,9 +7,9 @@ with interpretations and trends.
 
 import typer
 
-from sports_coach_engine.api import get_current_metrics
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import output_json
+from resilio.api import get_current_metrics
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import output_json
 
 
 def status_command(ctx: typer.Context) -> None:

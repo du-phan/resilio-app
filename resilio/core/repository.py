@@ -11,8 +11,8 @@ from typing import Optional, Type, TypeVar, Union
 
 from pydantic import BaseModel
 
-from sports_coach_engine.core.config import get_repo_root
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType, ReadOptions
+from resilio.core.config import get_repo_root
+from resilio.schemas.repository import RepoError, RepoErrorType, ReadOptions
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -241,7 +241,7 @@ class RepositoryIO:
         import time
         from datetime import datetime
 
-        from sports_coach_engine.schemas.repository import FileLock
+        from resilio.schemas.repository import FileLock
 
         lock_path = self.resolve_path("config/.sync_lock")
         lock_path.parent.mkdir(parents=True, exist_ok=True)

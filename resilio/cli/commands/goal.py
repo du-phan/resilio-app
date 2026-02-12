@@ -1,5 +1,5 @@
 """
-sce goal - Manage race goals.
+resilio goal - Manage race goals.
 
 Set a race goal and automatically validate feasibility.
 """
@@ -9,13 +9,13 @@ from typing import Optional, Dict, Any, List
 
 import typer
 
-from sports_coach_engine.api import set_goal
-from sports_coach_engine.api.metrics import get_current_metrics, MetricsError
-from sports_coach_engine.api.vdot import estimate_current_vdot, calculate_vdot_from_race, VDOTError
-from sports_coach_engine.api.validation import api_assess_goal_feasibility, ValidationError
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
-from sports_coach_engine.utils.dates import get_next_monday
+from resilio.api import set_goal
+from resilio.api.metrics import get_current_metrics, MetricsError
+from resilio.api.vdot import estimate_current_vdot, calculate_vdot_from_race, VDOTError
+from resilio.api.validation import api_assess_goal_feasibility, ValidationError
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
+from resilio.utils.dates import get_next_monday
 
 # Create subcommand app
 app = typer.Typer(help="Manage race goals")
@@ -58,11 +58,11 @@ def goal_set_command(
     - general_fitness
 
     Examples:
-        sce goal set --type 10k --date 2026-06-01
-        sce goal set --type half_marathon --date 2026-04-15 --time 01:45:00
-        sce goal set --type marathon --date 2026-10-20 --time 03:30:00
-        sce goal set --type general_fitness
-        sce goal set --type 10k --horizon-weeks 12
+        resilio goal set --type 10k --date 2026-06-01
+        resilio goal set --type half_marathon --date 2026-04-15 --time 01:45:00
+        resilio goal set --type marathon --date 2026-10-20 --time 03:30:00
+        resilio goal set --type general_fitness
+        resilio goal set --type 10k --horizon-weeks 12
     """
     # Validate race_type
     valid_race_types = ["5k", "10k", "half_marathon", "marathon", "general_fitness"]
@@ -276,9 +276,9 @@ def goal_validate_command(
     - After illness/injury: "Is goal still achievable?"
 
     Examples:
-        sce goal validate
+        resilio goal validate
     """
-    from sports_coach_engine.api.profile import get_profile, ProfileError
+    from resilio.api.profile import get_profile, ProfileError
 
     # 1. Get goal from profile
     profile_result = get_profile()
@@ -286,7 +286,7 @@ def goal_validate_command(
     if isinstance(profile_result, ProfileError):
         envelope = create_error_envelope(
             error_type="not_found",
-            message="Profile not found. Create a profile first using 'sce profile create'.",
+            message="Profile not found. Create a profile first using 'resilio profile create'.",
         )
         output_json(envelope)
         raise typer.Exit(code=2)
@@ -294,7 +294,7 @@ def goal_validate_command(
     if not profile_result.goal:
         envelope = create_error_envelope(
             error_type="validation",
-            message="No goal set in profile. Use 'sce goal set' to set a goal first.",
+            message="No goal set in profile. Use 'resilio goal set' to set a goal first.",
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -322,7 +322,7 @@ def goal_validate_command(
     if not target_date_str:
         envelope = create_error_envelope(
             error_type="validation",
-            message="Goal is missing a target date. Use 'sce goal set' to set a date or horizon.",
+            message="Goal is missing a target date. Use 'resilio goal set' to set a date or horizon.",
         )
         output_json(envelope)
         raise typer.Exit(code=5)

@@ -7,7 +7,7 @@ ACWR (load spike indicator), readiness scoring, intensity distribution, and edge
 
 import pytest
 from datetime import date, datetime, timedelta
-from sports_coach_engine.core.metrics import (
+from resilio.core.metrics import (
     compute_daily_metrics,
     compute_weekly_summary,
     aggregate_daily_load,
@@ -22,8 +22,8 @@ from sports_coach_engine.core.metrics import (
     MetricsCalculationError,
     InsufficientDataError,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.metrics import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.metrics import (
     DailyMetrics,
     TSBZone,
     ACWRZone,
@@ -31,7 +31,7 @@ from sports_coach_engine.schemas.metrics import (
     ConfidenceLevel,
     CTLZone,
 )
-from sports_coach_engine.schemas.activity import (
+from resilio.schemas.activity import (
     NormalizedActivity,
     SessionType,
     SportType,
@@ -317,7 +317,7 @@ class TestCTLATLCalculation:
             atl = ctl_atl.atl
 
             # Create daily metrics
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -352,7 +352,7 @@ class TestCTLATLCalculation:
 
     def test_load_trend_uses_today_load(self, temp_repo):
         """Load trend should use today's load instead of missing metrics."""
-        from sports_coach_engine.schemas.metrics import (
+        from resilio.schemas.metrics import (
             DailyMetrics,
             DailyLoad,
             CTLATLMetrics,
@@ -429,7 +429,7 @@ class TestACWRCalculation:
         for i in range(20):
             current_date = start_date + timedelta(days=i)
             # Create minimal metrics (just to exist)
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -486,7 +486,7 @@ class TestACWRCalculation:
             # Consistent load
             daily_load = 300.0
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -551,7 +551,7 @@ class TestACWRCalculation:
             else:
                 daily_load = 200.0  # Low baseline
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -619,7 +619,7 @@ class TestACWRCalculation:
             else:
                 daily_load = 250.0
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -674,7 +674,7 @@ class TestACWRCalculation:
         for i in range(30):
             current_date = start_date + timedelta(days=i)
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -729,7 +729,7 @@ class TestACWRCalculation:
         for i in range(27):
             current_date = start_date + timedelta(days=i)
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -794,7 +794,7 @@ class TestACWRCalculation:
         for i in range(27):
             current_date = start_date + timedelta(days=i)
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -858,7 +858,7 @@ class TestACWRCalculation:
         for i in range(30):
             current_date = start_date + timedelta(days=i)
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -924,7 +924,7 @@ class TestACWRCalculation:
             else:
                 daily_load = 200.0  # Low baseline
 
-            from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
+            from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone
 
             daily_metrics = DailyMetrics(
                 date=current_date,
@@ -1478,7 +1478,7 @@ class TestEdgeCases:
     def test_validation_warns_on_extreme_values(self, temp_repo):
         """Should warn if metrics are extreme but not fail."""
         # Create metrics with out-of-range values
-        from sports_coach_engine.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ACWRMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone, ACWRZone
+        from resilio.schemas.metrics import DailyMetrics, DailyLoad, CTLATLMetrics, ACWRMetrics, ReadinessScore, ReadinessComponents, ReadinessLevel, ConfidenceLevel, TSBZone, CTLZone, ACWRZone
 
         metrics = DailyMetrics(
             date=date(2026, 1, 12),

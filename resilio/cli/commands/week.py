@@ -1,14 +1,14 @@
 """
-sce week - Get weekly training summary.
+resilio week - Get weekly training summary.
 
 Shows planned workouts, completed activities, metrics, and overall week status.
 """
 
 import typer
 
-from sports_coach_engine.api import get_weekly_status
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import output_json
+from resilio.api import get_weekly_status
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import output_json
 
 
 def week_command(ctx: typer.Context) -> None:

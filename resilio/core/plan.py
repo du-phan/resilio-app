@@ -36,7 +36,7 @@ import uuid
 import shutil
 import os
 import sys
-from sports_coach_engine.schemas.plan import (
+from resilio.schemas.plan import (
     GoalType,
     PlanPhase,
     WorkoutType,
@@ -45,14 +45,14 @@ from sports_coach_engine.schemas.plan import (
     WeekPlan,
     MasterPlan,
 )
-from sports_coach_engine.core.guardrails.volume import validate_workout_minimums
-from sports_coach_engine.core.paths import (
+from resilio.core.guardrails.volume import validate_workout_minimums
+from resilio.core.paths import (
     current_plan_path,
     get_plans_dir,
     current_plan_review_path,
     current_training_log_path,
 )
-from sports_coach_engine.core.repository import RepositoryIO
+from resilio.core.repository import RepositoryIO
 
 
 # Constants removed - weekly structures and day preferences now handled
@@ -1066,7 +1066,7 @@ def suggest_volume_adjustment(
     Returns:
         VolumeRecommendation with safe ranges and rationale
     """
-    from sports_coach_engine.schemas.plan import VolumeRecommendation
+    from resilio.schemas.plan import VolumeRecommendation
 
     # Determine fitness level and starting range from CTL
     if current_ctl < 30:
@@ -1333,7 +1333,7 @@ def validate_week(
     Returns:
         List of detected violations
     """
-    from sports_coach_engine.schemas.plan import GuardrailViolation
+    from resilio.schemas.plan import GuardrailViolation
 
     violations = []
 
@@ -1473,7 +1473,7 @@ def validate_guardrails(
         List of violations with severity levels (info/warning/danger)
         Claude Code reviews and decides enforcement
     """
-    from sports_coach_engine.schemas.plan import GuardrailViolation
+    from resilio.schemas.plan import GuardrailViolation
 
     violations = []
 

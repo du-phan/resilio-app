@@ -8,7 +8,7 @@ analysis functions (4 weekly + 4 risk).
 import pytest
 from datetime import date, timedelta
 
-from sports_coach_engine.api.analysis import (
+from resilio.api.analysis import (
     api_validate_intensity_distribution,
     api_detect_activity_gaps,
     api_analyze_load_distribution_by_sport,
@@ -20,7 +20,7 @@ from sports_coach_engine.api.analysis import (
     AnalysisError,
 )
 
-from sports_coach_engine.schemas.analysis import (
+from resilio.schemas.analysis import (
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,

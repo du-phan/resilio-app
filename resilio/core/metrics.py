@@ -20,18 +20,18 @@ import logging
 from datetime import date, datetime, timedelta
 from typing import Optional
 
-from sports_coach_engine.core.paths import (
+from resilio.core.paths import (
     activities_month_dir,
     daily_metrics_path,
     weekly_metrics_summary_path,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.activity import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.activity import (
     NormalizedActivity,
     SessionType,
     SportType,
 )
-from sports_coach_engine.schemas.metrics import (
+from resilio.schemas.metrics import (
     DailyMetrics,
     DailyLoad,
     CTLATLMetrics,
@@ -958,7 +958,7 @@ def _read_previous_metrics(target_date: date, repo: RepositoryIO) -> Optional[Da
     result = repo.read_yaml(metrics_path, DailyMetrics)
 
     # repo.read_yaml returns RepoError if file doesn't exist
-    from sports_coach_engine.schemas.repository import RepoError
+    from resilio.schemas.repository import RepoError
     if isinstance(result, RepoError):
         return None
 

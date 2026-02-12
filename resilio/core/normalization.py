@@ -18,10 +18,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from sports_coach_engine.core.notes import detect_treadmill
-from sports_coach_engine.core.paths import activities_month_dir
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.activity import (
+from resilio.core.notes import detect_treadmill
+from resilio.core.paths import activities_month_dir
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.activity import (
     DataQuality,
     NormalizedActivity,
     NormalizationResult,

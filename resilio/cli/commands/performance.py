@@ -1,5 +1,5 @@
 """
-sce performance - Performance baseline and fitness tracking.
+resilio performance - Performance baseline and fitness tracking.
 
 View current fitness vs. historical performance to assess progression/regression.
 """
@@ -8,9 +8,9 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api.performance import api_get_performance_baseline
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import output_json
+from resilio.api.performance import api_get_performance_baseline
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import output_json
 
 # Create subcommand app
 app = typer.Typer(help="Performance baseline and fitness tracking")
@@ -37,8 +37,8 @@ def performance_baseline_command(
     - Planning training volume and intensity
 
     Examples:
-        sce performance baseline
-        sce performance baseline --lookback-days 42
+        resilio performance baseline
+        resilio performance baseline --lookback-days 42
 
     Output includes:
         - Current fitness: VDOT estimate, CTL, confidence level

@@ -1,18 +1,18 @@
 """
-Sports Coach Engine CLI - Main entry point.
+Resilio CLI - Main entry point.
 
 Provides a command-line interface for Claude Code to interact with the
-Sports Coach Engine. All commands return structured JSON for easy parsing.
+Resilio. All commands return structured JSON for easy parsing.
 
 Usage:
-    sce init                        # Initialize data directories
-    sce sync                        # Import activities from Strava
-    sce status                      # Get current training metrics
-    sce today                       # Get today's workout
-    sce vdot calculate              # Calculate VDOT from race performance
-    sce vdot paces                  # Generate training pace zones
-    sce guardrails quality-volume   # Validate T/I/R pace volumes
-    sce guardrails break-return     # Plan return after training break
+    resilio init                        # Initialize data directories
+    resilio sync                        # Import activities from Strava
+    resilio status                      # Get current training metrics
+    resilio today                       # Get today's workout
+    resilio vdot calculate              # Calculate VDOT from race performance
+    resilio vdot paces                  # Generate training pace zones
+    resilio guardrails quality-volume   # Validate T/I/R pace volumes
+    resilio guardrails break-return     # Plan return after training break
 """
 
 from pathlib import Path
@@ -22,8 +22,8 @@ import typer
 
 # Create the main Typer app
 app = typer.Typer(
-    name="sce",
-    help="Sports Coach Engine - AI-powered adaptive running coach (JSON output)",
+    name="resilio",
+    help="Resilio - AI-powered adaptive running coach (JSON output)",
     add_completion=False,  # Keep it simple for v0
     no_args_is_help=True,
 )
@@ -50,18 +50,18 @@ def main(
         help="Repository root path (auto-detected if not specified)",
     ),
 ) -> None:
-    """Sports Coach Engine CLI - All commands output JSON."""
+    """Resilio CLI - All commands output JSON."""
     # Create context object
     ctx.obj = CLIContext(repo_root=repo_root)
 
 
 # Import and register commands
-from sports_coach_engine.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, memory, activity, dates, performance, goal, approvals
-from sports_coach_engine.cli.commands.init_cmd import init_command
-from sports_coach_engine.cli.commands.status import status_command
-from sports_coach_engine.cli.commands.sync import sync_command
-from sports_coach_engine.cli.commands.today import today_command
-from sports_coach_engine.cli.commands.week import week_command
+from resilio.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, memory, activity, dates, performance, goal, approvals
+from resilio.cli.commands.init_cmd import init_command
+from resilio.cli.commands.status import status_command
+from resilio.cli.commands.sync import sync_command
+from resilio.cli.commands.today import today_command
+from resilio.cli.commands.week import week_command
 
 # Register commands
 app.command(name="init", help="Initialize data directories and config")(init_command)

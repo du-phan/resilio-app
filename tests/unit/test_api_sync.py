@@ -7,12 +7,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from sports_coach_engine.api.sync import SyncError, log_activity, sync_strava
-from sports_coach_engine.core.config import ConfigError
-from sports_coach_engine.core.workflows import ManualActivityResult, WorkflowError
-from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.schemas.config import ConfigErrorType
-from sports_coach_engine.schemas.sync import SyncPhase, SyncReport
+from resilio.api.sync import SyncError, log_activity, sync_strava
+from resilio.core.config import ConfigError
+from resilio.core.workflows import ManualActivityResult, WorkflowError
+from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.config import ConfigErrorType
+from resilio.schemas.sync import SyncPhase, SyncReport
 
 
 @pytest.fixture
@@ -54,8 +54,8 @@ def mock_manual_result(mock_activity):
 
 
 class TestSyncStrava:
-    @patch("sports_coach_engine.api.sync.load_config")
-    @patch("sports_coach_engine.api.sync.run_sync_workflow")
+    @patch("resilio.api.sync.load_config")
+    @patch("resilio.api.sync.run_sync_workflow")
     def test_sync_strava_success(self, mock_workflow, mock_config, mock_log, mock_sync_report):
         mock_config.return_value = Mock()
         mock_workflow.return_value = mock_sync_report
@@ -66,7 +66,7 @@ class TestSyncStrava:
         assert result.activities_imported == 2
         mock_workflow.assert_called_once()
 
-    @patch("sports_coach_engine.api.sync.load_config")
+    @patch("resilio.api.sync.load_config")
     def test_sync_strava_config_error(self, mock_config, mock_log):
         mock_config.return_value = ConfigError(
             error_type=ConfigErrorType.FILE_NOT_FOUND,
@@ -78,8 +78,8 @@ class TestSyncStrava:
         assert isinstance(result, SyncError)
         assert result.error_type == "config"
 
-    @patch("sports_coach_engine.api.sync.load_config")
-    @patch("sports_coach_engine.api.sync.run_sync_workflow")
+    @patch("resilio.api.sync.load_config")
+    @patch("resilio.api.sync.run_sync_workflow")
     def test_sync_strava_workflow_error(self, mock_workflow, mock_config, mock_log):
         mock_config.return_value = Mock()
         mock_workflow.side_effect = WorkflowError("Network connection failed")
@@ -89,8 +89,8 @@ class TestSyncStrava:
         assert isinstance(result, SyncError)
         assert result.error_type == "network"
 
-    @patch("sports_coach_engine.api.sync.load_config")
-    @patch("sports_coach_engine.api.sync.run_sync_workflow")
+    @patch("resilio.api.sync.load_config")
+    @patch("resilio.api.sync.run_sync_workflow")
     def test_sync_strava_with_since_parameter(
         self,
         mock_workflow,
@@ -107,8 +107,8 @@ class TestSyncStrava:
         mock_workflow.assert_called_once()
         assert mock_workflow.call_args.kwargs["since"] == since_date
 
-    @patch("sports_coach_engine.api.sync.load_config")
-    @patch("sports_coach_engine.api.sync.run_sync_workflow")
+    @patch("resilio.api.sync.load_config")
+    @patch("resilio.api.sync.run_sync_workflow")
     def test_sync_strava_auth_error_classification(self, mock_workflow, mock_config, mock_log):
         mock_config.return_value = Mock()
         mock_workflow.side_effect = WorkflowError("Strava auth token expired")
@@ -117,8 +117,8 @@ class TestSyncStrava:
         assert isinstance(result, SyncError)
         assert result.error_type == "auth"
 
-    @patch("sports_coach_engine.api.sync.load_config")
-    @patch("sports_coach_engine.api.sync.run_sync_workflow")
+    @patch("resilio.api.sync.load_config")
+    @patch("resilio.api.sync.run_sync_workflow")
     def test_sync_strava_rate_limit_error_classification(self, mock_workflow, mock_config, mock_log):
         mock_config.return_value = Mock()
         mock_workflow.side_effect = WorkflowError("API rate limit exceeded")
@@ -129,7 +129,7 @@ class TestSyncStrava:
 
 
 class TestLogActivity:
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+    @patch("resilio.api.sync.run_manual_activity_workflow")
     def test_log_activity_success(self, mock_workflow, mock_log, mock_manual_result):
         mock_workflow.return_value = mock_manual_result
 
@@ -144,7 +144,7 @@ class TestLogActivity:
         assert result.sport_type == "run"
         mock_workflow.assert_called_once()
 
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+    @patch("resilio.api.sync.run_manual_activity_workflow")
     def test_log_activity_with_distance(self, mock_workflow, mock_log, mock_manual_result):
         mock_workflow.return_value = mock_manual_result
 
@@ -156,7 +156,7 @@ class TestLogActivity:
 
         assert mock_workflow.call_args.kwargs["distance_km"] == 10.5
 
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+    @patch("resilio.api.sync.run_manual_activity_workflow")
     def test_log_activity_defaults_to_today(self, mock_workflow, mock_log, mock_manual_result):
         mock_workflow.return_value = mock_manual_result
 
@@ -164,7 +164,7 @@ class TestLogActivity:
 
         assert mock_workflow.call_args.kwargs["activity_date"] == date.today()
 
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+    @patch("resilio.api.sync.run_manual_activity_workflow")
     def test_log_activity_workflow_failure(self, mock_workflow, mock_log):
         mock_workflow.return_value = ManualActivityResult(
             success=False,
@@ -178,7 +178,7 @@ class TestLogActivity:
         assert isinstance(result, SyncError)
         assert result.error_type == "validation"
 
-    @patch("sports_coach_engine.api.sync.run_manual_activity_workflow")
+    @patch("resilio.api.sync.run_manual_activity_workflow")
     def test_log_activity_exception_handling(self, mock_workflow, mock_log):
         mock_workflow.side_effect = Exception("Unexpected error")
 

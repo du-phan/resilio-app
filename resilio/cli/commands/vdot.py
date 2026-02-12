@@ -1,5 +1,5 @@
 """
-sce vdot - VDOT calculations and training pace generation.
+resilio vdot - VDOT calculations and training pace generation.
 
 Calculate VDOT from race performances, generate training pace zones,
 predict equivalent race times, and apply environmental pace adjustments.
@@ -9,7 +9,7 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api.vdot import (
+from resilio.api.vdot import (
     calculate_vdot_from_race,
     get_training_paces,
     predict_race_times,
@@ -17,8 +17,8 @@ from sports_coach_engine.api.vdot import (
     adjust_pace_for_environment,
     estimate_current_vdot,
 )
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import output_json
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import output_json
 
 # Create subcommand app
 app = typer.Typer(help="VDOT calculations and training paces")
@@ -49,9 +49,9 @@ def vdot_calculate_command(
     Use this to determine your current fitness level and set training paces.
 
     Examples:
-        sce vdot calculate --race-type 10k --time 42:30
-        sce vdot calculate --race-type half_marathon --time 1:30:00 --race-date 2026-01-10
-        sce vdot calculate --race-type 5k --time 20:15
+        resilio vdot calculate --race-type 10k --time 42:30
+        resilio vdot calculate --race-type half_marathon --time 1:30:00 --race-date 2026-01-10
+        resilio vdot calculate --race-type 5k --time 20:15
 
     Supported race distances:
         - mile
@@ -100,8 +100,8 @@ def vdot_paces_command(
     Generates E/M/T/I/R pace ranges based on Jack Daniels' methodology.
 
     Examples:
-        sce vdot paces --vdot 48
-        sce vdot paces --vdot 55 --unit min_per_mile
+        resilio vdot paces --vdot 48
+        resilio vdot paces --vdot 55 --unit min_per_mile
 
     Pace zones:
         - E (Easy): Recovery runs, aerobic base
@@ -150,8 +150,8 @@ def vdot_predict_command(
     Useful for goal setting and performance tracking.
 
     Examples:
-        sce vdot predict --race-type 10k --time 42:30
-        sce vdot predict --race-type half_marathon --time 1:30:00
+        resilio vdot predict --race-type 10k --time 42:30
+        resilio vdot predict --race-type half_marathon --time 1:30:00
 
     Output includes predictions for:
         - Mile
@@ -201,12 +201,12 @@ def vdot_six_second_command(
     Note: For VDOT 40-50 range, uses 7-8 seconds instead of 6.
 
     Examples:
-        sce vdot six-second --mile-time 6:00
-        sce vdot six-second --mile-time 8:30
+        resilio vdot six-second --mile-time 6:00
+        resilio vdot six-second --mile-time 8:30
 
     Recommendation:
         For more accurate paces, complete a recent 5K race and use
-        'sce vdot calculate' instead.
+        'resilio vdot calculate' instead.
     """
     # Call API
     result = apply_six_second_rule_paces(mile_time=mile_time)
@@ -253,9 +253,9 @@ def vdot_adjust_command(
     Returns adjusted pace and coaching recommendations.
 
     Examples:
-        sce vdot adjust --pace 5:00 --condition altitude --severity 7000
-        sce vdot adjust --pace 4:30 --condition heat --severity 30
-        sce vdot adjust --pace 5:15 --condition hills --severity 5
+        resilio vdot adjust --pace 5:00 --condition altitude --severity 7000
+        resilio vdot adjust --pace 4:30 --condition heat --severity 30
+        resilio vdot adjust --pace 5:15 --condition hills --severity 5
 
     Condition types:
         - altitude: Severity in feet (e.g., 7000 for 7000ft)
@@ -318,11 +318,11 @@ def vdot_estimate_current_command(
         - Automatically detects easy efforts via heart rate zones (65-78% max HR)
         - Infers VDOT from easy paces for more robust estimates
         - Works even when athletes don't label runs as "easy"
-        - Requires max_hr in profile ('sce profile update --max-hr 199')
+        - Requires max_hr in profile ('resilio profile update --max-hr 199')
 
     Examples:
-        sce vdot estimate-current
-        sce vdot estimate-current --lookback-days 90
+        resilio vdot estimate-current
+        resilio vdot estimate-current --lookback-days 90
 
     Confidence levels:
         - HIGH: Recent race (<90 days) or 3+ quality workouts
@@ -330,8 +330,8 @@ def vdot_estimate_current_command(
         - LOW: Single workout, long break, or easy pace only
 
     Use this to compare current fitness against PBs:
-        1. sce profile get  # View PBs section
-        2. sce vdot estimate-current  # Estimate current VDOT
+        1. resilio profile get  # View PBs section
+        2. resilio vdot estimate-current  # Estimate current VDOT
         3. Compare current VDOT to peak VDOT from personal bests
     """
     # Call API

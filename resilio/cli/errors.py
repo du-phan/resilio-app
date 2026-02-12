@@ -7,8 +7,8 @@ CLI exit codes that Claude Code can branch on.
 
 from typing import Any, Union
 
-from sports_coach_engine.api.helpers import get_error_message, is_error
-from sports_coach_engine.cli.output import OutputEnvelope, create_error_envelope, create_success_envelope
+from resilio.api.helpers import get_error_message, is_error
+from resilio.cli.output import OutputEnvelope, create_error_envelope, create_success_envelope
 
 
 # Exit codes (following plan specification)
@@ -94,13 +94,13 @@ def api_result_to_envelope(
         # Add next_steps guidance for common errors
         if error_type == "auth":
             error_data["next_steps"] = (
-                "Run: sce auth url to get authorization link, "
-                "then sce auth exchange --code YOUR_CODE"
+                "Run: resilio auth url to get authorization link, "
+                "then resilio auth exchange --code YOUR_CODE"
             )
         elif error_type == "config":
-            error_data["next_steps"] = "Run: sce init to create data directories and config"
+            error_data["next_steps"] = "Run: resilio init to create data directories and config"
         elif error_type == "no_goal":
-            error_data["next_steps"] = "Run: sce goal set --type 10k --date 2026-06-01"
+            error_data["next_steps"] = "Run: resilio goal set --type 10k --date 2026-06-01"
         elif error_type == "insufficient_data":
             days_available = error_data.get("days_available", 0)
             days_needed = error_data.get("minimum_days_needed", 14)

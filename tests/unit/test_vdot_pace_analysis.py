@@ -7,7 +7,7 @@ Tests quality workout detection, HR-based easy pace classification, and VDOT inf
 import pytest
 from datetime import date, datetime, timedelta
 
-from sports_coach_engine.core.vdot.pace_analysis import (
+from resilio.core.vdot.pace_analysis import (
     calculate_easy_hr_range,
     is_easy_effort_by_hr,
     is_quality_workout,
@@ -15,7 +15,7 @@ from sports_coach_engine.core.vdot.pace_analysis import (
     find_vdot_from_easy_pace,
     analyze_recent_paces,
 )
-from sports_coach_engine.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import NormalizedActivity
 
 
 def create_run(
@@ -27,7 +27,7 @@ def create_run(
     is_treadmill: bool = False
 ) -> NormalizedActivity:
     """Helper to create a run activity with specific properties."""
-    from sports_coach_engine.schemas.activity import SportType, SurfaceType, DataQuality
+    from resilio.schemas.activity import SportType, SurfaceType, DataQuality
 
     duration_minutes = int(duration_seconds / 60)
     sport_type = SportType.TREADMILL_RUN if is_treadmill else SportType.RUN
@@ -194,7 +194,7 @@ class TestRecentPaceAnalysis:
     def test_quality_workouts_detected(self):
         """Quality workouts should be detected and analyzed."""
         max_hr = 200
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             # Quality workout: tempo at 5:00/km
@@ -225,7 +225,7 @@ class TestRecentPaceAnalysis:
     def test_easy_runs_detected_by_hr(self):
         """Easy runs should be detected by HR zone."""
         max_hr = 200
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             # Easy run: 6:30/km at 145 bpm (72.5% max)
@@ -256,7 +256,7 @@ class TestRecentPaceAnalysis:
 
     def test_no_hr_data_flag_set(self):
         """No HR data should set no_hr_data flag."""
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             create_run(
@@ -274,7 +274,7 @@ class TestRecentPaceAnalysis:
     def test_implied_vdot_range_calculated(self):
         """Implied VDOT range should span all detected runs."""
         max_hr = 200
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             # Fast quality workout
@@ -307,7 +307,7 @@ class TestRecentPaceAnalysis:
     def test_treadmill_runs_excluded(self):
         """Treadmill runs should be excluded from analysis."""
         max_hr = 200
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             # Treadmill run (unreliable pace)
@@ -330,7 +330,7 @@ class TestRecentPaceAnalysis:
     def test_short_runs_excluded(self):
         """Runs <1km or <5min should be excluded."""
         max_hr = 200
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             # Too short (warmup)
@@ -365,7 +365,7 @@ class TestEdgeCases:
     def test_quality_and_easy_not_double_counted(self):
         """Run should not be counted as both quality and easy."""
         max_hr = 200
-        today = date(2026, 2, 4)
+        today = date.today()
 
         activities = [
             # Tempo run with easy HR (conflicting signals)

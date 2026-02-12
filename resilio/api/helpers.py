@@ -2,7 +2,7 @@
 Helper functions for API error handling.
 
 Provides utilities to make error checking concise and clear when using
-the Sports Coach Engine API from coaching scripts.
+the Resilio API from coaching scripts.
 """
 
 from typing import Optional, Union
@@ -21,7 +21,7 @@ def is_error(result) -> bool:
         True if result is an error type, False if it's a success type
 
     Example:
-        >>> from sports_coach_engine.api import get_profile
+        >>> from resilio.api import get_profile
         >>> profile = get_profile()
         >>> if is_error(profile):
         ...     print(f"Error: {profile.message}")
@@ -29,15 +29,15 @@ def is_error(result) -> bool:
         ...     print(f"Name: {profile.name}")
     """
     # Import here to avoid circular dependencies
-    from sports_coach_engine.api.profile import ProfileError
-    from sports_coach_engine.api.sync import SyncError
-    from sports_coach_engine.api.coach import CoachError
-    from sports_coach_engine.api.metrics import MetricsError
-    from sports_coach_engine.api.plan import PlanError
-    from sports_coach_engine.api.vdot import VDOTError
-    from sports_coach_engine.api.guardrails import GuardrailsError
-    from sports_coach_engine.api.analysis import AnalysisError
-    from sports_coach_engine.api.validation import ValidationError
+    from resilio.api.profile import ProfileError
+    from resilio.api.sync import SyncError
+    from resilio.api.coach import CoachError
+    from resilio.api.metrics import MetricsError
+    from resilio.api.plan import PlanError
+    from resilio.api.vdot import VDOTError
+    from resilio.api.guardrails import GuardrailsError
+    from resilio.api.analysis import AnalysisError
+    from resilio.api.validation import ValidationError
 
     return isinstance(
         result,

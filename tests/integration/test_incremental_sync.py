@@ -14,11 +14,11 @@ from datetime import date, datetime, timezone
 from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
-from sports_coach_engine.core.workflows import run_sync_workflow
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.config import Config, Secrets, Settings
-from sports_coach_engine.schemas.config import StravaSecrets
-from sports_coach_engine.schemas.sync import SyncPhase, SyncReport
+from resilio.core.workflows import run_sync_workflow
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.config import Config, Secrets, Settings
+from resilio.schemas.config import StravaSecrets
+from resilio.schemas.sync import SyncPhase, SyncReport
 
 
 @pytest.fixture
@@ -77,9 +77,9 @@ def repo_with_activities(tmp_path):
 class TestIncrementalSync:
     """Tests for incremental sync processing."""
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_activity_persisted_before_next_processed(
         self,
         mock_metrics,
@@ -89,7 +89,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Activities should be saved incrementally, not batched."""
-        from sports_coach_engine.schemas.activity import RawActivity, ActivitySource
+        from resilio.schemas.activity import RawActivity, ActivitySource
 
         # Create 3 activities to sync
         activities = [
@@ -145,9 +145,9 @@ class TestIncrementalSync:
             "data/activities/2026-01/2026-01-17_run_0700.yaml"
         )
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_resume_after_rate_limit(
         self,
         mock_metrics,
@@ -157,7 +157,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Sync should resume from where it stopped after rate limit."""
-        from sports_coach_engine.schemas.activity import (
+        from resilio.schemas.activity import (
             RawActivity,
             ActivitySource,
         )
@@ -255,9 +255,9 @@ class TestIncrementalSync:
         assert result2.phase == SyncPhase.DONE
         assert result2.activities_imported == 1
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_rate_limit_persists_resume_cursor_state(
         self,
         mock_metrics,
@@ -267,7 +267,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Rate-limit pause should persist backfill/resume cursor state."""
-        from sports_coach_engine.schemas.activity import ActivitySource, RawActivity
+        from resilio.schemas.activity import ActivitySource, RawActivity
 
         raw_activity = RawActivity(
             id="strava_300",
@@ -342,9 +342,9 @@ class TestIncrementalSync:
         assert progress_payload["cursor_before_timestamp"] == 1736500000
         assert progress_payload["updated_at"] is not None
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_completion_clears_resume_state_and_progress_file(
         self,
         mock_metrics,
@@ -354,7 +354,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Successful completion after paused state should clear resume cursor/progress."""
-        from sports_coach_engine.schemas.activity import ActivitySource, RawActivity
+        from resilio.schemas.activity import ActivitySource, RawActivity
 
         # Seed a paused backfill state + heartbeat progress file.
         repo_with_activities.write_yaml(
@@ -440,9 +440,9 @@ class TestIncrementalSync:
         assert training_history["last_progress_at"] is not None
         assert repo_with_activities.file_exists("config/.sync_progress.json") is False
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_profile_failure_doesnt_block_activities(
         self,
         mock_metrics,
@@ -452,7 +452,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Profile update failure should not stop activity sync."""
-        from sports_coach_engine.schemas.activity import RawActivity, ActivitySource
+        from resilio.schemas.activity import RawActivity, ActivitySource
 
         # Mock profile update to fail
         mock_profile.side_effect = Exception("Profile fetch failed")
@@ -482,9 +482,9 @@ class TestIncrementalSync:
         # Profile failure should be surfaced as sync errors
         assert any("Profile update failed" in e for e in result.errors)
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_metrics_failure_doesnt_block_activities(
         self,
         mock_metrics,
@@ -494,7 +494,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Metrics computation failure should not stop activity persistence."""
-        from sports_coach_engine.schemas.activity import RawActivity, ActivitySource
+        from resilio.schemas.activity import RawActivity, ActivitySource
 
         # Mock metrics to fail
         mock_metrics.side_effect = Exception("Metrics computation failed")
@@ -529,9 +529,9 @@ class TestIncrementalSync:
             "data/activities/2026-01/2026-01-15_run_0700.yaml"
         )
 
-    @patch("sports_coach_engine.core.workflows.sync_strava_generator")
-    @patch("sports_coach_engine.core.workflows._fetch_and_update_athlete_profile")
-    @patch("sports_coach_engine.core.workflows.recompute_all_metrics")
+    @patch("resilio.core.workflows.sync_strava_generator")
+    @patch("resilio.core.workflows._fetch_and_update_athlete_profile")
+    @patch("resilio.core.workflows.recompute_all_metrics")
     def test_no_duplicate_activities_created(
         self,
         mock_metrics,
@@ -541,7 +541,7 @@ class TestIncrementalSync:
         mock_config,
     ):
         """Re-running sync should not create duplicate activities."""
-        from sports_coach_engine.schemas.activity import RawActivity, ActivitySource
+        from resilio.schemas.activity import RawActivity, ActivitySource
 
         # Same activity synced twice
         activity = RawActivity(

@@ -14,13 +14,13 @@ Key Innovation: HR-based easy pace detection
 from typing import List, Optional, Tuple
 from datetime import date, timedelta
 
-from sports_coach_engine.schemas.vdot import (
+from resilio.schemas.vdot import (
     WorkoutPaceData,
     EasyPaceData,
     PaceAnalysisResult,
 )
-from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.core.vdot.tables import VDOT_TABLE
+from resilio.schemas.activity import NormalizedActivity
+from resilio.core.vdot.tables import VDOT_TABLE
 
 
 def calculate_easy_hr_range(max_hr: int) -> Tuple[int, int]:
@@ -150,7 +150,7 @@ def analyze_recent_paces(
         PaceAnalysisResult with detected workouts and easy runs
     """
     from datetime import date as dt_date
-    from sports_coach_engine.schemas.activity import SportType, SurfaceType
+    from resilio.schemas.activity import SportType, SurfaceType
 
     today = dt_date.today()
     cutoff_date = today - timedelta(days=lookback_days)

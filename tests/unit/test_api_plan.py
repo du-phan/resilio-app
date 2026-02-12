@@ -11,7 +11,7 @@ from datetime import date, timedelta
 from unittest.mock import Mock, patch
 from pathlib import Path
 
-from sports_coach_engine.api.plan import (
+from resilio.api.plan import (
     get_current_plan,
     export_plan_structure,
     build_macro_template,
@@ -27,9 +27,9 @@ from sports_coach_engine.api.plan import (
     DeclineResult,
     PlanWeeksResult,
 )
-from sports_coach_engine.schemas.plan import MasterPlan
-from sports_coach_engine.schemas.profile import Goal, GoalType, AthleteProfile
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+from resilio.schemas.plan import MasterPlan
+from resilio.schemas.profile import Goal, GoalType, AthleteProfile
+from resilio.schemas.repository import RepoError, RepoErrorType
 from types import SimpleNamespace
 
 
@@ -71,7 +71,7 @@ def mock_log():
 
 class TestGetCurrentPlan:
     """Test get_current_plan() function."""
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_get_current_plan_success(self, mock_repo_cls, mock_log, mock_plan):
         """Test successful plan retrieval."""
         mock_repo = Mock()
@@ -90,7 +90,7 @@ class TestGetCurrentPlan:
         # Verify read_yaml was called correctly
         mock_repo.read_yaml.assert_called_once()
 
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_get_current_plan_not_found(self, mock_repo_cls, mock_log):
         """Test plan retrieval when no plan exists."""
         mock_repo = Mock()
@@ -106,7 +106,7 @@ class TestGetCurrentPlan:
         assert result.error_type == "not_found"
         assert "No training plan found" in result.message
 
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_get_current_plan_validation_error(self, mock_repo_cls, mock_log):
         """Test plan retrieval with validation error."""
         mock_repo = Mock()
@@ -132,7 +132,7 @@ def _write_week_plan(tmp_path: Path, week: dict) -> str:
 class TestValidateWeekPlanMaxSession:
     """Tests for max session enforcement in validate_week_plan."""
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_uses_slowest_pace_range(self, mock_get_profile, tmp_path):
         """Slow end of pace_range should drive max-session validation."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -164,7 +164,7 @@ class TestValidateWeekPlanMaxSession:
         assert result["is_valid"] is False
         assert any("exceeds max session limit" in e for e in result["errors"])
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_uses_ceil_for_duration(self, mock_get_profile, tmp_path):
         """Ceil rounding should enforce over-limit durations."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -196,7 +196,7 @@ class TestValidateWeekPlanMaxSession:
         assert result["is_valid"] is False
         assert any("exceeds max session limit" in e for e in result["errors"])
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_non_rest_zero_distance_is_error(self, mock_get_profile, tmp_path):
         """Non-rest workouts missing distance/duration should fail."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -227,7 +227,7 @@ class TestValidateWeekPlanMaxSession:
         assert result["is_valid"] is False
         assert any("missing distance_km and duration_minutes" in e for e in result["errors"])
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_rest_zero_distance_is_ok(self, mock_get_profile, tmp_path):
         """Rest workouts with zero distance should be allowed."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -257,7 +257,7 @@ class TestValidateWeekPlanMaxSession:
 
         assert result["is_valid"] is True
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_uses_pace_range_max_fields(self, mock_get_profile, tmp_path):
         """pace_range_min_km/pace_range_max_km should be used if pace_range missing."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -290,7 +290,7 @@ class TestValidateWeekPlanMaxSession:
         assert result["is_valid"] is False
         assert any("exceeds max session limit" in e for e in result["errors"])
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_max_session_zero_is_error(self, mock_get_profile, tmp_path):
         """max_time_per_session_minutes = 0 should fail validation."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -321,7 +321,7 @@ class TestValidateWeekPlanMaxSession:
         assert result["is_valid"] is False
         assert any("max_time_per_session_minutes is 0" in e for e in result["errors"])
 
-    @patch("sports_coach_engine.api.profile.get_profile")
+    @patch("resilio.api.profile.get_profile")
     def test_intervals_use_slowest_pace(self, mock_get_profile, tmp_path):
         """Intervals should use slowest pace for duration estimation."""
         mock_get_profile.return_value = SimpleNamespace(
@@ -359,7 +359,7 @@ class TestValidateWeekPlanMaxSession:
 # ============================================================
 
 
-@patch("sports_coach_engine.api.plan.get_current_plan")
+@patch("resilio.api.plan.get_current_plan")
 def test_export_plan_structure_uses_race_week_from_plan(mock_get_plan, mock_log):
     """Race week should match the week that contains goal date."""
     weeks = [
@@ -401,7 +401,7 @@ def test_export_plan_structure_uses_race_week_from_plan(mock_get_plan, mock_log)
     assert result.race_week == 3
 
 
-@patch("sports_coach_engine.api.plan.get_current_plan")
+@patch("resilio.api.plan.get_current_plan")
 def test_export_plan_structure_derives_phases_and_volumes(mock_get_plan, mock_log):
     """Phases, volumes, and recovery weeks should match stored plan."""
     weeks = [
@@ -446,7 +446,7 @@ def test_export_plan_structure_derives_phases_and_volumes(mock_get_plan, mock_lo
     assert result.recovery_weeks == [2]
 
 
-@patch("sports_coach_engine.api.plan.get_current_plan")
+@patch("resilio.api.plan.get_current_plan")
 def test_export_plan_structure_general_fitness_no_date(mock_get_plan, mock_log):
     """General fitness with no target date should return race_week=None."""
     weeks = [
@@ -503,7 +503,7 @@ def test_build_macro_template_shape():
 # ============================================================
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_with_valid_template(mock_repo_cls):
     """Test creating macro plan with valid template (single-sport, no systemic load)."""
     mock_repo = Mock()
@@ -539,7 +539,7 @@ def test_create_macro_plan_with_valid_template(mock_repo_cls):
     assert result.weeks[0].target_systemic_load_au == 0.0  # Default for single-sport
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_with_systemic_load_targets(mock_repo_cls):
     """Test creating macro plan with systemic load targets (multi-sport)."""
     mock_repo = Mock()
@@ -576,7 +576,7 @@ def test_create_macro_plan_with_systemic_load_targets(mock_repo_cls):
     assert result.weeks[2].target_systemic_load_au == 110.0
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_validates_volumes_positive(mock_repo_cls):
     """Test that negative or zero volumes are rejected."""
     mock_repo = Mock()
@@ -608,7 +608,7 @@ def test_create_macro_plan_validates_volumes_positive(mock_repo_cls):
     assert "positive number" in result.message
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_derives_starting_peak_volumes(mock_repo_cls):
     """Test that starting/peak volumes are derived from weekly_volumes_km."""
     mock_repo = Mock()
@@ -641,7 +641,7 @@ def test_create_macro_plan_derives_starting_peak_volumes(mock_repo_cls):
     assert max(w.target_volume_km for w in result.weeks) == 35.0  # Peak
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_validates_structure_hints_schema(mock_repo_cls):
     """Test that invalid structure hints are rejected."""
     mock_repo = Mock()
@@ -673,7 +673,7 @@ def test_create_macro_plan_validates_structure_hints_schema(mock_repo_cls):
     assert "invalid" in result.message.lower()
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_rejects_length_mismatch(mock_repo_cls):
     """Test that volume/hint length mismatches are rejected."""
     mock_repo = Mock()
@@ -705,7 +705,7 @@ def test_create_macro_plan_rejects_length_mismatch(mock_repo_cls):
     assert "length" in result.message
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_validates_systemic_load_length(mock_repo_cls):
     """Test that systemic load length must match total_weeks."""
     mock_repo = Mock()
@@ -739,7 +739,7 @@ def test_create_macro_plan_validates_systemic_load_length(mock_repo_cls):
     assert "weekly_systemic_load_au length" in result.message
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_validates_systemic_load_non_negative(mock_repo_cls):
     """Test that negative systemic load values are rejected."""
     mock_repo = Mock()
@@ -773,7 +773,7 @@ def test_create_macro_plan_validates_systemic_load_non_negative(mock_repo_cls):
     assert "non-negative" in result.message
 
 
-@patch("sports_coach_engine.core.repository.RepositoryIO")
+@patch("resilio.core.repository.RepositoryIO")
 def test_create_macro_plan_defaults_systemic_load_to_zero(mock_repo_cls):
     """Test that systemic load defaults to 0.0 when not provided (single-sport)."""
     mock_repo = Mock()
@@ -812,8 +812,8 @@ def test_create_macro_plan_defaults_systemic_load_to_zero(mock_repo_cls):
 
 class TestRegeneratePlan:
     """Test regenerate_plan() function."""
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
-    @patch("sports_coach_engine.api.plan.run_plan_generation")
+    @patch("resilio.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.run_plan_generation")
     def test_regenerate_plan_no_goal(self, mock_workflow, mock_repo_cls, mock_log, mock_plan):
         """Test regenerating plan without changing goal."""
         mock_repo = Mock()
@@ -837,8 +837,8 @@ class TestRegeneratePlan:
         call_args = mock_workflow.call_args
         assert call_args.kwargs["goal"] is None
 
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
-    @patch("sports_coach_engine.api.plan.run_plan_generation")
+    @patch("resilio.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.run_plan_generation")
     def test_regenerate_plan_with_new_goal(
         self, mock_workflow, mock_repo_cls, mock_log, mock_plan, mock_profile
     ):
@@ -878,7 +878,7 @@ class TestRegeneratePlan:
         call_args = mock_workflow.call_args
         assert call_args.kwargs["goal"] == new_goal
 
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_regenerate_plan_profile_error(self, mock_repo_cls, mock_log):
         """Test regenerating plan with profile error."""
         mock_repo = Mock()
@@ -900,11 +900,11 @@ class TestRegeneratePlan:
         assert result.error_type == "validation"
         assert "Failed to load profile" in result.message
 
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
-    @patch("sports_coach_engine.api.plan.run_plan_generation")
+    @patch("resilio.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.run_plan_generation")
     def test_regenerate_plan_workflow_failure(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan with workflow failure."""
-        from sports_coach_engine.core.workflows import WorkflowError
+        from resilio.core.workflows import WorkflowError
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -919,8 +919,8 @@ class TestRegeneratePlan:
         assert result.error_type == "unknown"
         assert "Failed to generate plan" in result.message
 
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
-    @patch("sports_coach_engine.api.plan.run_plan_generation")
+    @patch("resilio.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.run_plan_generation")
     def test_regenerate_plan_no_goal_set(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan when no goal is set."""
         mock_repo = Mock()
@@ -948,7 +948,7 @@ class TestRegeneratePlan:
 
 class TestGetPendingSuggestions:
     """Test get_pending_suggestions() function."""
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_get_pending_suggestions_empty(self, mock_repo_cls, mock_log):
         """Test getting pending suggestions (v0 simplified)."""
         mock_repo = Mock()
@@ -968,7 +968,7 @@ class TestGetPendingSuggestions:
 
 class TestAcceptSuggestion:
     """Test accept_suggestion() function."""
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_accept_suggestion_v0_simplified(self, mock_repo_cls, mock_log):
         """Test accepting suggestion (v0 simplified)."""
         mock_repo = Mock()
@@ -989,7 +989,7 @@ class TestAcceptSuggestion:
 
 class TestDeclineSuggestion:
     """Test decline_suggestion() function."""
-    @patch("sports_coach_engine.api.plan.RepositoryIO")
+    @patch("resilio.api.plan.RepositoryIO")
     def test_decline_suggestion_v0_simplified(self, mock_repo_cls, mock_log):
         """Test declining suggestion (v0 simplified)."""
         mock_repo = Mock()
@@ -1042,7 +1042,7 @@ def mock_plan_with_weeks():
 class TestGetPlanWeeks:
     """Test get_plan_weeks() function."""
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_current_week_default(self, mock_get_plan, mock_plan_with_weeks):
         """Test retrieving current week (default behavior)."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1056,7 +1056,7 @@ class TestGetPlanWeeks:
         assert result.total_weeks == 9
         assert "Week 3 of 9" in result.week_range
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_next_week(self, mock_get_plan, mock_plan_with_weeks):
         """Test retrieving next week with --next flag."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1069,7 +1069,7 @@ class TestGetPlanWeeks:
         assert result.weeks[0].week_number == 4  # Next week
         assert "Week 4 of 9" in result.week_range
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_specific_week_number(self, mock_get_plan, mock_plan_with_weeks):
         """Test retrieving specific week by number."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1082,7 +1082,7 @@ class TestGetPlanWeeks:
         assert result.weeks[0].week_number == 5
         assert "Week 5 of 9" in result.week_range
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_week_by_date(self, mock_get_plan, mock_plan_with_weeks):
         """Test retrieving week containing specific date."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1097,7 +1097,7 @@ class TestGetPlanWeeks:
         assert len(result.weeks) == 1
         assert result.weeks[0].week_number == 5
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_multiple_consecutive_weeks(self, mock_get_plan, mock_plan_with_weeks):
         """Test retrieving multiple consecutive weeks with --count."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1111,7 +1111,7 @@ class TestGetPlanWeeks:
         assert result.weeks[1].week_number == 6
         assert "Weeks 5-6 of 9" in result.week_range
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_week_out_of_range(self, mock_get_plan, mock_plan_with_weeks):
         """Test error when week number is out of range."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1123,7 +1123,7 @@ class TestGetPlanWeeks:
         assert result.error_type == "validation"
         assert "out of range" in result.message
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_next_week_beyond_plan_end(self, mock_get_plan, mock_plan_with_weeks):
         """Test error when next week is beyond plan end."""
         # Adjust all weeks so week 9 is the current week
@@ -1146,7 +1146,7 @@ class TestGetPlanWeeks:
         assert result.error_type == "not_found"
         assert "beyond plan end" in result.message
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_week_by_date_not_found(self, mock_get_plan, mock_plan_with_weeks):
         """Test error when date is not in any week."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1161,7 +1161,7 @@ class TestGetPlanWeeks:
         assert result.error_type == "not_found"
         assert "No week found" in result.message
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_get_weeks_no_plan_exists(self, mock_get_plan):
         """Test error when no plan exists."""
         mock_get_plan.return_value = PlanError(
@@ -1175,7 +1175,7 @@ class TestGetPlanWeeks:
         assert isinstance(result, PlanError)
         assert result.error_type == "not_found"
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_plan_context_included(self, mock_get_plan, mock_plan_with_weeks):
         """Test that plan context is included in result."""
         mock_get_plan.return_value = mock_plan_with_weeks
@@ -1188,7 +1188,7 @@ class TestGetPlanWeeks:
         assert result.plan_context["peak_volume_km"] == 45.19
         assert result.plan_context["conflict_policy"] == "running_goal_wins"
 
-    @patch("sports_coach_engine.api.plan.get_current_plan")
+    @patch("resilio.api.plan.get_current_plan")
     def test_goal_details_included(self, mock_get_plan, mock_plan_with_weeks):
         """Test that goal details are included in result."""
         mock_get_plan.return_value = mock_plan_with_weeks

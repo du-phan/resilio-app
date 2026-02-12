@@ -9,12 +9,12 @@ from datetime import date, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass
 
-from sports_coach_engine.core.paths import daily_metrics_path
-from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.core.enrichment import enrich_metrics
-from sports_coach_engine.schemas.metrics import DailyMetrics, ReadinessScore, IntensityDistribution
-from sports_coach_engine.schemas.enrichment import EnrichedMetrics
+from resilio.core.paths import daily_metrics_path
+from resilio.core.repository import RepositoryIO, ReadOptions
+from resilio.schemas.repository import RepoError
+from resilio.core.enrichment import enrich_metrics
+from resilio.schemas.metrics import DailyMetrics, ReadinessScore, IntensityDistribution
+from resilio.schemas.enrichment import EnrichedMetrics
 
 
 # ============================================================

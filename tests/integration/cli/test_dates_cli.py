@@ -1,5 +1,5 @@
 """
-Integration tests for sce dates CLI commands.
+Integration tests for resilio dates CLI commands.
 
 Tests the CLI interface, JSON output formatting, and error handling.
 """
@@ -9,14 +9,14 @@ import pytest
 from datetime import date, timedelta
 from typer.testing import CliRunner
 
-from sports_coach_engine.cli.commands.dates import app
+from resilio.cli.commands.dates import app
 
 
 runner = CliRunner()
 
 
 class TestTodayCommand:
-    """Tests for 'sce dates today' command."""
+    """Tests for 'resilio dates today' command."""
 
     def test_returns_json_envelope(self):
         """Should return valid JSON envelope with ok=True."""
@@ -74,7 +74,7 @@ class TestTodayCommand:
 
 
 class TestNextMondayCommand:
-    """Tests for 'sce dates next-monday' command."""
+    """Tests for 'resilio dates next-monday' command."""
 
     def test_from_saturday(self):
         """Next Monday from Saturday should be 2 days ahead."""
@@ -142,7 +142,7 @@ class TestNextMondayCommand:
 
 
 class TestWeekBoundariesCommand:
-    """Tests for 'sce dates week-boundaries' command."""
+    """Tests for 'resilio dates week-boundaries' command."""
 
     def test_monday_input(self):
         """Should return Monday-Sunday boundaries."""
@@ -200,7 +200,7 @@ class TestWeekBoundariesCommand:
 
 
 class TestValidateCommand:
-    """Tests for 'sce dates validate' command."""
+    """Tests for 'resilio dates validate' command."""
 
     def test_monday_validates_as_monday(self):
         """Monday should validate as Monday."""

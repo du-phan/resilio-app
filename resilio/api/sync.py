@@ -9,16 +9,16 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Optional, Union
 
-from sports_coach_engine.core.config import ConfigError, load_config
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.strava import StravaRateLimitError
-from sports_coach_engine.core.workflows import (
+from resilio.core.config import ConfigError, load_config
+from resilio.core.repository import RepositoryIO
+from resilio.core.strava import StravaRateLimitError
+from resilio.core.workflows import (
     WorkflowError,
     run_manual_activity_workflow,
     run_sync_workflow,
 )
-from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.schemas.sync import SyncReport
+from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.sync import SyncReport
 
 
 @dataclass

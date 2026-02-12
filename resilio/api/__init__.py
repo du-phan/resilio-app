@@ -14,7 +14,7 @@ Modules:
 """
 
 # Re-export all public functions for convenient access
-from sports_coach_engine.api.coach import (
+from resilio.api.coach import (
     get_todays_workout,
     get_weekly_status,
     get_training_status,
@@ -22,20 +22,20 @@ from sports_coach_engine.api.coach import (
     WeeklyStatus,
 )
 
-from sports_coach_engine.api.sync import (
+from resilio.api.sync import (
     sync_strava,
     log_activity,
     SyncError,
 )
 
-from sports_coach_engine.api.metrics import (
+from resilio.api.metrics import (
     get_current_metrics,
     get_readiness,
     get_intensity_distribution,
     MetricsError,
 )
 
-from sports_coach_engine.api.plan import (
+from resilio.api.plan import (
     get_current_plan,
     export_plan_structure,
     build_macro_template,
@@ -58,7 +58,7 @@ from sports_coach_engine.api.plan import (
     assess_override_risk,
 )
 
-from sports_coach_engine.api.profile import (
+from resilio.api.profile import (
     create_profile,
     get_profile,
     update_profile,
@@ -66,13 +66,13 @@ from sports_coach_engine.api.profile import (
     ProfileError,
 )
 
-from sports_coach_engine.api.helpers import (
+from resilio.api.helpers import (
     is_error,
     get_error_message,
     handle_error,
 )
 
-from sports_coach_engine.api.vdot import (
+from resilio.api.vdot import (
     calculate_vdot_from_race,
     get_training_paces,
     predict_race_times,
@@ -81,7 +81,7 @@ from sports_coach_engine.api.vdot import (
     VDOTError,
 )
 
-from sports_coach_engine.api.guardrails import (
+from resilio.api.guardrails import (
     validate_quality_volume,
     validate_weekly_progression,
     validate_long_run_limits,
@@ -93,7 +93,7 @@ from sports_coach_engine.api.guardrails import (
     GuardrailsError,
 )
 
-from sports_coach_engine.api.analysis import (
+from resilio.api.analysis import (
     api_validate_intensity_distribution,
     api_detect_activity_gaps,
     api_analyze_load_distribution_by_sport,
@@ -105,14 +105,14 @@ from sports_coach_engine.api.analysis import (
     AnalysisError,
 )
 
-from sports_coach_engine.api.validation import (
+from resilio.api.validation import (
     api_validate_interval_structure,
     api_validate_plan_structure,
     api_assess_goal_feasibility,
     ValidationError,
 )
 
-from sports_coach_engine.core.memory import (
+from resilio.core.memory import (
     save_memory,
     load_memories,
     get_memories_by_type,
@@ -121,7 +121,7 @@ from sports_coach_engine.core.memory import (
     analyze_memory_patterns,
 )
 
-from sports_coach_engine.core.repository import RepositoryIO
+from resilio.core.repository import RepositoryIO
 
 __all__ = [
     # Coach operations

@@ -4,10 +4,10 @@ Approval state persistence helpers.
 
 from typing import Optional, Union
 
-from sports_coach_engine.core.paths import approvals_state_path
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.approvals import ApprovalState
-from sports_coach_engine.schemas.repository import RepoError
+from resilio.core.paths import approvals_state_path
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.approvals import ApprovalState
+from resilio.schemas.repository import RepoError
 
 
 def load_approval_state() -> Union[ApprovalState, None, RepoError]:

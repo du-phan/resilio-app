@@ -11,11 +11,11 @@ from dataclasses import dataclass
 from collections import defaultdict, Counter
 import logging
 
-from sports_coach_engine.core.paths import athlete_profile_path, get_activities_dir
-from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-from sports_coach_engine.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
-from sports_coach_engine.schemas.profile import (
+from resilio.core.paths import athlete_profile_path, get_activities_dir
+from resilio.core.repository import RepositoryIO, ReadOptions
+from resilio.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
+from resilio.schemas.repository import RepoError, RepoErrorType
+from resilio.schemas.profile import (
     AthleteProfile,
     Goal,
     GoalType,
@@ -31,7 +31,7 @@ from sports_coach_engine.schemas.profile import (
     PauseReason,
     PBEntry,
 )
-from sports_coach_engine.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import NormalizedActivity
 
 
 # ============================================================
@@ -128,7 +128,7 @@ def create_profile(
     if existing_result is not None and not isinstance(existing_result, RepoError):
         return ProfileError(
             error_type="validation",
-            message="Profile already exists. Use 'sce profile set' to update it or delete the existing profile first.",
+            message="Profile already exists. Use 'resilio profile set' to update it or delete the existing profile first.",
         )
 
     # Parse enums
@@ -173,7 +173,7 @@ def create_profile(
     # Create preferences with provided values or defaults
     preferences = CommunicationPreferences(
         detail_level=detail_level if detail_level is not None else DetailLevel.MODERATE,
-        coaching_style=coaching_style if coaching_style is not None else CoachingStyle.SUPPORTIVE,
+        coaching_style=coaching_style if coaching_style is not None else CoachingStyle.ANALYTICAL,
         intensity_metric=intensity_metric if intensity_metric is not None else IntensityMetric.PACE,
     )
 
@@ -358,7 +358,7 @@ def set_personal_best(
     Returns:
         Dict with PB info on success, ProfileError on failure.
     """
-    from sports_coach_engine.api.vdot import calculate_vdot_from_race, VDOTError
+    from resilio.api.vdot import calculate_vdot_from_race, VDOTError
 
     # Handle the 'date' parameter being passed as kwarg (from CLI)
     pb_date = date_str or kwargs.get("date", "")
@@ -366,7 +366,7 @@ def set_personal_best(
         return ProfileError(error_type="validation", message="Date is required")
 
     # Validate distance
-    from sports_coach_engine.schemas.vdot import RaceDistance
+    from resilio.schemas.vdot import RaceDistance
     valid_distances = [d.value for d in RaceDistance]
     if distance.lower() not in valid_distances:
         return ProfileError(
@@ -609,7 +609,7 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
         ProfileError if no activities found or computation fails
 
     Example CLI usage:
-        sce profile analyze
+        resilio profile analyze
 
     Example output:
         {
@@ -643,7 +643,7 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
     if not activities:
         return ProfileError(
             error_type="not_found",
-            message="No activities found. Run 'sce sync' first to import activities."
+            message="No activities found. Run 'resilio sync' first to import activities."
         )
 
     # Sort by date
@@ -958,7 +958,7 @@ def _load_profile_for_sport_update(
         if result.error_type == RepoErrorType.FILE_NOT_FOUND:
             return ProfileError(
                 error_type="not_found",
-                message="Profile not found. Create a profile first using 'sce profile create'",
+                message="Profile not found. Create a profile first using 'resilio profile create'",
             )
         return ProfileError(
             error_type="unknown",
@@ -993,7 +993,7 @@ def add_sport_to_profile(
         >>> add_sport_to_profile("climbing", frequency=3, duration=120, intensity="moderate_to_hard")
         >>> add_sport_to_profile("yoga", frequency=2, unavailable_days=[Weekday.SUNDAY], intensity="easy")
     """
-    from sports_coach_engine.schemas.profile import OtherSport
+    from resilio.schemas.profile import OtherSport
 
     repo = RepositoryIO()
     profile_path = athlete_profile_path()
@@ -1077,7 +1077,7 @@ def remove_sport_from_profile(sport: str) -> Union[AthleteProfile, ProfileError]
     if len(updated_sports) == len(profile.other_sports):
         return ProfileError(
             error_type="validation",
-            message=f"Sport '{sport}' not found in profile. Use 'sce profile list-sports' to see configured sports."
+            message=f"Sport '{sport}' not found in profile. Use 'resilio profile list-sports' to see configured sports."
         )
 
     profile.other_sports = updated_sports
@@ -1140,7 +1140,7 @@ def pause_sport_in_profile(
     if not matched:
         return ProfileError(
             error_type="validation",
-            message=f"Active sport '{sport}' not found in profile. Use 'sce profile list-sports' to inspect configured sports.",
+            message=f"Active sport '{sport}' not found in profile. Use 'resilio profile list-sports' to inspect configured sports.",
         )
 
     write_result = repo.write_yaml(profile_path, profile)
@@ -1178,7 +1178,7 @@ def resume_sport_in_profile(sport: str) -> Union[AthleteProfile, ProfileError]:
     if not matched:
         return ProfileError(
             error_type="validation",
-            message=f"Paused sport '{sport}' not found in profile. Use 'sce profile list-sports' to inspect configured sports.",
+            message=f"Paused sport '{sport}' not found in profile. Use 'resilio profile list-sports' to inspect configured sports.",
         )
 
     write_result = repo.write_yaml(profile_path, profile)
@@ -1245,7 +1245,7 @@ def validate_profile_completeness() -> Union[Dict, ProfileError]:
                         f"Your Strava data shows {sport} as {percentage:.1f}% of activities "
                         f"({analysis_result.sport_distribution.get(sport, 0)} sessions in last 120 days), "
                         f"but it's not in other_sports. Add it for accurate load calculations: "
-                        f"sce profile add-sport --sport {sport} "
+                        f"resilio profile add-sport --sport {sport} "
                         f"--frequency <times/week> "
                         f"--unavailable-days <days> "
                         f"--duration <mins> --intensity <level>"

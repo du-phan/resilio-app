@@ -1,5 +1,5 @@
 """
-sce sync - Import activities from Strava and inspect sync status.
+resilio sync - Import activities from Strava and inspect sync status.
 """
 
 import os
@@ -8,14 +8,14 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api import sync_strava
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import output_json
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.sync_state import read_resume_state
-from sports_coach_engine.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.schemas.sync import (
+from resilio.api import sync_strava
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import output_json
+from resilio.core.repository import RepositoryIO
+from resilio.core.sync_state import read_resume_state
+from resilio.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
+from resilio.schemas.repository import RepoError
+from resilio.schemas.sync import (
     SyncLockStatus,
     SyncPhase,
     SyncProgress,
@@ -156,7 +156,7 @@ def _build_success_message(result: SyncReport) -> str:
     if result.rate_limited:
         msg += (
             "\n\nStrava rate limit hit. Data saved successfully. "
-            "Wait 15 minutes and run 'sce sync' again to continue."
+            "Wait 15 minutes and run 'resilio sync' again to continue."
         )
     return msg
 

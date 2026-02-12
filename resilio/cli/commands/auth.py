@@ -1,5 +1,5 @@
 """
-sce auth - Manage Strava authentication.
+resilio auth - Manage Strava authentication.
 
 Handle OAuth flow for Strava API access: generate URL, exchange code, check status.
 """
@@ -11,14 +11,14 @@ from typing import Optional
 import typer
 import yaml
 
-from sports_coach_engine.core.config import load_config
-from sports_coach_engine.core.strava import (
+from resilio.core.config import load_config
+from resilio.core.strava import (
     StravaAuthError,
     exchange_code_for_tokens,
     initiate_oauth,
 )
-from sports_coach_engine.cli.errors import EXIT_AUTH_FAILURE, EXIT_CONFIG_MISSING, EXIT_SUCCESS
-from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
+from resilio.cli.errors import EXIT_AUTH_FAILURE, EXIT_CONFIG_MISSING, EXIT_SUCCESS
+from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
 
 # Create subcommand app
 app = typer.Typer(help="Manage Strava authentication")
@@ -32,11 +32,11 @@ def auth_url_command(ctx: typer.Context) -> None:
     the app to access their Strava data.
 
     Workflow:
-        1. Run: sce auth url
+        1. Run: resilio auth url
         2. Open the URL in browser
         3. Authorize the app
         4. Copy the authorization code from redirect URL
-        5. Run: sce auth exchange --code YOUR_CODE
+        5. Run: resilio auth exchange --code YOUR_CODE
     """
     # Get repo root
     cli_ctx = ctx.obj
@@ -49,7 +49,7 @@ def auth_url_command(ctx: typer.Context) -> None:
         envelope = create_error_envelope(
             error_type="config",
             message=f"Failed to load config: {e}",
-            data={"next_steps": "Run: sce init to create config files"},
+            data={"next_steps": "Run: resilio init to create config files"},
         )
         output_json(envelope)
         raise typer.Exit(code=EXIT_CONFIG_MISSING)
@@ -76,7 +76,7 @@ def auth_url_command(ctx: typer.Context) -> None:
         envelope = create_error_envelope(
             error_type="config",
             message="secrets.local.yaml not found",
-            data={"next_steps": "Run: sce init to create config files"},
+            data={"next_steps": "Run: resilio init to create config files"},
         )
         output_json(envelope)
         raise typer.Exit(code=EXIT_CONFIG_MISSING)
@@ -96,7 +96,7 @@ def auth_url_command(ctx: typer.Context) -> None:
                 "1. Open the URL in your browser",
                 "2. Authorize the app",
                 "3. Copy the 'code' parameter from redirect URL",
-                "4. Run: sce auth exchange --code YOUR_CODE",
+                "4. Run: resilio auth exchange --code YOUR_CODE",
             ],
         },
     )
@@ -128,7 +128,7 @@ def auth_exchange_command(
         envelope = create_error_envelope(
             error_type="config",
             message=f"Failed to load config: {e}",
-            data={"next_steps": "Run: sce init to create config files"},
+            data={"next_steps": "Run: resilio init to create config files"},
         )
         output_json(envelope)
         raise typer.Exit(code=EXIT_CONFIG_MISSING)
@@ -168,7 +168,7 @@ def auth_exchange_command(
         envelope = create_error_envelope(
             error_type="config",
             message="secrets.local.yaml not found",
-            data={"next_steps": "Run: sce init to create config files"},
+            data={"next_steps": "Run: resilio init to create config files"},
         )
         output_json(envelope)
         raise typer.Exit(code=EXIT_CONFIG_MISSING)
@@ -181,7 +181,7 @@ def auth_exchange_command(
             error_type="auth",
             message=f"Token exchange failed: {e}",
             data={
-                "next_steps": "Run: sce auth url to get a new authorization URL and try again"
+                "next_steps": "Run: resilio auth url to get a new authorization URL and try again"
             },
         )
         output_json(envelope)
@@ -203,7 +203,7 @@ def auth_exchange_command(
             "status": "authorized",
             "expires_at": expires_dt.isoformat(),
             "token_stored": str(secrets_path),
-            "next_steps": ["Run: sce sync to import your activities"],
+            "next_steps": ["Run: resilio sync to import your activities"],
         },
     )
     output_json(envelope)
@@ -236,7 +236,7 @@ def auth_status_command(ctx: typer.Context) -> None:
                 message="No Strava token found",
                 data={
                     "authenticated": False,
-                    "next_steps": "Run: sce auth url to start OAuth flow",
+                    "next_steps": "Run: resilio auth url to start OAuth flow",
                 },
             )
             output_json(envelope)
@@ -256,7 +256,7 @@ def auth_status_command(ctx: typer.Context) -> None:
                         "authenticated": False,
                         "expired": True,
                         "expired_at": expires_dt.isoformat(),
-                        "next_steps": "Run: sce auth url to refresh authentication",
+                        "next_steps": "Run: resilio auth url to refresh authentication",
                     },
                 )
                 output_json(envelope)
@@ -290,7 +290,7 @@ def auth_status_command(ctx: typer.Context) -> None:
         envelope = create_error_envelope(
             error_type="config",
             message="secrets.local.yaml not found",
-            data={"next_steps": "Run: sce init to create config files"},
+            data={"next_steps": "Run: resilio init to create config files"},
         )
         output_json(envelope)
         raise typer.Exit(code=EXIT_CONFIG_MISSING)

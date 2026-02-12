@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone, timedelta
 from unittest.mock import Mock, patch, MagicMock
 import httpx
 
-from sports_coach_engine.core.strava import (
+from resilio.core.strava import (
     initiate_oauth,
     exchange_code_for_tokens,
     refresh_access_token,
@@ -25,12 +25,12 @@ from sports_coach_engine.core.strava import (
     StravaRateLimitError,
     StravaAPIError,
 )
-from sports_coach_engine.schemas.activity import (
+from resilio.schemas.activity import (
     ActivitySource,
     RawActivity,
 )
-from sports_coach_engine.schemas.config import Config, Secrets, Settings
-from sports_coach_engine.schemas.sync import SyncReport
+from resilio.schemas.config import Config, Secrets, Settings
+from resilio.schemas.sync import SyncReport
 
 
 # ============================================================
@@ -41,7 +41,7 @@ from sports_coach_engine.schemas.sync import SyncReport
 @pytest.fixture
 def mock_config():
     """Create mock configuration with Strava credentials."""
-    from sports_coach_engine.schemas.config import StravaSecrets
+    from resilio.schemas.config import StravaSecrets
 
     strava_secrets = StravaSecrets(
         client_id="test_client_id",
@@ -100,7 +100,7 @@ class TestOAuth:
         assert "scope=activity:read_all,profile:read_all" in url
         assert "redirect_uri=http://localhost" in url
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.httpx.Client")
     def test_exchange_code_for_tokens_success(self, mock_client_class):
         """Should successfully exchange code for tokens."""
         # Mock response
@@ -124,7 +124,7 @@ class TestOAuth:
         assert tokens["refresh_token"] == "new_refresh_token"
         assert tokens["expires_at"] == 1735812000
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.httpx.Client")
     def test_refresh_access_token_success(self, mock_client_class):
         """Should successfully refresh expired token."""
         mock_response = Mock()
@@ -145,8 +145,8 @@ class TestOAuth:
 
         assert tokens["access_token"] == "refreshed_token"
 
-    @patch("sports_coach_engine.core.strava.store_tokens")
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.store_tokens")
+    @patch("resilio.core.strava.httpx.Client")
     def test_token_refresh_on_expiration(self, mock_client_class, mock_store_tokens, mock_config):
         """Should refresh token when it expires soon."""
         # Set token to expire in 2 minutes
@@ -185,8 +185,8 @@ class TestOAuth:
 class TestActivityFetching:
     """Tests for activity fetching."""
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_fetch_activities_success(self, mock_get_token, mock_client_class, mock_config):
         """Should fetch activity list successfully."""
         mock_get_token.return_value = "valid_token"
@@ -207,8 +207,8 @@ class TestActivityFetching:
         assert len(activities) == 2
         assert activities[0]["name"] == "Run 1"
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_fetch_activities_with_pagination(self, mock_get_token, mock_client_class, mock_config):
         """Should handle pagination parameters correctly."""
         mock_get_token.return_value = "valid_token"
@@ -228,8 +228,8 @@ class TestActivityFetching:
         assert call_kwargs["params"]["page"] == 2
         assert call_kwargs["params"]["per_page"] == 100
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_fetch_activities_rate_limit_error(self, mock_get_token, mock_client_class, mock_config):
         """Should raise StravaRateLimitError on 429 response."""
         mock_get_token.return_value = "valid_token"
@@ -248,8 +248,8 @@ class TestActivityFetching:
 
         assert exc_info.value.retry_after == 60
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_fetch_activity_details_success(self, mock_get_token, mock_client_class, mock_config, sample_strava_activity):
         """Should fetch full activity details."""
         mock_get_token.return_value = "valid_token"
@@ -267,8 +267,8 @@ class TestActivityFetching:
         assert activity["id"] == 123456789
         assert activity["private_note"] == "Felt strong"
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_fetch_activity_details_rate_limit_error(self, mock_get_token, mock_client_class, mock_config):
         """Should raise StravaRateLimitError on 429 response."""
         mock_get_token.return_value = "valid_token"
@@ -286,8 +286,8 @@ class TestActivityFetching:
 
         assert exc_info.value.retry_after == 120
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_fetch_activities_auth_error(self, mock_get_token, mock_client_class, mock_config):
         """Should raise StravaAuthError on 401 response."""
         mock_get_token.return_value = "invalid_token"
@@ -533,7 +533,7 @@ class TestManualActivity:
 class TestErrorHandling:
     """Tests for error handling."""
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.httpx.Client")
     def test_token_exchange_failure(self, mock_client_class):
         """Should raise StravaAuthError on failed token exchange."""
         mock_response = Mock()
@@ -547,7 +547,7 @@ class TestErrorHandling:
         with pytest.raises(StravaAuthError, match="Token exchange failed"):
             exchange_code_for_tokens("client_id", "client_secret", "bad_code")
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.httpx.Client")
     def test_token_refresh_failure(self, mock_client_class):
         """Should raise StravaAuthError on failed token refresh."""
         mock_response = Mock()
@@ -561,8 +561,8 @@ class TestErrorHandling:
         with pytest.raises(StravaAuthError, match="Token refresh failed"):
             refresh_access_token("client_id", "client_secret", "bad_refresh")
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
-    @patch("sports_coach_engine.core.strava.get_valid_token")
+    @patch("resilio.core.strava.httpx.Client")
+    @patch("resilio.core.strava.get_valid_token")
     def test_api_error_on_non_200_response(self, mock_get_token, mock_client_class, mock_config):
         """Should raise error on non-200 response (wrapped in RetryError after retries)."""
         from tenacity import RetryError
@@ -581,7 +581,7 @@ class TestErrorHandling:
         with pytest.raises(RetryError):
             fetch_activities(mock_config)
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.httpx.Client")
     def test_http_error_during_token_exchange(self, mock_client_class):
         """Should raise StravaAuthError on HTTP errors during token exchange."""
         mock_client = MagicMock()
@@ -591,7 +591,7 @@ class TestErrorHandling:
         with pytest.raises(StravaAuthError, match="HTTP error during token exchange"):
             exchange_code_for_tokens("client_id", "client_secret", "code")
 
-    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("resilio.core.strava.httpx.Client")
     def test_http_error_during_token_refresh(self, mock_client_class):
         """Should raise StravaAuthError on HTTP errors during token refresh."""
         mock_client = MagicMock()
@@ -610,9 +610,9 @@ class TestErrorHandling:
 class TestSync:
     """Tests for sync workflow."""
 
-    @patch("sports_coach_engine.core.strava.fetch_activity_details")
-    @patch("sports_coach_engine.core.strava.fetch_activities")
-    @patch("sports_coach_engine.core.strava.time.sleep")
+    @patch("resilio.core.strava.fetch_activity_details")
+    @patch("resilio.core.strava.fetch_activities")
+    @patch("resilio.core.strava.time.sleep")
     def test_sync_strava_generator_success(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
@@ -656,9 +656,9 @@ class TestSync:
         assert activities[0].id == "strava_123"
         assert activities[1].id == "strava_456"
 
-    @patch("sports_coach_engine.core.strava.fetch_activity_details")
-    @patch("sports_coach_engine.core.strava.fetch_activities")
-    @patch("sports_coach_engine.core.strava.time.sleep")
+    @patch("resilio.core.strava.fetch_activity_details")
+    @patch("resilio.core.strava.fetch_activities")
+    @patch("resilio.core.strava.time.sleep")
     def test_sync_strava_generator_with_errors(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
@@ -691,20 +691,20 @@ class TestSync:
         assert len(activities) == 1  # Only successful activity
         assert activities[0].id == "strava_123"
 
-    @patch("sports_coach_engine.core.strava.load_config")
+    @patch("resilio.core.strava.load_config")
     def test_sync_strava_generator_loads_config_if_not_provided(self, mock_load_config, mock_config):
         """Should load config if not provided."""
         mock_load_config.return_value = mock_config
 
-        with patch("sports_coach_engine.core.strava.fetch_activities") as mock_fetch:
+        with patch("resilio.core.strava.fetch_activities") as mock_fetch:
             mock_fetch.return_value = []
             gen = sync_strava_generator(config=None)
             list(gen)  # Consume generator
             mock_load_config.assert_called_once()
 
-    @patch("sports_coach_engine.core.strava.fetch_activity_details")
-    @patch("sports_coach_engine.core.strava.fetch_activities")
-    @patch("sports_coach_engine.core.strava.time.sleep")
+    @patch("resilio.core.strava.fetch_activity_details")
+    @patch("resilio.core.strava.fetch_activities")
+    @patch("resilio.core.strava.time.sleep")
     def test_sync_strava_generator_yields_incrementally(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
@@ -765,9 +765,9 @@ class TestSync:
         assert activities[1].id == "strava_2"
         assert activities[2].id == "strava_3"
 
-    @patch("sports_coach_engine.core.strava.fetch_activity_details")
-    @patch("sports_coach_engine.core.strava.fetch_activities")
-    @patch("sports_coach_engine.core.strava.time.sleep")
+    @patch("resilio.core.strava.fetch_activity_details")
+    @patch("resilio.core.strava.fetch_activities")
+    @patch("resilio.core.strava.time.sleep")
     def test_sync_strava_generator_stops_on_rate_limit(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
@@ -812,9 +812,9 @@ class TestSync:
         assert any("Rate Limit" in str(err) for err in sync_result.errors)
         assert sync_result.activities_imported == 1
 
-    @patch("sports_coach_engine.core.strava.fetch_activity_details")
-    @patch("sports_coach_engine.core.strava.fetch_activities")
-    @patch("sports_coach_engine.core.strava.time.sleep")
+    @patch("resilio.core.strava.fetch_activity_details")
+    @patch("resilio.core.strava.fetch_activities")
+    @patch("resilio.core.strava.time.sleep")
     def test_sync_strava_generator_skips_existing_ids(
         self, mock_sleep, mock_fetch_activities, mock_fetch_details, mock_config
     ):
@@ -872,7 +872,7 @@ class TestTokenStorage:
 
     def test_store_tokens_updates_config(self, mock_config):
         """Should update config object with new tokens."""
-        from sports_coach_engine.core.strava import store_tokens
+        from resilio.core.strava import store_tokens
 
         tokens = {
             "access_token": "new_access",

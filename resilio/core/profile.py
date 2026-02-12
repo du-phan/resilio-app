@@ -9,16 +9,16 @@ import math
 from typing import Optional, Union, List
 from enum import Enum
 
-from sports_coach_engine.core.paths import athlete_profile_path
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.profile import (
+from resilio.core.paths import athlete_profile_path
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.profile import (
     AthleteProfile,
     TrainingConstraints,
     Goal,
     GoalType,
     Weekday,
 )
-from sports_coach_engine.schemas.repository import RepoError, ReadOptions
+from resilio.schemas.repository import RepoError, ReadOptions
 
 
 # ============================================================

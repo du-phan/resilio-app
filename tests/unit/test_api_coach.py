@@ -1,5 +1,7 @@
 """
-Unit tests for Coach API (api/coach.py).
+Unit tests for Coach API
+
+    (api/coach.py).
 
 Tests get_todays_workout(), get_weekly_status(), and get_training_status().
 """
@@ -8,18 +10,18 @@ import pytest
 from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
-from sports_coach_engine.api.coach import (
+from resilio.api.coach import (
     get_todays_workout,
     get_weekly_status,
     get_training_status,
     CoachError,
     WeeklyStatus,
 )
-from sports_coach_engine.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
-from sports_coach_engine.schemas.metrics import DailyMetrics
-from sports_coach_engine.schemas.profile import AthleteProfile
-from sports_coach_engine.schemas.plan import WorkoutPrescription
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+from resilio.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
+from resilio.schemas.metrics import DailyMetrics
+from resilio.schemas.profile import AthleteProfile
+from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -83,9 +85,9 @@ def mock_log():
 
 class TestGetTodaysWorkout:
     """Test get_todays_workout() function."""
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach.run_adaptation_check")
-    @patch("sports_coach_engine.api.coach.enrich_workout")
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.run_adaptation_check")
+    @patch("resilio.api.coach.enrich_workout")
     def test_get_todays_workout_success(
         self,
         mock_enrich,
@@ -124,8 +126,8 @@ class TestGetTodaysWorkout:
         # Verify workflow was called
         mock_workflow.assert_called_once()
 
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach.run_adaptation_check")
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_workout(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval when no workout scheduled."""
         mock_repo = Mock()
@@ -143,8 +145,10 @@ class TestGetTodaysWorkout:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "not_found"
-        assert "No workout scheduled" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach.run_adaptation_check")
+        assert "No workout scheduled" in result.message
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_plan(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval when no plan exists."""
         mock_repo = Mock()
@@ -162,8 +166,10 @@ class TestGetTodaysWorkout:
         # Should return CoachError with no_plan type
         assert isinstance(result, CoachError)
         assert result.error_type == "no_plan"
-        assert "No training plan found" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach.run_adaptation_check")
+        assert "No training plan found" in result.message
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.run_adaptation_check")
     def test_get_todays_workout_no_metrics(
         self, mock_workflow, mock_repo_cls, mock_log, mock_workout
     ):
@@ -186,11 +192,13 @@ class TestGetTodaysWorkout:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "insufficient_data"
-        assert "No metrics available" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach.run_adaptation_check")
+        assert "No metrics available" in result.message
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.run_adaptation_check")
     def test_get_todays_workout_workflow_error(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval with workflow error."""
-        from sports_coach_engine.core.workflows import WorkflowError
+        from resilio.core.workflows import WorkflowError
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -203,8 +211,10 @@ class TestGetTodaysWorkout:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "unknown"
-        assert "Failed to check workout" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach.run_adaptation_check")
+        assert "Failed to check workout" in result.message
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.run_adaptation_check")
     def test_get_todays_workout_custom_date(
         self, mock_workflow, mock_repo_cls, mock_log, mock_workout, mock_daily_metrics, mock_profile
     ):
@@ -223,8 +233,8 @@ class TestGetTodaysWorkout:
         mock_repo.read_yaml.side_effect = [mock_daily_metrics, mock_profile]
 
         # Mock enrichment
-        from sports_coach_engine.api.coach import enrich_workout
-        with patch("sports_coach_engine.api.coach.enrich_workout") as mock_enrich:
+        from resilio.api.coach import enrich_workout
+        with patch("resilio.api.coach.enrich_workout") as mock_enrich:
             mock_enrich.return_value = Mock()
 
             target_date = date.today() + timedelta(days=1)
@@ -243,7 +253,7 @@ class TestGetTodaysWorkout:
 
 class TestGetWeeklyStatus:
     """Test get_weekly_status() function."""
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
+    @patch("resilio.api.coach.RepositoryIO")
     def test_get_weekly_status_success(self, mock_repo_cls, mock_log):
         """Test successful weekly status retrieval."""
         mock_repo = Mock()
@@ -257,6 +267,8 @@ class TestGetWeeklyStatus:
         week_start = today - timedelta(days=today.weekday())
         mock_week.week_start = week_start
         mock_week.week_end = week_start + timedelta(days=6)
+        mock_week.start_date = week_start
+        mock_week.end_date = week_start + timedelta(days=6)
         mock_week.workouts = [Mock(), Mock(), Mock()]  # 3 planned workouts
         mock_plan.weeks.append(mock_week)
 
@@ -284,7 +296,9 @@ class TestGetWeeklyStatus:
         assert isinstance(result, WeeklyStatus)
         assert result.planned_workouts == 3
         assert result.completed_workouts == 0
-        assert result.completion_rate == 0.0    @patch("sports_coach_engine.api.coach.RepositoryIO")
+        assert result.completion_rate == 0.0
+
+    @patch("resilio.api.coach.RepositoryIO")
     def test_get_weekly_status_no_plan(self, mock_repo_cls, mock_log):
         """Test weekly status when no plan exists."""
         mock_repo = Mock()
@@ -320,9 +334,9 @@ class TestGetWeeklyStatus:
 
 class TestGetTrainingStatus:
     """Test get_training_status() function."""
-    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
-    @patch("sports_coach_engine.api.coach.enrich_metrics")
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach._find_latest_metrics_date")
+    @patch("resilio.api.coach.enrich_metrics")
     def test_get_training_status_success(
         self, mock_enrich, mock_find_date, mock_repo_cls, mock_log, mock_daily_metrics
     ):
@@ -353,8 +367,10 @@ class TestGetTrainingStatus:
         assert result == mock_enriched
 
         # Verify enrichment was called
-        mock_enrich.assert_called_once()    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
+        mock_enrich.assert_called_once()
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach._find_latest_metrics_date")
     def test_get_training_status_no_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test training status when no data available."""
         mock_repo = Mock()
@@ -368,8 +384,10 @@ class TestGetTrainingStatus:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "not_found"
-        assert "No training data available" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
+        assert "No training data available" in result.message
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach._find_latest_metrics_date")
     def test_get_training_status_load_error(self, mock_find_date, mock_repo_cls, mock_log):
         """Test training status with metrics load error."""
         mock_repo = Mock()
@@ -385,9 +403,11 @@ class TestGetTrainingStatus:
         # Should return CoachError
         assert isinstance(result, CoachError)
         assert result.error_type == "validation"
-        assert "Failed to load metrics" in result.message    @patch("sports_coach_engine.api.coach.RepositoryIO")
-    @patch("sports_coach_engine.api.coach._find_latest_metrics_date")
-    @patch("sports_coach_engine.api.coach.enrich_metrics")
+        assert "Failed to load metrics" in result.message
+
+    @patch("resilio.api.coach.RepositoryIO")
+    @patch("resilio.api.coach._find_latest_metrics_date")
+    @patch("resilio.api.coach.enrich_metrics")
     def test_get_training_status_enrichment_error(
         self, mock_enrich, mock_find_date, mock_repo_cls, mock_log, mock_daily_metrics
     ):
@@ -419,8 +439,8 @@ class TestFindLatestMetricsDate:
 
     def test_find_latest_metrics_date_today(self, tmp_path):
         """Test finding metrics for today."""
-        from sports_coach_engine.core.repository import RepositoryIO
-        from sports_coach_engine.api.coach import _find_latest_metrics_date
+        from resilio.core.repository import RepositoryIO
+        from resilio.api.coach import _find_latest_metrics_date
 
         repo = RepositoryIO()
         repo.repo_root = tmp_path
@@ -438,8 +458,8 @@ class TestFindLatestMetricsDate:
 
     def test_find_latest_metrics_date_none(self, tmp_path):
         """Test finding metrics when none exist."""
-        from sports_coach_engine.core.repository import RepositoryIO
-        from sports_coach_engine.api.coach import _find_latest_metrics_date
+        from resilio.core.repository import RepositoryIO
+        from resilio.api.coach import _find_latest_metrics_date
 
         repo = RepositoryIO()
         repo.repo_root = tmp_path

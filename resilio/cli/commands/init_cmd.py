@@ -1,7 +1,7 @@
 """
-sce init - Initialize data directory structure.
+resilio init - Initialize data directory structure.
 
-Creates the required directory structure and template files for the Sports Coach Engine.
+Creates the required directory structure and template files for the Resilio.
 Safe to run multiple times (idempotent).
 """
 
@@ -11,9 +11,9 @@ from typing import List
 
 import typer
 
-from sports_coach_engine.cli.errors import get_exit_code_from_envelope
-from sports_coach_engine.schemas.config import PathSettings
-from sports_coach_engine.cli.output import create_success_envelope, output_json
+from resilio.cli.errors import get_exit_code_from_envelope
+from resilio.schemas.config import PathSettings
+from resilio.cli.output import create_success_envelope, output_json
 
 
 def init_command(ctx: typer.Context) -> None:
@@ -71,7 +71,7 @@ def init_command(ctx: typer.Context) -> None:
             "skipped": skipped,
             "next_steps": [
                 "Edit config/secrets.local.yaml with your Strava credentials",
-                "Run: sce auth url to get OAuth authorization link",
+                "Run: resilio auth url to get OAuth authorization link",
             ],
         },
     )
@@ -111,7 +111,7 @@ def _setup_config_files(
         else:
             # Fallback: create minimal settings inline
             settings_file.write_text(
-                """# Sports Coach Engine Settings
+                """# Resilio Settings
 _schema:
   format_version: "1.0.0"
   schema_type: "settings"

@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, Union
 
-from sports_coach_engine.schemas.config import (
+from resilio.schemas.config import (
     Config,
     ConfigErrorType,
     Secrets,

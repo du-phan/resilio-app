@@ -2,14 +2,14 @@
 Analysis CLI commands - Weekly insights and risk assessment.
 
 Commands:
-    sce analysis intensity      - Validate 80/20 distribution
-    sce analysis gaps           - Detect activity gaps
-    sce analysis load           - Analyze multi-sport load
-    sce analysis capacity       - Check weekly capacity
-    sce risk assess             - Assess current training risk
-    sce risk recovery-window    - Estimate recovery timeline
-    sce risk forecast           - Forecast training stress
-    sce risk taper-status       - Verify taper progression
+    resilio analysis intensity      - Validate 80/20 distribution
+    resilio analysis gaps           - Detect activity gaps
+    resilio analysis load           - Analyze multi-sport load
+    resilio analysis capacity       - Check weekly capacity
+    resilio risk assess             - Assess current training risk
+    resilio risk recovery-window    - Estimate recovery timeline
+    resilio risk forecast           - Forecast training stress
+    resilio risk taper-status       - Verify taper progression
 """
 
 import typer
@@ -17,7 +17,7 @@ import json
 from typing import Optional
 from datetime import date
 
-from sports_coach_engine.api import (
+from resilio.api import (
     api_validate_intensity_distribution,
     api_detect_activity_gaps,
     api_analyze_load_distribution_by_sport,
@@ -28,8 +28,8 @@ from sports_coach_engine.api import (
     api_assess_taper_status,
 )
 
-from sports_coach_engine.cli.output import create_error_envelope, output_json
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import create_error_envelope, output_json
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 
 app = typer.Typer(help="Weekly analysis and risk assessment")
 risk_app = typer.Typer(help="Risk assessment commands")
@@ -54,7 +54,7 @@ def intensity_command(
     and identifies moderate-intensity "gray zone" violations.
 
     Example:
-        sce analysis intensity --activities activities_28d.json --days 28
+        resilio analysis intensity --activities activities_28d.json --days 28
     """
     try:
         # Load activities
@@ -102,7 +102,7 @@ def gaps_command(
     potential causes (injury, illness) from activity notes.
 
     Example:
-        sce analysis gaps --activities all_activities.json --min-days 7
+        resilio analysis gaps --activities all_activities.json --min-days 7
     """
     try:
         # Load activities
@@ -151,7 +151,7 @@ def load_command(
     sport priorities, and identifies fatigue risk from sport conflicts.
 
     Example:
-        sce analysis load --activities week_activities.json \\
+        resilio analysis load --activities week_activities.json \\
             --days 7 --priority equal
     """
     try:
@@ -213,7 +213,7 @@ def capacity_command(
     of attempting unproven training volumes.
 
     Example:
-        sce analysis capacity --week 15 --volume 60.0 --load 550.0 \\
+        resilio analysis capacity --week 15 --volume 60.0 --load 550.0 \\
             --historical all_activities.json
     """
     try:
@@ -270,7 +270,7 @@ def risk_assess_command(
     risk index and provide actionable risk mitigation options.
 
     Example:
-        sce risk assess --metrics current_metrics.json \\
+        resilio risk assess --metrics current_metrics.json \\
             --recent last_7d_activities.json \\
             --planned today_workout.json
     """
@@ -332,7 +332,7 @@ def recovery_window_command(
     checkpoints for returning to safe training zones.
 
     Example:
-        sce risk recovery-window --trigger ACWR_ELEVATED \\
+        resilio risk recovery-window --trigger ACWR_ELEVATED \\
             --value 1.35 --threshold 1.3
     """
     try:
@@ -371,7 +371,7 @@ def forecast_command(
     proactive plan adjustments.
 
     Example:
-        sce risk forecast --weeks 3 \\
+        resilio risk forecast --weeks 3 \\
             --metrics current_metrics.json \\
             --plan planned_weeks.json
     """
@@ -427,7 +427,7 @@ def taper_status_command(
     taper is on track for race day freshness.
 
     Example:
-        sce risk taper-status --race-date 2026-03-15 \\
+        resilio risk taper-status --race-date 2026-03-15 \\
             --metrics current_metrics.json \\
             --recent-weeks last_3_weeks.json
     """

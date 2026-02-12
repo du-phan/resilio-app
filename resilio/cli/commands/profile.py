@@ -1,5 +1,5 @@
 """
-sce profile - Manage athlete profile.
+resilio profile - Manage athlete profile.
 
 Get or update athlete profile fields like name, max_hr, resting_hr, etc.
 """
@@ -10,11 +10,11 @@ import subprocess
 
 import typer
 
-from sports_coach_engine.api import create_profile, get_profile, update_profile
-from sports_coach_engine.api.profile import ProfileError
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, output_json, OutputEnvelope
-from sports_coach_engine.schemas.profile import Weekday, DetailLevel, CoachingStyle, IntensityMetric, PauseReason
+from resilio.api import create_profile, get_profile, update_profile
+from resilio.api.profile import ProfileError
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import create_error_envelope, output_json, OutputEnvelope
+from resilio.schemas.profile import Weekday, DetailLevel, CoachingStyle, IntensityMetric, PauseReason
 
 # Create subcommand app
 app = typer.Typer(help="Manage athlete profile")
@@ -58,12 +58,12 @@ def profile_create_command(
     """Create a new athlete profile.
 
     This creates an initial profile with sensible defaults. You can update
-    fields later using 'sce profile set'.
+    fields later using 'resilio profile set'.
 
     Examples:
-        sce profile create --name "Alex" --age 32 --max-hr 190
-        sce profile create --name "Sam" --run-priority primary
-        sce profile create --name "Alex" --unavailable-days "tuesday,thursday"
+        resilio profile create --name "Alex" --age 32 --max-hr 190
+        resilio profile create --name "Sam" --run-priority primary
+        resilio profile create --name "Alex" --unavailable-days "tuesday,thursday"
     """
     # Parse constraint fields (comma-separated days to List[Weekday])
     unavailable_days_list = None
@@ -221,14 +221,14 @@ def profile_set_command(
     Only specified fields are updated; others remain unchanged.
 
     Examples:
-        sce profile set --name "Alex" --age 32
-        sce profile set --max-hr 190 --resting-hr 55
-        sce profile set --vdot 42
-        sce profile set --run-priority primary --primary-sport running
-        sce profile set --conflict-policy ask_each_time
-        sce profile set --min-run-days 3 --max-run-days 4
-        sce profile set --max-session-minutes 180
-        sce profile set --unavailable-days "tuesday,thursday"
+        resilio profile set --name "Alex" --age 32
+        resilio profile set --max-hr 190 --resting-hr 55
+        resilio profile set --vdot 42
+        resilio profile set --run-priority primary --primary-sport running
+        resilio profile set --conflict-policy ask_each_time
+        resilio profile set --min-run-days 3 --max-run-days 4
+        resilio profile set --max-session-minutes 180
+        resilio profile set --unavailable-days "tuesday,thursday"
     """
     # Collect non-None fields
     fields = {}
@@ -349,7 +349,7 @@ def profile_set_command(
             error_type="validation",
             message="No fields specified. Use --name, --age, --max-hr, --min-run-days, --max-session-minutes, etc.",
             data={
-                "next_steps": "Run: sce profile set --help to see available fields"
+                "next_steps": "Run: resilio profile set --help to see available fields"
             },
         )
         output_json(envelope)
@@ -412,14 +412,14 @@ def profile_analyze_command(ctx: typer.Context) -> None:
     Pure computation on local data - no Strava API calls.
 
     Example:
-        sce profile analyze
+        resilio profile analyze
 
         Output includes suggestions for:
         - max_hr: 199 (observed peak)
         - weekly_km: 22.5 (4-week average)
         - running_priority: equal (40% running, 60% other sports)
     """
-    from sports_coach_engine.api.profile import analyze_profile_from_activities
+    from resilio.api.profile import analyze_profile_from_activities
 
     # Call API
     result = analyze_profile_from_activities()
@@ -455,9 +455,9 @@ def profile_add_sport_command(
 
     Examples:
         # Frequency with unavailable days
-        sce profile add-sport --sport climbing --frequency 3 --unavailable-days tuesday,thursday --duration 120 --intensity moderate_to_hard
+        resilio profile add-sport --sport climbing --frequency 3 --unavailable-days tuesday,thursday --duration 120 --intensity moderate_to_hard
     """
-    from sports_coach_engine.api.profile import add_sport_to_profile
+    from resilio.api.profile import add_sport_to_profile
 
     # Parse unavailable days if provided
     day_list = None
@@ -511,9 +511,9 @@ def profile_remove_sport_command(
     """Remove a sport commitment from your profile.
 
     Example:
-        sce profile remove-sport --sport climbing
+        resilio profile remove-sport --sport climbing
     """
-    from sports_coach_engine.api.profile import remove_sport_from_profile
+    from resilio.api.profile import remove_sport_from_profile
 
     # Call API
     result = remove_sport_from_profile(sport=sport)
@@ -548,7 +548,7 @@ def profile_pause_sport_command(
     ),
 ) -> None:
     """Pause a sport commitment while keeping history in profile."""
-    from sports_coach_engine.api.profile import pause_sport_in_profile
+    from resilio.api.profile import pause_sport_in_profile
 
     # Validate reason early for cleaner CLI feedback
     try:
@@ -584,7 +584,7 @@ def profile_resume_sport_command(
     sport: str = typer.Option(..., "--sport", help="Sport name to resume (case-insensitive)"),
 ) -> None:
     """Resume a paused sport commitment."""
-    from sports_coach_engine.api.profile import resume_sport_in_profile
+    from resilio.api.profile import resume_sport_in_profile
 
     result = resume_sport_in_profile(sport=sport)
     envelope = api_result_to_envelope(
@@ -603,7 +603,7 @@ def profile_list_sports_command(ctx: typer.Context) -> None:
     Shows all configured sport commitments with constraints, duration, and intensity.
 
     Example:
-        sce profile list-sports
+        resilio profile list-sports
     """
     # Call get_profile API
     profile = get_profile()
@@ -663,7 +663,7 @@ def profile_validate_command(ctx: typer.Context) -> None:
     Checks if other_sports is populated for all significant activities
     (>15% of total) in your Strava data.
     """
-    from sports_coach_engine.api.profile import validate_profile_completeness
+    from resilio.api.profile import validate_profile_completeness
 
     result = validate_profile_completeness()
 
@@ -723,11 +723,11 @@ def profile_set_pb_command(
     Replaces any existing PB for the same distance (keeps only the best).
 
     Examples:
-        sce profile set-pb --distance 10k --time 42:30 --date 2024-06-15
-        sce profile set-pb --distance 5k --time 18:45 --date 2023-05-10
-        sce profile set-pb --distance half_marathon --time 1:30:00 --date 2023-09-15
+        resilio profile set-pb --distance 10k --time 42:30 --date 2024-06-15
+        resilio profile set-pb --distance 5k --time 18:45 --date 2023-05-10
+        resilio profile set-pb --distance half_marathon --time 1:30:00 --date 2023-09-15
     """
-    from sports_coach_engine.api.profile import set_personal_best, ProfileError
+    from resilio.api.profile import set_personal_best, ProfileError
 
     result = set_personal_best(
         distance=distance,
@@ -770,17 +770,17 @@ def profile_edit_command(ctx: typer.Context) -> None:
                 Supports: nano, vim, emacs, code, etc.
 
     Examples:
-        sce profile edit                    # Uses $EDITOR (default: nano)
-        EDITOR=vim sce profile edit         # Use vim
-        EDITOR=code sce profile edit        # Use VS Code
+        resilio profile edit                    # Uses $EDITOR (default: nano)
+        EDITOR=vim resilio profile edit         # Use vim
+        EDITOR=code resilio profile edit        # Use VS Code
 
     After editing, the profile is validated. If validation fails,
     you'll see the error and can re-edit or revert changes.
     """
-    from sports_coach_engine.core.paths import athlete_profile_path
-    from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-    from sports_coach_engine.schemas.profile import AthleteProfile
-    from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+    from resilio.core.paths import athlete_profile_path
+    from resilio.core.repository import RepositoryIO, ReadOptions
+    from resilio.schemas.profile import AthleteProfile
+    from resilio.schemas.repository import RepoError, RepoErrorType
 
     repo = RepositoryIO()
     profile_path = athlete_profile_path()
@@ -795,7 +795,7 @@ def profile_edit_command(ctx: typer.Context) -> None:
         if result.error_type == RepoErrorType.FILE_NOT_FOUND:
             envelope = create_error_envelope(
                 error_type="not_found",
-                message="Profile not found. Create a profile first using 'sce profile create'",
+                message="Profile not found. Create a profile first using 'resilio profile create'",
                 data={"profile_path": profile_path_str}
             )
             output_json(envelope)
@@ -827,7 +827,7 @@ def profile_edit_command(ctx: typer.Context) -> None:
                 message=f"Profile validation failed after editing: {validation_result.message}",
                 data={
                     "profile_path": profile_path_str,
-                    "next_steps": "Review the error, fix the YAML, and run 'sce profile edit' again"
+                    "next_steps": "Review the error, fix the YAML, and run 'resilio profile edit' again"
                 }
             )
             output_json(envelope)

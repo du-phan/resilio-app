@@ -1,5 +1,5 @@
 """
-sce metrics - Manage training metrics.
+resilio metrics - Manage training metrics.
 
 Commands for recomputing metrics from local activity files without syncing from Strava.
 """
@@ -9,9 +9,9 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.workflows import recompute_all_metrics
-from sports_coach_engine.cli.output import output_json, OutputEnvelope
+from resilio.core.repository import RepositoryIO
+from resilio.core.workflows import recompute_all_metrics
+from resilio.cli.output import output_json, OutputEnvelope
 
 app = typer.Typer(name="metrics", help="Manage training metrics")
 
@@ -42,9 +42,9 @@ def recompute_metrics(
     - Regenerate metrics after manual activity edits
 
     Examples:
-        sce metrics recompute                          # Full recompute
-        sce metrics recompute --start 2025-06-01       # From June onwards
-        sce metrics recompute --start 2025-12-01 --end 2026-01-14  # Specific range
+        resilio metrics recompute                          # Full recompute
+        resilio metrics recompute --start 2025-06-01       # From June onwards
+        resilio metrics recompute --start 2025-12-01 --end 2026-01-14  # Specific range
     """
     repo = RepositoryIO()
 

@@ -13,7 +13,7 @@ import pytest
 from datetime import date, datetime, timedelta
 from pydantic import ValidationError
 
-from sports_coach_engine.schemas.adaptation import (
+from resilio.schemas.adaptation import (
     TriggerType,
     AdaptationTrigger,
     OverrideRiskAssessment,
@@ -28,7 +28,7 @@ from sports_coach_engine.schemas.adaptation import (
     SafetyOverride,
     AdaptationResult,
 )
-from sports_coach_engine.core.adaptation import (
+from resilio.core.adaptation import (
     detect_adaptation_triggers,
     assess_override_risk,
     estimate_recovery_time,

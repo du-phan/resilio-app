@@ -12,7 +12,7 @@ are handled by Claude Code and are not tested here.
 
 import pytest
 from datetime import date, datetime, timezone
-from sports_coach_engine.core.notes import (
+from resilio.core.notes import (
     analyze_activity,
     estimate_rpe,
     estimate_rpe_from_hr,
@@ -23,14 +23,14 @@ from sports_coach_engine.core.notes import (
     AnalysisError,
     InsufficientDataError,
 )
-from sports_coach_engine.schemas.activity import (
+from resilio.schemas.activity import (
     NormalizedActivity,
     SportType,
     SurfaceType,
     DataQuality,
     RPESource,
 )
-from sports_coach_engine.schemas.profile import (
+from resilio.schemas.profile import (
     AthleteProfile,
     VitalSigns,
     Goal,

@@ -14,8 +14,8 @@ Design:
 from datetime import date
 from typing import Optional
 
-from sports_coach_engine.core.config import load_config
-from sports_coach_engine.core.repository import RepositoryIO
+from resilio.core.config import load_config
+from resilio.core.repository import RepositoryIO
 
 # Cache config to avoid repeated file reads
 _config_cache: Optional[object] = None
@@ -30,7 +30,7 @@ def _get_paths():
         config_result = load_config(repo.repo_root)
         if hasattr(config_result, "error_type"):
             # Config load failed, use defaults
-            from sports_coach_engine.schemas.config import PathSettings
+            from resilio.schemas.config import PathSettings
 
             _config_cache = PathSettings()
         else:

@@ -17,7 +17,7 @@ Key Design Principles:
 from datetime import date, timedelta
 from typing import Optional
 
-from sports_coach_engine.schemas.enrichment import (
+from resilio.schemas.enrichment import (
     DisclosureLevel,
     EnrichedMetrics,
     EnrichedSuggestion,
@@ -31,11 +31,11 @@ from sports_coach_engine.schemas.enrichment import (
     ReadinessSummary,
     WorkoutRationale,
 )
-from sports_coach_engine.schemas.metrics import DailyMetrics, WeeklySummary
-from sports_coach_engine.schemas.plan import WorkoutPrescription
-from sports_coach_engine.schemas.profile import AthleteProfile
-from sports_coach_engine.schemas.adaptation import Suggestion
-from sports_coach_engine.schemas.repository import ReadOptions, RepoError
+from resilio.schemas.metrics import DailyMetrics, WeeklySummary
+from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.profile import AthleteProfile
+from resilio.schemas.adaptation import Suggestion
+from resilio.schemas.repository import ReadOptions, RepoError
 
 
 # ============================================================
@@ -240,8 +240,8 @@ def enrich_metrics(
     Returns:
         EnrichedMetrics with interpretations, zones, and trends
     """
-    from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-    from sports_coach_engine.core.paths import daily_metrics_path
+    from resilio.core.repository import RepositoryIO, ReadOptions
+    from resilio.core.paths import daily_metrics_path
 
     # Get previous values for trends (7 days ago)
     prev_ctl = None
@@ -274,7 +274,7 @@ def enrich_metrics(
     disclosure = determine_disclosure_level(days_of_data)
 
     # Intensity distribution (from weekly summary if available)
-    from sports_coach_engine.core.paths import weekly_metrics_summary_path
+    from resilio.core.paths import weekly_metrics_summary_path
 
     weekly_summary_path = weekly_metrics_summary_path()
     weekly_summary = repo.read_yaml(

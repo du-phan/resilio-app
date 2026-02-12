@@ -1,5 +1,5 @@
 """
-sce dates - Date utilities for training plan generation.
+resilio dates - Date utilities for training plan generation.
 
 Provides computational date verification to prevent manual calculation errors.
 All training weeks follow Monday-Sunday structure.
@@ -10,13 +10,13 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.utils.dates import (
+from resilio.utils.dates import (
     get_next_monday,
     get_week_boundaries,
     format_week_range,
     validate_week_start,
 )
-from sports_coach_engine.cli.output import (
+from resilio.cli.output import (
     output_json,
     create_success_envelope,
     create_error_envelope,
@@ -62,7 +62,7 @@ def today_command() -> None:
     Returns comprehensive date information for planning context.
 
     Examples:
-        sce dates today
+        resilio dates today
 
     Output includes:
         - date: Today's date (YYYY-MM-DD)
@@ -103,8 +103,8 @@ def next_monday_command(
     Otherwise returns the upcoming Monday.
 
     Examples:
-        sce dates next-monday
-        sce dates next-monday --from-date 2026-01-17
+        resilio dates next-monday
+        resilio dates next-monday --from-date 2026-01-17
 
     Output includes:
         - date: Next Monday (YYYY-MM-DD)
@@ -162,7 +162,7 @@ def week_boundaries_command(
     Validates that the start date is Monday and returns the corresponding Sunday.
 
     Examples:
-        sce dates week-boundaries --start 2026-01-19
+        resilio dates week-boundaries --start 2026-01-19
 
     Output includes:
         - start: Week start date (Monday)
@@ -223,8 +223,8 @@ def validate_command(
     Useful for verifying training plan dates before saving.
 
     Examples:
-        sce dates validate --date 2026-01-19 --must-be monday
-        sce dates validate --date 2026-01-25 --must-be sunday
+        resilio dates validate --date 2026-01-19 --must-be monday
+        resilio dates validate --date 2026-01-25 --must-be sunday
 
     Output includes:
         - valid: True if date matches required day

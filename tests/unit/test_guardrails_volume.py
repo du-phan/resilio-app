@@ -9,7 +9,7 @@ Tests volume guardrails based on Daniels' Running Formula:
 """
 
 import pytest
-from sports_coach_engine.core.guardrails.volume import (
+from resilio.core.guardrails.volume import (
     validate_quality_volume,
     validate_weekly_progression,
     validate_long_run_limits,

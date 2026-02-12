@@ -8,7 +8,7 @@ load interpretation, and context table logic.
 import pytest
 from datetime import date, timedelta
 from unittest.mock import Mock
-from sports_coach_engine.core.enrichment import (
+from resilio.core.enrichment import (
     interpret_metric,
     determine_disclosure_level,
     enrich_metrics,
@@ -16,15 +16,15 @@ from sports_coach_engine.core.enrichment import (
     interpret_load,
     InvalidMetricNameError,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.enrichment import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.enrichment import (
     DisclosureLevel,
     MetricInterpretation,
     EnrichedMetrics,
     EnrichedWorkout,
     LoadInterpretation,
 )
-from sports_coach_engine.schemas.metrics import (
+from resilio.schemas.metrics import (
     DailyMetrics,
     DailyLoad,
     CTLATLMetrics,
@@ -37,13 +37,13 @@ from sports_coach_engine.schemas.metrics import (
     CTLZone,
     ConfidenceLevel,
 )
-from sports_coach_engine.schemas.plan import (
+from resilio.schemas.plan import (
     WorkoutPrescription,
     WorkoutType,
     IntensityZone,
     PlanPhase,
 )
-from sports_coach_engine.schemas.profile import (
+from resilio.schemas.profile import (
     AthleteProfile,
     GoalType,
     ConflictPolicy,

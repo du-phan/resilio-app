@@ -7,15 +7,15 @@ Tests break detection, continuity scoring, and Daniels' Table 9.2 decay logic.
 import pytest
 from datetime import date, datetime, timedelta
 
-from sports_coach_engine.core.vdot.continuity import (
+from resilio.core.vdot.continuity import (
     detect_training_breaks,
     calculate_vdot_decay,
     _calculate_short_break_decay,
     _calculate_long_break_decay,
     _calculate_cross_training_adjustment,
 )
-from sports_coach_engine.schemas.vdot import ConfidenceLevel
-from sports_coach_engine.schemas.activity import NormalizedActivity
+from resilio.schemas.vdot import ConfidenceLevel
+from resilio.schemas.activity import NormalizedActivity
 
 
 def create_run(activity_date: date, sport_type: str = "run") -> NormalizedActivity:
@@ -45,7 +45,7 @@ class TestBreakDetection:
     def test_high_continuity_no_breaks(self):
         """Consistent training (no breaks) should have high continuity score."""
         race_date = date(2026, 1, 1)
-        today = date(2026, 2, 4)
+        today = date.today()
 
         # Create activities: 3 runs per week for 5 weeks
         activities = []
@@ -63,7 +63,7 @@ class TestBreakDetection:
 
     def test_single_week_break(self):
         """Single week break in the middle should be detected."""
-        today = date(2026, 2, 4)
+        today = date.today()
         race_date = date(2026, 1, 6)  # Day of first run
 
         # Week 1 (Jan 5-11): 3 runs
@@ -91,7 +91,7 @@ class TestBreakDetection:
 
     def test_multiple_breaks(self):
         """Multiple breaks should all be detected, longest identified."""
-        today = date(2026, 2, 4)
+        today = date.today()
         race_date = date(2026, 1, 6)  # Day of first run
 
         activities = [
@@ -169,7 +169,7 @@ class TestVDOTDecayResult:
 
     def test_high_continuity_minimal_decay(self):
         """High continuity (≥75% active weeks) should have minimal decay."""
-        from sports_coach_engine.schemas.vdot import BreakAnalysis
+        from resilio.schemas.vdot import BreakAnalysis
 
         race_date = date(2025, 6, 1)  # 8 months ago
 
@@ -196,7 +196,7 @@ class TestVDOTDecayResult:
 
     def test_short_break_daniels_decay(self):
         """Short break (<28 days) should use Daniels Table 9.2."""
-        from sports_coach_engine.schemas.vdot import BreakAnalysis, BreakPeriod
+        from resilio.schemas.vdot import BreakAnalysis, BreakPeriod
 
         race_date = date(2025, 12, 1)  # 2 months ago
 
@@ -229,7 +229,7 @@ class TestVDOTDecayResult:
 
     def test_long_break_with_ctl_adjustment(self):
         """Long break with stable CTL should get decay reduction."""
-        from sports_coach_engine.schemas.vdot import BreakAnalysis, BreakPeriod
+        from resilio.schemas.vdot import BreakAnalysis, BreakPeriod
 
         race_date = date(2025, 10, 1)  # 4 months ago
 
@@ -275,7 +275,7 @@ class TestEdgeCases:
 
     def test_vdot_clamped_to_valid_range(self):
         """Decayed VDOT should be clamped to 30-85 range."""
-        from sports_coach_engine.schemas.vdot import BreakAnalysis, BreakPeriod
+        from resilio.schemas.vdot import BreakAnalysis, BreakPeriod
 
         race_date = date(2024, 1, 1)  # 2 years ago
 

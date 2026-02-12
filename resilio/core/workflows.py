@@ -30,8 +30,8 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from sports_coach_engine.core.config import load_config, Config
-from sports_coach_engine.core.paths import (
+from resilio.core.config import load_config, Config
+from resilio.core.paths import (
     athlete_profile_path,
     daily_metrics_path,
     current_plan_path,
@@ -39,43 +39,43 @@ from sports_coach_engine.core.paths import (
     weekly_metrics_summary_path,
     get_plans_dir,
 )
-from sports_coach_engine.core.sync_state import (
+from resilio.core.sync_state import (
     read_resume_state,
     read_training_history,
     write_training_history,
 )
-from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-from sports_coach_engine.core.profile import ProfileService
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.core.strava import (
+from resilio.core.repository import RepositoryIO, ReadOptions
+from resilio.core.profile import ProfileService
+from resilio.schemas.repository import RepoError
+from resilio.core.strava import (
     fetch_athlete_profile,
     sync_strava_generator,
     StravaAuthError,
     StravaRateLimitError,
     StravaAPIError,
 )
-from sports_coach_engine.core.normalization import normalize_activity
-from sports_coach_engine.core.notes import analyze_activity
-from sports_coach_engine.core.load import compute_load
-from sports_coach_engine.core.metrics import compute_daily_metrics, compute_weekly_summary, _read_activities_for_date
-from sports_coach_engine.core.adaptation import (
+from resilio.core.normalization import normalize_activity
+from resilio.core.notes import analyze_activity
+from resilio.core.load import compute_load
+from resilio.core.metrics import compute_daily_metrics, compute_weekly_summary, _read_activities_for_date
+from resilio.core.adaptation import (
     detect_adaptation_triggers,
     assess_override_risk,
 )
-from sports_coach_engine.core.memory import save_memory, Memory, MemoryType, MemorySource
-from sports_coach_engine.core.plan import calculate_periodization, suggest_volume_adjustment
-from sports_coach_engine.utils.dates import get_next_monday
-from sports_coach_engine.schemas.activity import (
+from resilio.core.memory import save_memory, Memory, MemoryType, MemorySource
+from resilio.core.plan import calculate_periodization, suggest_volume_adjustment
+from resilio.utils.dates import get_next_monday
+from resilio.schemas.activity import (
     RawActivity,
     NormalizedActivity,
     RPEEstimate,
     RPESource,
 )
-from sports_coach_engine.schemas.metrics import DailyMetrics
-from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, StravaConnection
-from sports_coach_engine.schemas.sync import SyncPhase, SyncProgress, SyncReport, SyncResumeState
+from resilio.schemas.metrics import DailyMetrics
+from resilio.schemas.profile import AthleteProfile, Goal, GoalType, StravaConnection
+from resilio.schemas.sync import SyncPhase, SyncProgress, SyncReport, SyncResumeState
 # ProfileError import removed to avoid circular dependency - using duck typing instead
-from sports_coach_engine.schemas.plan import WeekPlan, MasterPlan, PlanPhase
+from resilio.schemas.plan import WeekPlan, MasterPlan, PlanPhase
 
 
 logger = logging.getLogger(__name__)
@@ -458,7 +458,7 @@ def _fetch_and_update_athlete_profile(
         profile_service = ProfileService(repo)
         profile = profile_service.load_profile()
 
-        # If no profile exists, skip (profile should be created via `sce profile create`)
+        # If no profile exists, skip (profile should be created via `resilio profile create`)
         # Use duck typing to check for error (has error_type attribute)
         if profile is None or hasattr(profile, 'error_type'):
             return None
@@ -977,7 +977,7 @@ def run_plan_generation(
         current_ctl = 20.0  # Default for new athletes
         current_weekly_volume = 0.0
         try:
-            from sports_coach_engine.api.coach import get_current_metrics
+            from resilio.api.coach import get_current_metrics
             metrics = get_current_metrics()
             if hasattr(metrics, 'ctl') and metrics.ctl is not None:
                 current_ctl = metrics.ctl
@@ -1684,12 +1684,12 @@ def recompute_all_metrics(
     Raises:
         MetricsCalculationError: If no activities found or computation fails
     """
-    from sports_coach_engine.core.metrics import (
+    from resilio.core.metrics import (
         compute_daily_metrics,
         compute_weekly_summary,
         MetricsCalculationError,
     )
-    from sports_coach_engine.core.paths import (
+    from resilio.core.paths import (
         daily_metrics_path,
         weekly_metrics_summary_path,
     )

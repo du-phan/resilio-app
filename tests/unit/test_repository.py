@@ -9,8 +9,8 @@ import yaml
 from pathlib import Path
 from pydantic import BaseModel
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType, ReadOptions
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.repository import RepoError, RepoErrorType, ReadOptions
 
 
 # Test schema

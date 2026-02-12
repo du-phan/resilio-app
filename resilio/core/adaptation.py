@@ -22,7 +22,7 @@ from datetime import datetime, date, timedelta
 from typing import Optional
 import uuid
 
-from sports_coach_engine.schemas.adaptation import (
+from resilio.schemas.adaptation import (
     TriggerType,
     AdaptationTrigger,
     OverrideRiskAssessment,
@@ -37,7 +37,7 @@ from sports_coach_engine.schemas.adaptation import (
     SafetyOverride,
     AdaptationResult,
 )
-from sports_coach_engine.core.repository import RepositoryIO
+from resilio.core.repository import RepositoryIO
 
 
 # ============================================================

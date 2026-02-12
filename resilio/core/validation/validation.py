@@ -8,7 +8,7 @@ This module implements:
 
 from datetime import date, timedelta
 from typing import List, Dict, Any, Optional
-from sports_coach_engine.schemas.validation import (
+from resilio.schemas.validation import (
     IntervalStructureValidation,
     IntervalBout,
     RecoveryBout,

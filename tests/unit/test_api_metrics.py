@@ -1,5 +1,7 @@
 """
-Unit tests for Metrics API (api/metrics.py).
+Unit tests for Metrics API
+
+    (api/metrics.py).
 
 Tests get_current_metrics(), get_readiness(), and get_intensity_distribution().
 """
@@ -8,22 +10,22 @@ import pytest
 from datetime import date, timedelta
 from unittest.mock import Mock, patch, MagicMock
 
-from sports_coach_engine.api.metrics import (
+from resilio.api.metrics import (
     get_current_metrics,
     get_readiness,
     get_intensity_distribution,
     MetricsError,
     _find_latest_metrics_date,
 )
-from sports_coach_engine.schemas.metrics import (
+from resilio.schemas.metrics import (
     DailyMetrics,
     ReadinessScore,
     ReadinessLevel,
     IntensityDistribution,
     CTLATLMetrics,
 )
-from sports_coach_engine.schemas.enrichment import EnrichedMetrics, MetricInterpretation
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+from resilio.schemas.enrichment import EnrichedMetrics, MetricInterpretation
+from resilio.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -67,6 +69,12 @@ def mock_enriched_metrics():
     return enriched
 
 
+@pytest.fixture
+def mock_log():
+    """Mock logger for testing."""
+    return Mock()
+
+
 # ============================================================
 # GET_CURRENT_METRICS TESTS
 # ============================================================
@@ -74,9 +82,9 @@ def mock_enriched_metrics():
 
 class TestGetCurrentMetrics:
     """Test get_current_metrics() function."""
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
-    @patch("sports_coach_engine.api.metrics.enrich_metrics")
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
+    @patch("resilio.api.metrics.enrich_metrics")
     def test_get_current_metrics_success(
         self, mock_enrich, mock_find_date, mock_repo_cls, mock_daily_metrics, mock_enriched_metrics
     ):
@@ -101,8 +109,10 @@ class TestGetCurrentMetrics:
         assert result == mock_enriched_metrics
 
         # Verify enrichment was called with repo
-        mock_enrich.assert_called_once_with(mock_daily_metrics, mock_repo)    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
+        mock_enrich.assert_called_once_with(mock_daily_metrics, mock_repo)
+
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
     def test_get_current_metrics_no_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test metrics retrieval when no data exists."""
         mock_repo = Mock()
@@ -116,8 +126,10 @@ class TestGetCurrentMetrics:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "not_found"
-        assert "No metrics available" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
+        assert "No metrics available" in result.message
+
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
     def test_get_current_metrics_validation_error(self, mock_find_date, mock_repo_cls, mock_log):
         """Test metrics retrieval with validation error."""
         mock_repo = Mock()
@@ -133,9 +145,11 @@ class TestGetCurrentMetrics:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "validation"
-        assert "Failed to load metrics" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
-    @patch("sports_coach_engine.api.metrics.enrich_metrics")
+        assert "Failed to load metrics" in result.message
+
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
+    @patch("resilio.api.metrics.enrich_metrics")
     def test_get_current_metrics_enrichment_failure(
         self, mock_enrich, mock_find_date, mock_repo_cls, mock_log, mock_daily_metrics
     ):
@@ -164,8 +178,8 @@ class TestGetCurrentMetrics:
 
 class TestGetReadiness:
     """Test get_readiness() function."""
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
     def test_get_readiness_success(self, mock_find_date, mock_repo_cls, mock_log, mock_daily_metrics):
         """Test successful readiness retrieval."""
         mock_repo = Mock()
@@ -179,8 +193,10 @@ class TestGetReadiness:
         # Should return ReadinessScore
         assert isinstance(result, Mock)  # Mock of ReadinessScore
         assert result == mock_daily_metrics.readiness
-        assert result.score == 68    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
+        assert result.score == 68
+
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
     def test_get_readiness_no_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test readiness retrieval when no metrics exist."""
         mock_repo = Mock()
@@ -193,8 +209,10 @@ class TestGetReadiness:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "not_found"
-        assert "No readiness data available" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
-    @patch("sports_coach_engine.api.metrics._find_latest_metrics_date")
+        assert "No readiness data available" in result.message
+
+    @patch("resilio.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics._find_latest_metrics_date")
     def test_get_readiness_insufficient_data(self, mock_find_date, mock_repo_cls, mock_log):
         """Test readiness retrieval when readiness is not computed."""
         mock_repo = Mock()
@@ -223,7 +241,7 @@ class TestGetReadiness:
 
 class TestGetIntensityDistribution:
     """Test get_intensity_distribution() function."""
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_success(self, mock_repo_cls, mock_log):
         """Test successful intensity distribution retrieval."""
         mock_repo = Mock()
@@ -255,7 +273,9 @@ class TestGetIntensityDistribution:
 
         # Check 80/20 compliance
         assert result.is_compliant is not None
-        assert result.target_low_percent == 80.0    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert result.target_low_percent == 80.0
+
+    @patch("resilio.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_no_data(self, mock_repo_cls, mock_log):
         """Test intensity distribution when no data exists."""
         mock_repo = Mock()
@@ -269,7 +289,9 @@ class TestGetIntensityDistribution:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "not_found"
-        assert "No training data" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "No training data" in result.message
+
+    @patch("resilio.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_no_training_time(self, mock_repo_cls, mock_log):
         """Test intensity distribution when no training time recorded."""
         mock_repo = Mock()
@@ -291,9 +313,13 @@ class TestGetIntensityDistribution:
         # Should return MetricsError
         assert isinstance(result, MetricsError)
         assert result.error_type == "insufficient_data"
-        assert "No training time recorded" in result.message    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert "No training time recorded" in result.message
+
+    @patch("resilio.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_partial_data(self, mock_repo_cls, mock_log):
-        """Test intensity distribution with partial data (some days missing)."""
+        """Test intensity distribution with partial data
+
+    (some days missing)."""
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
 
@@ -322,7 +348,9 @@ class TestGetIntensityDistribution:
         assert isinstance(result, IntensityDistribution)
         assert result.low_minutes == 40 * 3  # 120
         assert result.moderate_minutes == 5 * 3  # 15
-        assert result.high_minutes == 5 * 3  # 15    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+        assert result.high_minutes == 5 * 3  # 15
+
+    @patch("resilio.api.metrics.RepositoryIO")
     def test_get_intensity_distribution_custom_days(self, mock_repo_cls, mock_log):
         """Test intensity distribution with custom day range."""
         mock_repo = Mock()
@@ -356,7 +384,7 @@ class TestFindLatestMetricsDate:
 
     def test_find_latest_metrics_date_today(self, tmp_path):
         """Test finding metrics for today."""
-        from sports_coach_engine.core.repository import RepositoryIO
+        from resilio.core.repository import RepositoryIO
 
         repo = RepositoryIO()
         repo.repo_root = tmp_path
@@ -374,7 +402,7 @@ class TestFindLatestMetricsDate:
 
     def test_find_latest_metrics_date_past(self, tmp_path):
         """Test finding metrics from several days ago."""
-        from sports_coach_engine.core.repository import RepositoryIO
+        from resilio.core.repository import RepositoryIO
 
         repo = RepositoryIO()
         repo.repo_root = tmp_path
@@ -392,7 +420,7 @@ class TestFindLatestMetricsDate:
 
     def test_find_latest_metrics_date_none(self, tmp_path):
         """Test finding metrics when none exist."""
-        from sports_coach_engine.core.repository import RepositoryIO
+        from resilio.core.repository import RepositoryIO
 
         repo = RepositoryIO()
         repo.repo_root = tmp_path
@@ -409,7 +437,7 @@ class TestFindLatestMetricsDate:
 
 class TestEdgeCases:
     """Test edge cases and error conditions."""
-    @patch("sports_coach_engine.api.metrics.RepositoryIO")
+    @patch("resilio.api.metrics.RepositoryIO")
     def test_intensity_distribution_skip_invalid_files(self, mock_repo_cls, mock_log):
         """Test that invalid metrics files are skipped gracefully."""
         mock_repo = Mock()

@@ -8,7 +8,7 @@ training pace generation based on Jack Daniels' methodology.
 from typing import Tuple, Optional
 from datetime import timedelta
 
-from sports_coach_engine.schemas.vdot import (
+from resilio.schemas.vdot import (
     RaceDistance,
     VDOTResult,
     TrainingPaces,
@@ -17,7 +17,7 @@ from sports_coach_engine.schemas.vdot import (
     ConfidenceLevel,
     PaceUnit,
 )
-from sports_coach_engine.core.vdot.tables import (
+from resilio.core.vdot.tables import (
     VDOT_TABLE,
     VDOT_BY_VALUE,
     get_nearest_vdot_values,
@@ -183,7 +183,7 @@ def calculate_training_paces(vdot: int, unit: PaceUnit = PaceUnit.MIN_PER_KM) ->
             )
 
         # Create a minimal entry object for pace extraction
-        from sports_coach_engine.schemas.vdot import VDOTTableEntry
+        from resilio.schemas.vdot import VDOTTableEntry
 
         entry = VDOTTableEntry(vdot=vdot, **entry_data)
 
@@ -268,7 +268,7 @@ def calculate_race_equivalents(
                 linear_interpolate(vdot, vdot_lower, vdot_upper, val_lower, val_upper)
             )
 
-        from sports_coach_engine.schemas.vdot import VDOTTableEntry
+        from resilio.schemas.vdot import VDOTTableEntry
 
         entry = VDOTTableEntry(**entry_data)
 

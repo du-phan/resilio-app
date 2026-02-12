@@ -7,7 +7,7 @@ unit conversions, and filename generation.
 
 import pytest
 from datetime import date, datetime
-from sports_coach_engine.core.normalization import (
+from resilio.core.normalization import (
     normalize_activity,
     normalize_and_persist,
     normalize_sport_type,
@@ -17,8 +17,8 @@ from sports_coach_engine.core.normalization import (
     validate_activity,
     InvalidActivityError,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.activity import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.activity import (
     RawActivity,
     NormalizedActivity,
     ActivitySource,

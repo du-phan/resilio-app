@@ -12,7 +12,7 @@ from pathlib import Path
 def init_data_directory(root_path: Path = Path(".")):
     """Create data directory structure with templates."""
 
-    print("Initializing Sports Coach Engine data directory...")
+    print("Initializing Resilio data directory...")
     print()
 
     # Create directory structure
@@ -75,7 +75,7 @@ strava:
     print()
     print("Next steps:")
     print("1. Edit config/secrets.local.yaml with your Strava credentials")
-    print("2. Run: python -m sports_coach_engine.strava_connect (when implemented)")
+    print("2. Run: python -m resilio.strava_connect (when implemented)")
     print()
 
 

@@ -7,14 +7,14 @@ checking, risk assessment, recovery window estimation, training stress
 forecasting, and taper status tracking.
 """
 
-from sports_coach_engine.core.analysis.weekly import (
+from resilio.core.analysis.weekly import (
     validate_intensity_distribution,
     detect_activity_gaps,
     analyze_load_distribution_by_sport,
     check_weekly_capacity,
 )
 
-from sports_coach_engine.core.analysis.risk import (
+from resilio.core.analysis.risk import (
     assess_current_risk,
     estimate_recovery_window,
     forecast_training_stress,

@@ -8,9 +8,9 @@ from datetime import datetime, timedelta, timezone
 
 from typer.testing import CliRunner
 
-from sports_coach_engine.cli import app
-from sports_coach_engine.cli.commands.sync import _build_success_message
-from sports_coach_engine.schemas.sync import SyncPhase, SyncReport
+from resilio.cli import app
+from resilio.cli.commands.sync import _build_success_message
+from resilio.schemas.sync import SyncPhase, SyncReport
 
 
 def _parse_output(stdout: str) -> dict:

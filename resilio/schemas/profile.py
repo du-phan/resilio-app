@@ -8,7 +8,7 @@ from datetime import date
 from enum import Enum
 import warnings
 
-from sports_coach_engine.schemas.adaptation import AdaptationThresholds
+from resilio.schemas.adaptation import AdaptationThresholds
 
 
 # ============================================================
@@ -283,8 +283,8 @@ class AthleteProfile(BaseModel):
             warnings.warn(
                 "Profile has empty other_sports. If you have any regular non-running "
                 "activities (climbing, cycling, yoga, etc.), add them for accurate load "
-                "calculations. Run 'sce profile analyze' to see your sport distribution, "
-                "then: sce profile add-sport --sport <name> --frequency <times_per_week> "
+                "calculations. Run 'resilio profile analyze' to see your sport distribution, "
+                "then: resilio profile add-sport --sport <name> --frequency <times_per_week> "
                 "--unavailable-days <days> --duration <mins>",
                 UserWarning
             )

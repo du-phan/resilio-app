@@ -19,9 +19,9 @@ The two-channel model enables proper multi-sport training:
 
 from typing import Optional
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.schemas.activity import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.repository import RepoError
+from resilio.schemas.activity import (
     LoadCalculation,
     NormalizedActivity,
     SessionType,

@@ -1,7 +1,7 @@
 """Tests for date utility functions."""
 import pytest
 from datetime import date, timedelta
-from sports_coach_engine.utils.dates import (
+from resilio.utils.dates import (
     get_next_monday,
     get_week_boundaries,
     format_week_range,

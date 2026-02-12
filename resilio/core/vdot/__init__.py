@@ -16,7 +16,7 @@ Key exports:
     - adjust_pace_for_conditions: Apply environmental adjustments
 """
 
-from sports_coach_engine.core.vdot.calculator import (
+from resilio.core.vdot.calculator import (
     calculate_vdot,
     calculate_training_paces,
     calculate_race_equivalents,
@@ -25,14 +25,14 @@ from sports_coach_engine.core.vdot.calculator import (
     format_time_seconds,
 )
 
-from sports_coach_engine.core.vdot.adjustments import (
+from resilio.core.vdot.adjustments import (
     adjust_pace_for_conditions,
     adjust_pace_for_altitude,
     adjust_pace_for_heat,
     adjust_pace_for_hills,
 )
 
-from sports_coach_engine.core.vdot.tables import (
+from resilio.core.vdot.tables import (
     VDOT_TABLE,
     VDOT_BY_VALUE,
     get_vdot_entry,

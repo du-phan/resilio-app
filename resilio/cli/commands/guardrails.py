@@ -1,5 +1,5 @@
 """
-sce guardrails - Volume validation and recovery planning.
+resilio guardrails - Volume validation and recovery planning.
 
 Validate training volumes against Daniels' constraints, check weekly progression,
 validate long runs, calculate safe volume ranges, and generate recovery protocols
@@ -10,7 +10,7 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api.guardrails import (
+from resilio.api.guardrails import (
     validate_quality_volume,
     validate_weekly_progression,
     validate_long_run_limits,
@@ -22,8 +22,8 @@ from sports_coach_engine.api.guardrails import (
     generate_illness_recovery_plan,
     analyze_weekly_progression_context,
 )
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import output_json
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import output_json
 
 # Create subcommand app
 app = typer.Typer(help="Volume validation and recovery planning")
@@ -66,8 +66,8 @@ def quality_volume_command(
     - R-pace: ≤ lesser of 8km OR 5% of weekly mileage
 
     Examples:
-        sce guardrails quality-volume --t-pace 4.5 --i-pace 6.0 --r-pace 2.0 --weekly-volume 50.0
-        sce guardrails quality-volume --t-pace 3.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
+        resilio guardrails quality-volume --t-pace 4.5 --i-pace 6.0 --r-pace 2.0 --weekly-volume 50.0
+        resilio guardrails quality-volume --t-pace 3.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
 
     The command returns violations if any pace type exceeds safe limits.
     """
@@ -120,8 +120,8 @@ def progression_command(
     from one week to the next to minimize injury risk.
 
     Examples:
-        sce guardrails progression --previous 40.0 --current 50.0
-        sce guardrails progression --previous 40.0 --current 44.0
+        resilio guardrails progression --previous 40.0 --current 50.0
+        resilio guardrails progression --previous 40.0 --current 44.0
 
     Returns:
         - ok: true/false - Whether progression is safe
@@ -208,13 +208,13 @@ def analyze_progression_command(
 
     Examples:
         # BG scenario: Low volume, small absolute increase
-        sce guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4 --age 32
+        resilio guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4 --age 32
 
         # High volume scenario: Large absolute increase
-        sce guardrails analyze-progression --previous 60 --current 75 --ctl 55 --run-days 4
+        resilio guardrails analyze-progression --previous 60 --current 75 --ctl 55 --run-days 4
 
         # Masters athlete with recent injury
-        sce guardrails analyze-progression --previous 40 --current 46 --age 52 --recent-injury
+        resilio guardrails analyze-progression --previous 40 --current 46 --age 52 --recent-injury
 
     Output includes:
         - volume_context: Volume level classification with injury risk factor
@@ -290,8 +290,8 @@ def long_run_command(
     - Long run ≤ 2.5 hours (150 minutes) for most runners
 
     Examples:
-        sce guardrails long-run --distance 18.0 --duration 135 --weekly-volume 50.0
-        sce guardrails long-run --distance 15.0 --duration 120 --weekly-volume 50.0 --pct-limit 30
+        resilio guardrails long-run --distance 18.0 --duration 135 --weekly-volume 50.0
+        resilio guardrails long-run --distance 15.0 --duration 120 --weekly-volume 50.0 --pct-limit 30
 
     Returns:
         - pct_ok: Whether percentage is within limit
@@ -302,7 +302,7 @@ def long_run_command(
     resolved_duration_limit = duration_limit
     if resolved_duration_limit is None:
         try:
-            from sports_coach_engine.api.profile import get_profile, ProfileError
+            from resilio.api.profile import get_profile, ProfileError
             profile_result = get_profile()
             if not isinstance(profile_result, ProfileError) and profile_result.constraints:
                 resolved_duration_limit = profile_result.constraints.max_time_per_session_minutes
@@ -370,8 +370,8 @@ def feasible_volume_command(
     max session duration, and a conservative easy pace.
 
     Examples:
-        sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5
-        sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5 --target-volume 32
+        resilio guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5
+        resilio guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5 --target-volume 32
     """
     result = validate_weekly_volume_feasibility(
         run_days_per_week=run_days,
@@ -453,13 +453,13 @@ def safe_volume_command(
 
     Examples:
         # Single-sport runner
-        sce guardrails safe-volume --ctl 44.0 --priority primary --goal half_marathon --age 52
+        resilio guardrails safe-volume --ctl 44.0 --priority primary --goal half_marathon --age 52
 
         # Multi-sport athlete (running balanced with climbing)
-        sce guardrails safe-volume --ctl 30.0 --priority equal --goal 10k --recent-volume 20.7
+        resilio guardrails safe-volume --ctl 30.0 --priority equal --goal 10k --recent-volume 20.7
 
         # Runner maintaining fitness while focused on another sport
-        sce guardrails safe-volume --ctl 27.0 --priority secondary --goal fitness
+        resilio guardrails safe-volume --ctl 27.0 --priority secondary --goal fitness
 
     Returns:
         - ctl_zone: Fitness level category
@@ -537,8 +537,8 @@ def break_return_command(
     - >8 weeks: Structured multi-week (33%, 50%, 75%), 80-92% VDOT
 
     Examples:
-        sce guardrails break-return --days 21 --ctl 44.0 --cross-training moderate
-        sce guardrails break-return --days 3 --ctl 35.0
+        resilio guardrails break-return --days 21 --ctl 44.0 --cross-training moderate
+        resilio guardrails break-return --days 3 --ctl 35.0
 
     Returns:
         - load_phase_1_pct: Load percentage for first half of return
@@ -594,8 +594,8 @@ def masters_recovery_command(
     Age brackets: 18-35 (base), 36-45 (+0-1 day), 46-55 (+1-2 days), 56+ (+2-3 days)
 
     Examples:
-        sce guardrails masters-recovery --age 52 --workout-type vo2max
-        sce guardrails masters-recovery --age 28 --workout-type tempo
+        resilio guardrails masters-recovery --age 52 --workout-type vo2max
+        resilio guardrails masters-recovery --age 28 --workout-type tempo
 
     Returns:
         - age_bracket: Age category
@@ -657,8 +657,8 @@ def race_recovery_command(
     - Marathon: 14-28 days
 
     Examples:
-        sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
-        sce guardrails race-recovery --distance 10k --age 28 --effort moderate
+        resilio guardrails race-recovery --distance half_marathon --age 52 --effort hard
+        resilio guardrails race-recovery --distance 10k --age 28 --effort moderate
 
     Returns:
         - minimum_recovery_days: Minimum recovery needed
@@ -719,8 +719,8 @@ def illness_recovery_command(
     Monitor resting HR, fatigue levels, and symptoms before progression.
 
     Examples:
-        sce guardrails illness-recovery --start-date 2026-01-10 --end-date 2026-01-15 --severity moderate
-        sce guardrails illness-recovery --start-date 2026-01-01 --end-date 2026-01-03 --severity mild
+        resilio guardrails illness-recovery --start-date 2026-01-10 --end-date 2026-01-15 --severity moderate
+        resilio guardrails illness-recovery --start-date 2026-01-01 --end-date 2026-01-03 --severity mild
 
     Returns:
         - illness_duration_days: Days of illness

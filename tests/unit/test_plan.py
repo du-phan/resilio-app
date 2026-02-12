@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from pydantic import ValidationError
 
-from sports_coach_engine.schemas.plan import (
+from resilio.schemas.plan import (
     GoalType,
     PlanPhase,
     WorkoutType,
@@ -481,7 +481,7 @@ class TestPeriodization:
 
     def test_marathon_18_weeks(self):
         """Marathon 18 weeks should have 4 phases with correct distribution."""
-        from sports_coach_engine.core.plan import calculate_periodization
+        from resilio.core.plan import calculate_periodization
 
         phases = calculate_periodization(
             goal=GoalType.MARATHON,
@@ -507,7 +507,7 @@ class TestPeriodization:
 
     def test_half_marathon_12_weeks(self):
         """Half marathon 12 weeks should have correct phase distribution."""
-        from sports_coach_engine.core.plan import calculate_periodization
+        from resilio.core.plan import calculate_periodization
 
         phases = calculate_periodization(
             goal=GoalType.HALF_MARATHON,
@@ -525,7 +525,7 @@ class TestPeriodization:
 
     def test_general_fitness_12_weeks(self):
         """General fitness should use rolling 4-week cycles."""
-        from sports_coach_engine.core.plan import calculate_periodization
+        from resilio.core.plan import calculate_periodization
 
         phases = calculate_periodization(
             goal=GoalType.GENERAL_FITNESS,
@@ -546,7 +546,7 @@ class TestPeriodization:
 
     def test_timeline_too_short_raises_error(self):
         """Timeline shorter than minimum should log warning but still generate plan."""
-        from sports_coach_engine.core.plan import calculate_periodization
+        from resilio.core.plan import calculate_periodization
         import sys
         from io import StringIO
 
@@ -572,7 +572,7 @@ class TestPeriodization:
 
     def test_phase_dates_are_continuous(self):
         """Phase start/end dates should be continuous with no gaps."""
-        from sports_coach_engine.core.plan import calculate_periodization
+        from resilio.core.plan import calculate_periodization
 
         phases = calculate_periodization(
             goal=GoalType.TEN_K,
@@ -588,7 +588,7 @@ class TestPeriodization:
 
     def test_week_ranges_are_correct(self):
         """start_week and end_week should match the weeks count."""
-        from sports_coach_engine.core.plan import calculate_periodization
+        from resilio.core.plan import calculate_periodization
 
         phases = calculate_periodization(
             goal=GoalType.FIVE_K,
@@ -606,7 +606,7 @@ class TestVolumeProgression:
 
     def test_base_phase_progression(self):
         """Base phase should progress from starting to 80% of peak."""
-        from sports_coach_engine.core.plan import calculate_volume_progression
+        from resilio.core.plan import calculate_volume_progression
 
         # Use 5 weeks to avoid week 4 being a recovery week
         phases = [
@@ -635,7 +635,7 @@ class TestVolumeProgression:
 
     def test_taper_reduces_progressively(self):
         """Taper phase should reduce volume by 15% per week."""
-        from sports_coach_engine.core.plan import calculate_volume_progression
+        from resilio.core.plan import calculate_volume_progression
 
         phases = [
             {"phase": "peak", "weeks": 1},
@@ -658,7 +658,7 @@ class TestVolumeProgression:
 
     def test_recovery_weeks_applied(self):
         """Recovery weeks (every 4th) should be at 70% of surrounding."""
-        from sports_coach_engine.core.plan import calculate_volume_progression
+        from resilio.core.plan import calculate_volume_progression
 
         # 8 weeks base phase
         phases = [
@@ -681,7 +681,7 @@ class TestVolumeProgression:
 
     def test_general_fitness_recovery_weeks(self):
         """General fitness recovery weeks should be 70% of previous."""
-        from sports_coach_engine.core.plan import calculate_volume_progression
+        from resilio.core.plan import calculate_volume_progression
 
         phases = [
             {"phase": "build", "weeks": 1},
@@ -709,8 +709,8 @@ class TestWorkoutCreation:
 
     def test_create_long_run_workout(self):
         """Long run should be capped at 28% of weekly volume and 2.5 hours."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         workout = create_workout(
             workout_type="long_run",
@@ -740,8 +740,8 @@ class TestWorkoutCreation:
 
     def test_long_run_capped_at_2_5_hours(self):
         """Long run duration should be capped at 150 minutes."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         # Very high volume that would normally exceed 2.5h
         workout = create_workout(
@@ -761,8 +761,8 @@ class TestWorkoutCreation:
 
     def test_create_tempo_workout(self):
         """Tempo workout should have interval structure and higher intensity."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         workout = create_workout(
             workout_type="tempo",
@@ -791,8 +791,8 @@ class TestWorkoutCreation:
 
     def test_create_intervals_workout(self):
         """Intervals workout should have VO2max intensity and structure."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         workout = create_workout(
             workout_type="intervals",
@@ -818,8 +818,8 @@ class TestWorkoutCreation:
 
     def test_create_easy_workout(self):
         """Easy workout should have low intensity and simple structure."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         workout = create_workout(
             workout_type="easy",
@@ -845,8 +845,8 @@ class TestWorkoutCreation:
 
     def test_hr_ranges_calculated_from_profile(self):
         """HR ranges should be calculated when max_hr available."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         profile = {
             "vital_signs": {"max_hr": 185}
@@ -869,8 +869,8 @@ class TestWorkoutCreation:
 
     def test_pace_ranges_calculated_from_vdot(self):
         """Pace ranges should be calculated when VDOT available."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         profile = {
             "vdot": 45.0
@@ -896,8 +896,8 @@ class TestWorkoutCreation:
 
     def test_no_pace_or_hr_without_profile(self):
         """Without profile, pace/HR ranges should be None."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         workout = create_workout(
             workout_type="easy",
@@ -920,8 +920,8 @@ class TestWorkoutCreation:
 
     def test_workout_id_generation(self):
         """Each workout should have unique ID."""
-        from sports_coach_engine.core.plan import create_workout
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import create_workout
+        from resilio.schemas.plan import PlanPhase
 
         workout1 = create_workout(
             workout_type="easy",
@@ -959,7 +959,7 @@ class TestVolumeRecommendation:
 
     def test_beginner_volume_recommendation(self):
         """Beginner (CTL <30) should get conservative ranges."""
-        from sports_coach_engine.core.plan import suggest_volume_adjustment
+        from resilio.core.plan import suggest_volume_adjustment
 
         rec = suggest_volume_adjustment(
             current_weekly_volume_km=20.0,
@@ -975,7 +975,7 @@ class TestVolumeRecommendation:
 
     def test_recreational_volume_recommendation(self):
         """Recreational (CTL 30-45) should get moderate ranges."""
-        from sports_coach_engine.core.plan import suggest_volume_adjustment
+        from resilio.core.plan import suggest_volume_adjustment
 
         rec = suggest_volume_adjustment(
             current_weekly_volume_km=35.0,
@@ -993,7 +993,7 @@ class TestWorkoutTemplates:
 
     def test_get_easy_template(self):
         """Should return easy workout template."""
-        from sports_coach_engine.core.plan import get_workout_template, WorkoutType
+        from resilio.core.plan import get_workout_template, WorkoutType
 
         template = get_workout_template(WorkoutType.EASY)
 
@@ -1003,7 +1003,7 @@ class TestWorkoutTemplates:
 
     def test_get_tempo_template(self):
         """Should return tempo workout template with intervals."""
-        from sports_coach_engine.core.plan import get_workout_template, WorkoutType
+        from resilio.core.plan import get_workout_template, WorkoutType
 
         template = get_workout_template(WorkoutType.TEMPO)
 
@@ -1017,7 +1017,7 @@ class TestWorkoutModification:
 
     def test_create_downgraded_workout(self):
         """Should downgrade tempo to easy."""
-        from sports_coach_engine.core.plan import create_workout, create_downgraded_workout, PlanPhase
+        from resilio.core.plan import create_workout, create_downgraded_workout, PlanPhase
         from datetime import date
 
         tempo = create_workout(
@@ -1039,7 +1039,7 @@ class TestWorkoutModification:
 
     def test_create_shortened_workout(self):
         """Should shorten workout duration."""
-        from sports_coach_engine.core.plan import create_workout, create_shortened_workout, PlanPhase
+        from resilio.core.plan import create_workout, create_shortened_workout, PlanPhase
         from datetime import date
 
         long_run = create_workout(
@@ -1064,7 +1064,7 @@ class TestRecoveryEstimation:
 
     def test_easy_run_minimal_recovery(self):
         """Easy runs need minimal recovery."""
-        from sports_coach_engine.core.plan import create_workout, estimate_recovery_days, PlanPhase
+        from resilio.core.plan import create_workout, estimate_recovery_days, PlanPhase
         from datetime import date
 
         easy = create_workout(
@@ -1082,7 +1082,7 @@ class TestRecoveryEstimation:
 
     def test_tempo_needs_recovery(self):
         """Tempo runs need 2 days recovery."""
-        from sports_coach_engine.core.plan import create_workout, estimate_recovery_days, PlanPhase
+        from resilio.core.plan import create_workout, estimate_recovery_days, PlanPhase
         from datetime import date
 
         tempo = create_workout(
@@ -1104,7 +1104,7 @@ class TestGuardrailValidation:
 
     def test_validate_week_detects_too_many_quality_sessions(self):
         """Should detect 3 quality sessions but not auto-fix."""
-        from sports_coach_engine.core.plan import create_workout, validate_week, WeekPlan, PlanPhase
+        from resilio.core.plan import create_workout, validate_week, WeekPlan, PlanPhase
         from datetime import date
 
         # Create week with 3 quality sessions
@@ -1138,7 +1138,7 @@ class TestGuardrailValidation:
 
     def test_validate_week_detects_back_to_back_hard_days(self):
         """Should detect consecutive hard sessions."""
-        from sports_coach_engine.core.plan import create_workout, validate_week, WeekPlan, PlanPhase
+        from resilio.core.plan import create_workout, validate_week, WeekPlan, PlanPhase
         from datetime import date
 
         # Create week with back-to-back hard days
@@ -1165,7 +1165,7 @@ class TestGuardrailValidation:
 
     def test_validate_guardrails_checks_80_20_distribution(self):
         """Should detect 80/20 violations across full plan."""
-        from sports_coach_engine.core.plan import validate_guardrails, MasterPlan, WeekPlan, create_workout, PlanPhase
+        from resilio.core.plan import validate_guardrails, MasterPlan, WeekPlan, create_workout, PlanPhase
         from datetime import date
 
         # Create plan with poor 80/20 distribution (60/40)
@@ -1216,7 +1216,7 @@ class TestPlanReviewAndLogPaths:
 
     def test_current_plan_review_path(self):
         """Test current plan review path returns correct location."""
-        from sports_coach_engine.core.paths import current_plan_review_path
+        from resilio.core.paths import current_plan_review_path
 
         path = current_plan_review_path()
         assert path.endswith("current_plan_review.md")
@@ -1224,7 +1224,7 @@ class TestPlanReviewAndLogPaths:
 
     def test_current_training_log_path(self):
         """Test current training log path returns correct location."""
-        from sports_coach_engine.core.paths import current_training_log_path
+        from resilio.core.paths import current_training_log_path
 
         path = current_training_log_path()
         assert path.endswith("current_training_log.md")
@@ -1236,8 +1236,8 @@ class TestVolumeDistribution:
 
     def test_distribute_volume_sums_to_target(self):
         """Test that distributed volumes sum to weekly target."""
-        from sports_coach_engine.core.plan import distribute_weekly_volume
-        from sports_coach_engine.schemas.plan import WorkoutType
+        from resilio.core.plan import distribute_weekly_volume
+        from resilio.schemas.plan import WorkoutType
 
         # Test case: 25km week with 4 workouts (1 long, 3 easy)
         workout_types = [WorkoutType.LONG_RUN, WorkoutType.EASY, WorkoutType.EASY, WorkoutType.EASY]
@@ -1252,8 +1252,8 @@ class TestVolumeDistribution:
 
     def test_distribute_volume_with_quality_workouts(self):
         """Test volume distribution with tempo and intervals."""
-        from sports_coach_engine.core.plan import distribute_weekly_volume
-        from sports_coach_engine.schemas.plan import WorkoutType
+        from resilio.core.plan import distribute_weekly_volume
+        from resilio.schemas.plan import WorkoutType
 
         # 40km week with varied workouts
         workout_types = [
@@ -1276,8 +1276,8 @@ class TestVolumeDistribution:
 
     def test_distribute_volume_with_profile_minimums(self):
         """Test that profile-based minimums are respected."""
-        from sports_coach_engine.core.plan import distribute_weekly_volume
-        from sports_coach_engine.schemas.plan import WorkoutType
+        from resilio.core.plan import distribute_weekly_volume
+        from resilio.schemas.plan import WorkoutType
 
         # Profile with typical distances
         profile = {
@@ -1298,8 +1298,8 @@ class TestWeekValidation:
 
     def test_validate_week_detects_volume_mismatch(self):
         """Test that volume mismatch is detected."""
-        from sports_coach_engine.core.plan import validate_week
-        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+        from resilio.core.plan import validate_week
+        from resilio.schemas.plan import WeekPlan, WorkoutPrescription
 
         # Create week with volume mismatch
         workouts = [
@@ -1351,8 +1351,8 @@ class TestWeekValidation:
 
     def test_validate_week_accepts_matching_volume(self):
         """Test that matching volume passes validation."""
-        from sports_coach_engine.core.plan import validate_week
-        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+        from resilio.core.plan import validate_week
+        from resilio.schemas.plan import WeekPlan, WorkoutPrescription
 
         # Create week with matching volume
         workouts = [
@@ -1420,8 +1420,8 @@ class TestLongRunProgression:
 
     def test_suggest_long_run_base_phase(self):
         """Test long run suggestion respects current capacity in base phase."""
-        from sports_coach_engine.core.plan import suggest_long_run_progression
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import suggest_long_run_progression
+        from resilio.schemas.plan import PlanPhase
 
         # Athlete currently running 8km long runs
         suggestion = suggest_long_run_progression(
@@ -1439,8 +1439,8 @@ class TestLongRunProgression:
 
     def test_suggest_long_run_never_below_minimum(self):
         """Test that suggestions never go below 90% of current capacity."""
-        from sports_coach_engine.core.plan import suggest_long_run_progression
-        from sports_coach_engine.schemas.plan import PlanPhase
+        from resilio.core.plan import suggest_long_run_progression
+        from resilio.schemas.plan import PlanPhase
 
         suggestion = suggest_long_run_progression(
             current_long_run_km=10.0,
@@ -1458,8 +1458,8 @@ class TestMinimumWorkoutEnforcement:
 
     def test_validate_week_catches_short_easy_run(self):
         """Short easy run (20min/3km) should trigger warning."""
-        from sports_coach_engine.core.plan import validate_week
-        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+        from resilio.core.plan import validate_week
+        from resilio.schemas.plan import WeekPlan, WorkoutPrescription
 
         # Create week with short workout
         short_workout = WorkoutPrescription(
@@ -1495,8 +1495,8 @@ class TestMinimumWorkoutEnforcement:
 
     def test_validate_week_with_profile_aware_minimums(self):
         """Validation should use athlete's typical minimums from profile."""
-        from sports_coach_engine.core.plan import validate_week
-        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+        from resilio.core.plan import validate_week
+        from resilio.schemas.plan import WeekPlan, WorkoutPrescription
 
         profile = {
             "typical_easy_distance_km": 7.0,
@@ -1538,8 +1538,8 @@ class TestMinimumWorkoutEnforcement:
 
     def test_validate_week_accepts_adequate_easy_runs(self):
         """Adequate easy runs should not trigger warnings."""
-        from sports_coach_engine.core.plan import validate_week
-        from sports_coach_engine.schemas.plan import WeekPlan, WorkoutPrescription
+        from resilio.core.plan import validate_week
+        from resilio.schemas.plan import WeekPlan, WorkoutPrescription
 
         # Create week with adequate workout (30min/5km - meets generic minimums)
         adequate_workout = WorkoutPrescription(
@@ -1579,7 +1579,7 @@ class TestVolumeDistributionMinimums:
 
     def test_low_volume_triggers_warning_not_crash(self):
         """22km with 4 easy runs creates 3.7km each - should work but get flagged."""
-        from sports_coach_engine.core.plan import distribute_weekly_volume
+        from resilio.core.plan import distribute_weekly_volume
 
         workout_types = [
             WorkoutType.EASY,
@@ -1602,7 +1602,7 @@ class TestVolumeDistributionMinimums:
 
     def test_profile_aware_distribution(self):
         """Distribution should use athlete's typical minimums."""
-        from sports_coach_engine.core.plan import distribute_weekly_volume
+        from resilio.core.plan import distribute_weekly_volume
 
         profile = {"typical_easy_distance_km": 7.0}
 
@@ -1629,7 +1629,7 @@ class TestVolumeDistributionMinimums:
 
     def test_insufficient_volume_distributes_evenly(self):
         """When volume is insufficient, distribute evenly and let validation catch it."""
-        from sports_coach_engine.core.plan import distribute_weekly_volume
+        from resilio.core.plan import distribute_weekly_volume
 
         profile = {"typical_easy_distance_km": 7.0}
 
@@ -1660,7 +1660,7 @@ class TestOtherSportScheduling:
     """Other sports should not block run scheduling in v0."""
 
     def test_other_sports_do_not_block_sunday_long_run(self):
-        from sports_coach_engine.core.plan import determine_weekly_workouts
+        from resilio.core.plan import determine_weekly_workouts
 
         schedule = determine_weekly_workouts(
             phase=PlanPhase.BASE,
@@ -1686,7 +1686,7 @@ class TestUnavailableRunDaysScheduling:
     """Unavailable run days should be respected in plan scheduling."""
 
     def test_unavailable_days_block_sunday_long_run(self):
-        from sports_coach_engine.core.plan import determine_weekly_workouts
+        from resilio.core.plan import determine_weekly_workouts
 
         schedule = determine_weekly_workouts(
             phase=PlanPhase.BASE,

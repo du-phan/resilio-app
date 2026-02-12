@@ -7,9 +7,9 @@ from datetime import date, datetime
 
 import yaml
 
-from sports_coach_engine.core.paths import athlete_training_history_path
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.sync import SyncResumeState
+from resilio.core.paths import athlete_training_history_path
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.sync import SyncResumeState
 
 
 logger = logging.getLogger(__name__)

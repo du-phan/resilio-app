@@ -14,7 +14,7 @@ This API wraps the core VDOT module with error handling and convenient interface
 from typing import Union, Optional
 from dataclasses import dataclass
 
-from sports_coach_engine.schemas.vdot import (
+from resilio.schemas.vdot import (
     RaceDistance,
     VDOTResult,
     TrainingPaces,
@@ -31,7 +31,7 @@ from sports_coach_engine.schemas.vdot import (
     VDOTDecayResult,
     PaceAnalysisResult,
 )
-from sports_coach_engine.core.vdot import (
+from resilio.core.vdot import (
     calculate_vdot as core_calculate_vdot,
     calculate_training_paces as core_calculate_paces,
     calculate_race_equivalents as core_calculate_equivalents,
@@ -345,13 +345,13 @@ def estimate_current_vdot(
     from pathlib import Path
     from statistics import median
 
-    from sports_coach_engine.core.paths import get_activities_dir
-    from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-    from sports_coach_engine.schemas.activity import NormalizedActivity
-    from sports_coach_engine.core.vdot.continuity import detect_training_breaks, calculate_vdot_decay
-    from sports_coach_engine.core.vdot.pace_analysis import analyze_recent_paces
-    from sports_coach_engine.api.profile import get_profile, ProfileError
-    from sports_coach_engine.api.metrics import get_current_metrics, MetricsError
+    from resilio.core.paths import get_activities_dir
+    from resilio.core.repository import RepositoryIO, ReadOptions
+    from resilio.schemas.activity import NormalizedActivity
+    from resilio.core.vdot.continuity import detect_training_breaks, calculate_vdot_decay
+    from resilio.core.vdot.pace_analysis import analyze_recent_paces
+    from resilio.api.profile import get_profile, ProfileError
+    from resilio.api.metrics import get_current_metrics, MetricsError
 
     try:
         # Load activities
@@ -362,7 +362,7 @@ def estimate_current_vdot(
         if not activity_files:
             return VDOTError(
                 error_type="not_found",
-                message="No activities found. Run 'sce sync' to import activities from Strava.",
+                message="No activities found. Run 'resilio sync' to import activities from Strava.",
             )
 
         # Load all activities (we need full history for break detection)
@@ -376,7 +376,7 @@ def estimate_current_vdot(
         if not all_activities:
             return VDOTError(
                 error_type="not_found",
-                message="No running activities found. Run 'sce sync' to import activities.",
+                message="No running activities found. Run 'resilio sync' to import activities.",
             )
 
         # Get profile (for max_hr and race history)
@@ -384,14 +384,16 @@ def estimate_current_vdot(
         if isinstance(profile_result, ProfileError):
             return VDOTError(
                 error_type="not_found",
-                message="Profile not found. Run 'sce profile create' to create your profile.",
+                message="Profile not found. Run 'resilio profile create' to create your profile.",
             )
         profile = profile_result
 
         # Get max_hr for HR-based easy pace detection
         max_hr = None
-        if profile.vital_signs and profile.vital_signs.max_hr:
-            max_hr = profile.vital_signs.max_hr
+        vital_signs = getattr(profile, "vital_signs", None)
+        candidate_max_hr = getattr(vital_signs, "max_hr", None) if vital_signs else None
+        if isinstance(candidate_max_hr, (int, float)) and candidate_max_hr > 0:
+            max_hr = int(candidate_max_hr)
 
         # Step 1: Check for recent PB (<90 days)
         if profile.personal_bests:
@@ -523,7 +525,7 @@ def estimate_current_vdot(
             error_type="not_found",
             message=(
                 "Insufficient data for VDOT estimation. To establish your baseline:\n\n"
-                "1. Add a PB: 'sce profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD'\n"
+                "1. Add a PB: 'resilio profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD'\n"
                 "2. OR run quality workouts with keywords (tempo, threshold, interval)\n"
                 "3. OR run easy runs consistently (requires max HR in profile for detection)\n\n"
                 "Why no CTL-based estimate? CTL measures training volume, not pace capability.\n"
@@ -535,4 +537,4 @@ def estimate_current_vdot(
         return VDOTError(error_type="calculation_failed", message=f"VDOT estimation failed: {e}")
 
 
-# Moved to sports_coach_engine.core.vdot.pace_analysis
+# Moved to resilio.core.vdot.pace_analysis

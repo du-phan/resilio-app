@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from sports_coach_engine.core.memory import (
+from resilio.core.memory import (
     analyze_memory_patterns,
     archive_memory,
     cleanup_archived,
@@ -21,8 +21,8 @@ from sports_coach_engine.core.memory import (
     load_memories,
     save_memory,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.memory import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.memory import (
     Memory,
     MemoryConfidence,
     MemorySource,
@@ -41,7 +41,7 @@ def repo(tmp_path, monkeypatch):
     # Create .git directory to mark as repo root
     (tmp_path / ".git").mkdir()
     # Create athlete directory
-    (tmp_path / "data" / "athlete").mkdir(exist_ok=True)
+    (tmp_path / "data" / "athlete").mkdir(parents=True, exist_ok=True)
     # Change to tmp directory
     monkeypatch.chdir(tmp_path)
     return RepositoryIO()
@@ -394,7 +394,7 @@ class TestDeduplication:
 
     def test_normalize_for_comparison(self):
         """Content normalization works correctly."""
-        from sports_coach_engine.core.memory import _normalize_for_comparison
+        from resilio.core.memory import _normalize_for_comparison
 
         assert _normalize_for_comparison("Left knee pain!") == "left knee pain"
         assert _normalize_for_comparison("   Left   knee   pain   ") == "left knee pain"

@@ -8,16 +8,16 @@ from datetime import date, datetime
 from typing import Union, Optional, Dict, Any
 from dataclasses import dataclass
 
-from sports_coach_engine.api.profile import get_profile, ProfileError
-from sports_coach_engine.api.metrics import get_current_metrics, MetricsError
-from sports_coach_engine.api.vdot import (
+from resilio.api.profile import get_profile, ProfileError
+from resilio.api.metrics import get_current_metrics, MetricsError
+from resilio.api.vdot import (
     estimate_current_vdot as api_vdot_estimate_current,
     calculate_vdot_from_race,
     predict_race_times,
     VDOTError,
 )
-from sports_coach_engine.core.vdot import calculate_race_equivalents
-from sports_coach_engine.schemas.vdot import RaceDistance
+from resilio.core.vdot import calculate_race_equivalents
+from resilio.schemas.vdot import RaceDistance
 
 
 # ============================================================
@@ -159,7 +159,7 @@ def api_get_performance_baseline(
     if current_vdot:
         # Use VDOT table to get equivalent race times
         try:
-            from sports_coach_engine.core.vdot.tables import VDOT_TABLE
+            from resilio.core.vdot.tables import VDOT_TABLE
 
             # Find VDOT entry
             vdot_entry = next((entry for entry in VDOT_TABLE if entry.vdot == current_vdot), None)

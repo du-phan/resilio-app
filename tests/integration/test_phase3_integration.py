@@ -14,14 +14,14 @@ import yaml
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.metrics import (
+from resilio.core.repository import RepositoryIO
+from resilio.core.metrics import (
     compute_daily_metrics,
     compute_weekly_summary,
     compute_metrics_batch,
     MetricsCalculationError,
 )
-from sports_coach_engine.schemas.activity import (
+from resilio.schemas.activity import (
     NormalizedActivity,
     LoadCalculation,
     SessionType,
@@ -29,7 +29,7 @@ from sports_coach_engine.schemas.activity import (
     SurfaceType,
     DataQuality,
 )
-from sports_coach_engine.schemas.metrics import (
+from resilio.schemas.metrics import (
     DailyMetrics,
     WeeklySummary,
     TSBZone,

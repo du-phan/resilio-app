@@ -2,13 +2,13 @@
 
 import pytest
 from datetime import date, timedelta
-from sports_coach_engine.api.validation import (
+from resilio.api.validation import (
     api_validate_interval_structure,
     api_validate_plan_structure,
     api_assess_goal_feasibility,
     ValidationError,
 )
-from sports_coach_engine.schemas.validation import (
+from resilio.schemas.validation import (
     IntervalStructureValidation,
     PlanStructureValidation,
     GoalFeasibilityAssessment,

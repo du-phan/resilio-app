@@ -8,8 +8,8 @@ import pytest
 import yaml
 from pathlib import Path
 
-from sports_coach_engine.core.config import ConfigError, get_repo_root, load_config
-from sports_coach_engine.schemas.config import Config, ConfigErrorType
+from resilio.core.config import ConfigError, get_repo_root, load_config
+from resilio.schemas.config import Config, ConfigErrorType
 
 
 class TestGetRepoRoot:

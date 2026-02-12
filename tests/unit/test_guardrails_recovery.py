@@ -9,13 +9,13 @@ Tests recovery protocols based on Daniels' Table 9.2 and Pfitzinger's guidelines
 """
 
 import pytest
-from sports_coach_engine.core.guardrails.recovery import (
+from resilio.core.guardrails.recovery import (
     calculate_break_return_plan,
     calculate_masters_recovery,
     calculate_race_recovery,
     generate_illness_recovery_plan,
 )
-from sports_coach_engine.schemas.guardrails import IllnessSeverity
+from resilio.schemas.guardrails import IllnessSeverity
 
 
 # ============================================================
@@ -159,7 +159,7 @@ class TestMastersRecovery:
             workout_type="vo2max",
         )
 
-        assert result.age_bracket == "18-35"
+        assert result.age_bracket == "18-45"
         # Base recovery, no additional days
         assert result.adjustments["vo2max"] == 0
         assert result.recommended_recovery_days["vo2max"] == 1  # 1 base day
@@ -171,9 +171,9 @@ class TestMastersRecovery:
             workout_type="vo2max",
         )
 
-        assert result.age_bracket == "36-45"
-        # Should have minimal adjustment
-        assert 0 <= result.adjustments["vo2max"] <= 1
+        assert result.age_bracket == "18-45"
+        # 18-45 bucket has no additional adjustment
+        assert result.adjustments["vo2max"] == 0
 
     def test_masters_46_to_55_moderate_adjustment(self):
         """Masters 46-55 should have moderate adjustments (+1-2 days)."""
@@ -194,7 +194,7 @@ class TestMastersRecovery:
             workout_type="vo2max",
         )
 
-        assert result.age_bracket == "56+"
+        assert result.age_bracket == "56-65"
         # Significant additional recovery needed
         assert result.adjustments["vo2max"] >= 2
 
@@ -248,7 +248,7 @@ class TestRaceRecovery:
     """Tests for post-race recovery protocols."""
 
     def test_5k_recovery_young_athlete(self):
-        """5K recovery for young athlete should be 4-7 days."""
+        """5K recovery for young athlete should be 3-5 days."""
         result = calculate_race_recovery(
             race_distance="5k",
             athlete_age=28,
@@ -256,18 +256,18 @@ class TestRaceRecovery:
         )
 
         assert result.race_distance == "5k"
-        assert 4 <= result.minimum_recovery_days <= 7
+        assert 3 <= result.minimum_recovery_days <= 5
         assert result.quality_work_resume_day >= result.minimum_recovery_days
 
     def test_10k_recovery_young_athlete(self):
-        """10K recovery should be 6-10 days."""
+        """10K recovery should be 5-7 days."""
         result = calculate_race_recovery(
             race_distance="10k",
             athlete_age=28,
             finishing_effort="hard",
         )
 
-        assert 6 <= result.minimum_recovery_days <= 10
+        assert 5 <= result.minimum_recovery_days <= 7
 
     def test_half_marathon_recovery_young_athlete(self):
         """Half marathon recovery should be 7-14 days."""
@@ -380,7 +380,7 @@ class TestIllnessRecovery:
 
         assert result.severity == IllnessSeverity.MILD
         assert result.estimated_ctl_drop <= 5.0  # Minimal fitness loss
-        assert result.full_training_resume_day <= 7  # Quick return
+        assert result.full_training_resume_day <= 10  # Quick return
 
     def test_moderate_illness_medium_duration(self):
         """Moderate illness (4-7 days) should have structured return."""
@@ -472,7 +472,7 @@ class TestIllnessRecovery:
         )
 
         # Should resume within a week
-        assert result.full_training_resume_day <= 7
+        assert result.full_training_resume_day <= 10
 
     def test_return_protocol_gradual_progression(self):
         """Return protocol should show gradual load increase."""

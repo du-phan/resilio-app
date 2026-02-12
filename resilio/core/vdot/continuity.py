@@ -14,14 +14,14 @@ from datetime import date, timedelta
 from typing import Optional, List
 from statistics import median
 
-from sports_coach_engine.schemas.vdot import (
+from resilio.schemas.vdot import (
     BreakAnalysis,
     BreakPeriod,
     VDOTDecayResult,
     ConfidenceLevel,
 )
-from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.utils.dates import get_week_boundaries
+from resilio.schemas.activity import NormalizedActivity
+from resilio.utils.dates import get_week_boundaries
 
 
 def group_by_training_week(

@@ -76,7 +76,7 @@ class SyncLockStatus(BaseModel):
 
 
 class SyncStatusSnapshot(BaseModel):
-    """Status payload returned by `sce sync --status`."""
+    """Status payload returned by `resilio sync --status`."""
 
     running: bool
     lock: Optional[SyncLockStatus] = None

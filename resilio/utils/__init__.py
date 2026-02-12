@@ -1,1 +1,1 @@
-"""Utility modules for sports coach engine."""
+"""Utility modules for resilio."""

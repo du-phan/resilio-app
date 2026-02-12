@@ -8,12 +8,12 @@ Provides validation with input sanitization and error handling:
 
 from datetime import date, datetime
 from typing import List, Dict, Any, Union, Optional
-from sports_coach_engine.core.validation import (
+from resilio.core.validation import (
     validate_interval_structure,
     validate_plan_structure,
     assess_goal_feasibility,
 )
-from sports_coach_engine.schemas.validation import (
+from resilio.schemas.validation import (
     IntervalStructureValidation,
     PlanStructureValidation,
     GoalFeasibilityAssessment,

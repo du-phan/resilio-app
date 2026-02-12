@@ -9,23 +9,23 @@ from datetime import date, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass, field
 
-from sports_coach_engine.core.paths import (
+from resilio.core.paths import (
     daily_metrics_path,
     athlete_profile_path,
     current_plan_path,
     activities_month_dir,
     weekly_metrics_summary_path,
 )
-from sports_coach_engine.core.repository import RepositoryIO, ReadOptions
-from sports_coach_engine.schemas.repository import RepoError
-from sports_coach_engine.core.workflows import run_adaptation_check, WorkflowError
-from sports_coach_engine.core.enrichment import enrich_workout, enrich_metrics
-from sports_coach_engine.core.metrics import compute_weekly_summary
-from sports_coach_engine.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
-from sports_coach_engine.schemas.metrics import DailyMetrics
-from sports_coach_engine.schemas.activity import NormalizedActivity
-from sports_coach_engine.schemas.plan import MasterPlan, WorkoutPrescription
-from sports_coach_engine.schemas.profile import AthleteProfile
+from resilio.core.repository import RepositoryIO, ReadOptions
+from resilio.schemas.repository import RepoError
+from resilio.core.workflows import run_adaptation_check, WorkflowError
+from resilio.core.enrichment import enrich_workout, enrich_metrics
+from resilio.core.metrics import compute_weekly_summary
+from resilio.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
+from resilio.schemas.metrics import DailyMetrics
+from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.plan import MasterPlan, WorkoutPrescription
+from resilio.schemas.profile import AthleteProfile
 
 
 # ============================================================
@@ -193,11 +193,9 @@ def get_todays_workout(
                 break
 
         if metrics is None:
-            # No historical metrics either -
-            return error
             return CoachError(
                 error_type="insufficient_data",
-                message="No training data available yet. Sync activities to generate metrics.",
+                message="No metrics available yet. Sync activities to generate metrics.",
             )
     else:
         metrics = metrics_result

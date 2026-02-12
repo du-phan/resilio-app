@@ -1,5 +1,5 @@
 """
-sce approvals - Approval state management for progressive disclosure workflows.
+resilio approvals - Approval state management for progressive disclosure workflows.
 """
 
 from datetime import datetime, timezone
@@ -8,11 +8,11 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.cli.errors import get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
-from sports_coach_engine.core.state import load_approval_state, save_approval_state
-from sports_coach_engine.schemas.approvals import ApprovalState, WeeklyApproval
-from sports_coach_engine.schemas.repository import RepoError
+from resilio.cli.errors import get_exit_code_from_envelope
+from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
+from resilio.core.state import load_approval_state, save_approval_state
+from resilio.schemas.approvals import ApprovalState, WeeklyApproval
+from resilio.schemas.repository import RepoError
 
 app = typer.Typer(help="Manage approval state for planning workflows")
 
@@ -95,7 +95,7 @@ def approvals_approve_vdot_command(
 
     # Sync approved VDOT to athlete profile
     try:
-        from sports_coach_engine.api.profile import update_profile
+        from resilio.api.profile import update_profile
         from rich.console import Console
 
         console = Console()

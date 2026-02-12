@@ -5,7 +5,7 @@ Implements pace adjustments for altitude, heat, humidity, and hills based on
 exercise physiology research and Daniels' recommendations.
 """
 
-from sports_coach_engine.schemas.vdot import PaceAdjustment, ConditionType
+from resilio.schemas.vdot import PaceAdjustment, ConditionType
 
 
 # ============================================================

@@ -8,7 +8,7 @@ import pytest
 from datetime import date, timedelta
 from unittest.mock import Mock, patch
 
-from sports_coach_engine.api.profile import (
+from resilio.api.profile import (
     create_profile,
     get_profile,
     update_profile,
@@ -19,7 +19,7 @@ from sports_coach_engine.api.profile import (
     resume_sport_in_profile,
     ProfileError,
 )
-from sports_coach_engine.schemas.profile import (
+from resilio.schemas.profile import (
     AthleteProfile,
     Goal,
     GoalType,
@@ -30,7 +30,7 @@ from sports_coach_engine.schemas.profile import (
     OtherSport,
     PauseReason,
 )
-from sports_coach_engine.schemas.repository import RepoError, RepoErrorType
+from resilio.schemas.repository import RepoError, RepoErrorType
 
 
 # ============================================================
@@ -73,7 +73,7 @@ def mock_log():
 
 class TestGetProfile:
     """Test get_profile() function."""
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_get_profile_success(self, mock_repo_cls, mock_log, mock_profile):
         """Test successful profile retrieval."""
         mock_repo = Mock()
@@ -89,7 +89,7 @@ class TestGetProfile:
         assert result == mock_profile
         assert result.name == "Test Athlete"
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_get_profile_with_goal(self, mock_repo_cls, mock_log, mock_profile_with_goal):
         """Test profile retrieval with goal set."""
         mock_repo = Mock()
@@ -104,7 +104,7 @@ class TestGetProfile:
         assert result.goal is not None
         assert result.goal.type == GoalType.HALF_MARATHON
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_get_profile_not_found(self, mock_repo_cls, mock_log):
         """Test profile retrieval when file not found."""
         mock_repo = Mock()
@@ -120,7 +120,7 @@ class TestGetProfile:
         assert result.error_type == "not_found"
         assert "Failed to load profile" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_get_profile_validation_error(self, mock_repo_cls, mock_log):
         """Test profile retrieval with validation error."""
         mock_repo = Mock()
@@ -144,8 +144,8 @@ class TestGetProfile:
 
 class TestUpdateProfile:
     """Test update_profile() function."""
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_success(self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile):
         """Test successful profile update."""
         mock_repo = Mock()
@@ -170,7 +170,7 @@ class TestUpdateProfile:
         # Verify save was called
         mock_repo.write_yaml.assert_called_once()
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_update_profile_invalid_field(self, mock_repo_cls, mock_log, mock_profile):
         """Test updating profile with invalid field."""
         mock_repo = Mock()
@@ -185,7 +185,7 @@ class TestUpdateProfile:
         assert result.error_type == "validation"
         assert "validation error" in result.message.lower()
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_update_profile_not_found(self, mock_repo_cls, mock_log):
         """Test updating profile when file not found."""
         mock_repo = Mock()
@@ -201,8 +201,8 @@ class TestUpdateProfile:
         assert result.error_type == "not_found"
         assert "Failed to load profile" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_validation_error(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -223,8 +223,8 @@ class TestUpdateProfile:
         assert result.error_type == "validation"
         assert "Invalid profile data" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_save_error(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -254,7 +254,7 @@ class TestUpdateProfile:
 
 class TestSetGoal:
     """Test set_goal() function."""
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_set_goal_success(self, mock_repo_cls, mock_log, mock_profile):
         """Test successful goal setting."""
         mock_repo = Mock()
@@ -277,7 +277,7 @@ class TestSetGoal:
         assert result.target_date == target_date.isoformat()  # Goal stores as ISO string
         assert result.target_time == "1:45:00"
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_set_goal_invalid_race_type(self, mock_repo_cls, mock_log):
         """Test setting goal with invalid race type."""
         mock_repo = Mock()
@@ -293,7 +293,7 @@ class TestSetGoal:
         assert result.error_type == "validation"
         assert "Invalid race type" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_set_goal_profile_not_found(self, mock_repo_cls, mock_log):
         """Test setting goal when profile not found."""
         mock_repo = Mock()
@@ -312,7 +312,7 @@ class TestSetGoal:
         assert result.error_type == "not_found"
         assert "Failed to load profile" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_set_goal_save_error(self, mock_repo_cls, mock_log, mock_profile):
         """Test setting goal with save error."""
         mock_repo = Mock()
@@ -333,7 +333,7 @@ class TestSetGoal:
         assert result.error_type == "unknown"
         assert "Failed to save profile" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_set_goal_plan_generation_error(
         self, mock_repo_cls, mock_log, mock_profile
     ):
@@ -355,7 +355,7 @@ class TestSetGoal:
         assert result.error_type == "unknown"
         assert "failed to save profile" in result.message.lower()
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_set_goal_without_target_time(
         self, mock_repo_cls, mock_log, mock_profile
     ):
@@ -386,8 +386,8 @@ class TestSetGoal:
 
 class TestPR1NewFields:
     """Test new profile fields added in PR1."""
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_dict_merge_not_setattr(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -410,8 +410,8 @@ class TestPR1NewFields:
         mock_profile_cls.model_validate.assert_called_once()
         assert isinstance(result, Mock)
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_with_vdot(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -429,8 +429,8 @@ class TestPR1NewFields:
         assert isinstance(result, Mock)
         mock_repo.write_yaml.assert_called_once()
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_with_running_experience_years(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -448,8 +448,8 @@ class TestPR1NewFields:
         assert isinstance(result, Mock)
         mock_repo.write_yaml.assert_called_once()
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_with_weekly_km(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -467,8 +467,8 @@ class TestPR1NewFields:
         assert isinstance(result, Mock)
         mock_repo.write_yaml.assert_called_once()
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
-    @patch("sports_coach_engine.api.profile.AthleteProfile")
+    @patch("resilio.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.AthleteProfile")
     def test_update_profile_validation_immediate(
         self, mock_profile_cls, mock_repo_cls, mock_log, mock_profile
     ):
@@ -492,10 +492,10 @@ class TestPR1NewFields:
 
 class TestPR2ConstraintFields:
     """Test constraint fields added in PR2."""
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_create_profile_with_unavailable_days(self, mock_repo_cls, mock_log):
         """Test creating profile with unavailable_run_days constraint."""
-        from sports_coach_engine.schemas.profile import Weekday
+        from resilio.schemas.profile import Weekday
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -514,10 +514,10 @@ class TestPR2ConstraintFields:
         assert result.name == "Test Athlete"
         assert result.constraints.unavailable_run_days == unavailable_days
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_create_profile_constraint_defaults(self, mock_repo_cls, mock_log):
         """Test that constraint fields use sensible defaults when not provided."""
-        from sports_coach_engine.schemas.profile import Weekday
+        from resilio.schemas.profile import Weekday
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -551,7 +551,7 @@ class TestSportCommitments:
             other_sports=[],
         )
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_add_sport_with_unavailable_days(self, mock_repo_cls, mock_log):
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -573,7 +573,7 @@ class TestSportCommitments:
         assert sport.unavailable_days == [Weekday.TUESDAY, Weekday.THURSDAY]
         assert sport.frequency_per_week == 2
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_add_sport_frequency_only(self, mock_repo_cls, mock_log):
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -592,7 +592,7 @@ class TestSportCommitments:
         assert added.frequency_per_week == 3
         assert added.unavailable_days is None
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_add_sport_missing_profile_returns_not_found(self, mock_repo_cls, mock_log):
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -603,7 +603,7 @@ class TestSportCommitments:
         assert isinstance(result, ProfileError)
         assert result.error_type == "not_found"
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_add_sport_requires_frequency(self, mock_repo_cls, mock_log):
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -615,7 +615,7 @@ class TestSportCommitments:
         assert result.error_type == "validation"
         assert "Missing required frequency" in result.message
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_remove_sport_missing_profile_returns_not_found(self, mock_repo_cls, mock_log):
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo
@@ -626,7 +626,7 @@ class TestSportCommitments:
         assert isinstance(result, ProfileError)
         assert result.error_type == "not_found"
 
-    @patch("sports_coach_engine.api.profile.RepositoryIO")
+    @patch("resilio.api.profile.RepositoryIO")
     def test_pause_and_resume_sport(self, mock_repo_cls, mock_log):
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo

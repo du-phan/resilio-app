@@ -5,13 +5,13 @@ Tests profile CRUD operations, constraint validation, and error handling.
 """
 
 import pytest
-from sports_coach_engine.core.profile import (
+from resilio.core.profile import (
     ProfileService,
     ProfileError,
     ProfileErrorType,
 )
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.schemas.profile import (
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.profile import (
     AthleteProfile,
     Goal,
     GoalType,
@@ -228,7 +228,7 @@ class TestProfileService:
         repo = RepositoryIO()
         service = ProfileService(repo)
 
-        from sports_coach_engine.schemas.profile import (
+        from resilio.schemas.profile import (
             StravaConnection,
             OtherSport,
         )
@@ -327,7 +327,7 @@ class TestVDOTCalculation:
 
     def test_calculate_vdot_for_10k_47min(self):
         """Should calculate VDOT ~43 for 47:00 10K."""
-        from sports_coach_engine.core.profile import calculate_vdot, RaceDistance
+        from resilio.core.profile import calculate_vdot, RaceDistance
 
         vdot = calculate_vdot(RaceDistance.TEN_K, "47:00")
 
@@ -336,7 +336,7 @@ class TestVDOTCalculation:
 
     def test_calculate_vdot_for_5k_22min(self):
         """Should calculate VDOT ~43.5 for 22:30 5K."""
-        from sports_coach_engine.core.profile import calculate_vdot, RaceDistance
+        from resilio.core.profile import calculate_vdot, RaceDistance
 
         vdot = calculate_vdot(RaceDistance.FIVE_K, "22:30")
 
@@ -345,7 +345,7 @@ class TestVDOTCalculation:
 
     def test_calculate_vdot_for_marathon(self):
         """Should calculate VDOT for marathon time."""
-        from sports_coach_engine.core.profile import calculate_vdot, RaceDistance
+        from resilio.core.profile import calculate_vdot, RaceDistance
 
         # 3:30:00 marathon ~ VDOT 45
         vdot = calculate_vdot(RaceDistance.MARATHON, "3:30:00")
@@ -355,7 +355,7 @@ class TestVDOTCalculation:
 
     def test_calculate_vdot_invalid_time_format(self):
         """Should return error for invalid time format."""
-        from sports_coach_engine.core.profile import calculate_vdot, RaceDistance
+        from resilio.core.profile import calculate_vdot, RaceDistance
 
         result = calculate_vdot(RaceDistance.TEN_K, "invalid")
 
@@ -364,14 +364,14 @@ class TestVDOTCalculation:
 
     def test_parse_time_to_seconds_mmss(self):
         """Should parse MM:SS format correctly."""
-        from sports_coach_engine.core.profile import parse_time_to_seconds
+        from resilio.core.profile import parse_time_to_seconds
 
         seconds = parse_time_to_seconds("47:00")
         assert seconds == 2820  # 47 * 60
 
     def test_parse_time_to_seconds_hhmmss(self):
         """Should parse HH:MM:SS format correctly."""
-        from sports_coach_engine.core.profile import parse_time_to_seconds
+        from resilio.core.profile import parse_time_to_seconds
 
         seconds = parse_time_to_seconds("3:30:00")
         assert seconds == 12600  # 3*3600 + 30*60
@@ -382,7 +382,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_valid(self):
         """Should validate correct constraints."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SUNDAY],
@@ -398,7 +398,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_error_max_less_than_min(self):
         """Should error when max < min."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[Weekday.MONDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
@@ -417,7 +417,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_warning_insufficient_days(self):
         """Should warn when available days < min days."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY],  # Only Sunday available (1 day)
@@ -437,7 +437,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_error_no_days_race_goal(self):
         """Should error when no run days with race goal."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],  # All days unavailable
@@ -458,7 +458,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_allows_no_days_general_fitness(self):
         """Should allow no run days with general fitness goal."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[Weekday.MONDAY, Weekday.TUESDAY, Weekday.WEDNESDAY, Weekday.THURSDAY, Weekday.FRIDAY, Weekday.SATURDAY, Weekday.SUNDAY],
@@ -474,7 +474,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_warning_consecutive_days(self):
         """Should warn when all available days are consecutive."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[
@@ -501,7 +501,7 @@ class TestConstraintValidation:
 
     def test_validate_constraints_no_warning_non_consecutive(self):
         """Should not warn when available days are not all consecutive."""
-        from sports_coach_engine.core.profile import validate_constraints
+        from resilio.core.profile import validate_constraints
 
         constraints = TrainingConstraints(
             unavailable_run_days=[
