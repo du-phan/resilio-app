@@ -1,5 +1,5 @@
 """
-sce plan - Manage training plans.
+resilio plan - Manage training plans.
 
 View current plan or regenerate based on goal.
 """
@@ -10,12 +10,12 @@ from typing import Optional
 
 import typer
 
-from sports_coach_engine.api import (
+from resilio.api import (
     get_current_plan,
     api_validate_interval_structure,
     api_validate_plan_structure,
 )
-from sports_coach_engine.api.plan import (
+from resilio.api.plan import (
     get_plan_weeks,
     build_macro_template,
     export_plan_structure,
@@ -30,8 +30,8 @@ from sports_coach_engine.api.plan import (
     revert_week_plan,
     PlanError,
 )
-from sports_coach_engine.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from sports_coach_engine.cli.output import create_error_envelope, create_success_envelope, output_json
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
+from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
 
 # Create subcommand app
 app = typer.Typer(help="Manage training plans")
@@ -71,11 +71,11 @@ def plan_show_command(
     - Metrics and coach observations
 
     Examples:
-        sce plan show                      # Show plan (default)
-        sce plan show --type plan          # Show plan explicitly
-        sce plan show --type review        # Show plan review
-        sce plan show --type log           # Show training log
-        sce plan show --type log --last-weeks 4  # Show last 4 weeks of log
+        resilio plan show                      # Show plan (default)
+        resilio plan show --type plan          # Show plan explicitly
+        resilio plan show --type review        # Show plan review
+        resilio plan show --type log           # Show training log
+        resilio plan show --type log --last-weeks 4  # Show last 4 weeks of log
     """
     if type == "plan":
         # Original show command behavior
@@ -96,8 +96,8 @@ def plan_show_command(
 
     elif type == "review":
         # show-review behavior
-        from sports_coach_engine.core.paths import current_plan_review_path
-        from sports_coach_engine.core.repository import RepositoryIO
+        from resilio.core.paths import current_plan_review_path
+        from resilio.core.repository import RepositoryIO
 
         repo = RepositoryIO()
         review_path = current_plan_review_path()
@@ -116,22 +116,21 @@ def plan_show_command(
         with open(review_abs_path, 'r') as f:
             content = f.read()
 
-        envelope = {
-            "success": True,
-            "message": "Plan review retrieved",
-            "data": {
+        envelope = create_success_envelope(
+            message="Plan review retrieved",
+            data={
                 "path": review_path,
-                "content": content
-            }
-        }
+                "content": content,
+            },
+        )
 
         output_json(envelope)
         raise typer.Exit(code=0)
 
     elif type == "log":
         # show-log behavior
-        from sports_coach_engine.core.paths import current_training_log_path
-        from sports_coach_engine.core.repository import RepositoryIO
+        from resilio.core.paths import current_training_log_path
+        from resilio.core.repository import RepositoryIO
 
         repo = RepositoryIO()
         log_path = current_training_log_path()
@@ -140,7 +139,7 @@ def plan_show_command(
         if not log_abs_path.exists():
             envelope = create_error_envelope(
                 error_type="not_found",
-                message="Training log not found. Initialize it with: sce plan init-log",
+                message="Training log not found. Initialize it with: resilio plan init-log",
                 data={"expected_path": log_path}
             )
             output_json(envelope)
@@ -169,15 +168,14 @@ def plan_show_command(
                 # Reconstruct content
                 content = header + ''.join([marker + text for marker, text in selected_weeks])
 
-        envelope = {
-            "success": True,
-            "message": f"Training log retrieved{' (last ' + str(last_weeks) + ' weeks)' if last_weeks else ''}",
-            "data": {
+        envelope = create_success_envelope(
+            message=f"Training log retrieved{' (last ' + str(last_weeks) + ' weeks)' if last_weeks else ''}",
+            data={
                 "path": log_path,
                 "content": content,
-                "weeks_shown": last_weeks if last_weeks else "all"
-            }
-        }
+                "weeks_shown": last_weeks if last_weeks else "all",
+            },
+        )
 
         output_json(envelope)
         raise typer.Exit(code=0)
@@ -222,11 +220,11 @@ def plan_week_command(
     Useful for previewing upcoming training or reviewing specific weeks.
 
     Examples:
-        sce plan week                    # Current week
-        sce plan week --next             # Next week
-        sce plan week --week 5           # Week 5 specifically
-        sce plan week --date 2026-02-15  # Week containing this date
-        sce plan week --week 5 --count 2 # Weeks 5-6
+        resilio plan week                    # Current week
+        resilio plan week --next             # Next week
+        resilio plan week --week 5           # Week 5 specifically
+        resilio plan week --date 2026-02-15  # Week containing this date
+        resilio plan week --week 5 --count 2 # Weeks 5-6
     """
     # Parse date if provided
     target_date = None
@@ -268,8 +266,8 @@ def plan_week_command(
 @app.command(name="status")
 def plan_status_command(ctx: typer.Context) -> None:
     """Get summarized plan status for routing decisions."""
-    from sports_coach_engine.api.profile import get_profile
-    from sports_coach_engine.schemas.profile import AthleteProfile
+    from resilio.api.profile import get_profile
+    from resilio.schemas.profile import AthleteProfile
 
     plan_result = get_current_plan()
     if isinstance(plan_result, PlanError):
@@ -457,12 +455,12 @@ def plan_populate_command(
     Requires approval state for the exact weekly JSON payload.
 
     Progressive workflow:
-        sce plan populate --from-json /tmp/week1.json   # Add week 1
-        sce plan populate --from-json /tmp/week2.json   # Add week 2 (week 1 preserved)
-        sce plan populate --from-json /tmp/week3.json   # Add week 3 (weeks 1-2 preserved)
+        resilio plan populate --from-json /tmp/week1.json   # Add week 1
+        resilio plan populate --from-json /tmp/week2.json   # Add week 2 (week 1 preserved)
+        resilio plan populate --from-json /tmp/week3.json   # Add week 3 (weeks 1-2 preserved)
 
     Bulk addition also works:
-        sce plan populate --from-json /tmp/weeks_1_to_5.json
+        resilio plan populate --from-json /tmp/weeks_1_to_5.json
 
     JSON Format:
         {
@@ -535,8 +533,8 @@ def plan_populate_command(
         raise typer.Exit(code=5)
 
     # Approval gate: require exact approved weekly JSON file before writing
-    from sports_coach_engine.core.state import load_approval_state
-    from sports_coach_engine.schemas.repository import RepoError
+    from resilio.core.state import load_approval_state
+    from resilio.schemas.repository import RepoError
 
     approval_state = load_approval_state()
     if isinstance(approval_state, RepoError):
@@ -553,7 +551,7 @@ def plan_populate_command(
             error_type="validation",
             message="Weekly approval is required before applying a plan",
             data={
-                "next_steps": "Run: sce approvals approve-week --week <N> --file <approved_json>"
+                "next_steps": "Run: resilio approvals approve-week --week <N> --file <approved_json>"
             },
         )
         output_json(envelope)
@@ -644,8 +642,8 @@ def plan_validate_week_command(
     Returns exit code 0 if valid, 1 if errors found.
 
     Examples:
-        sce plan validate-week --file /tmp/week1.json
-        sce plan validate-week --file /tmp/week1.json --verbose
+        resilio plan validate-week --file /tmp/week1.json
+        resilio plan validate-week --file /tmp/week1.json --verbose
     """
     # Validate file exists
     json_path = Path(file)
@@ -681,7 +679,7 @@ def plan_validate_week_command(
         raise typer.Exit(code=1)
 
     # STAGE 2: Semantic validation (guardrails, minimums, etc.)
-    from sports_coach_engine.api.plan import validate_week_plan
+    from resilio.api.plan import validate_week_plan
 
     semantic_result = validate_week_plan(weekly_plan_path=file, verbose=verbose)
 
@@ -749,8 +747,8 @@ def plan_export_week_command(
     in explicit format, ready for AI Coach to modify and re-apply.
 
     Examples:
-        sce plan export-week --week 1 --out /tmp/week1.json
-        sce plan export-week --week 3 --out /tmp/week3_modified.json
+        resilio plan export-week --week 1 --out /tmp/week1.json
+        resilio plan export-week --week 3 --out /tmp/week3_modified.json
     """
     from datetime import date as dt_date
 
@@ -858,8 +856,8 @@ def plan_update_from_command(
         }
 
     Examples:
-        sce plan update-from --week 5 --from-json weeks5-10.json
-        sce plan update-from --week 1 --from-json /tmp/full_replan.json
+        resilio plan update-from --week 5 --from-json weeks5-10.json
+        resilio plan update-from --week 1 --from-json /tmp/full_replan.json
     """
     # Validate file exists
     json_path = Path(from_json)
@@ -931,7 +929,7 @@ def plan_validate_intervals_command(
     - R-pace: 30-90sec work bouts, 2-3x recovery
 
     Example:
-        sce plan validate-intervals \\
+        resilio plan validate-intervals \\
             --type intervals \\
             --intensity I-pace \\
             --work-bouts work.json \\
@@ -1022,7 +1020,7 @@ def plan_validate_structure_command(
     - Taper structure (gradual volume reduction)
 
     Example:
-        sce plan validate-structure \\
+        resilio plan validate-structure \\
             --total-weeks 20 \\
             --goal-type half_marathon \\
             --phases phases.json \\
@@ -1251,7 +1249,7 @@ def _build_week_message(result: any) -> str:
     Returns:
         Human-readable message
     """
-    from sports_coach_engine.api.plan import PlanWeeksResult
+    from resilio.api.plan import PlanWeeksResult
 
     if not isinstance(result, PlanWeeksResult):
         return "Plan weeks retrieved"
@@ -1308,7 +1306,7 @@ def plan_save_review_command(
     Use this after athlete approves a plan to preserve the review document.
 
     Example:
-        sce plan save-review --from-file /tmp/training_plan_review_2026_01_20.md --approved
+        resilio plan save-review --from-file /tmp/training_plan_review_2026_01_20.md --approved
 
     Returns JSON with saved path and symlink location.
     """
@@ -1390,7 +1388,7 @@ def plan_append_week_command(
         }
 
     Example:
-        sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
+        resilio plan append-week --week 1 --from-json /tmp/week_1_summary.json
 
     Returns JSON with confirmation and appended week number.
     """
@@ -1475,7 +1473,7 @@ def create_macro_command(
     macro_template_json: str = typer.Option(
         ...,
         "--macro-template-json",
-        help="Path to macro template JSON (generated by sce plan template-macro)"
+        help="Path to macro template JSON (generated by resilio plan template-macro)"
     ),
 ) -> None:
     """
@@ -1489,13 +1487,13 @@ def create_macro_command(
     execution detail generated every 4 weeks.
 
     Examples:
-        sce plan create-macro --goal-type half_marathon --race-date 2026-05-03 \\
+        resilio plan create-macro --goal-type half_marathon --race-date 2026-05-03 \\
             --target-time "1:30:00" --total-weeks 16 --start-date 2026-01-20 \\
             --current-ctl 44.0 --baseline-vdot 48.0 \\
             --macro-template-json /tmp/macro_template.json
 
         # Benchmark goal with derived date (end of horizon)
-        sce plan create-macro --goal-type 10k --total-weeks 12 --start-date 2026-02-02 \\
+        resilio plan create-macro --goal-type 10k --total-weeks 12 --start-date 2026-02-02 \\
             --current-ctl 30.0 --baseline-vdot 42.0 \\
             --macro-template-json /tmp/macro_template.json
 
@@ -1508,7 +1506,7 @@ def create_macro_command(
         Macro plan structure with phases, volume trajectory, CTL projections,
         recovery weeks, and assessment milestones.
     """
-    from sports_coach_engine.api.plan import create_macro_plan
+    from resilio.api.plan import create_macro_plan
     from datetime import date as dt_date, timedelta
 
     # Parse dates
@@ -1548,13 +1546,13 @@ def create_macro_command(
         envelope = create_error_envelope(
             error_type="validation",
             message="baseline_vdot is required and must be approved before macro creation",
-            data={"next_steps": "Run: sce approvals approve-vdot --value <VDOT>"},
+            data={"next_steps": "Run: resilio approvals approve-vdot --value <VDOT>"},
         )
         output_json(envelope)
         raise typer.Exit(code=5)
 
-    from sports_coach_engine.core.state import load_approval_state
-    from sports_coach_engine.schemas.repository import RepoError
+    from resilio.core.state import load_approval_state
+    from resilio.schemas.repository import RepoError
     import math
 
     approval_state = load_approval_state()
@@ -1572,7 +1570,7 @@ def create_macro_command(
         envelope = create_error_envelope(
             error_type="validation",
             message="Approved baseline VDOT not found in approvals state",
-            data={"next_steps": "Run: sce approvals approve-vdot --value <VDOT>"},
+            data={"next_steps": "Run: resilio approvals approve-vdot --value <VDOT>"},
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -1620,7 +1618,7 @@ def create_macro_command(
     if payload.get("template_version") != "macro_template_v1":
         envelope = create_error_envelope(
             error_type="validation",
-            message="Macro template missing template_version (generate with sce plan template-macro)",
+            message="Macro template missing template_version (generate with resilio plan template-macro)",
             data={"file": macro_template_json},
         )
         output_json(envelope)
@@ -1758,7 +1756,7 @@ def create_macro_command(
         output_json(envelope)
         raise typer.Exit(code=5)
 
-    from sports_coach_engine.schemas.plan import WorkoutStructureHints
+    from resilio.schemas.plan import WorkoutStructureHints
     for idx, hint in enumerate(weekly_structure_hints, start=1):
         try:
             WorkoutStructureHints.model_validate(hint)
@@ -1844,13 +1842,13 @@ def assess_period_command(
 
     Examples:
         # Assess 4-week period (weeks 1-4)
-        sce plan assess-period --period-number 1 --week-numbers "1,2,3,4" \\
+        resilio plan assess-period --period-number 1 --week-numbers "1,2,3,4" \\
             --planned-workouts /tmp/planned.json \\
             --completed-activities /tmp/completed.json \\
             --starting-ctl 44.0 --ending-ctl 50.5 --target-ctl 52.0 --current-vdot 48.0
 
         # Assess 3-week period (weeks 9-11 of an 11-week plan)
-        sce plan assess-period --period-number 3 --week-numbers "9,10,11" \\
+        resilio plan assess-period --period-number 3 --week-numbers "9,10,11" \\
             --planned-workouts /tmp/planned.json \\
             --completed-activities /tmp/completed.json \\
             --starting-ctl 58.0 --ending-ctl 60.5 --target-ctl 62.0 --current-vdot 49.5
@@ -1859,7 +1857,7 @@ def assess_period_command(
         Period assessment with adherence, CTL analysis, VDOT recommendations,
         signals detected, and recommendations for next period.
     """
-    from sports_coach_engine.api.plan import assess_month_completion
+    from resilio.api.plan import assess_month_completion
     import json
 
     # Parse week numbers
@@ -1944,16 +1942,16 @@ def plan_suggest_run_count_command(
     - Training phase (affects long run %)
 
     Examples:
-        sce plan suggest-run-count --volume 23 --max-runs 4 --phase base
-        sce plan suggest-run-count --volume 48 --max-runs 5 --phase build
+        resilio plan suggest-run-count --volume 23 --max-runs 4 --phase base
+        resilio plan suggest-run-count --volume 48 --max-runs 5 --phase build
     """
-    from sports_coach_engine.api.plan import suggest_optimal_run_count
-    from sports_coach_engine.api.profile import ProfileError
+    from resilio.api.plan import suggest_optimal_run_count
+    from resilio.api.profile import ProfileError
 
     # Load profile if provided
     profile_dict = None
     if profile_path:
-        from sports_coach_engine.api.profile import get_profile
+        from resilio.api.profile import get_profile
         profile_result = get_profile()
         if not isinstance(profile_result, ProfileError):
             profile_dict = profile_result.model_dump()
