@@ -38,20 +38,22 @@ resilio sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sy
 
 **Note**: Without `--since`, `resilio sync` uses smart detection (incremental sync from last activity).
 
-### Step 0.5: Check for Active Training Plan (MANDATORY)
+### Step 0.5: Plan Context (Automatic)
 
-**Before analyzing the week, determine if the athlete has a structured plan:**
+**Note**: `resilio week` now automatically includes planned workout details when a plan exists, so you don't need a separate command for plan checking.
 
-```bash
-resilio plan week
-```
+The `planned_workouts_detail` field in the response contains:
+- `null` if no plan exists → Use freeform analysis (Step 2 Option B)
+- List of workouts if plan exists → Use adherence analysis (Step 2 Option A)
 
-This returns the current week's planned workouts (date, workout_type, distance_km, target_rpe, pace_range, intensity_zone) plus plan context (week number, phase, total weeks, goal).
+**Decision logic:**
 
-**If plan exists** → the weekly analysis MUST compare actual vs planned (Step 2 Option A)
-**If no plan / error** → proceed with freeform analysis (Step 2 Option B)
+| `planned_workouts_detail` | Interpretation | Next Step |
+|---------------------------|----------------|-----------|
+| `[{workouts...}]` | Structured plan active | → Step 2 Option A (adherence analysis) |
+| `null` | No plan or freeform training | → Step 2 Option B (freeform analysis) |
 
-**Why this matters:** Without this step, the coach may analyze a week as freeform training when the athlete is actually on a structured plan — missing critical adherence insights.
+**Key benefit**: You can't forget to check the plan—it's included automatically.
 
 ### Step 1: Get Weekly Summary
 

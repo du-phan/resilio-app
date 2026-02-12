@@ -8,6 +8,7 @@ weekly status, and overall training status.
 from datetime import date, timedelta
 from typing import Optional, Union
 from dataclasses import dataclass, field
+from enum import Enum
 
 from resilio.core.paths import (
     daily_metrics_path,
@@ -62,6 +63,9 @@ class WeeklyStatus:
     activities: list[dict] = field(
         default_factory=list
     )  # Brief activity summaries (date, day_of_week, day_name, sport_type, duration_minutes, systemic_load_au)
+
+    # Planned workout details (None if no plan exists)
+    planned_workouts_detail: Optional[list[dict]] = field(default=None)
 
     # Metrics snapshot
     current_ctl: Optional[float] = None
@@ -294,22 +298,62 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to refresh weekly summary: {e}")
 
-    # Load current plan to count planned workouts
+    # Load current plan to count planned workouts AND extract details
     planned_workouts = 0
+    planned_workouts_detail = None  # Will be populated if plan exists
+
     plan_path = current_plan_path()
     plan_result = repo.read_yaml(
         plan_path, MasterPlan, ReadOptions(allow_missing=True, should_validate=True)
     )
 
     if isinstance(plan_result, RepoError):
-        # Plan load error
-        pass  # Continue without plan data
+        # Plan load error - continue without plan data
+        pass
     elif plan_result is not None:
-        # Count workouts in current week
-        for week in plan_result.weeks:
-            if week.start_date <= today <= week.end_date:
-                planned_workouts = len([w for w in week.workouts if w is not None])
-                break
+        try:
+            # Find current week and extract workout details
+            for week in plan_result.weeks:
+                if week.start_date <= today <= week.end_date:
+                    # Count workouts
+                    valid_workouts = [w for w in week.workouts if w is not None]
+                    planned_workouts = len(valid_workouts)
+
+                    # Extract full workout details for coach analysis
+                    # Helper to safely extract enum values
+                    def _enum_value(val):
+                        """Extract string value from enum or return as-is."""
+                        return val.value if isinstance(val, Enum) else val
+
+                    planned_workouts_detail = [
+                        {
+                            "date": str(w.date),
+                            "day_of_week": w.day_of_week,
+                            "day_name": w.date.strftime("%A").lower(),  # "monday", "tuesday", etc.
+                            "workout_type": _enum_value(w.workout_type),
+                            "distance_km": w.distance_km,
+                            "target_rpe": w.target_rpe,
+                            "pace_range": w.pace_range,
+                            "pace_range_min_km": w.pace_range_min_km,
+                            "pace_range_max_km": w.pace_range_max_km,
+                            "intensity_zone": _enum_value(w.intensity_zone),
+                            "purpose": w.purpose,
+                            "notes": w.notes,
+                            "key_workout": w.key_workout,
+                            "week_number": w.week_number,
+                            "phase": _enum_value(week.phase),  # Include phase context
+                        }
+                        for w in valid_workouts
+                    ]
+                    break
+        except Exception as e:
+            # Corrupted plan data or unexpected structure - continue without plan details
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to extract plan details: {e}")
+            planned_workouts = 0
+            planned_workouts_detail = None
 
     # Load activities for current week
     activities = []
@@ -405,6 +449,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
         total_duration_minutes=total_duration,
         total_load_au=total_load,
         activities=activities,
+        planned_workouts_detail=planned_workouts_detail,  # Include workout details
         current_ctl=current_ctl,
         current_tsb=current_tsb,
         current_readiness=current_readiness,

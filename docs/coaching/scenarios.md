@@ -206,9 +206,9 @@ resilio today
 ## Scenario 3: Weekly Review
 
 ```bash
-# Get full week summary
+# Get full week summary (includes plan if exists)
 resilio week
-# Returns: planned vs completed, total load, metrics, changes
+# Returns: planned_workouts_detail (workouts if plan exists, null otherwise), completed activities, metrics, changes
 
 # Sync latest if needed
 resilio sync --since 7d
@@ -217,12 +217,23 @@ resilio sync --since 7d
 resilio status
 ```
 
-**Analysis Points:**
+**Analysis Decision:**
 
-- Compare planned vs completed workouts
-- Review total training load (systemic + lower-body)
-- Check metric trends (CTL/ATL/TSB progression)
-- Identify patterns: consistency, intensity distribution, recovery
+- **If `planned_workouts_detail` exists** → Use adherence analysis:
+  - Map planned workouts to actual activities by date
+  - Flag: Missed workouts, day shifts, volume variance (>15%), quality downgrades
+  - Assess: Completion rate, volume adherence, intensity compliance
+
+- **If `planned_workouts_detail` is null** → Use freeform analysis:
+  - List activities by date/sport/volume
+  - Compare to 4-week rolling average
+  - Check: Consistency, goal alignment, intensity distribution
+
+**Analysis Points:**
+- Compare planned vs completed workouts (if plan exists)
+- Review total training load (systemic + lower-body across all sports)
+- Check metric trends (CTL/ATL/TSB progression, ACWR load spikes)
+- Identify patterns: consistency, intensity distribution, recovery adequacy
 
 ## Scenario 4: Goal Change
 

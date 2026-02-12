@@ -91,9 +91,10 @@ resilio profile analyze   # Required after sync: report actual span; never assum
 resilio status
 ```
 
-**Weekly coaching workflow** - For explicit recent sync:
+**Weekly coaching workflow**:
 ```bash
 resilio sync --since 7d   # Last week only (faster for weekly analysis)
+resilio week               # Now includes plan details automatically
 ```
 
 **Common coaching commands**:
