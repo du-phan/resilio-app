@@ -1,6 +1,6 @@
 ---
 name: complete-setup
-description: Sets up the Sports Coach Engine environment for non-technical users on macOS with safe, gated validation. Use when users ask to get started, install dependencies, or recover an interrupted setup session.
+description: Sets up the Resilio environment for non-technical users on macOS with safe, gated validation. Use when users ask to get started, install dependencies, or recover an interrupted setup session.
 ---
 
 # Complete Setup (macOS only)
@@ -33,7 +33,7 @@ Copy and update this checklist while running setup:
 Setup Progress:
 - [ ] Phase 1: Detection gates passed
 - [ ] Phase 2: Python available (>=3.11)
-- [ ] Phase 3: Package installed and `sce` runnable
+- [ ] Phase 3: Package installed and `resilio` runnable
 - [ ] Phase 4: Config initialized
 - [ ] Phase 5: Final verification + handoff
 ```
@@ -43,8 +43,8 @@ Setup Progress:
 ### Gate 1: Repo root
 
 ```bash
-if [ ! -f pyproject.toml ] || [ ! -d sports_coach_engine ]; then
-  echo "Not in repo root. cd into sports-coach-engine and retry."
+if [ ! -f pyproject.toml ] || [ ! -d resilio ]; then
+  echo "Not in repo root. cd into resilio and retry."
   exit 1
 fi
 ```
@@ -87,10 +87,10 @@ poetry --version >/dev/null 2>&1
 
 ```bash
 PACKAGE_READY=false
-if command -v sce >/dev/null 2>&1; then
-  sce --help >/dev/null 2>&1 && PACKAGE_READY=true
+if command -v resilio >/dev/null 2>&1; then
+  resilio --help >/dev/null 2>&1 && PACKAGE_READY=true
 elif poetry --version >/dev/null 2>&1; then
-  poetry run sce --help >/dev/null 2>&1 && PACKAGE_READY=true
+  poetry run resilio --help >/dev/null 2>&1 && PACKAGE_READY=true
 fi
 ```
 
@@ -99,10 +99,10 @@ fi
 If package is runnable:
 
 ```bash
-if command -v sce >/dev/null 2>&1; then
-  sce status
+if command -v resilio >/dev/null 2>&1; then
+  resilio status
 else
-  poetry run sce status
+  poetry run resilio status
 fi
 ```
 
@@ -152,8 +152,8 @@ Run only when package is not runnable.
 
 ```bash
 poetry install
-poetry run sce --help
-SCE_CMD="poetry run sce"
+poetry run resilio --help
+RESILIO_CMD="poetry run resilio"
 ```
 
 ### Path B: venv (explicit interpreter)
@@ -163,19 +163,19 @@ SCE_CMD="poetry run sce"
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
-sce --help
-SCE_CMD="sce"
+resilio --help
+RESILIO_CMD="resilio"
 ```
 
-Validation gate: `SCE_CMD --help` must pass before Phase 4.
+Validation gate: `RESILIO_CMD --help` must pass before Phase 4.
 
 ## Phase 4: Config initialization
 
 Run only when config is missing.
 
 ```bash
-$SCE_CMD init
-$SCE_CMD status
+$RESILIO_CMD init
+$RESILIO_CMD status
 ls -la config/
 ```
 
@@ -188,15 +188,15 @@ Config is ready only when both files exist:
 
 ```bash
 "$PYTHON_CMD" --version
-$SCE_CMD --help
-$SCE_CMD status
+$RESILIO_CMD --help
+$RESILIO_CMD status
 ls -la config/
 ```
 
 Successful completion message should include:
 
 - Python ready (`>=3.11`)
-- `sce` runnable
+- `resilio` runnable
 - config initialized
 
 Then hand off to `first-session` for Strava credentials/auth + profile setup.

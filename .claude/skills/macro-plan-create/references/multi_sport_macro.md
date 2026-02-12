@@ -158,7 +158,7 @@ When running and other sports conflict (same day or consecutive days), policy de
 ### Step 2: Set Volume Targets Based on Priority
 
 **PRIMARY**:
-- Starting volume: Based on CTL (standard `sce guardrails safe-volume`)
+- Starting volume: Based on CTL (standard `resilio guardrails safe-volume`)
 - Peak volume: Goal-specific (half marathon: 60-70 km)
 - Progression: Standard 10% rule
 
@@ -177,7 +177,7 @@ When running and other sports conflict (same day or consecutive days), policy de
 **Don't just count running kilometers** - calculate total systemic load:
 
 ```bash
-sce analysis load --activities activities.json --days 7 --priority equal
+resilio analysis load --activities activities.json --days 7 --priority equal
 ```
 
 **Use output** to verify total load stays within 100-120 load units/week during peak weeks.
@@ -196,16 +196,16 @@ sce analysis load --activities activities.json --days 7 --priority equal
 
 ```bash
 # Set running priority in profile
-sce profile set --run-priority equal  # or primary, secondary
+resilio profile set --run-priority equal  # or primary, secondary
 
 # Set conflict policy
-sce profile set --conflict-policy ask_each_time  # or running_goal_wins, primary_sport_wins
+resilio profile set --conflict-policy ask_each_time  # or running_goal_wins, primary_sport_wins
 
 # Analyze historical multi-sport distribution
-sce analysis load --activities activities.json --days 90
+resilio analysis load --activities activities.json --days 90
 
 # Safe volume with multi-sport context
-sce guardrails safe-volume --ctl 44 --goal-type half_marathon --priority equal
+resilio guardrails safe-volume --ctl 44 --goal-type half_marathon --priority equal
 ```
 
 ---

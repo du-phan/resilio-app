@@ -26,18 +26,18 @@ Historical activity data from Strava is essential for intelligent coaching. With
 ### Step 1: Check Authentication Status
 
 ```bash
-sce auth status
+resilio auth status
 ```
 
 **Exit codes**:
 - **0**: Authenticated (proceed to sync)
-- **2**: Config missing (run `sce init` first)
+- **2**: Config missing (run `resilio init` first)
 - **3**: Expired/missing (guide OAuth flow below)
 
 ### Step 2: Generate Authorization URL
 
 ```bash
-sce auth url
+resilio auth url
 ```
 
 **Returns**: OAuth URL like `https://strava.com/oauth/authorize?client_id=...&redirect_uri=...`
@@ -64,7 +64,7 @@ Your code: ABC123XYZ789
 ### Step 5: Exchange Code for Tokens
 
 ```bash
-sce auth exchange --code ABC123XYZ789
+resilio auth exchange --code ABC123XYZ789
 ```
 
 **Success**: Tokens stored, authentication complete
@@ -77,7 +77,7 @@ sce auth exchange --code ABC123XYZ789
 ### Step 6: Confirm Success
 
 ```bash
-sce auth status
+resilio auth status
 # Exit code 0 = success
 ```
 
@@ -97,7 +97,7 @@ No problem - you can still use the system, but I won't have access to historical
 This means:
 - Your CTL will start at 0
 - I won't see your climbing/cycling activities automatically
-- You'll need to manually log activities via `sce log` command
+- You'll need to manually log activities via `resilio log` command
 
 We can still create a great plan - I just won't have the historical context.
 ```
@@ -112,7 +112,7 @@ We can still create a great plan - I just won't have the historical context.
 ```
 The authorization code expired (they timeout after 10 minutes). Let me generate a new URL.
 
-[Run: sce auth url]
+[Run: resilio auth url]
 
 Here's a fresh authorization link. This time, I'll wait right here - just authorize and paste the code within a few minutes.
 ```
@@ -135,13 +135,13 @@ Your CTL will start at 0, which means we'll build your training volume gradually
 
 ### Q: Network error during exchange
 
-**Scenario**: `sce auth exchange` fails with network error.
+**Scenario**: `resilio auth exchange` fails with network error.
 
 **Response**:
 ```
 Network error occurred while exchanging the authorization code. Let me try again.
 
-[Retry: sce auth exchange --code ABC123]
+[Retry: resilio auth exchange --code ABC123]
 
 [If still fails:]
 Check your network connection. The code is still valid for ~10 minutes, so we can retry when your network is stable.
@@ -149,12 +149,12 @@ Check your network connection. The code is still valid for ~10 minutes, so we ca
 
 ### Q: Athlete authorized but sync fails
 
-**Scenario**: `sce auth status` returns 0, but `sce sync` fails.
+**Scenario**: `resilio auth status` returns 0, but `resilio sync` fails.
 
 **Response**:
 ```
 Your Strava account is connected, but sync failed. This can happen if:
-1. Network issue (retry: sce sync)
+1. Network issue (retry: resilio sync)
 2. Strava API rate limit (wait 15 min, retry)
 3. Account has no public activities (check Strava privacy settings)
 
@@ -167,11 +167,11 @@ Let's try syncing again.
 
 | Command | Purpose | Exit Codes |
 |---------|---------|------------|
-| `sce auth status` | Check authentication state | 0=ok, 2=no config, 3=expired |
-| `sce auth url` | Generate OAuth URL | 0=success |
-| `sce auth exchange --code CODE` | Exchange code for tokens | 0=success, 4=network, 5=invalid |
-| `sce auth refresh` | Refresh expired tokens (auto) | 0=success |
-| `sce auth revoke` | Remove stored tokens | 0=success |
+| `resilio auth status` | Check authentication state | 0=ok, 2=no config, 3=expired |
+| `resilio auth url` | Generate OAuth URL | 0=success |
+| `resilio auth exchange --code CODE` | Exchange code for tokens | 0=success, 4=network, 5=invalid |
+| `resilio auth refresh` | Refresh expired tokens (auto) | 0=success |
+| `resilio auth revoke` | Remove stored tokens | 0=success |
 
 ---
 
@@ -184,13 +184,13 @@ Let's try syncing again.
 - NO access to private notes unless made visible
 
 **Token storage**:
-- Tokens stored locally in `~/.sce/auth.json`
+- Tokens stored locally in `config/secrets.local.yaml` (`strava.access_token`, `strava.refresh_token`, `strava.token_expires_at`)
 - Never logged or transmitted elsewhere
 - Refresh tokens auto-renew without re-authorization
 
 **Athlete can revoke anytime**:
 - Strava account settings → "Apps, Services, and Devices" → Revoke access
-- Or: `sce auth revoke` command
+- Or: `resilio auth revoke` command
 
 ---
 

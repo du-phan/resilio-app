@@ -16,7 +16,7 @@ Workout-level guardrails for weekly plan validation. Ensures safe intensity dist
 
 ### Validation
 ```bash
-sce analysis intensity --activities activities.json --days 28
+resilio analysis intensity --activities activities.json --days 28
 ```
 
 **Returns**:
@@ -51,7 +51,7 @@ sce analysis intensity --activities activities.json --days 28
 
 ### Validation
 ```bash
-sce guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
+resilio guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
 ```
 
 **Returns**:
@@ -107,7 +107,7 @@ sce guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --r-pace 2.0 --weekly-vo
 
 ### Validation
 ```bash
-sce guardrails long-run --duration 150 --weekly-volume 60 --pct-limit 30
+resilio guardrails long-run --duration 150 --weekly-volume 60 --pct-limit 30
 ```
 
 **Returns**:
@@ -138,7 +138,7 @@ sce guardrails long-run --duration 150 --weekly-volume 60 --pct-limit 30
 
 ### Validation
 ```bash
-sce guardrails progression --previous 40 --current 48
+resilio guardrails progression --previous 40 --current 48
 ```
 
 **Returns**:
@@ -179,7 +179,7 @@ sce guardrails progression --previous 40 --current 48
 ### Validation
 Check session density:
 ```bash
-sce today  # Returns adaptation triggers including "session_density_high"
+resilio today  # Returns adaptation triggers including "session_density_high"
 ```
 
 **Trigger**: `session_density_high` if 2+ hard sessions in 7 days without adequate spacing
@@ -232,7 +232,7 @@ sce today  # Returns adaptation triggers including "session_density_high"
 
 **Check ACWR**:
 ```bash
-sce status  # Returns current ACWR with risk level
+resilio status  # Returns current ACWR with risk level
 ```
 
 ---
@@ -250,7 +250,7 @@ sce status  # Returns current ACWR with risk level
 
 ### Validation
 ```bash
-sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
+resilio guardrails race-recovery --distance half_marathon --age 52 --effort hard
 ```
 
 **Returns**:
@@ -300,7 +300,7 @@ sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
 ### Validation
 ```bash
-sce guardrails illness-recovery --severity moderate --days-missed 7
+resilio guardrails illness-recovery --severity moderate --days-missed 7
 ```
 
 **Returns**:
@@ -342,25 +342,25 @@ sce guardrails illness-recovery --severity moderate --days-missed 7
 
 ```bash
 # 80/20 intensity distribution
-sce analysis intensity --activities activities.json --days 28
+resilio analysis intensity --activities activities.json --days 28
 
 # Quality volume limits
-sce guardrails quality-volume --t-pace 5.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
+resilio guardrails quality-volume --t-pace 5.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
 
 # Long run caps
-sce guardrails long-run --duration 135 --weekly-volume 55 --pct-limit 30
+resilio guardrails long-run --duration 135 --weekly-volume 55 --pct-limit 30
 
 # Weekly progression (10% rule)
-sce guardrails progression --previous 40 --current 48
+resilio guardrails progression --previous 40 --current 48
 
 # Race recovery
-sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
+resilio guardrails race-recovery --distance half_marathon --age 52 --effort hard
 
 # Illness recovery
-sce guardrails illness-recovery --severity moderate --days-missed 7
+resilio guardrails illness-recovery --severity moderate --days-missed 7
 
 # Current ACWR check
-sce status
+resilio status
 ```
 
 ---

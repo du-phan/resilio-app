@@ -1,6 +1,6 @@
-# Sports Coach Engine CLI — Agent-Friendly Contract
+# Resilio CLI — Agent-Friendly Contract
 
-This document specifies a portable CLI for Sports Coach Engine that works reliably with Claude Code, Codex CLI, Aider-like tools, and humans. It defines the command surface, output contracts, error handling, and rollout steps. The CLI is the canonical interface; the Python API remains the implementation boundary but is not the primary user/agent contract.
+This document specifies a portable CLI for Resilio that works reliably with Claude Code, Codex CLI, Aider-like tools, and humans. It defines the command surface, output contracts, error handling, and rollout steps. The CLI is the canonical interface; the Python API remains the implementation boundary but is not the primary user/agent contract.
 
 ## Goals and Principles
 
@@ -16,7 +16,7 @@ This document specifies a portable CLI for Sports Coach Engine that works reliab
 
 - Default output: JSON to stdout; errors to stderr; exit code communicates class of failure.
 - Flags: `--format json|text` (default json), `--repo-root PATH` to override auto-detection, `--interactive` to allow prompts (otherwise forbidden), `--verbose` for extra fields in text mode.
-- Env knobs (optional): `SCE_OUTPUT=json|text`, `SCE_NONINTERACTIVE=1` to hard-disable prompts, `SCE_LOG_LEVEL=info|debug`.
+- Env knobs (optional): `RESILIO_OUTPUT=json|text`, `RESILIO_NONINTERACTIVE=1` to hard-disable prompts, `RESILIO_LOG_LEVEL=info|debug`.
 - Deterministic sorting for lists in JSON to keep outputs stable for tests/agents.
 - Time and units: ISO 8601 timestamps, durations in seconds, distance in meters/kilometers, loads in AU; always document units in the payload.
 
@@ -24,20 +24,20 @@ This document specifies a portable CLI for Sports Coach Engine that works reliab
 
 All commands support the global flags above.
 
-### `sce doctor`
+### `resilio doctor`
 
 - Purpose: Diagnose readiness (config, secrets, token validity, data dirs, writable paths).
 - Checks should include: repo root detection, `config/settings.yaml` exists + parses, `config/secrets.local.yaml` exists + parses, Strava credentials present, token expiry/freshness, required directories exist and are writable, lock file cleanliness, Python version compatibility.
 - Output `data`: `checks: [{name, status: ok|warn|error, detail}]`, `errors`, `warnings`.
 - Exit codes: `0` success, `2` config/setup missing, `3` auth error, `4` network, `1` internal.
 
-### `sce init`
+### `resilio init`
 
 - Purpose: Create data/config dirs and copy templates; safe to rerun.
 - Output `data`: `created: [paths]`, `skipped: [paths]`.
 - Exit codes: `0` success, `2` when blocked by missing permissions, `1` internal.
 
-### `sce auth`
+### `resilio auth`
 
 - Subcommands:
   - `auth url`: emit authorization URL, scopes, redirect URI.
@@ -45,32 +45,32 @@ All commands support the global flags above.
   - `auth status`: token health and expiry.
 - Exit codes: `0` success, `3` auth failure, `4` network, `2` config missing, `1` internal.
 
-### `sce sync`
+### `resilio sync`
 
 - Purpose: Fetch Strava, normalize, RPE/load, metrics refresh; idempotent. Option `--since 14d`.
 - Output `data`: `activities_fetched`, `activities_new`, `activities_updated`, `activities_skipped`, `errors`, `sync_duration_seconds`, optional `metrics_updated`, `suggestions_generated`.
 - Exit codes: `0` success, `3` auth, `4` network/rate-limit, `2` config missing, `5` validation/input, `1` internal.
 
-### `sce status`
+### `resilio status`
 
 - Purpose: Current CTL/ATL/TSB/ACWR/readiness and intensity distribution with interpretations.
 - Output `data`: `ctl`, `atl`, `tsb`, `acwr`, `readiness`, `intensity_distribution` (all with value + interpretation + units where applicable).
 - Exit codes: `0` success, `2` missing data, `5` validation, `1` internal.
 
-### `sce today`
+### `resilio today`
 
 - Purpose: Today’s recommended workout + rationale + warnings + suggestions (M10/M11).
 - While not implemented, respond with `ok=false`, `error_type="not_implemented"`, exit `6`.
 - Output `data`: `workout`, `rationale`, `metrics_context`, `warnings`, `suggestions` (when implemented).
 - Exit codes: `0` success, `6` not implemented, `2` missing data, `1` internal.
 
-### `sce plan`
+### `resilio plan`
 
 - `plan show`: current plan, goal, weeks, phase, constraints applied.
 - `plan regen [--goal ...]`: regenerate plan, archive old plan.
 - Exit codes: `0` success, `6` not implemented, `2` missing data/config, `5` validation, `1` internal.
 
-### `sce profile`
+### `resilio profile`
 
 - `profile get`: show profile (redact secrets).
 - `profile set --field value`: patch profile fields.
@@ -93,7 +93,7 @@ Every command returns the same top-level shape (JSON default):
 
 - `error_type` values: `config`, `auth`, `rate_limit`, `network`, `validation`, `not_implemented`, `internal`.
 - `human_summary`: a single, short sentence; avoid multi-line prose; include the key value if useful.
-- `next_steps`: optional guidance string for non-OK responses (e.g., “run sce init”, “refresh token”).
+- `next_steps`: optional guidance string for non-OK responses (e.g., “run resilio init”, “refresh token”).
 - Use snake_case keys; ISO 8601 dates; durations in seconds; distances in meters/kilometers; loads in AU; document units in docs.
 - Redact all secrets/tokens; never echo them.
 
@@ -120,7 +120,7 @@ Every command returns the same top-level shape (JSON default):
 
 ## Architecture Notes
 
-- Entry point: `[tool.poetry.scripts] sce = "sports_coach_engine.cli:app"` (Typer/Click; keep deps minimal).
+- Entry point: `[tool.poetry.scripts] resilio = "resilio.cli:app"` (Typer/Click; keep deps minimal).
 - CLI is a thin shim; business logic remains in core modules.
 - Shared helpers:
   - Output formatter (json/text) + envelope builder.
@@ -138,9 +138,9 @@ Every command returns the same top-level shape (JSON default):
 
 ## Agent Guidance (to mirror into README/CLAUDE.md)
 
-- “Use `poetry run sce ... --format json` for all operations.”
+- “Use `poetry run resilio ... --format json` for all operations.”
 - “Do not import internal Python modules directly.”
-- “Start with `sce doctor`; then `sce init`; then `sce auth url/exchange`; then `sce sync`; then `sce status`/`sce today`.”
+- “Start with `resilio doctor`; then `resilio init`; then `resilio auth url/exchange`; then `resilio sync`; then `resilio status`/`resilio today`.”
 - “Non-interactive by default; pass `--interactive` to allow prompts (rare).”
 
 ## Testing and Stability

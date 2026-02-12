@@ -44,7 +44,7 @@ Strategic guardrails for 16-week training plan design. Ensures safe volume progr
 
 **Command**:
 ```bash
-sce guardrails masters-recovery --age 52
+resilio guardrails masters-recovery --age 52
 ```
 
 ---
@@ -193,7 +193,7 @@ Plot planned weekly volumes, verify CTL would increase smoothly.
 
 **Check**:
 ```bash
-sce analysis capacity --activities activities.json --planned-volume 70
+resilio analysis capacity --activities activities.json --planned-volume 70
 ```
 
 **Returns**:
@@ -244,16 +244,16 @@ sce analysis capacity --activities activities.json --planned-volume 70
 
 ```bash
 # Safe starting and peak volumes
-sce guardrails safe-volume --ctl 44 --goal-type half_marathon
+resilio guardrails safe-volume --ctl 44 --goal-type half_marathon
 
 # Masters recovery adjustments
-sce guardrails masters-recovery --age 52
+resilio guardrails masters-recovery --age 52
 
 # Historical capacity check
-sce analysis capacity --activities activities.json --planned-volume 70
+resilio analysis capacity --activities activities.json --planned-volume 70
 
 # Return after training break
-sce guardrails break-return --days 21 --ctl 44 --cross-training moderate
+resilio guardrails break-return --days 21 --ctl 44 --cross-training moderate
 ```
 
 ---

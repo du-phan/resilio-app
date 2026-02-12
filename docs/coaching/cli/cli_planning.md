@@ -5,30 +5,30 @@
 Commands for setting race goals and managing training plans, including macro planning, weekly plan validation, and plan persistence.
 
 **Commands in this category:**
-- `sce goal set` - Set a race goal (validates feasibility if target time provided)
-- `sce goal validate` - Validate existing goal feasibility
-- `sce approvals status` - Show current approval state
-- `sce approvals approve-vdot` - Record baseline VDOT approval
-- `sce approvals approve-macro` - Record macro approval
-- `sce approvals approve-week` - Record weekly approval (with file path)
-- `sce plan show` - Get current training plan with all weeks and workouts
-- `sce plan week` - Get specific week(s) from the training plan
-- `sce plan populate` - Add/update weekly workouts in the plan
-- `sce plan validate-week` - Validate single-week JSON before populate (unified validator)
-- `sce plan validate-intervals` - Validate interval workout structure (Daniels)
-- `sce plan validate-structure` - Validate plan structure inputs (phases, volumes, taper)
-- `sce plan update-from` - Replace plan weeks from a specific week onwards
-- `sce plan save-review` - Save plan review markdown
-- `sce plan append-week` - Append weekly training summary to log
-- `sce plan template-macro` - Generate a blank macro template JSON
-- `sce plan create-macro` - Generate high-level plan structure (macro)
-- `sce plan export-structure` - Export stored macro structure JSON for validation
-- `sce plan assess-period` - Assess completed period for adaptive planning
-- `sce plan suggest-run-count` - Suggest optimal run count for volume/phase
+- `resilio goal set` - Set a race goal (validates feasibility if target time provided)
+- `resilio goal validate` - Validate existing goal feasibility
+- `resilio approvals status` - Show current approval state
+- `resilio approvals approve-vdot` - Record baseline VDOT approval
+- `resilio approvals approve-macro` - Record macro approval
+- `resilio approvals approve-week` - Record weekly approval (with file path)
+- `resilio plan show` - Get current training plan with all weeks and workouts
+- `resilio plan week` - Get specific week(s) from the training plan
+- `resilio plan populate` - Add/update weekly workouts in the plan
+- `resilio plan validate-week` - Validate single-week JSON before populate (unified validator)
+- `resilio plan validate-intervals` - Validate interval workout structure (Daniels)
+- `resilio plan validate-structure` - Validate plan structure inputs (phases, volumes, taper)
+- `resilio plan update-from` - Replace plan weeks from a specific week onwards
+- `resilio plan save-review` - Save plan review markdown
+- `resilio plan append-week` - Append weekly training summary to log
+- `resilio plan template-macro` - Generate a blank macro template JSON
+- `resilio plan create-macro` - Generate high-level plan structure (macro)
+- `resilio plan export-structure` - Export stored macro structure JSON for validation
+- `resilio plan assess-period` - Assess completed period for adaptive planning
+- `resilio plan suggest-run-count` - Suggest optimal run count for volume/phase
 
 ---
 
-## sce goal set
+## resilio goal set
 
 Set a goal (validates feasibility if target time provided).
 
@@ -36,19 +36,19 @@ Set a goal (validates feasibility if target time provided).
 
 ```bash
 # Set 10K goal with target time
-sce goal set --type 10k --date 2026-06-01 --time 00:45:00
+resilio goal set --type 10k --date 2026-06-01 --time 00:45:00
 
 # Set half marathon goal
-sce goal set --type half_marathon --date 2026-09-15 --time 01:45:00
+resilio goal set --type half_marathon --date 2026-09-15 --time 01:45:00
 
 # Set marathon goal (no time = race goal without time)
-sce goal set --type marathon --date 2026-11-01
+resilio goal set --type marathon --date 2026-11-01
 
 # General fitness goal (no date required)
-sce goal set --type general_fitness
+resilio goal set --type general_fitness
 
 # Non-race performance goal with horizon
-sce goal set --type 10k --horizon-weeks 12
+resilio goal set --type 10k --horizon-weeks 12
 ```
 
 **Supported race types:**
@@ -80,18 +80,18 @@ sce goal set --type 10k --horizon-weeks 12
 1. Goal saved to profile
 2. If a target time is provided, feasibility is assessed and returned
 3. If no date is provided, a default horizon is used and a target date is derived
-4. Planning workflows use this goal as input (see `sce plan create-macro`)
+4. Planning workflows use this goal as input (see `resilio plan create-macro`)
 
 ---
 
-## sce goal validate
+## resilio goal validate
 
 Re-validate the current goal feasibility without setting a new goal.
 
 **Usage:**
 
 ```bash
-sce goal validate
+resilio goal validate
 ```
 
 **When to use:**
@@ -102,62 +102,62 @@ sce goal validate
 
 ---
 
-## sce approvals status
+## resilio approvals status
 
 Show current approval state (VDOT, macro, and weekly approval if present).
 
 **Usage:**
 
 ```bash
-sce approvals status
+resilio approvals status
 ```
 
 ---
 
-## sce approvals approve-vdot
+## resilio approvals approve-vdot
 
 Record baseline VDOT approval (required before macro creation).
 
 **Usage:**
 
 ```bash
-sce approvals approve-vdot --value 48.0
+resilio approvals approve-vdot --value 48.0
 ```
 
 ---
 
-## sce approvals approve-macro
+## resilio approvals approve-macro
 
 Record macro plan approval.
 
 **Usage:**
 
 ```bash
-sce approvals approve-macro
+resilio approvals approve-macro
 ```
 
 ---
 
-## sce approvals approve-week
+## resilio approvals approve-week
 
 Record weekly plan approval with the exact JSON file path.
 
 **Usage:**
 
 ```bash
-sce approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
+resilio approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
 ```
 
 ---
 
-## sce plan show
+## resilio plan show
 
 Get current training plan with all weeks and workouts.
 
 **Usage:**
 
 ```bash
-sce plan show
+resilio plan show
 ```
 
 **Returns:**
@@ -192,7 +192,7 @@ sce plan show
 }
 ```
 
-## sce plan week
+## resilio plan week
 
 Get specific week(s) from the training plan without loading the entire plan.
 
@@ -200,19 +200,19 @@ Get specific week(s) from the training plan without loading the entire plan.
 
 ```bash
 # Current week (default)
-sce plan week
+resilio plan week
 
 # Next week
-sce plan week --next
+resilio plan week --next
 
 # Specific week by number
-sce plan week --week 5
+resilio plan week --week 5
 
 # Week containing a specific date
-sce plan week --date 2026-02-15
+resilio plan week --date 2026-02-15
 
 # Multiple consecutive weeks
-sce plan week --week 5 --count 2
+resilio plan week --week 5 --count 2
 ```
 
 **Parameters:**
@@ -276,7 +276,7 @@ sce plan week --week 5 --count 2
 - "What does week 8 look like?" - Use `--week 8`
 - "What training do I have mid-February?" - Use `--date 2026-02-15`
 - Previewing upcoming weeks without loading entire plan
-- More efficient than `sce plan show` when you only need specific weeks
+- More efficient than `resilio plan show` when you only need specific weeks
 
 **Benefits:**
 
@@ -287,14 +287,14 @@ sce plan week --week 5 --count 2
 
 ---
 
-## sce plan template-macro
+## resilio plan template-macro
 
 Generate a blank macro template with required fields and null placeholders.
 
 **Usage:**
 
 ```bash
-sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks 16 --out /tmp/macro_template.json
 ```
 
 **Template Structure:**
@@ -310,24 +310,24 @@ For **single-sport** athletes (running only):
 - Set `target_systemic_load_au: [0.0, 0.0, ...]` (systemic load calculated later from running volume)
 
 For **multi-sport** athletes (running + cross-training + other sports):
-- Calculate total systemic load targets using `sce analysis load`
+- Calculate total systemic load targets using `resilio analysis load`
 - Set `target_systemic_load_au: [95.0, 105.0, 110.0, ...]` (total aerobic load across all sports)
 - Example: Week with 45 km running (45 AU) + climbing (48 AU) + yoga (12 AU) = 105 AU total systemic load
 
 **Notes:**
-- Replace all `null` values before calling `sce plan create-macro`
+- Replace all `null` values before calling `resilio plan create-macro`
 - Template is intentionally blank to keep planning decisions with the AI coach
 
 ---
 
-## sce plan create-macro
+## resilio plan create-macro
 
 Generate high-level training plan structure (macro plan) with phase boundaries, volume trajectory, CTL projections, and recovery week schedule.
 
 **Template-first flow:** generate a blank template, fill it, then create the plan.
 
 ```bash
-sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks 16 --out /tmp/macro_template.json
 # Fill /tmp/macro_template.json (replace nulls)
 ```
 
@@ -335,12 +335,12 @@ sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
 
 ```bash
 # Requires approved baseline VDOT
-sce approvals approve-vdot --value 48.0
+resilio approvals approve-vdot --value 48.0
 
 # Generate macro plan for 16-week half marathon
-sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks 16 --out /tmp/macro_template.json
 # Fill /tmp/macro_template.json with volumes + hints
-sce plan create-macro \
+resilio plan create-macro \
   --goal-type half_marathon \
   --race-date 2026-05-03 \
   --target-time 01:30:00 \
@@ -351,9 +351,9 @@ sce plan create-macro \
   --macro-template-json /tmp/macro_template.json
 
 # Generate macro plan without target time (benchmark goal)
-sce plan template-macro --total-weeks 20 --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks 20 --out /tmp/macro_template.json
 # Fill /tmp/macro_template.json with volumes + hints
-sce plan create-macro \
+resilio plan create-macro \
   --goal-type marathon \
   --race-date 2026-11-01 \
   --total-weeks 20 \
@@ -363,9 +363,9 @@ sce plan create-macro \
   --macro-template-json /tmp/macro_template.json
 
 # Generate macro plan without race-date (benchmark date derived from horizon)
-sce plan template-macro --total-weeks 12 --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks 12 --out /tmp/macro_template.json
 # Fill /tmp/macro_template.json with volumes + hints
-sce plan create-macro \
+resilio plan create-macro \
   --goal-type 10k \
   --total-weeks 12 \
   --start-date 2026-02-02 \
@@ -381,9 +381,9 @@ sce plan create-macro \
 - `--target-time` (optional) - Target finish time in HH:MM:SS format (e.g., 01:30:00)
 - `--total-weeks` (required) - Total training weeks (typically 12-20)
 - `--start-date` (required) - Plan start date (YYYY-MM-DD), must be Monday
-- `--current-ctl` (required) - Current CTL value (use `sce status` to get)
+- `--current-ctl` (required) - Current CTL value (use `resilio status` to get)
 - `--baseline-vdot` (required) - Approved baseline VDOT for the macro plan
-- `--macro-template-json` (required) - Macro template JSON generated by `sce plan template-macro` and filled by the AI coach (length of `workout_structure_hints` must equal `total_weeks`):
+- `--macro-template-json` (required) - Macro template JSON generated by `resilio plan template-macro` and filled by the AI coach (length of `workout_structure_hints` must equal `total_weeks`):
 ```json
 {
   "template_version": "macro_template_v1",
@@ -475,13 +475,13 @@ These fields are **outputs**, not inputs. The AI coach fills `weekly_volumes_km`
 
 ## Weekly planning workflow (CLI)
 
-The CLI can now scaffold a weekly JSON via `sce plan generate-week` (it does not choose the pattern; the AI coach still decides run days, long run %, and paces).
+The CLI can now scaffold a weekly JSON via `resilio plan generate-week` (it does not choose the pattern; the AI coach still decides run days, long run %, and paces).
 
 **Typical flow:**
 
 ```bash
 # 1) AI coach decides the pattern (run days, long run %, paces) and generates JSON
-sce plan generate-week \
+resilio plan generate-week \
   --week N \
   --run-days "0,2,6" \
   --long-run-day 6 \
@@ -491,42 +491,42 @@ sce plan generate-week \
   --out /tmp/weekly_plan_wN.json
 
 # 2) Validate before presenting
-sce plan validate-week --file /tmp/weekly_plan_wN.json
+resilio plan validate-week --file /tmp/weekly_plan_wN.json
 
 # 3) Present to athlete and get approval
-sce approvals approve-week --week N --file /tmp/weekly_plan_wN.json
+resilio approvals approve-week --week N --file /tmp/weekly_plan_wN.json
 
 # 4) Persist after approval
-sce plan populate --from-json /tmp/weekly_plan_wN.json --validate
+resilio plan populate --from-json /tmp/weekly_plan_wN.json --validate
 ```
 
 ---
 
-## sce plan populate
+## resilio plan populate
 
 Add or update weekly workouts in the training plan.
 
 **Usage:**
 
 ```bash
-sce plan populate --from-json /tmp/weekly_plan_w1.json --validate
+resilio plan populate --from-json /tmp/weekly_plan_w1.json --validate
 ```
 
 **Notes:**
 - Safe to call repeatedly; existing weeks are preserved and updated by week_number.
-- Requires weekly approval in `data/state/approvals.json` (set via `sce approvals approve-week`).
+- Requires weekly approval in `data/state/approvals.json` (set via `resilio approvals approve-week`).
 
 ---
 
-## sce plan validate-week
+## resilio plan validate-week
 
 Validate weekly plan JSON before populating (unified validator).
 
 **Usage:**
 
 ```bash
-sce plan validate-week --file /tmp/weekly_plan_w1.json
-sce plan validate-week --file /tmp/weekly_plan_w1.json --verbose
+resilio plan validate-week --file /tmp/weekly_plan_w1.json
+resilio plan validate-week --file /tmp/weekly_plan_w1.json --verbose
 ```
 
 **What it checks:**
@@ -537,7 +537,7 @@ sce plan validate-week --file /tmp/weekly_plan_w1.json --verbose
 
 ---
 
-## sce plan validate-intervals
+## resilio plan validate-intervals
 
 Validate interval workout structure per Daniels methodology.
 
@@ -546,7 +546,7 @@ Validate interval workout structure per Daniels methodology.
 **Usage:**
 
 ```bash
-sce plan validate-intervals \
+resilio plan validate-intervals \
     --type intervals \
     --intensity I-pace \
     --work-bouts work.json \
@@ -596,7 +596,7 @@ sce plan validate-intervals \
 
 ---
 
-## sce plan validate-structure
+## resilio plan validate-structure
 
 Validate training plan structure for common errors.
 
@@ -605,7 +605,7 @@ Validate training plan structure for common errors.
 **Usage:**
 
 ```bash
-sce plan validate-structure \
+resilio plan validate-structure \
     --total-weeks 20 \
     --goal-type half_marathon \
     --phases phases.json \
@@ -649,14 +649,14 @@ sce plan validate-structure \
 
 ---
 
-## sce plan export-structure
+## resilio plan export-structure
 
 Export stored macro plan structure into validation-ready JSON files.
 
 **Usage:**
 
 ```bash
-sce plan export-structure --out-dir /tmp
+resilio plan export-structure --out-dir /tmp
 ```
 
 **Outputs:**
@@ -668,62 +668,62 @@ sce plan export-structure --out-dir /tmp
 
 ---
 
-## sce plan update-from
+## resilio plan update-from
 
 Replace plan weeks from a specific week onward.
 
 **Usage:**
 
 ```bash
-sce plan update-from --week 5 --from-json /tmp/weeks_5_to_10.json
+resilio plan update-from --week 5 --from-json /tmp/weeks_5_to_10.json
 ```
 
 ---
 
-## sce plan save-review
+## resilio plan save-review
 
 Save plan review markdown to the repository after athlete approval.
 
 **Usage:**
 
 ```bash
-sce plan save-review --from-file /tmp/training_plan_review_2026_01_20.md --approved
+resilio plan save-review --from-file /tmp/training_plan_review_2026_01_20.md --approved
 ```
 
 ---
 
-## sce plan append-week
+## resilio plan append-week
 
 Append weekly training summary to the training log (used by weekly analysis).
 
 **Usage:**
 
 ```bash
-sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
+resilio plan append-week --week 1 --from-json /tmp/week_1_summary.json
 ```
 
 ---
 
-## sce plan assess-period
+## resilio plan assess-period
 
 Assess a completed training period (2–6 weeks) for adaptive planning.
 
 **Usage:**
 
 ```bash
-sce plan assess-period   --period-number 1   --week-numbers "1,2,3,4"   --planned-workouts /tmp/planned.json   --completed-activities /tmp/completed.json   --starting-ctl 44.0   --ending-ctl 50.5   --target-ctl 52.0   --current-vdot 48.0
+resilio plan assess-period   --period-number 1   --week-numbers "1,2,3,4"   --planned-workouts /tmp/planned.json   --completed-activities /tmp/completed.json   --starting-ctl 44.0   --ending-ctl 50.5   --target-ctl 52.0   --current-vdot 48.0
 ```
 
 ---
 
-## sce plan suggest-run-count
+## resilio plan suggest-run-count
 
 Suggest optimal run count for a weekly volume and phase.
 
 **Usage:**
 
 ```bash
-sce plan suggest-run-count --volume 35 --max-runs 5 --phase build
+resilio plan suggest-run-count --volume 35 --max-runs 5 --phase build
 ```
 
 ---

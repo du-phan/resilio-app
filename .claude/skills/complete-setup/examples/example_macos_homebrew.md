@@ -47,8 +47,8 @@ Poetry path:
 
 ```bash
 poetry install
-poetry run sce --help
-SCE_CMD="poetry run sce"
+poetry run resilio --help
+RESILIO_CMD="poetry run resilio"
 ```
 
 venv path:
@@ -58,23 +58,23 @@ venv path:
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
-sce --help
-SCE_CMD="sce"
+resilio --help
+RESILIO_CMD="resilio"
 ```
 
 ### 4) Config init
 
 ```bash
-$SCE_CMD init
-$SCE_CMD status
+$RESILIO_CMD init
+$RESILIO_CMD status
 ```
 
 ### 5) Final verification
 
 ```bash
 "$PYTHON_CMD" --version
-$SCE_CMD --help
-$SCE_CMD status
+$RESILIO_CMD --help
+$RESILIO_CMD status
 ls -la config/
 ```
 

@@ -5,21 +5,21 @@
 Weekly insights and multi-sport load distribution analysis.
 
 **Commands in this category:**
-- `sce analysis intensity` - Validate 80/20 rule compliance
-- `sce analysis gaps` - Detect training breaks with CTL impact
-- `sce analysis load` - Analyze systemic and lower-body load distribution
-- `sce analysis capacity` - Validate planned volume against proven capacity
+- `resilio analysis intensity` - Validate 80/20 rule compliance
+- `resilio analysis gaps` - Detect training breaks with CTL impact
+- `resilio analysis load` - Analyze systemic and lower-body load distribution
+- `resilio analysis capacity` - Validate planned volume against proven capacity
 
 ---
 
-## sce analysis intensity
+## resilio analysis intensity
 
 Validate 80/20 rule compliance (80% low-intensity, 20% high-intensity).
 
 **Usage:**
 
 ```bash
-sce analysis intensity --activities activities_28d.json --days 28
+resilio analysis intensity --activities activities_28d.json --days 28
 ```
 
 **Input JSON Format:**
@@ -39,14 +39,14 @@ sce analysis intensity --activities activities_28d.json --days 28
 
 ---
 
-## sce analysis gaps
+## resilio analysis gaps
 
 Detect training breaks with CTL impact analysis and cause detection.
 
 **Usage:**
 
 ```bash
-sce analysis gaps --activities all_activities.json --min-days 7
+resilio analysis gaps --activities all_activities.json --min-days 7
 ```
 
 **Input JSON Format:**
@@ -64,14 +64,14 @@ sce analysis gaps --activities all_activities.json --min-days 7
 
 ---
 
-## sce analysis load
+## resilio analysis load
 
 Analyze systemic and lower-body load distribution across all sports.
 
 **Usage:**
 
 ```bash
-sce analysis load --activities week_activities.json \
+resilio analysis load --activities week_activities.json \
     --days 7 --priority equal
 ```
 
@@ -100,14 +100,14 @@ sce analysis load --activities week_activities.json \
 
 ---
 
-## sce analysis capacity
+## resilio analysis capacity
 
 Validate planned volume against athlete's proven capacity.
 
 **Usage:**
 
 ```bash
-sce analysis capacity --week 15 --volume 60.0 --load 550.0 \
+resilio analysis capacity --week 15 --volume 60.0 --load 550.0 \
     --historical all_activities.json
 ```
 

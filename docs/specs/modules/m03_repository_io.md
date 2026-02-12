@@ -22,7 +22,7 @@
 
 ### 1.1 Purpose
 
-M3 provides centralized file system operations for all data persistence in the Sports Coach Engine. It is the **only module** that directly reads and writes files (except M2 for configuration). This ensures consistent handling of atomic writes, schema validation, locking, and path resolution across the entire system.
+M3 provides centralized file system operations for all data persistence in the Resilio. It is the **only module** that directly reads and writes files (except M2 for configuration). This ensures consistent handling of atomic writes, schema validation, locking, and path resolution across the entire system.
 
 ### 1.2 Scope Boundaries
 
@@ -74,7 +74,7 @@ All data schemas (ActivitySchema, ProfileSchema, etc.) are defined in a separate
 
 ## 3. Internal Interface
 
-**Note:** This module is called internally by all core modules for file operations. **Additionally, this module IS exposed for direct access** by Claude Code for exploration and debugging via `from sports_coach_engine.core.repository import RepositoryIO`.
+**Note:** This module is called internally by all core modules for file operations. **Additionally, this module IS exposed for direct access** by Claude Code for exploration and debugging via `from resilio.core.repository import RepositoryIO`.
 
 ### 3.1 Type Definitions
 
@@ -887,7 +887,7 @@ def get_activity_path(
 
 ```python
 from pathlib import Path
-from sports_coach_engine.m02_config import get_repo_root as m2_get_repo_root
+from resilio.m02_config import get_repo_root as m2_get_repo_root
 
 
 def resolve_path(relative_path: str | Path) -> Path:
@@ -1021,11 +1021,11 @@ Claude Code → core.repository::RepositoryIO → read_yaml(), list_files()
 ### 7.2 Module Usage Patterns
 
 ```python
-from sports_coach_engine.core.repository import (
+from resilio.core.repository import (
     read_yaml, write_yaml, list_files, with_lock,
     get_activity_path, RepoError
 )
-from sports_coach_engine.schemas import ActivitySchema, ProfileSchema
+from resilio.schemas import ActivitySchema, ProfileSchema
 
 # M4 (Profile Service) - Read/write profile
 profile = read_yaml("athlete/profile.yaml", ProfileSchema)
@@ -1102,7 +1102,7 @@ activities = repo.list_files("activities/**/*.yaml")
 ```python
 import pytest
 from pathlib import Path
-from sports_coach_engine.m03_repository import (
+from resilio.m03_repository import (
     read_yaml, write_yaml, atomic_write, acquire_lock,
     release_lock, list_files, RepoError, RepoErrorType
 )
@@ -1399,7 +1399,7 @@ class TestConcurrentAccess:
 ### 9.1 Project Structure
 
 ```
-sports_coach_engine/
+resilio/
 ├── __init__.py
 ├── m03_repository/
 │   ├── __init__.py

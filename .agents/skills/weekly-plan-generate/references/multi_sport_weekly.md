@@ -6,7 +6,7 @@ Workout placement and daily scheduling for multi-sport athletes. Uses two-channe
 
 ## Two-Channel Load Model
 
-Traditional single-channel models treat all activities equally, causing problems. Sports Coach Engine uses **two channels**:
+Traditional single-channel models treat all activities equally, causing problems. Resilio uses **two channels**:
 
 ### 1. Systemic Load (Cardio + Whole-Body Fatigue)
 **Feeds**: CTL/ATL/TSB/ACWR
@@ -116,7 +116,7 @@ lower_body_load_au = base_effort_au × lower_body_multiplier
 
 ### Step 4: Validate Multi-Sport Load for the Week
 ```bash
-sce analysis load --activities activities.json --days 7 --priority equal
+resilio analysis load --activities activities.json --days 7 --priority equal
 ```
 
 **Returns**:
@@ -193,7 +193,7 @@ sce analysis load --activities activities.json --days 7 --priority equal
 ## Checking Daily Readiness with Multi-Sport Context
 
 ```bash
-sce today
+resilio today
 ```
 
 **Returns adaptation triggers including multi-sport warnings**:
@@ -239,16 +239,16 @@ sce today
 
 ```bash
 # Check multi-sport load for current week
-sce analysis load --activities activities.json --days 7 --priority equal
+resilio analysis load --activities activities.json --days 7 --priority equal
 
 # Check today's readiness considering other sports
-sce today
+resilio today
 
 # View other sport commitments (from profile)
-sce profile get | jq -r '.other_sports'
+resilio profile get | jq -r '.other_sports'
 
 # Forecast multi-sport load for next week
-sce risk forecast --weeks 1 --metrics metrics.json --plan plan.json
+resilio risk forecast --weeks 1 --metrics metrics.json --plan plan.json
 ```
 
 ---

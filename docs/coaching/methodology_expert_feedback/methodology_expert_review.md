@@ -1,16 +1,16 @@
-# Sports Coach Engine: Training Methodology (Expert Review Draft)
+# Resilio: Training Methodology (Expert Review Draft)
 
-**Purpose**: This document describes the training methodology currently implemented in Sports Coach Engine, the relationship between classic training literature and the quantitative metrics we use, and open questions for review by a sport coaching expert.
+**Purpose**: This document describes the training methodology currently implemented in Resilio, the relationship between classic training literature and the quantitative metrics we use, and open questions for review by a sport coaching expert.
 
 **Audience**: Sport coaching experts, physiologists, and internal reviewers.
 
-**Cross-check**: Definitions, zones, thresholds, guardrails, and adaptation triggers have been verified against [methodology.md](methodology.md) and the codebase. Equations, constants, and conditions in §3.4, §4.2–4.3, §6.2, and §7 are taken directly from [sports_coach_engine/core](../../../sports_coach_engine/core) and related schemas.
+**Cross-check**: Definitions, zones, thresholds, guardrails, and adaptation triggers have been verified against [methodology.md](methodology.md) and the codebase. Equations, constants, and conditions in §3.4, §4.2–4.3, §6.2, and §7 are taken directly from [resilio/core](../../../resilio/core) and related schemas.
 
 ---
 
 ## 1. Executive Summary
 
-Sports Coach Engine combines:
+Resilio combines:
 
 - **Training philosophy and workout design** from established running texts: Daniels' Running Formula, Pfitzinger's Advanced Marathoning / Faster Road Racing, Matt Fitzgerald's 80/20 Running, and FIRST (Run Less, Run Faster).
 - **Quantitative load and readiness metrics** from the Banister/TrainingPeaks tradition: Chronic Training Load (CTL), Acute Training Load (ATL), Training Stress Balance (TSB), Acute:Chronic Workload Ratio (ACWR), and a composite Readiness score.
@@ -61,20 +61,20 @@ Those concepts come from the Banister fitness–fatigue model and its populariza
 
 **Zone boundaries (as implemented in code):**
 
-- **CTL zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_ctl_zone`): &lt;20 Beginner, &lt;40 Developing, &lt;60 Recreational, &lt;80 Trained, &lt;100 Competitive, ≥100 Elite.
-- **TSB zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_tsb_zone`): &lt;−25 Overreached, −25 to &lt;−10 Productive, −10 to &lt;+5 Optimal, +5 to &lt;+15 Fresh, +15 to &lt;+25 Race Ready, ≥+25 Detraining Risk.
-- **ACWR zones** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_acwr_zone`): &lt;0.8 Undertrained, 0.8–&lt;1.3 Safe, 1.3–&lt;1.5 Caution, ≥1.5 High risk. Internal flag `load_spike_elevated = True` when ACWR &gt; 1.3.
+- **CTL zones** ([metrics.py](../../../resilio/core/metrics.py) `_classify_ctl_zone`): &lt;20 Beginner, &lt;40 Developing, &lt;60 Recreational, &lt;80 Trained, &lt;100 Competitive, ≥100 Elite.
+- **TSB zones** ([metrics.py](../../../resilio/core/metrics.py) `_classify_tsb_zone`): &lt;−25 Overreached, −25 to &lt;−10 Productive, −10 to &lt;+5 Optimal, +5 to &lt;+15 Fresh, +15 to &lt;+25 Race Ready, ≥+25 Detraining Risk.
+- **ACWR zones** ([metrics.py](../../../resilio/core/metrics.py) `_classify_acwr_zone`): &lt;0.8 Undertrained, 0.8–&lt;1.3 Safe, 1.3–&lt;1.5 Caution, ≥1.5 High risk. Internal flag `load_spike_elevated = True` when ACWR &gt; 1.3.
 
 ### 3.3 How We Use These Metrics
 
-- **Plan design**: Starting and target volume are informed by current CTL (e.g. safe volume range from `sce guardrails safe-volume --ctl X`). Goal feasibility (e.g. marathon) can consider CTL and weeks until race.
+- **Plan design**: Starting and target volume are informed by current CTL (e.g. safe volume range from `resilio guardrails safe-volume --ctl X`). Goal feasibility (e.g. marathon) can consider CTL and weeks until race.
 - **Injury prevention**: ACWR drives adaptation triggers (e.g. ACWR >1.5 → high risk; >1.3 → caution). We do not auto-downgrade; the AI presents options and reasoning.
 - **Daily readiness**: TSB and Readiness inform whether to proceed with a quality session, downgrade, or rest. Safety override: ACWR >1.5 and Readiness <35 can force a rest day.
 - **Multi-sport**: Two-channel load (systemic vs lower-body) gates running quality/long runs by lower-body load; systemic load feeds CTL/ATL/TSB/ACWR so all sports contribute to fitness and fatigue.
 
 ### 3.4 Implementation Reference (Code-Accurate)
 
-All formulas and constants below are taken from [sports_coach_engine/core/metrics.py](../../../sports_coach_engine/core/metrics.py). These are the exact equations and conditions used in the package.
+All formulas and constants below are taken from [resilio/core/metrics.py](../../../resilio/core/metrics.py). These are the exact equations and conditions used in the package.
 
 **CTL / ATL / TSB**
 
@@ -98,7 +98,7 @@ All formulas and constants below are taken from [sports_coach_engine/core/metric
 - `BASELINE_DAYS_THRESHOLD = 14`: `baseline_established = (data_days >= 14)` where `data_days` = count of days with metrics in the last 60 days (excluding today).
 - Historical days are counted backward from `target_date` (the day for which metrics are being computed); today is not included.
 
-**Validation (sanity checks)** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `validate_metrics`): Warnings are raised if: CTL &lt; 0 or &gt; 200; ATL &lt; 0 or &gt; 300; TSB &lt; −100 or &gt; 50; ACWR &lt; 0.2 or &gt; 3.0; readiness &lt; 0 or &gt; 100; negative daily loads; or readiness component weights do not sum to 1.0 (tolerance 0.01). These are internal sanity checks, not athlete-facing rules.
+**Validation (sanity checks)** ([metrics.py](../../../resilio/core/metrics.py) `validate_metrics`): Warnings are raised if: CTL &lt; 0 or &gt; 200; ATL &lt; 0 or &gt; 300; TSB &lt; −100 or &gt; 50; ACWR &lt; 0.2 or &gt; 3.0; readiness &lt; 0 or &gt; 100; negative daily loads; or readiness component weights do not sum to 1.0 (tolerance 0.01). These are internal sanity checks, not athlete-facing rules.
 
 ---
 
@@ -109,7 +109,7 @@ All formulas and constants below are taken from [sports_coach_engine/core/metric
 - **Systemic load** (`systemic_load_au`): Drives CTL, ATL, TSB, ACWR. All activities contribute via sport-specific multipliers. Formula per activity: `systemic_load_au = base_effort_au × systemic_multiplier` (after interval adjustment).
 - **Lower-body load** (`lower_body_load_au`): Used to gate running quality and long runs. Formula: `lower_body_load_au = base_effort_au × lower_body_multiplier`. Threshold for gating: see §7.2 (lower-body load trigger).
 
-**Sport multipliers (exact, from [load.py](../../../sports_coach_engine/core/load.py) `DEFAULT_MULTIPLIERS`)** — (systemic, lower_body):
+**Sport multipliers (exact, from [load.py](../../../resilio/core/load.py) `DEFAULT_MULTIPLIERS`)** — (systemic, lower_body):
 
 | Sport         | Systemic | Lower-body |
 | ------------- | -------- | ---------- |
@@ -131,7 +131,7 @@ Running surface overrides (when sport is Run): Treadmill → lower_body 0.9; Tra
 
 ### 4.2 Base Effort (Implementation vs Documentation)
 
-**Current implementation** (see [sports_coach_engine/core/load.py](../../../sports_coach_engine/core/load.py)): Base effort is computed with a **TSS-equivalent** formula aligned with TrainingPeaks/Coggan.
+**Current implementation** (see [resilio/core/load.py](../../../resilio/core/load.py)): Base effort is computed with a **TSS-equivalent** formula aligned with TrainingPeaks/Coggan.
 
 **Formula**: `base_effort_au = hours × IF² × 100`, where `hours = duration_minutes / 60` and IF comes from the RPE→IF table below. Function: `calculate_base_effort_tss(rpe, duration_minutes)`.
 
@@ -154,19 +154,19 @@ Default for unknown RPE: `IF = 0.70`. Result is rounded to 1 decimal place.
 
 **Examples**: 60 min at RPE 3 → (1 × 0.65² × 100) ≈ 42.3 AU. 60 min at RPE 8 → 100.0 AU.
 
-**Interval adjustment** ([load.py](../../../sports_coach_engine/core/load.py) `adjust_tss_for_intervals`): If the activity is detected as interval work (keywords: "interval", "repeat", "rep", "x ", "@ "; or Strava workout_type == 3; or session_type QUALITY/RACE), base TSS is multiplied by **0.85** (−15%) before applying sport multipliers. Explanation: work:rest recovery reduces effective stress.
+**Interval adjustment** ([load.py](../../../resilio/core/load.py) `adjust_tss_for_intervals`): If the activity is detected as interval work (keywords: "interval", "repeat", "rep", "x ", "@ "; or Strava workout_type == 3; or session_type QUALITY/RACE), base TSS is multiplied by **0.85** (−15%) before applying sport multipliers. Explanation: work:rest recovery reduces effective stress.
 
-**Session type classification** ([load.py](../../../sports_coach_engine/core/load.py) `classify_session_type`): Strava `workout_type == 1` (race) → RACE. Else: RPE 1–4 → EASY, 5–6 → MODERATE, 7–8 → QUALITY, 9–10 → RACE.
+**Session type classification** ([load.py](../../../resilio/core/load.py) `classify_session_type`): Strava `workout_type == 1` (race) → RACE. Else: RPE 1–4 → EASY, 5–6 → MODERATE, 7–8 → QUALITY, 9–10 → RACE.
 
-**Multiplier adjustments** ([load.py](../../../sports_coach_engine/core/load.py) `adjust_multipliers`): (1) **Strength**: if name/description contains leg keywords (leg, squat, deadlift, lunge, lower body) → lower-body +0.25; if upper-body keywords (upper body, bench, pull-up, shoulder, chest, back) → lower-body = max(0.15, lower_body − 0.15). (2) **Elevation**: if elevation_gain_m / (distance_m/1000) > 30 m/km → systemic +0.05, lower-body +0.10. (3) **Duration**: if duration_minutes > 120 → systemic +0.05. (4) **Race**: if workout_type == 1 → systemic +0.10.
+**Multiplier adjustments** ([load.py](../../../resilio/core/load.py) `adjust_multipliers`): (1) **Strength**: if name/description contains leg keywords (leg, squat, deadlift, lunge, lower body) → lower-body +0.25; if upper-body keywords (upper body, bench, pull-up, shoulder, chest, back) → lower-body = max(0.15, lower_body − 0.15). (2) **Elevation**: if elevation_gain_m / (distance_m/1000) > 30 m/km → systemic +0.05, lower-body +0.10. (3) **Duration**: if duration_minutes > 120 → systemic +0.05. (4) **Race**: if workout_type == 1 → systemic +0.10.
 
-**Surface overrides for running** ([load.py](../../../sports_coach_engine/core/load.py) `get_multipliers`): Treadmill → lower-body 0.9; Trail → systemic 1.05, lower-body 1.10; Track → no change (1.0, 1.0).
+**Surface overrides for running** ([load.py](../../../resilio/core/load.py) `get_multipliers`): Treadmill → lower-body 0.9; Trail → systemic 1.05, lower-body 1.10; Track → no change (1.0, 1.0).
 
 ### 4.3 RPE Estimation (Inputs to Load)
 
-RPE used for base effort can come from multiple sources. The package **does not** resolve conflicts; it returns all estimates and the AI/athlete chooses. Source order in the code ([notes.py](../../../sports_coach_engine/core/notes.py) `estimate_rpe`): (1) Explicit user input (Strava `perceived_exertion`), (2) HR-based estimate, (3) Strava relative effort (`suffer_score`), (4) Pace-based estimate (running + VDOT in profile), (5) Duration heuristic (fallback).
+RPE used for base effort can come from multiple sources. The package **does not** resolve conflicts; it returns all estimates and the AI/athlete chooses. Source order in the code ([notes.py](../../../resilio/core/notes.py) `estimate_rpe`): (1) Explicit user input (Strava `perceived_exertion`), (2) HR-based estimate, (3) Strava relative effort (`suffer_score`), (4) Pace-based estimate (running + VDOT in profile), (5) Duration heuristic (fallback).
 
-**HR-based RPE** ([notes.py](../../../sports_coach_engine/core/notes.py) `estimate_rpe_from_hr`): Uses `max_hr = athlete_max_hr or max_hr_activity`. **Percent-of-max zones** (exact boundaries):
+**HR-based RPE** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_hr`): Uses `max_hr = athlete_max_hr or max_hr_activity`. **Percent-of-max zones** (exact boundaries):
 
 | % max HR  | Base RPE | Label                 |
 | --------- | -------- | --------------------- |
@@ -181,11 +181,11 @@ RPE used for base effort can come from multiple sources. The package **does not*
 
 **Duration adjustment** (HR-based only): If `duration_minutes > 90` and `base_rpe >= 4` → +1 RPE; if `> 150` → +2 RPE; if `> 240` (4 h) → +3 RPE. Cap: `final_rpe = min(10, base_rpe + duration_adjustment)` (adjustment itself is capped at 3).
 
-**Strava relative effort** ([notes.py](../../../sports_coach_engine/core/notes.py) `estimate_rpe_from_strava_relative`): `effort_per_min = suffer_score / duration_minutes`. Mapping: &lt;0.5 → RPE 2, &lt;1.0 → 4, &lt;1.5 → 5, &lt;2.0 → 6, &lt;2.5 → 7, &lt;3.0 → 8, else 9.
+**Strava relative effort** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_strava_relative`): `effort_per_min = suffer_score / duration_minutes`. Mapping: &lt;0.5 → RPE 2, &lt;1.0 → 4, &lt;1.5 → 5, &lt;2.0 → 6, &lt;2.5 → 7, &lt;3.0 → 8, else 9.
 
-**Pace-based RPE** ([notes.py](../../../sports_coach_engine/core/notes.py) `estimate_rpe_from_pace`): Uses VDOT from profile. Zone paces (seconds per km): Easy = 360 − (VDOT − 40)×6; Tempo = 330 − (VDOT − 40)×5; Interval = 300 − (VDOT − 40)×5.5; Marathon ≈ (easy + tempo)/2; Repetition = interval − 30. Then: pace ≤ repetition → RPE 9, ≤ interval → 8, ≤ tempo → 7, ≤ marathon → 6, ≤ easy → 4; slower → 3. Trail_run adds +1 RPE.
+**Pace-based RPE** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_pace`): Uses VDOT from profile. Zone paces (seconds per km): Easy = 360 − (VDOT − 40)×6; Tempo = 330 − (VDOT − 40)×5; Interval = 300 − (VDOT − 40)×5.5; Marathon ≈ (easy + tempo)/2; Repetition = interval − 30. Then: pace ≤ repetition → RPE 9, ≤ interval → 8, ≤ tempo → 7, ≤ marathon → 6, ≤ easy → 4; slower → 3. Trail_run adds +1 RPE.
 
-**Duration heuristic** ([notes.py](../../../sports_coach_engine/core/notes.py) `estimate_rpe_from_duration`): Sport defaults (e.g. run 5, trail_run 6, cycle 4, climb 6, strength 6, yoga 2). If duration_minutes > 120, `base_rpe = min(10, base_rpe + 1)`.
+**Duration heuristic** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_duration`): Sport defaults (e.g. run 5, trail_run 6, cycle 4, climb 6, strength 6, yoga 2). If duration_minutes > 120, `base_rpe = min(10, base_rpe + 1)`.
 
 ---
 
@@ -195,7 +195,7 @@ RPE used for base effort can come from multiple sources. The package **does not*
 
 - **CTL**: Time constant 42 days (code: `CTL_DECAY = 0.976`, `CTL_ALPHA = 0.024`). TrainingPeaks states that "it takes 42 days to get concrete CTL when starting fresh"; we document a **minimum of 12 weeks (84 days)** in [cli_data.md](cli/cli_data.md) for the 42-day CTL calculation to be considered fully valid (conservative). The package can still compute CTL from day 1 using cold-start estimation (see §3.4).
 - **ACWR**: Code constant `ACWR_MINIMUM_DAYS = 28`. ACWR is **not** computed when any of the previous 28 days is missing metrics; `calculate_acwr` returns `None` in that case.
-- **Baseline**: Code constant `BASELINE_DAYS_THRESHOLD = 14`. `baseline_established = True` when `data_days >= 14`, where `data_days` = number of days with metrics in the last 60 days (excluding the day being computed). Source: [metrics.py](../../../sports_coach_engine/core/metrics.py).
+- **Baseline**: Code constant `BASELINE_DAYS_THRESHOLD = 14`. `baseline_established = True` when `data_days >= 14`, where `data_days` = number of days with metrics in the last 60 days (excluding the day being computed). Source: [metrics.py](../../../resilio/core/metrics.py).
 
 ### 5.2 Cold Start
 
@@ -217,21 +217,21 @@ Readiness is on a 0–100 scale; <35 "very low" (force rest), 35–50 "low" (dow
 
 ### 6.2 Implementation (Code-Accurate)
 
-**Current implementation** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_readiness`): The package **always** uses the **objective-only** path. Weights used are:
+**Current implementation** ([metrics.py](../../../resilio/core/metrics.py) `compute_readiness`): The package **always** uses the **objective-only** path. Weights used are:
 
 - **Weights**: `READINESS_WEIGHTS_OBJECTIVE_ONLY = {"tsb": 0.40, "load_trend": 0.40}`. So effective formula: `score = tsb_score × 0.40 + load_trend × 0.40` (before overrides), then capped at **65**.
 
 **TSB → 0–100 score**: `tsb_score = max(0, min(100, (tsb + 30) × 2.5))`. So TSB −30 → 0, TSB 0 → 75, TSB +10 → 100 (capped).
 
-**Load trend** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_load_trend`): Uses last 7 days of daily systemic load (including today). `avg_3d = mean(loads[0:3])`, `avg_7d = mean(loads[0:7])`. `ratio = 1 − (avg_3d / avg_7d)`. `trend_score = 50 + (ratio × 50)`, clamped to 0–100. Higher score = fresher (recent load lower than 7-day baseline). If any of the last 7 days are missing, returns 65.0 (neutral).
+**Load trend** ([metrics.py](../../../resilio/core/metrics.py) `compute_load_trend`): Uses last 7 days of daily systemic load (including today). `avg_3d = mean(loads[0:3])`, `avg_7d = mean(loads[0:7])`. `ratio = 1 − (avg_3d / avg_7d)`. `trend_score = 50 + (ratio × 50)`, clamped to 0–100. Higher score = fresher (recent load lower than 7-day baseline). If any of the last 7 days are missing, returns 65.0 (neutral).
 
 **Safety overrides** (applied in order): (1) If any **injury** flags from activity notes → `score = min(score, 25)`, `injury_flag_override = True`. (2) If any **illness** flags: if keywords "severe", "fever", "flu" in flags → `score = min(score, 15)`; else → `score = min(score, 35)`; `illness_flag_override = True`. Final score clamped to 0–100.
 
-**Readiness level boundaries** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_classify_readiness_level`): &lt;35 → REST_RECOMMENDED, &lt;50 → EASY_ONLY, &lt;65 → REDUCE_INTENSITY, &lt;80 → READY, ≥80 → PRIMED.
+**Readiness level boundaries** ([metrics.py](../../../resilio/core/metrics.py) `_classify_readiness_level`): &lt;35 → REST_RECOMMENDED, &lt;50 → EASY_ONLY, &lt;65 → REDUCE_INTENSITY, &lt;80 → READY, ≥80 → PRIMED.
 
 **Confidence**: Always `LOW` in v0 (objective-only readiness).
 
-**Injury/illness flags** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `_extract_activity_flags`): Scans activity `description` and `private_note` for keywords. Injury: pain, ache, hurt, sore, injury, strain, sprain, tear, limp, sharp, stabbing, shooting, tight, swollen, inflamed, etc. Illness: sick, ill, fever, flu, cold, covid, virus, nauseous, vomiting, diarrhea, congestion, cough, chills, headache, migraine. Returns lists of descriptive strings (e.g. "run activity: pain, sore").
+**Injury/illness flags** ([metrics.py](../../../resilio/core/metrics.py) `_extract_activity_flags`): Scans activity `description` and `private_note` for keywords. Injury: pain, ache, hurt, sore, injury, strain, sprain, tear, limp, sharp, stabbing, shooting, tight, swollen, inflamed, etc. Illness: sick, ill, fever, flu, cold, covid, virus, nauseous, vomiting, diarrhea, congestion, cough, chills, headache, migraine. Returns lists of descriptive strings (e.g. "run activity: pain, sore").
 
 ---
 
@@ -239,23 +239,23 @@ Readiness is on a 0–100 scale; <35 "very low" (force rest), 35–50 "low" (dow
 
 ### 7.1 Guardrails (From Books + Evidence)
 
-**80/20 intensity distribution** ([metrics.py](../../../sports_coach_engine/core/metrics.py) `compute_intensity_distribution`): Activities bucketed by session_type: EASY → low, MODERATE → moderate, QUALITY/RACE → high. Percentages = (low_minutes, moderate_minutes, high_minutes) / total_minutes × 100. **Compliance**: `is_compliant = (low_percent >= 75.0)`. Target low = 80% (`target_low_percent = 80.0`). No explicit "only when ≥3 run days" in this function; that condition is methodology/UI.
+**80/20 intensity distribution** ([metrics.py](../../../resilio/core/metrics.py) `compute_intensity_distribution`): Activities bucketed by session_type: EASY → low, MODERATE → moderate, QUALITY/RACE → high. Percentages = (low_minutes, moderate_minutes, high_minutes) / total_minutes × 100. **Compliance**: `is_compliant = (low_percent >= 75.0)`. Target low = 80% (`target_low_percent = 80.0`). No explicit "only when ≥3 run days" in this function; that condition is methodology/UI.
 
 **ACWR safety**: ACWR >1.5 → high risk (zone HIGH_RISK); >1.3 → caution (zone CAUTION), `load_spike_elevated = True`. Enforcement is contextual (AI + athlete).
 
-**Long run limits** ([guardrails/volume.py](../../../sports_coach_engine/core/guardrails/volume.py) `validate_long_run_limits`): Default `pct_limit = 30.0`, `duration_limit_minutes = 150`. Violations: (1) `long_run_km / weekly_volume_km × 100 > pct_limit` → LONG_RUN_EXCEEDS_WEEKLY_PCT; (2) `long_run_duration_minutes > duration_limit_minutes` → LONG_RUN_EXCEEDS_DURATION.
+**Long run limits** ([guardrails/volume.py](../../../resilio/core/guardrails/volume.py) `validate_long_run_limits`): Default `pct_limit = 30.0`, `duration_limit_minutes = 150`. Violations: (1) `long_run_km / weekly_volume_km × 100 > pct_limit` → LONG_RUN_EXCEEDS_WEEKLY_PCT; (2) `long_run_duration_minutes > duration_limit_minutes` → LONG_RUN_EXCEEDS_DURATION.
 
-**T/I/R volume limits (Daniels)** ([guardrails/volume.py](../../../sports_coach_engine/core/guardrails/volume.py) `validate_quality_volume`): Threshold: `t_pace_km <= weekly_mileage_km × 0.10`. Interval: `i_pace_km <= min(10.0, weekly_mileage_km × 0.08)`. Repetition: `r_pace_km <= min(8.0, weekly_mileage_km × 0.05)`. Violation types: T_PACE_VOLUME_EXCEEDED, I_PACE_VOLUME_EXCEEDED, R_PACE_VOLUME_EXCEEDED.
+**T/I/R volume limits (Daniels)** ([guardrails/volume.py](../../../resilio/core/guardrails/volume.py) `validate_quality_volume`): Threshold: `t_pace_km <= weekly_mileage_km × 0.10`. Interval: `i_pace_km <= min(10.0, weekly_mileage_km × 0.08)`. Repetition: `r_pace_km <= min(8.0, weekly_mileage_km × 0.05)`. Violation types: T_PACE_VOLUME_EXCEEDED, I_PACE_VOLUME_EXCEEDED, R_PACE_VOLUME_EXCEEDED.
 
-**Weekly progression (10% rule)** ([guardrails/volume.py](../../../sports_coach_engine/core/guardrails/volume.py) `validate_weekly_progression`): `safe_max_km = previous_volume_km × 1.10`. OK if `current_volume_km <= safe_max_km`. If `previous_volume_km == 0`, any current volume is OK. Decreases are always OK.
+**Weekly progression (10% rule)** ([guardrails/volume.py](../../../resilio/core/guardrails/volume.py) `validate_weekly_progression`): `safe_max_km = previous_volume_km × 1.10`. OK if `current_volume_km <= safe_max_km`. If `previous_volume_km == 0`, any current volume is OK. Decreases are always OK.
 
-**Safe volume range (CTL-based)** ([guardrails/volume.py](../../../sports_coach_engine/core/guardrails/volume.py) `calculate_safe_volume_range`): CTL zones and base ranges: CTL &lt;20 → (15, 25) km/week; &lt;35 → (25, 40); &lt;50 → (40, 65); ≥50 → (55, 80). Goal adjustments: 5k ×0.9, 10k/fitness ×1.0, half_marathon ×1.15, marathon ×1.3. Masters (age ≥50): range ×0.9. If `recent_weekly_volume_km` provided and gap to CTL-based start >10%, recommended start = min(recent × 1.10, ctl_based_start) with warning to avoid jump.
+**Safe volume range (CTL-based)** ([guardrails/volume.py](../../../resilio/core/guardrails/volume.py) `calculate_safe_volume_range`): CTL zones and base ranges: CTL &lt;20 → (15, 25) km/week; &lt;35 → (25, 40); &lt;50 → (40, 65); ≥50 → (55, 80). Goal adjustments: 5k ×0.9, 10k/fitness ×1.0, half_marathon ×1.15, marathon ×1.3. Masters (age ≥50): range ×0.9. If `recent_weekly_volume_km` provided and gap to CTL-based start >10%, recommended start = min(recent × 1.10, ctl_based_start) with warning to avoid jump.
 
 **Recovery weeks**: Pfitzinger "every 4th week ~70% volume" is applied in planning methodology (e.g. macro/weekly plan design); there is no dedicated recovery-week validator in the guardrails code.
 
 ### 7.2 Adaptation Triggers (M11)
 
-Trigger types and thresholds are defined in [schemas/adaptation.py](../../../sports_coach_engine/schemas/adaptation.py) `TriggerType` and `AdaptationThresholds`; detection logic in [core/analysis/risk.py](../../../sports_coach_engine/core/analysis/risk.py) and [core/adaptation.py](../../../sports_coach_engine/core/adaptation.py).
+Trigger types and thresholds are defined in [schemas/adaptation.py](../../../resilio/schemas/adaptation.py) `TriggerType` and `AdaptationThresholds`; detection logic in [core/analysis/risk.py](../../../resilio/core/analysis/risk.py) and [core/adaptation.py](../../../resilio/core/adaptation.py).
 
 **Trigger thresholds (code-accurate)**:
 
@@ -269,7 +269,7 @@ Trigger types and thresholds are defined in [schemas/adaptation.py](../../../spo
 | LOWER_BODY_LOAD_HIGH | Last **2 days** lower-body load sum &gt; **CTL × 2.5** | risk.py: `recent_lower_body = sum(activities[-2:].lower_body_load_au)`, `safe_daily_lower = ctl * 2.5`; weight 0.25 when triggered |
 | SESSION_DENSITY_HIGH | ≥ 2 hard (quality/race) sessions in last 7 days        | Schema: session_density_max = 2                                                                                                    |
 
-**Risk aggregation** ([risk.py](../../../sports_coach_engine/core/analysis/risk.py) `assess_current_risk`): `risk_index_pct = min(100, risk_score × 100)`. Risk level: risk_score ≥ 0.60 → DANGER, ≥ 0.40 → HIGH, ≥ 0.20 → MODERATE, else LOW. Safety override (force rest): typically ACWR > 1.5 and Readiness &lt; 35 (documented in Q8).
+**Risk aggregation** ([risk.py](../../../resilio/core/analysis/risk.py) `assess_current_risk`): `risk_index_pct = min(100, risk_score × 100)`. Risk level: risk_score ≥ 0.60 → DANGER, ≥ 0.40 → HIGH, ≥ 0.20 → MODERATE, else LOW. Safety override (force rest): typically ACWR > 1.5 and Readiness &lt; 35 (documented in Q8).
 
 The system returns triggers and risk level; the AI reasons with athlete context and presents options rather than applying automatic workout changes (except for the documented safety override).
 
@@ -555,11 +555,11 @@ The following questions are designed to yield **precise, actionable guidance**. 
 - [docs/specs/modules/m08_load_engine.md](../specs/modules/m08_load_engine.md) – Load calculation (M8)
 - [docs/specs/modules/m09_metrics_engine.md](../specs/modules/m09_metrics_engine.md) – Metrics (M9), cold start, baseline
 - [cli_data.md](cli/cli_data.md) – CTL baseline requirements (12 weeks)
-- [sports_coach_engine/core/load.py](../../../sports_coach_engine/core/load.py) – Base effort TSS, RPE→IF, multipliers, session type
-- [sports_coach_engine/core/metrics.py](../../../sports_coach_engine/core/metrics.py) – CTL/ATL/TSB/ACWR/Readiness, zones, validation
-- [sports_coach_engine/core/notes.py](../../../sports_coach_engine/core/notes.py) – RPE estimation (HR, Strava, pace, duration)
-- [sports_coach_engine/core/guardrails/volume.py](../../../sports_coach_engine/core/guardrails/volume.py) – Safe volume, T/I/R limits, long run, 10% rule
-- [sports_coach_engine/core/guardrails/recovery.py](../../../sports_coach_engine/core/guardrails/recovery.py) – Break return, masters, race/illness recovery
-- [sports_coach_engine/core/analysis/risk.py](../../../sports_coach_engine/core/analysis/risk.py) – Current risk, ACWR/readiness/TSB/lower-body factors
-- [sports_coach_engine/schemas/adaptation.py](../../../sports_coach_engine/schemas/adaptation.py) – Trigger types, AdaptationThresholds, suggestion/override models
-- [sports_coach_engine/schemas/metrics.py](../../../sports_coach_engine/schemas/metrics.py) – CTLZone, TSBZone, ACWRZone, ReadinessLevel, DailyMetrics
+- [resilio/core/load.py](../../../resilio/core/load.py) – Base effort TSS, RPE→IF, multipliers, session type
+- [resilio/core/metrics.py](../../../resilio/core/metrics.py) – CTL/ATL/TSB/ACWR/Readiness, zones, validation
+- [resilio/core/notes.py](../../../resilio/core/notes.py) – RPE estimation (HR, Strava, pace, duration)
+- [resilio/core/guardrails/volume.py](../../../resilio/core/guardrails/volume.py) – Safe volume, T/I/R limits, long run, 10% rule
+- [resilio/core/guardrails/recovery.py](../../../resilio/core/guardrails/recovery.py) – Break return, masters, race/illness recovery
+- [resilio/core/analysis/risk.py](../../../resilio/core/analysis/risk.py) – Current risk, ACWR/readiness/TSB/lower-body factors
+- [resilio/schemas/adaptation.py](../../../resilio/schemas/adaptation.py) – Trigger types, AdaptationThresholds, suggestion/override models
+- [resilio/schemas/metrics.py](../../../resilio/schemas/metrics.py) – CTLZone, TSBZone, ACWRZone, ReadinessLevel, DailyMetrics

@@ -5,19 +5,19 @@
 Initialize data directories and import activities from Strava.
 
 **Commands in this category:**
-- `sce init` - Initialize data directories and configuration
-- `sce sync` - Import activities from Strava
+- `resilio init` - Initialize data directories and configuration
+- `resilio sync` - Import activities from Strava
 
 ---
 
-## sce init
+## resilio init
 
 Initialize data directories and configuration.
 
 **Usage:**
 
 ```bash
-sce init
+resilio init
 ```
 
 **Returns:**
@@ -28,7 +28,7 @@ sce init
   "data": {
     "created_paths": ["data/athlete", "data/activities", ...],
     "skipped_paths": ["config/"],
-    "next_steps": "Run 'sce auth url' to connect Strava"
+    "next_steps": "Run 'resilio auth url' to connect Strava"
   }
 }
 ```
@@ -43,19 +43,19 @@ sce init
 
 ```bash
 # 1. Initialize directories
-sce init
+resilio init
 
 # 2. Authenticate with Strava
-sce auth url
+resilio auth url
 # Follow OAuth flow...
 
 # 3. Import activities
-sce sync
+resilio sync
 ```
 
 ---
 
-## sce sync
+## resilio sync
 
 Import activities from Strava.
 
@@ -63,13 +63,13 @@ Import activities from Strava.
 
 ```bash
 # Sync all activities (12+ weeks recommended for CTL baseline)
-sce sync
+resilio sync
 
 # Sync last 14 days only
-sce sync --since 14d
+resilio sync --since 14d
 
 # Sync specific date range
-sce sync --since 2026-01-01
+resilio sync --since 2026-01-01
 ```
 
 **Parameters:**
@@ -111,15 +111,15 @@ sce sync --since 2026-01-01
 
 ```bash
 # Initial sync (12 weeks minimum for CTL baseline)
-sce sync
+resilio sync
 
 # Daily refresh (last 7 days)
-sce sync --since 7d
+resilio sync --since 7d
 
 # Check if sync succeeded
 if [ $? -eq 0 ]; then
   echo "Activities synced successfully"
-  sce status  # View updated metrics
+  resilio status  # View updated metrics
 fi
 ```
 

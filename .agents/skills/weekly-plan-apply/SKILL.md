@@ -1,7 +1,7 @@
 ---
 name: weekly-plan-apply
 description: Applies an approved weekly plan JSON to the plan store after validation. Use only after athlete approval is recorded by the coach.
-compatibility: Codex CLI/IDE; requires local sce CLI and repo context
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # Weekly Plan Apply (Executor)
@@ -24,23 +24,23 @@ If missing, return a blocking checklist and stop.
 
 1) Verify approval state:
 ```bash
-sce approvals status
+resilio approvals status
 ```
 Confirm `weekly_approval.week_number` and `weekly_approval.approved_file` match the payload.
 
 2) Validate payload:
 ```bash
-sce plan validate-week --file <APPROVED_FILE>
+resilio plan validate-week --file <APPROVED_FILE>
 ```
 
 3) Apply with validation gate:
 ```bash
-sce plan populate --from-json <APPROVED_FILE> --validate
+resilio plan populate --from-json <APPROVED_FILE> --validate
 ```
 
 4) Confirm:
 ```bash
-sce plan week --week <WEEK_NUMBER>
+resilio plan week --week <WEEK_NUMBER>
 ```
 
 ## References (load only if needed)

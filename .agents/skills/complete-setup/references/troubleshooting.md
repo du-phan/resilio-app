@@ -4,7 +4,7 @@
 - Python not found
 - Python too old
 - Homebrew unavailable
-- `sce` not found
+- `resilio` not found
 - Config missing
 - Forbidden fixes
 
@@ -52,22 +52,22 @@ pyenv local 3.12.8
 PYTHON_CMD="$(pyenv which python)"
 ```
 
-## `sce` not found after install
+## `resilio` not found after install
 
 ### Poetry path
 
 ```bash
-poetry run sce --help
+poetry run resilio --help
 ```
 
-If this works, use Poetry runner (`SCE_CMD="poetry run sce"`).
+If this works, use Poetry runner (`RESILIO_CMD="poetry run resilio"`).
 
 ### venv path
 
 ```bash
 echo "$VIRTUAL_ENV"
 source .venv/bin/activate
-sce --help
+resilio --help
 ```
 
 ## Config missing
@@ -75,8 +75,8 @@ sce --help
 If package command works but config missing:
 
 ```bash
-$SCE_CMD init
-$SCE_CMD status
+$RESILIO_CMD init
+$RESILIO_CMD status
 ```
 
 ## Forbidden fixes (do not use)

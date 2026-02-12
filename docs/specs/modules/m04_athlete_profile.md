@@ -1165,7 +1165,7 @@ M3:                read_yaml("athlete/profile.yaml")
 ### 7.2 Usage Examples
 
 ```python
-from sports_coach_engine.core.profile import (
+from resilio.core.profile import (
     load_profile, create_profile, update_vdot_from_race,
     get_training_paces, validate_constraints, ProfileError
 )
@@ -1204,7 +1204,7 @@ if profile.conflict_policy == ConflictPolicy.ASK_EACH_TIME:
 
 ```python
 import pytest
-from sports_coach_engine.core.profile import (
+from resilio.core.profile import (
     calculate_vdot, derive_paces, validate_constraints,
     RaceDistance, GoalType, Goal, TrainingConstraints, Weekday
 )
@@ -1486,7 +1486,7 @@ class TestOtherSports:
 ## 9. Project Structure
 
 ```
-sports_coach_engine/
+resilio/
 ├── m04_profile/
 │   ├── __init__.py
 │   ├── models.py         # Pydantic models

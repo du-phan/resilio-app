@@ -13,7 +13,7 @@ Lap data provides lap-by-lap granularity (distance, pace, HR, elevation) enablin
 ## CLI Command
 
 ```bash
-sce activity laps <activity-id>
+resilio activity laps <activity-id>
 ```
 
 **Output**: Table showing lap breakdown with distance, time, pace, HR, elevation per lap.
@@ -104,7 +104,7 @@ Principles adapted from Daniels, Pfitzinger, Fitzgerald, and FIRST training meth
 
 When reviewing a structured workout:
 
-1. **Load lap data**: `sce activity laps <activity-id>`
+1. **Load lap data**: `resilio activity laps <activity-id>`
 
 2. **Identify workout structure**:
    - Warmup phase (easy pace/HR)

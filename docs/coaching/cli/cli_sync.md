@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `sce sync` command imports activities from Strava and updates all training metrics (CTL, ATL, TSB, ACWR, readiness).
+The `resilio sync` command imports activities from Strava and updates all training metrics (CTL, ATL, TSB, ACWR, readiness).
 
 **Smart sync detection** (default):
 - **First-time sync**: Fetches 365 days to establish CTL baseline
@@ -17,7 +17,7 @@ The `sce sync` command imports activities from Strava and updates all training m
 ### Automatic Smart Sync (Recommended)
 
 ```bash
-sce sync              # Smart detection
+resilio sync              # Smart detection
 ```
 
 **How it works:**
@@ -34,7 +34,7 @@ sce sync              # Smart detection
 ### Sync Status (Observability)
 
 ```bash
-sce sync --status
+resilio sync --status
 ```
 
 Returns a JSON status snapshot without running sync:
@@ -55,17 +55,17 @@ Override smart detection with `--since` flag:
 ### Relative Windows
 
 ```bash
-sce sync --since 7d   # Last 7 days (weekly analysis)
-sce sync --since 14d  # Last 2 weeks
-sce sync --since 30d  # Last month
-sce sync --since 365d # Full year (explicit)
+resilio sync --since 7d   # Last 7 days (weekly analysis)
+resilio sync --since 14d  # Last 2 weeks
+resilio sync --since 30d  # Last month
+resilio sync --since 365d # Full year (explicit)
 ```
 
 ### Absolute Dates
 
 ```bash
-sce sync --since 2026-01-01              # Since specific date
-sce sync --since 2026-01-01T00:00:00     # With time (ISO 8601)
+resilio sync --since 2026-01-01              # Since specific date
+resilio sync --since 2026-01-01T00:00:00     # With time (ISO 8601)
 ```
 
 ---
@@ -75,33 +75,33 @@ sce sync --since 2026-01-01T00:00:00     # With time (ISO 8601)
 ### Weekly Coaching Session
 
 ```bash
-sce auth status
-sce sync              # Smart sync (incremental, ~5-10 seconds)
-sce status
-sce week
+resilio auth status
+resilio sync              # Smart sync (incremental, ~5-10 seconds)
+resilio status
+resilio week
 ```
 
 **Optional explicit recent sync:**
 ```bash
-sce sync --since 7d   # Force last week only (faster for weekly analysis)
+resilio sync --since 7d   # Force last week only (faster for weekly analysis)
 ```
 
 ### First-Time Setup
 
 ```bash
-sce sync              # Automatic 365-day sync
+resilio sync              # Automatic 365-day sync
 ```
 
 Expects rate limit hit (~100 activities). If you want full year history:
 ```bash
 # Wait 15 minutes for rate limit reset
-sce sync              # Resumes automatically from where it left off
+resilio sync              # Resumes automatically from where it left off
 ```
 
 ### After Long Break (30-60 days)
 
 ```bash
-sce sync              # Smart sync catches up automatically
+resilio sync              # Smart sync catches up automatically
 ```
 
 No manual calculation needed - automatically syncs all missing days.
@@ -125,7 +125,7 @@ No manual calculation needed - automatically syncs all missing days.
 1. All fetched data is saved successfully (no data loss)
 2. Sync pauses and displays rate limit message
 3. Wait 15 minutes for limit reset (or longer for daily limit)
-4. Run `sce sync` again - automatically resumes from where it stopped
+4. Run `resilio sync` again - automatically resumes from where it stopped
 5. Repeat as needed until full history is synced
 
 **For very active athletes** (7+ activities/week over 365 days):
@@ -138,7 +138,7 @@ No manual calculation needed - automatically syncs all missing days.
 Synced 95 new activities from Strava.
 
 Strava rate limit hit. Data saved successfully.
-Wait 15 minutes and run 'sce sync' again to continue.
+Wait 15 minutes and run 'resilio sync' again to continue.
 ```
 
 ---
@@ -230,51 +230,51 @@ strava:
 
 ### Smart sync (first-time)
 ```bash
-$ sce sync
+$ resilio sync
 First-time sync: fetching last 365 days to establish training baseline...
 Synced 127 new activities from Strava.
 ```
 
 ### Smart sync (incremental, 2 days since last sync)
 ```bash
-$ sce sync
+$ resilio sync
 Incremental sync: fetching activities since 2026-01-31 (3 days)...
 Synced 2 new activities from Strava.
 ```
 
 ### Explicit weekly window
 ```bash
-$ sce sync --since 7d
+$ resilio sync --since 7d
 Syncing activities since 2026-01-26...
 Synced 5 new activities from Strava.
 ```
 
 ### Rate limit handling
 ```bash
-$ sce sync
+$ resilio sync
 First-time sync: fetching last 365 days to establish training baseline...
 Synced 95 new activities from Strava.
 
 Strava rate limit hit. Data saved successfully.
-Wait 15 minutes and run 'sce sync' again to continue.
+Wait 15 minutes and run 'resilio sync' again to continue.
 
 # 15 minutes later...
-$ sce sync
+$ resilio sync
 Incremental sync: fetching activities since 2025-06-01 (245 days)...
 Synced 32 new activities from Strava.
 
 # Check runtime status at any time (another terminal)
-$ sce sync --status
+$ resilio sync --status
 ```
 
 ---
 
 ## Related Commands
 
-- `sce auth status` - Check Strava authentication
-- `sce status` - View current metrics (CTL/ATL/TSB)
-- `sce week` - View weekly summary
-- `sce profile analyze` - Analyze synced activity patterns
+- `resilio auth status` - Check Strava authentication
+- `resilio status` - View current metrics (CTL/ATL/TSB)
+- `resilio week` - View weekly summary
+- `resilio profile analyze` - Analyze synced activity patterns
 
 ---
 

@@ -3,7 +3,7 @@
 ## Get Performance Baseline
 
 ```bash
-sce performance baseline
+resilio performance baseline
 ```
 
 **Present context to athlete**:
@@ -15,10 +15,10 @@ sce performance baseline
 
 ## Set Goal (Automatic Validation)
 
-The `sce goal set` command automatically validates feasibility:
+The `resilio goal set` command automatically validates feasibility:
 
 ```bash
-sce goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
+resilio goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
 # Automatically returns: goal saved + feasibility verdict + recommendations
 ```
 
@@ -60,7 +60,7 @@ sce goal set --type half_marathon --date 2026-06-01 --time "1:30:00"
 
 ## Edge Case: No Current VDOT Estimate
 
-If `sce performance baseline` returns no VDOT estimate (no recent quality workouts):
+If `resilio performance baseline` returns no VDOT estimate (no recent quality workouts):
 
 ```
 Coach: "I don't have enough recent quality workout data to estimate your current fitness.

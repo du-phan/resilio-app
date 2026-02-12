@@ -96,7 +96,7 @@ Each sport has different systemic and lower-body multipliers relative to running
 - 2 climbing sessions: 90-min bouldering, 120-min lead (moderate-hard intensity)
 - 1 yoga session: 60 min gentle flow
 
-**Load calculation** (from `sce analysis load`):
+**Load calculation** (from `resilio analysis load`):
 ```json
 {
   "systemic_load_by_sport": {
@@ -214,7 +214,7 @@ Since climbing is your primary sport, protecting Friday comp performance matters
 **Step 4: Capture pattern if recurring**
 If this conflict happens 3+ times, store as memory:
 ```bash
-sce memory add --type INSIGHT \
+resilio memory add --type INSIGHT \
   --content "Climbing comps on Friday consistently impact Saturday long run quality due to systemic fatigue" \
   --tags "sport:climbing,conflict:schedule,impact:long-run" \
   --confidence high
@@ -224,7 +224,7 @@ sce memory add --type INSIGHT \
 
 **Step 1: Check current load distribution**
 ```bash
-sce analysis load --activities [FILE] --days 7 --priority [PRIORITY]
+resilio analysis load --activities [FILE] --days 7 --priority [PRIORITY]
 ```
 
 **Step 2: Model the addition**

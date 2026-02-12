@@ -22,7 +22,7 @@
 
 Orchestrate multi-step operations by chaining internal modules together in the correct sequence. This module provides **workflow functions** that handle complex operations requiring multiple module calls.
 
-**Architectural Role:** M1 is an **internal module** called by the API layer (`sports_coach_engine/api/`). Claude Code does NOT call M1 directly—it calls API functions which delegate to M1 workflows internally.
+**Architectural Role:** M1 is an **internal module** called by the API layer (`resilio/api/`). Claude Code does NOT call M1 directly—it calls API functions which delegate to M1 workflows internally.
 
 ### 2.1 What This Module Does
 
@@ -326,15 +326,15 @@ from datetime import date, datetime
 from typing import Optional
 
 # Internal module imports
-from sports_coach_engine.core.config import AppConfig
-from sports_coach_engine.core.repository import RepositoryIO
-from sports_coach_engine.core.strava import fetch_activities, StravaActivity
-from sports_coach_engine.core.normalization import normalize_activity
-from sports_coach_engine.core.notes import analyze_activity_notes
-from sports_coach_engine.core.load import calculate_loads
-from sports_coach_engine.core.metrics import compute_daily_metrics, get_latest_metrics
-from sports_coach_engine.core.adaptation import evaluate_adaptations
-from sports_coach_engine.core.memory import extract_memories_from_activity
+from resilio.core.config import AppConfig
+from resilio.core.repository import RepositoryIO
+from resilio.core.strava import fetch_activities, StravaActivity
+from resilio.core.normalization import normalize_activity
+from resilio.core.notes import analyze_activity_notes
+from resilio.core.load import calculate_loads
+from resilio.core.metrics import compute_daily_metrics, get_latest_metrics
+from resilio.core.adaptation import evaluate_adaptations
+from resilio.core.memory import extract_memories_from_activity
 
 
 def run_sync_workflow(
@@ -772,8 +772,8 @@ API Layer:          EnrichedSyncResult (returned to Claude Code)
 
 ```python
 # In api/sync.py
-from sports_coach_engine.core.workflows import run_sync_workflow
-from sports_coach_engine.core.enrichment import enrich_sync_result
+from resilio.core.workflows import run_sync_workflow
+from resilio.core.enrichment import enrich_sync_result
 
 
 def sync_strava(

@@ -5,20 +5,20 @@
 Volume validation and recovery planning based on Daniels' Running Formula and Pfitzinger's guidelines.
 
 **Commands in this category:**
-- `sce guardrails quality-volume` - Validate T/I/R pace volumes
-- `sce guardrails progression` - Validate weekly volume progression (10% rule)
-- `sce guardrails analyze-progression` - Analyze progression with rich context for AI coaching
-- `sce guardrails long-run` - Validate long run limits
-- `sce guardrails feasible-volume` - Validate weekly volume feasibility (session duration)
-- `sce guardrails safe-volume` - Calculate safe volume range
-- `sce guardrails break-return` - Generate return-to-training protocol
-- `sce guardrails masters-recovery` - Calculate age-specific recovery adjustments
-- `sce guardrails race-recovery` - Determine post-race recovery protocol
-- `sce guardrails illness-recovery` - Generate return plan after illness
+- `resilio guardrails quality-volume` - Validate T/I/R pace volumes
+- `resilio guardrails progression` - Validate weekly volume progression (10% rule)
+- `resilio guardrails analyze-progression` - Analyze progression with rich context for AI coaching
+- `resilio guardrails long-run` - Validate long run limits
+- `resilio guardrails feasible-volume` - Validate weekly volume feasibility (session duration)
+- `resilio guardrails safe-volume` - Calculate safe volume range
+- `resilio guardrails break-return` - Generate return-to-training protocol
+- `resilio guardrails masters-recovery` - Calculate age-specific recovery adjustments
+- `resilio guardrails race-recovery` - Determine post-race recovery protocol
+- `resilio guardrails illness-recovery` - Generate return plan after illness
 
 ---
 
-## sce guardrails quality-volume
+## resilio guardrails quality-volume
 
 Validate T/I/R pace volumes against Daniels' hard constraints.
 
@@ -31,28 +31,28 @@ Validate T/I/R pace volumes against Daniels' hard constraints.
 **Usage:**
 
 ```bash
-sce guardrails quality-volume --t-pace 4.5 --i-pace 6.0 --r-pace 2.0 --weekly-volume 50.0
+resilio guardrails quality-volume --t-pace 4.5 --i-pace 6.0 --r-pace 2.0 --weekly-volume 50.0
 ```
 
 **Returns:** `overall_ok`, `violations[]`, pace limits and recommendations.
 
 ---
 
-## sce guardrails progression
+## resilio guardrails progression
 
 Validate weekly volume progression (10% rule).
 
 **Usage:**
 
 ```bash
-sce guardrails progression --previous 40.0 --current 50.0
+resilio guardrails progression --previous 40.0 --current 50.0
 ```
 
 **Returns:** `ok`, `increase_pct`, `safe_max_km`, violation if exceeds 10%.
 
 ---
 
-## sce guardrails analyze-progression
+## resilio guardrails analyze-progression
 
 Analyze volume progression with rich context for AI coaching decisions.
 
@@ -62,10 +62,10 @@ Analyze volume progression with rich context for AI coaching decisions.
 
 ```bash
 # Basic analysis
-sce guardrails analyze-progression --previous 15 --current 20
+resilio guardrails analyze-progression --previous 15 --current 20
 
 # Full context (recommended)
-sce guardrails analyze-progression \
+resilio guardrails analyze-progression \
   --previous 15 \
   --current 20 \
   --ctl 27 \
@@ -73,7 +73,7 @@ sce guardrails analyze-progression \
   --age 32
 
 # With risk factors
-sce guardrails analyze-progression \
+resilio guardrails analyze-progression \
   --previous 40 \
   --current 46 \
   --age 52 \
@@ -102,14 +102,14 @@ sce guardrails analyze-progression \
 
 ---
 
-## sce guardrails long-run
+## resilio guardrails long-run
 
 Validate long run against weekly volume (≤30%) and duration limits.
 
 **Usage:**
 
 ```bash
-sce guardrails long-run --distance 18.0 --duration 135 --weekly-volume 50.0
+resilio guardrails long-run --distance 18.0 --duration 135 --weekly-volume 50.0
 ```
 
 **Returns:** `pct_ok`, `duration_ok`, `violations[]` with recommendations.
@@ -117,7 +117,7 @@ sce guardrails long-run --distance 18.0 --duration 135 --weekly-volume 50.0
 
 ---
 
-## sce guardrails feasible-volume
+## resilio guardrails feasible-volume
 
 Validate whether a weekly volume target is feasible given **run frequency** and a
 **max session duration** constraint.
@@ -125,78 +125,78 @@ Validate whether a weekly volume target is feasible given **run frequency** and 
 **Usage:**
 
 ```bash
-sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5
-sce guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5 --target-volume 32
+resilio guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5
+resilio guardrails feasible-volume --run-days 2 --max-session-minutes 90 --easy-pace-min-per-km 6.5 --target-volume 32
 ```
 
 **Returns:** `max_single_session_km`, `max_weekly_volume_km`, `overall_ok`, `violations[]`.
 
 ---
 
-## sce guardrails safe-volume
+## resilio guardrails safe-volume
 
 Calculate safe weekly volume range based on current fitness (CTL) and goals.
 
 **Usage:**
 
 ```bash
-sce guardrails safe-volume --ctl 44.0 --goal half_marathon --age 52
+resilio guardrails safe-volume --ctl 44.0 --goal half_marathon --age 52
 ```
 
 **Returns:** `ctl_zone`, `recommended_start/peak_km`, masters adjustments if age 50+.
 
 ---
 
-## sce guardrails break-return
+## resilio guardrails break-return
 
 Generate return-to-training protocol per Daniels Table 9.2.
 
 **Usage:**
 
 ```bash
-sce guardrails break-return --days 21 --ctl 44.0 --cross-training moderate
+resilio guardrails break-return --days 21 --ctl 44.0 --cross-training moderate
 ```
 
 **Returns:** Load phases, VDOT adjustment, week-by-week schedule, red flags.
 
 ---
 
-## sce guardrails masters-recovery
+## resilio guardrails masters-recovery
 
 Calculate age-specific recovery adjustments (Pfitzinger).
 
 **Usage:**
 
 ```bash
-sce guardrails masters-recovery --age 52 --workout-type vo2max
+resilio guardrails masters-recovery --age 52 --workout-type vo2max
 ```
 
 **Returns:** Age bracket, additional recovery days by workout type.
 
 ---
 
-## sce guardrails race-recovery
+## resilio guardrails race-recovery
 
 Determine post-race recovery protocol by distance and age.
 
 **Usage:**
 
 ```bash
-sce guardrails race-recovery --distance half_marathon --age 52 --effort hard
+resilio guardrails race-recovery --distance half_marathon --age 52 --effort hard
 ```
 
 **Returns:** Minimum/recommended recovery days, day-by-day schedule.
 
 ---
 
-## sce guardrails illness-recovery
+## resilio guardrails illness-recovery
 
 Generate structured return-to-training plan after illness.
 
 **Usage:**
 
 ```bash
-sce guardrails illness-recovery --start-date 2026-01-10 --end-date 2026-01-15 --severity moderate
+resilio guardrails illness-recovery --start-date 2026-01-10 --end-date 2026-01-15 --severity moderate
 ```
 
 **Returns:** CTL drop estimate, day-by-day return protocol, medical consultation triggers.

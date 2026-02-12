@@ -18,14 +18,14 @@
 **Coach**: "Great! Let's get you set up. First, I need to check your Strava authentication."
 
 ```bash
-sce auth status
+resilio auth status
 # Exit code: 3 (not authenticated)
 ```
 
 **Coach**: "Your Strava account isn't connected yet. I need access to your training history to provide intelligent coaching. Let me generate an authorization link."
 
 ```bash
-sce auth url
+resilio auth url
 # Returns: https://strava.com/oauth/authorize?client_id=12345&redirect_uri=...
 ```
 
@@ -41,7 +41,7 @@ Please:
 
 **Coach**:
 ```bash
-sce auth exchange --code ABC123XYZ789
+resilio auth exchange --code ABC123XYZ789
 # Success
 ```
 
@@ -53,7 +53,7 @@ sce auth exchange --code ABC123XYZ789
 
 **Coach**:
 ```bash
-sce sync
+resilio sync
 # Imported 127 activities (6 months)
 ```
 
@@ -65,8 +65,8 @@ sce sync
 
 **Coach**:
 ```bash
-sce status
-sce profile analyze
+resilio status
+resilio profile analyze
 ```
 
 **Analysis results**:
@@ -120,7 +120,7 @@ Let's set up your profile. What's your name?"
 
 **Coach**:
 ```bash
-sce profile set --name "Jordan" --age 28 --max-hr 194 --run-priority primary --conflict-policy running_goal_wins
+resilio profile set --name "Jordan" --age 28 --max-hr 194 --run-priority primary --conflict-policy running_goal_wins
 ```
 
 "Profile created. Since running is your primary sport, I'll prioritize key running workouts and schedule cycling around them."
@@ -140,14 +140,14 @@ sce profile set --name "Jordan" --age 28 --max-hr 194 --run-priority primary --c
 **Coach**: "That's a 3% improvement - very achievable. Let me calculate your current VDOT."
 
 ```bash
-sce vdot calculate --race-type 10k --time 41:15
+resilio vdot calculate --race-type 10k --time 41:15
 # VDOT: 51.2
 ```
 
 **Coach**: "Your current VDOT is 51.2. VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports. To run sub-40 (3:59/km pace), you'd need a VDOT of 53.5 - a 2.3 point improvement over 12 weeks. That's realistic with focused training."
 
 ```bash
-sce goal --type 10k --date 2026-03-15 --time "39:59"
+resilio goal --type 10k --date 2026-03-15 --time "39:59"
 ```
 
 "Goal set: 10K on March 15th, 2026, goal time 39:59."
@@ -176,9 +176,9 @@ How many days per week can you run?"
 
 **Coach**:
 ```bash
-sce profile set --max-run-days 5 --unavailable-days "monday,wednesday" --max-session-minutes 90
+resilio profile set --max-run-days 5 --unavailable-days "monday,wednesday" --max-session-minutes 90
 
-sce profile add-sport --sport cycling --frequency 2 --duration 60 --intensity easy
+resilio profile add-sport --sport cycling --frequency 2 --duration 60 --intensity easy
 ```
 
 "Perfect. I have everything I need:

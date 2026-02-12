@@ -5,20 +5,20 @@
 OAuth flow and token management for Strava integration.
 
 **Commands in this category:**
-- `sce auth url` - Get Strava OAuth authorization URL
-- `sce auth exchange` - Exchange authorization code for access token
-- `sce auth status` - Check current authentication status
+- `resilio auth url` - Get Strava OAuth authorization URL
+- `resilio auth exchange` - Exchange authorization code for access token
+- `resilio auth status` - Check current authentication status
 
 ---
 
-## sce auth url
+## resilio auth url
 
 Get Strava OAuth authorization URL.
 
 **Usage:**
 
 ```bash
-sce auth url
+resilio auth url
 ```
 
 **Returns:**
@@ -38,18 +38,18 @@ sce auth url
 1. Open URL in browser
 2. Authorize application
 3. Copy authorization code from redirect URL
-4. Run `sce auth exchange --code YOUR_CODE`
+4. Run `resilio auth exchange --code YOUR_CODE`
 
 ---
 
-## sce auth exchange
+## resilio auth exchange
 
 Exchange authorization code for access token.
 
 **Usage:**
 
 ```bash
-sce auth exchange --code CODE
+resilio auth exchange --code CODE
 ```
 
 **Parameters:**
@@ -58,7 +58,7 @@ sce auth exchange --code CODE
 **Example:**
 
 ```bash
-sce auth exchange --code 1234567890abcdef
+resilio auth exchange --code 1234567890abcdef
 ```
 
 **Returns:**
@@ -69,7 +69,7 @@ sce auth exchange --code 1234567890abcdef
   "data": {
     "status": "authenticated",
     "expires_at": "2026-02-14T10:30:00Z",
-    "next_steps": "Run 'sce sync' to import activities"
+    "next_steps": "Run 'resilio sync' to import activities"
   }
 }
 ```
@@ -82,14 +82,14 @@ sce auth exchange --code 1234567890abcdef
 
 ---
 
-## sce auth status
+## resilio auth status
 
 Check current authentication status.
 
 **Usage:**
 
 ```bash
-sce auth status
+resilio auth status
 ```
 
 **Returns:**
@@ -114,10 +114,10 @@ sce auth status
 
 ```bash
 # Check if authentication is needed
-sce auth status
+resilio auth status
 if [ $? -eq 3 ]; then
   echo "Token expired - refreshing..."
-  sce auth url
+  resilio auth url
   # Follow OAuth flow...
 fi
 ```

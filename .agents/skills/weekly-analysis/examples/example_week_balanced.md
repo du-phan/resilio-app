@@ -67,7 +67,7 @@
 
 ## Analysis: Step by Step
 
-### Step 1: Weekly Summary (`sce week`)
+### Step 1: Weekly Summary (`resilio week`)
 
 ```json
 {
@@ -97,7 +97,7 @@
 - ✅ Volume exactly as planned (36 km)
 - ✅ Metrics stable and healthy
 
-### Step 2: Completion Summary (`sce week`)
+### Step 2: Completion Summary (`resilio week`)
 
 ```json
 {
@@ -118,7 +118,7 @@
 
 **Interpretation**: Excellent completion - athlete is highly consistent.
 
-### Step 3: Intensity Distribution (`sce analysis intensity`)
+### Step 3: Intensity Distribution (`resilio analysis intensity`)
 
 ```json
 {
@@ -141,7 +141,7 @@
 - ✅ Easy runs truly easy (RPE 3-4)
 - ✅ Tempo run appropriately hard (RPE 8)
 
-### Step 4: Multi-Sport Load Breakdown (`sce analysis load`)
+### Step 4: Multi-Sport Load Breakdown (`resilio analysis load`)
 
 ```json
 {
@@ -176,7 +176,7 @@
 
 **Activity notes review**:
 ```bash
-sce activity list --since 7d --has-notes
+resilio activity list --since 7d --has-notes
 # All 6 activities have notes - athlete is engaged
 ```
 
@@ -189,10 +189,10 @@ sce activity list --since 7d --has-notes
 
 **Check for concerning signals**:
 ```bash
-sce activity search --query "tired fatigue flat heavy" --since 7d
+resilio activity search --query "tired fatigue flat heavy" --since 7d
 # Result: No matches
 
-sce activity search --query "pain sore tight discomfort" --since 7d
+resilio activity search --query "pain sore tight discomfort" --since 7d
 # Result: No matches (Saturday "legs a bit tired" is normal post-climbing)
 ```
 
@@ -203,7 +203,7 @@ sce activity search --query "pain sore tight discomfort" --since 7d
 **Pattern observed**: 3rd consecutive week with 100% adherence - worth storing.
 
 ```bash
-sce memory add --type TRAINING_RESPONSE \
+resilio memory add --type TRAINING_RESPONSE \
   --content "Consistently completes 100% of planned workouts, excellent discipline and schedule management" \
   --tags "adherence:excellent,pattern:consistent,discipline:high" \
   --confidence high

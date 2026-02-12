@@ -208,7 +208,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# Sports Coach Engine - LOCAL DATA (NEVER COMMIT)
+# Resilio - LOCAL DATA (NEVER COMMIT)
 data/
 data_samples/
 config/secrets.local.yaml

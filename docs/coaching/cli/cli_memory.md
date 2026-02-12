@@ -5,20 +5,20 @@
 Store and retrieve durable athlete facts (injury history, preferences, insights, context).
 
 **Commands in this category:**
-- `sce memory add` - Add a structured memory
-- `sce memory list` - List memories by type
-- `sce memory search` - Search memories by keyword
+- `resilio memory add` - Add a structured memory
+- `resilio memory list` - List memories by type
+- `resilio memory search` - Search memories by keyword
 
 ---
 
-## sce memory add
+## resilio memory add
 
 Add a structured memory about the athlete.
 
 **Usage:**
 
 ```bash
-sce memory add --type TYPE --content "CONTENT" [--tags "tag1,tag2"] [--confidence LEVEL]
+resilio memory add --type TYPE --content "CONTENT" [--tags "tag1,tag2"] [--confidence LEVEL]
 ```
 
 **Parameters:**
@@ -36,28 +36,28 @@ sce memory add --type TYPE --content "CONTENT" [--tags "tag1,tag2"] [--confidenc
 
 ```bash
 # Injury history
-sce memory add --type INJURY_HISTORY \
+resilio memory add --type INJURY_HISTORY \
   --content "Left knee pain after long runs >18km" \
   --tags "body:knee,trigger:long-run,threshold:18km" \
   --confidence high
 
 # Training response
-sce memory add --type TRAINING_RESPONSE \
+resilio memory add --type TRAINING_RESPONSE \
   --content "Responds well to quality over quantity - prefers 3 hard runs/week vs 5 moderate" \
   --confidence high
 
 # Preference
-sce memory add --type PREFERENCE \
+resilio memory add --type PREFERENCE \
   --content "Prefers morning runs before 7am due to work schedule" \
   --confidence high
 
 # Context
-sce memory add --type CONTEXT \
+resilio memory add --type CONTEXT \
   --content "Work travel every other Thursday - needs flexible Thursday workouts" \
   --confidence high
 
 # Insight (pattern detected by coach)
-sce memory add --type INSIGHT \
+resilio memory add --type INSIGHT \
   --content "Consistently skips Tuesday runs - likely capacity issue" \
   --tags "pattern:adherence,day:tuesday" \
   --confidence medium
@@ -96,7 +96,7 @@ If similar memory exists, system will:
 
 ---
 
-## sce memory list
+## resilio memory list
 
 List memories by type.
 
@@ -104,14 +104,14 @@ List memories by type.
 
 ```bash
 # List all memories
-sce memory list
+resilio memory list
 
 # List specific type
-sce memory list --type INJURY_HISTORY
-sce memory list --type TRAINING_RESPONSE
-sce memory list --type PREFERENCE
-sce memory list --type CONTEXT
-sce memory list --type INSIGHT
+resilio memory list --type INJURY_HISTORY
+resilio memory list --type TRAINING_RESPONSE
+resilio memory list --type PREFERENCE
+resilio memory list --type CONTEXT
+resilio memory list --type INSIGHT
 ```
 
 **Parameters:**
@@ -147,25 +147,25 @@ sce memory list --type INSIGHT
 
 ```bash
 # Review all injury history before planning
-sce memory list --type INJURY_HISTORY
+resilio memory list --type INJURY_HISTORY
 
 # Check athlete preferences for workout timing
-sce memory list --type PREFERENCE
+resilio memory list --type PREFERENCE
 
 # Review training response patterns
-sce memory list --type TRAINING_RESPONSE
+resilio memory list --type TRAINING_RESPONSE
 ```
 
 ---
 
-## sce memory search
+## resilio memory search
 
 Search memories by keyword.
 
 **Usage:**
 
 ```bash
-sce memory search --query "KEYWORD"
+resilio memory search --query "KEYWORD"
 ```
 
 **Parameters:**
@@ -178,13 +178,13 @@ sce memory search --query "KEYWORD"
 
 ```bash
 # Find all ankle-related memories
-sce memory search --query "ankle"
+resilio memory search --query "ankle"
 
 # Find taper-related insights
-sce memory search --query "taper"
+resilio memory search --query "taper"
 
 # Multiple keywords (OR match)
-sce memory search --query "tired fatigue"
+resilio memory search --query "tired fatigue"
 ```
 
 **Returns:**

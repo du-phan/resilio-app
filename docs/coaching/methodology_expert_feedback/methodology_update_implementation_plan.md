@@ -1,6 +1,6 @@
 # Methodology & Metrics Update Implementation Plan
 
-**Purpose**: Provide a decision-complete spec for updating Sports Coach Engine’s methodology, metrics, and coaching logic based on expert feedback, current implementation reality, and training literature. This document is for the coding agent implementing improvements.
+**Purpose**: Provide a decision-complete spec for updating Resilio’s methodology, metrics, and coaching logic based on expert feedback, current implementation reality, and training literature. This document is for the coding agent implementing improvements.
 
 **Scope**: Phase 1 implementation (correctness + consistency + safer messaging) with Phase 2/3 design guidance captured for follow-on work.
 
@@ -18,12 +18,12 @@
   - `docs/coaching/methodology_expert_feedback/claude_methodolog_review.md`
   - `docs/coaching/methodology_expert_feedback/chatgpt_methodology_review.md`
 - Core implementation:
-  - `sports_coach_engine/core/metrics.py` (CTL/ATL/TSB/ACWR/Readiness)
-  - `sports_coach_engine/core/load.py` (load + multipliers)
-  - `sports_coach_engine/core/adaptation.py` (M11 triggers)
-  - `sports_coach_engine/core/analysis/risk.py` (risk aggregation)
-  - `sports_coach_engine/core/workflows.py` (adaptation workflow)
-  - `sports_coach_engine/core/enrichment.py` (interpretations)
+  - `resilio/core/metrics.py` (CTL/ATL/TSB/ACWR/Readiness)
+  - `resilio/core/load.py` (load + multipliers)
+  - `resilio/core/adaptation.py` (M11 triggers)
+  - `resilio/core/analysis/risk.py` (risk aggregation)
+  - `resilio/core/workflows.py` (adaptation workflow)
+  - `resilio/core/enrichment.py` (interpretations)
   - Schemas + CLI
 
 **Key design principle**
@@ -152,7 +152,7 @@ Add a summary object without hiding raw metrics:
 
 - `primary_signals.readiness`: score, level, confidence, data_coverage
 - `primary_signals.load_spike`: ACWR value, zone, availability, caveat
-- Optional: note that planned workout suitability is outside `sce status` (context needed).
+- Optional: note that planned workout suitability is outside `resilio status` (context needed).
 
 ---
 
@@ -167,7 +167,7 @@ Add a summary object without hiding raw metrics:
 
 **Files**:
 
-- `sports_coach_engine/core/metrics.py`
+- `resilio/core/metrics.py`
 
 **B) Readiness objective-only update**
 
@@ -179,8 +179,8 @@ Add a summary object without hiding raw metrics:
 
 **Files**:
 
-- `sports_coach_engine/core/metrics.py`
-- `sports_coach_engine/schemas/metrics.py`
+- `resilio/core/metrics.py`
+- `resilio/schemas/metrics.py`
 
 **C) TSB zones update**
 
@@ -189,9 +189,9 @@ Add a summary object without hiding raw metrics:
 
 **Files**:
 
-- `sports_coach_engine/schemas/metrics.py`
-- `sports_coach_engine/core/metrics.py`
-- `sports_coach_engine/core/enrichment.py`
+- `resilio/schemas/metrics.py`
+- `resilio/core/metrics.py`
+- `resilio/core/enrichment.py`
 
 **D) ACWR messaging cleanup**
 
@@ -200,9 +200,9 @@ Add a summary object without hiding raw metrics:
 
 **Files**:
 
-- `sports_coach_engine/schemas/metrics.py`
-- `sports_coach_engine/core/enrichment.py`
-- `sports_coach_engine/core/plan.py`
+- `resilio/schemas/metrics.py`
+- `resilio/core/enrichment.py`
+- `resilio/core/plan.py`
 
 **E) Risk model consistency**
 
@@ -212,20 +212,20 @@ Add a summary object without hiding raw metrics:
 
 **Files**:
 
-- `sports_coach_engine/core/analysis/risk.py`
-- `sports_coach_engine/schemas/analysis.py`
-- `sports_coach_engine/schemas/adaptation.py`
-- `sports_coach_engine/core/adaptation.py`
+- `resilio/core/analysis/risk.py`
+- `resilio/schemas/analysis.py`
+- `resilio/schemas/adaptation.py`
+- `resilio/core/adaptation.py`
 
 **F) Add primary signals summary to enriched metrics**
 
-- Introduce new schema in `sports_coach_engine/schemas/enrichment.py` for `PrimarySignals`.
-- Populate in `sports_coach_engine/core/enrichment.py`.
+- Introduce new schema in `resilio/schemas/enrichment.py` for `PrimarySignals`.
+- Populate in `resilio/core/enrichment.py`.
 
 **Files**:
 
-- `sports_coach_engine/schemas/enrichment.py`
-- `sports_coach_engine/core/enrichment.py`
+- `resilio/schemas/enrichment.py`
+- `resilio/core/enrichment.py`
 
 **G) Schema + workflow cleanup (no backward-compat)**
 
@@ -235,11 +235,11 @@ Add a summary object without hiding raw metrics:
 
 **Files**:
 
-- `sports_coach_engine/schemas/metrics.py`
-- `sports_coach_engine/core/metrics.py`
-- `sports_coach_engine/schemas/common.py`
-- `sports_coach_engine/schemas/activity.py`
-- `sports_coach_engine/core/workflows.py`
+- `resilio/schemas/metrics.py`
+- `resilio/core/metrics.py`
+- `resilio/schemas/common.py`
+- `resilio/schemas/activity.py`
+- `resilio/core/workflows.py`
 
 ### 3.2 Documentation Updates (Phase 1)
 

@@ -47,13 +47,13 @@ You provide qualitative coaching decisions (exact distances, workout types, paci
 1. Identify target week:
 
 ```bash
-sce plan next-unpopulated
-sce plan status
-sce plan week           # current week (use when updating current week)
-sce plan week --week <N>
+resilio plan next-unpopulated
+resilio plan status
+resilio plan week           # current week (use when updating current week)
+resilio plan week --week <N>
 ```
 
-If the parent agent requests a current-week update, use `sce plan week` to set
+If the parent agent requests a current-week update, use `resilio plan week` to set
 `week_number`, `start_date`, `end_date`, and `phase`. Otherwise default to
 the next unpopulated week.
 
@@ -63,10 +63,10 @@ guidelines (e.g., "max 2 quality sessions", "long run 25-30%", "80% easy intensi
 2. Load current metrics and recent response:
 
 ```bash
-sce status
-sce week
-sce dates week-boundaries --start <WEEK_START>
-sce profile get  # Load athlete profile including other_sports
+resilio status
+resilio week
+resilio dates week-boundaries --start <WEEK_START>
+resilio profile get  # Load athlete profile including other_sports
 ```
 
 **Multi-sport athletes**: Check `other_sports` field in profile to identify:
@@ -79,14 +79,14 @@ sce profile get  # Load athlete profile including other_sports
 Optionally export and analyze recent intensity distribution:
 
 ```bash
-sce activity export --since 28d --out /tmp/activities_28d.json
-sce analysis intensity --activities /tmp/activities_28d.json --days 28
+resilio activity export --since 28d --out /tmp/activities_28d.json
+resilio analysis intensity --activities /tmp/activities_28d.json --days 28
 ```
 
 3. Analyze progression safety:
 
 ```bash
-sce guardrails analyze-progression \
+resilio guardrails analyze-progression \
   --previous <PREV_ACTUAL_KM> \
   --current <PROPOSED_KM> \
   --ctl <CTL> \
@@ -97,7 +97,7 @@ sce guardrails analyze-progression \
 4. Calculate VDOT-based paces:
 
 ```bash
-sce vdot paces --vdot <VDOT>
+resilio vdot paces --vdot <VDOT>
 ```
 
 Use these paces to set pace_range for each workout type (easy, tempo, intervals).
@@ -191,7 +191,7 @@ Write JSON to `/tmp/weekly_plan_w<week>.json`
 6. Validate your design:
 
 ```bash
-sce plan validate-week --file /tmp/weekly_plan_w<week>.json
+resilio plan validate-week --file /tmp/weekly_plan_w<week>.json
 ```
 
 This checks:
@@ -232,7 +232,7 @@ Example formats:
 Then run:
 
 ```bash
-sce plan validate-intervals \
+resilio plan validate-intervals \
   --type intervals \
   --intensity I-pace \
   --work-bouts /tmp/work_bouts.json \
@@ -313,11 +313,11 @@ Present in this structure:
 **Approval Required**:
 Does this plan work for you, considering both your running and {other sports}?
 I'll record your approval with:
-`sce approvals approve-week --week {N} --file /tmp/weekly_plan_w{N}.json`
+`resilio approvals approve-week --week {N} --file /tmp/weekly_plan_w{N}.json`
 
 **Handoff note**: main agent must record approval via the command above.
 
-**Note on workout verification**: After workouts are completed, use `sce activity laps <activity-id>` to verify execution quality and adjust future weeks if pacing discipline issues emerge.
+**Note on workout verification**: After workouts are completed, use `resilio activity laps <activity-id>` to verify execution quality and adjust future weeks if pacing discipline issues emerge.
 
 ## References (load only if needed)
 

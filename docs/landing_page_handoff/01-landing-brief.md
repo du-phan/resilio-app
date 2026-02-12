@@ -11,7 +11,7 @@ The page should trigger an immediate recognition response: "yes, this is exactly
 
 ## Product Promise
 
-Sports Coach Engine is a conversation-first AI coach for hybrid training. It uses a CLI toolkit under the hood, so coaching feels natural while decisions stay grounded in measurable training data.
+Resilio is a conversation-first AI coach for hybrid training. It uses a CLI toolkit under the hood, so coaching feels natural while decisions stay grounded in measurable training data.
 
 Truth boundary (v0):
 The generated plan is running-first, but it is coordinated around other sports using total training load and recovery tradeoffs.

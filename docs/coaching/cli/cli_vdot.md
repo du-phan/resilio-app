@@ -5,16 +5,16 @@
 Commands for VDOT calculation, training pace zones, race predictions, and pace adjustments for environmental conditions.
 
 **Commands in this category:**
-- `sce vdot calculate` - Calculate VDOT from race performance
-- `sce vdot paces` - Generate training pace zones from VDOT
-- `sce vdot predict` - Predict equivalent race times for other distances
-- `sce vdot six-second` - Apply six-second rule for novice runners
-- `sce vdot adjust` - Adjust pace for environmental conditions
-- `sce vdot estimate-current` - Estimate current VDOT from workouts
+- `resilio vdot calculate` - Calculate VDOT from race performance
+- `resilio vdot paces` - Generate training pace zones from VDOT
+- `resilio vdot predict` - Predict equivalent race times for other distances
+- `resilio vdot six-second` - Apply six-second rule for novice runners
+- `resilio vdot adjust` - Adjust pace for environmental conditions
+- `resilio vdot estimate-current` - Estimate current VDOT from workouts
 
 ---
 
-## sce vdot calculate
+## resilio vdot calculate
 
 Calculate VDOT from race performance.
 
@@ -22,13 +22,13 @@ Calculate VDOT from race performance.
 
 ```bash
 # Calculate from 10K race
-sce vdot calculate --race-type 10k --time 42:30
+resilio vdot calculate --race-type 10k --time 42:30
 
 # With race date for confidence adjustment
-sce vdot calculate --race-type half_marathon --time 1:30:00 --race-date 2026-01-10
+resilio vdot calculate --race-type half_marathon --time 1:30:00 --race-date 2026-01-10
 
 # Marathon performance
-sce vdot calculate --race-type marathon --time 3:15:00
+resilio vdot calculate --race-type marathon --time 3:15:00
 ```
 
 **Supported race types:**
@@ -58,7 +58,7 @@ sce vdot calculate --race-type marathon --time 3:15:00
 
 ---
 
-## sce vdot paces
+## resilio vdot paces
 
 Generate training pace zones from VDOT.
 
@@ -66,10 +66,10 @@ Generate training pace zones from VDOT.
 
 ```bash
 # Get paces in min/km (default)
-sce vdot paces --vdot 48
+resilio vdot paces --vdot 48
 
 # Get paces in min/mile
-sce vdot paces --vdot 55 --unit min_per_mile
+resilio vdot paces --vdot 55 --unit min_per_mile
 ```
 
 **Returns:**
@@ -99,7 +99,7 @@ sce vdot paces --vdot 55 --unit min_per_mile
 
 ---
 
-## sce vdot predict
+## resilio vdot predict
 
 Predict equivalent race times for other distances.
 
@@ -107,10 +107,10 @@ Predict equivalent race times for other distances.
 
 ```bash
 # Predict from 10K performance
-sce vdot predict --race-type 10k --time 42:30
+resilio vdot predict --race-type 10k --time 42:30
 
 # Predict from half marathon
-sce vdot predict --race-type half_marathon --time 1:30:00
+resilio vdot predict --race-type half_marathon --time 1:30:00
 ```
 
 **Returns:**
@@ -142,7 +142,7 @@ sce vdot predict --race-type half_marathon --time 1:30:00
 
 ---
 
-## sce vdot six-second
+## resilio vdot six-second
 
 Apply six-second rule for novice runners without recent race times.
 
@@ -150,10 +150,10 @@ Apply six-second rule for novice runners without recent race times.
 
 ```bash
 # Estimate paces from mile time
-sce vdot six-second --mile-time 6:00
+resilio vdot six-second --mile-time 6:00
 
 # Slower runner
-sce vdot six-second --mile-time 8:30
+resilio vdot six-second --mile-time 8:30
 ```
 
 **Returns:**
@@ -183,7 +183,7 @@ sce vdot six-second --mile-time 8:30
 
 ---
 
-## sce vdot adjust
+## resilio vdot adjust
 
 Adjust pace for environmental conditions.
 
@@ -191,13 +191,13 @@ Adjust pace for environmental conditions.
 
 ```bash
 # Altitude adjustment
-sce vdot adjust --pace 5:00 --condition altitude --severity 7000
+resilio vdot adjust --pace 5:00 --condition altitude --severity 7000
 
 # Heat adjustment
-sce vdot adjust --pace 4:30 --condition heat --severity 30
+resilio vdot adjust --pace 4:30 --condition heat --severity 30
 
 # Hill adjustment
-sce vdot adjust --pace 5:15 --condition hills --severity 5
+resilio vdot adjust --pace 5:15 --condition hills --severity 5
 ```
 
 **Condition types:**
@@ -232,7 +232,7 @@ sce vdot adjust --pace 5:15 --condition hills --severity 5
 
 ---
 
-## sce vdot estimate-current
+## resilio vdot estimate-current
 
 Estimate current VDOT from recent tempo and interval workouts.
 

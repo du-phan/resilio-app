@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Sports Coach Engine stores activity data in an organized monthly folder structure for efficient storage, fast incremental syncing, and clear organization. Understanding this structure is essential for monitoring sync progress and validating data integrity.
+The Resilio stores activity data in an organized monthly folder structure for efficient storage, fast incremental syncing, and clear organization. Understanding this structure is essential for monitoring sync progress and validating data integrity.
 
 ## Directory Structure
 
@@ -74,7 +74,7 @@ The filename structure enables **fast incremental sync** without reading file co
 2. **Compare to sync window** → check if activity falls within requested range
 3. **Skip existing files** → no redundant API calls
 
-**Example**: `sce sync --since 7d`
+**Example**: `resilio sync --since 7d`
 - Only checks files dated within last 7 days
 - Skips files with dates outside window
 - Fetches only missing activities from Strava API
@@ -91,7 +91,7 @@ This is normal behavior. Syncs pause and resume automatically. See [cli_sync.md 
 
 ### During First Sync (Greedy Sync)
 
-The initial `sce sync` fetches up to 365 days of history. **Rate limits are expected** - the sync will pause one or more times.
+The initial `resilio sync` fetches up to 365 days of history. **Rate limits are expected** - the sync will pause one or more times.
 
 Progress messages show:
 - **"Fetching recent activities..."** → API requests in progress
@@ -102,10 +102,10 @@ Progress messages show:
 ```bash
 watch -n 2 'find data/activities -name "*.yaml" | wc -l'
 # or use built-in sync observability:
-sce sync --status
+resilio sync --status
 ```
 
-`sce sync --status` reports persisted resume cursor state (`data/athlete/training_history.yaml`) and live heartbeat progress (`config/.sync_progress.json`).
+`resilio sync --status` reports persisted resume cursor state (`data/athlete/training_history.yaml`) and live heartbeat progress (`config/.sync_progress.json`).
 
 ### After Sync Completion
 
@@ -175,10 +175,10 @@ The performance benefits for sync operations outweigh the slightly more complex 
 
 ## Related Commands
 
-- [`sce sync`](cli_sync.md) - Smart sync and activity import
-- [`sce activity list`](cli_activity.md) - List activities with notes
-- [`sce profile analyze`](cli_profile.md) - Analyze activity patterns
-- [`sce status`](cli_metrics.md) - Current metrics derived from activities
+- [`resilio sync`](cli_sync.md) - Smart sync and activity import
+- [`resilio activity list`](cli_activity.md) - List activities with notes
+- [`resilio profile analyze`](cli_profile.md) - Analyze activity patterns
+- [`resilio status`](cli_metrics.md) - Current metrics derived from activities
 
 ---
 

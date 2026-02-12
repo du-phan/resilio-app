@@ -17,7 +17,7 @@ Use CLI only.
 - Approved baseline VDOT provided via arguments
 - Goal present (race type/date/time)
 - Profile constraints present
-- Metrics available (`sce status`)
+- Metrics available (`resilio status`)
 
 If missing, return a blocking checklist and stop.
 
@@ -34,26 +34,26 @@ If missing, return a blocking checklist and stop.
 1. Gather context:
 
 ```bash
-sce dates next-monday
-sce profile get
-sce status
-sce memory list --type INJURY_HISTORY
+resilio dates next-monday
+resilio profile get
+resilio status
+resilio memory list --type INJURY_HISTORY
 ```
 
 2. Extract profile context and determine volumes:
 
 ```bash
 # Get running priority from profile
-PRIORITY=$(sce profile get | jq -r '.data.running_priority')
+PRIORITY=$(resilio profile get | jq -r '.data.running_priority')
 
 # If priority is null/empty, BLOCK - profile incomplete
 if [ -z "$PRIORITY" ] || [ "$PRIORITY" == "null" ]; then
-  echo '{"blocking_checklist": ["Profile missing running_priority field. Run: sce profile set --run-priority [primary|equal|secondary]"]}'
+  echo '{"blocking_checklist": ["Profile missing running_priority field. Run: resilio profile set --run-priority [primary|equal|secondary]"]}'
   exit 1
 fi
 
 # Get safe volume with priority context
-sce guardrails safe-volume \
+resilio guardrails safe-volume \
   --ctl <CTL> \
   --priority "$PRIORITY" \
   --goal <GOAL_TYPE> \
@@ -65,10 +65,10 @@ sce guardrails safe-volume \
 
 ```bash
 # Get easy pace (slower end for conservative estimate)
-EASY_PACE=$(sce vdot paces --vdot <VDOT> | jq -r '.data.E.max_min_per_km')
+EASY_PACE=$(resilio vdot paces --vdot <VDOT> | jq -r '.data.E.max_min_per_km')
 
 # Check if peak is achievable
-FEASIBILITY=$(sce guardrails feasible-volume \
+FEASIBILITY=$(resilio guardrails feasible-volume \
   --run-days <max_run_days_per_week> \
   --max-session-minutes <max_time_per_session_minutes> \
   --easy-pace-min-per-km $EASY_PACE \
@@ -112,7 +112,7 @@ fi
 3. Create a macro template JSON at `/tmp/macro_template.json` using the CLI:
 
 ```bash
-sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 ```
 
 Fill the template (replace all nulls) with AI-coach decisions:
@@ -181,7 +181,7 @@ Note: In Example 2, `target_systemic_load_au` represents total aerobic load acro
 - `weekly_volumes_km` length MUST equal `total_weeks`; each entry must be a positive number
 - `target_systemic_load_au` length MUST equal `total_weeks`; each entry must be >= 0.0
   - Single-sport athletes: Use `[0.0, 0.0, ...]` (systemic load calculated later from running volume)
-  - Multi-sport athletes: Plan total systemic load targets using `sce analysis load` (running + cross-training + other sports)
+  - Multi-sport athletes: Plan total systemic load targets using `resilio analysis load` (running + cross-training + other sports)
 - `workout_structure_hints` length MUST equal `total_weeks`; each entry must conform to WorkoutStructureHints:
   - `quality.max_sessions`: 0–3
   - `quality.types`: list of QualityType (e.g., tempo, intervals, strides_only, race_specific)
@@ -194,7 +194,7 @@ Note: In Example 2, `target_systemic_load_au` represents total aerobic load acro
 4. Create macro plan (store baseline VDOT):
 
 ```bash
-sce plan create-macro \
+resilio plan create-macro \
   --goal-type <GOAL> \
   --race-date <YYYY-MM-DD> \
   --target-time "<HH:MM:SS>" \
@@ -208,16 +208,16 @@ sce plan create-macro \
 5. Validate macro:
 
 ```bash
-sce plan validate-macro
+resilio plan validate-macro
 ```
 
 5b. Validate plan structure (phases/volumes/taper):
 Export structure from the stored plan, then validate:
 
 ```bash
-sce plan export-structure --out-dir /tmp
+resilio plan export-structure --out-dir /tmp
 
-sce plan validate-structure \
+resilio plan validate-structure \
   --total-weeks <N> \
   --goal-type <GOAL> \
   --phases /tmp/plan_phases.json \
@@ -233,11 +233,11 @@ sce plan validate-structure \
 **Critical requirements**:
 - Complete volume table (all weeks, no omissions)
 - Coaching rationale explains WHY these decisions (build trust)
-- Multi-sport section ONLY if `other_sports` in profile (check with `sce profile get`)
+- Multi-sport section ONLY if `other_sports` in profile (check with `resilio profile get`)
 - Systemic load column:
   - Multi-sport: Show total load targets (running + other sports)
   - Single-sport: Use 0.0 or omit column
-- Pace zones from VDOT using `sce vdot paces --vdot {value}`
+- Pace zones from VDOT using `resilio vdot paces --vdot {value}`
 - Storage note: temporary in `/tmp/`, permanent in `data/plans/` after approval
 
 Write to: `/tmp/macro_plan_review_YYYY_MM_DD.md`

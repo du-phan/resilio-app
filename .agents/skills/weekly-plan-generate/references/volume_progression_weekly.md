@@ -8,11 +8,11 @@ Week-to-week volume progression decisions based on training response, adaptation
 
 ### Philosophy: CLI Provides Context, AI Coach Decides
 
-`sce guardrails analyze-progression` provides **rich context**, not pass/fail. You interpret using training methodology.
+`resilio guardrails analyze-progression` provides **rich context**, not pass/fail. You interpret using training methodology.
 
 **Command**:
 ```bash
-sce guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4 --age 32
+resilio guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4 --age 32
 ```
 
 **Returns**:
@@ -139,7 +139,7 @@ sce guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-day
 
 **Command**:
 ```bash
-sce guardrails progression --previous 40 --current 48
+resilio guardrails progression --previous 40 --current 48
 ```
 
 **Recovery exception**: Every 4th week at 70%. Next buildup increases from pre-recovery baseline.
@@ -162,7 +162,7 @@ sce guardrails progression --previous 40 --current 48
 
 **Command**:
 ```bash
-sce guardrails long-run --duration 150 --weekly-volume 60 --pct-limit 30
+resilio guardrails long-run --duration 150 --weekly-volume 60 --pct-limit 30
 ```
 
 ### Buildup
@@ -215,7 +215,7 @@ Hard running must be capped:
 
 **Command**:
 ```bash
-sce guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
+resilio guardrails quality-volume --t-pace 6.0 --i-pace 4.0 --r-pace 2.0 --weekly-volume 50.0
 ```
 
 **Why**: Excessive quality work → injury, even if total volume safe.
@@ -261,10 +261,10 @@ Week N-1: TSB -22
 **Commands for context**:
 ```bash
 # Current week summary (planned vs completed)
-sce week
+resilio week
 
 # Current metrics (multi-week aggregates)
-sce status  # CTL (42-day), ATL (7-day), TSB, ACWR
+resilio status  # CTL (42-day), ATL (7-day), TSB, ACWR
 ```
 
 ---
@@ -285,20 +285,20 @@ sce status  # CTL (42-day), ATL (7-day), TSB, ACWR
 
 ```bash
 # Context-aware progression analysis
-sce guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4
+resilio guardrails analyze-progression --previous 15 --current 20 --ctl 27 --run-days 4
 
 # Validate weekly progression
-sce guardrails progression --previous 40 --current 48
+resilio guardrails progression --previous 40 --current 48
 
 # Validate long run
-sce guardrails long-run --duration 135 --weekly-volume 55 --pct-limit 30
+resilio guardrails long-run --duration 135 --weekly-volume 55 --pct-limit 30
 
 # Validate quality volume
-sce guardrails quality-volume --t-pace 5.0 --i-pace 4.0 --weekly-volume 50.0
+resilio guardrails quality-volume --t-pace 5.0 --i-pace 4.0 --weekly-volume 50.0
 
 # Current-week context + multi-week aggregates
-sce week
-sce status
+resilio week
+resilio status
 ```
 
 ---

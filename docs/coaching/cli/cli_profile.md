@@ -5,20 +5,20 @@
 Commands for managing athlete profiles: basic info, run constraints, and multi-sport commitments.
 
 **Commands in this category:**
-- `sce profile create`
-- `sce profile get`
-- `sce profile set`
-- `sce profile add-sport`
-- `sce profile remove-sport`
-- `sce profile pause-sport`
-- `sce profile resume-sport`
-- `sce profile list-sports`
-- `sce profile edit`
-- `sce profile analyze`
+- `resilio profile create`
+- `resilio profile get`
+- `resilio profile set`
+- `resilio profile add-sport`
+- `resilio profile remove-sport`
+- `resilio profile pause-sport`
+- `resilio profile resume-sport`
+- `resilio profile list-sports`
+- `resilio profile edit`
+- `resilio profile analyze`
 
 ---
 
-## sce profile create
+## resilio profile create
 
 Create a new athlete profile.
 
@@ -42,38 +42,38 @@ Create a new athlete profile.
 **Examples:**
 
 ```bash
-sce profile create --name "Alex"
-sce profile create --name "Alex" --age 32 --max-hr 190 --unavailable-days "tuesday,thursday"
+resilio profile create --name "Alex"
+resilio profile create --name "Alex" --age 32 --max-hr 190 --unavailable-days "tuesday,thursday"
 ```
 
 ---
 
-## sce profile get
+## resilio profile get
 
 Get athlete profile with all settings.
 
 ```bash
-sce profile get
+resilio profile get
 ```
 
 ---
 
-## sce profile set
+## resilio profile set
 
 Update profile fields. Only specified fields are updated.
 
 **Examples:**
 
 ```bash
-sce profile set --max-hr 190 --resting-hr 55
-sce profile set --min-run-days 3 --max-run-days 4 --unavailable-days "tuesday,thursday"
-sce profile set --run-priority primary --conflict-policy running_goal_wins
-sce profile set --detail-level detailed --coaching-style analytical --intensity-metric hr
+resilio profile set --max-hr 190 --resting-hr 55
+resilio profile set --min-run-days 3 --max-run-days 4 --unavailable-days "tuesday,thursday"
+resilio profile set --run-priority primary --conflict-policy running_goal_wins
+resilio profile set --detail-level detailed --coaching-style analytical --intensity-metric hr
 ```
 
 ---
 
-## sce profile add-sport
+## resilio profile add-sport
 
 Add a non-running sport commitment.
 
@@ -91,25 +91,25 @@ Add a non-running sport commitment.
 
 ```bash
 # Frequency with unavailable days
-sce profile add-sport --sport climbing --frequency 3 --unavailable-days tuesday,thursday --duration 120 --intensity moderate_to_hard
+resilio profile add-sport --sport climbing --frequency 3 --unavailable-days tuesday,thursday --duration 120 --intensity moderate_to_hard
 
 # Frequency only (fully flexible)
-sce profile add-sport --sport yoga --frequency 2 --duration 60 --intensity easy
+resilio profile add-sport --sport yoga --frequency 2 --duration 60 --intensity easy
 ```
 
 ---
 
-## sce profile remove-sport
+## resilio profile remove-sport
 
 Remove a sport commitment.
 
 ```bash
-sce profile remove-sport --sport climbing
+resilio profile remove-sport --sport climbing
 ```
 
 ---
 
-## sce profile pause-sport
+## resilio profile pause-sport
 
 Temporarily pause a sport commitment (keeps it in profile history).
 
@@ -123,28 +123,28 @@ Temporarily pause a sport commitment (keeps it in profile history).
 **Examples:**
 
 ```bash
-sce profile pause-sport --sport climbing --reason focus_running
-sce profile pause-sport --sport cycling --reason injury --paused-at 2026-02-09
+resilio profile pause-sport --sport climbing --reason focus_running
+resilio profile pause-sport --sport cycling --reason injury --paused-at 2026-02-09
 ```
 
 ---
 
-## sce profile resume-sport
+## resilio profile resume-sport
 
 Resume a paused sport commitment.
 
 ```bash
-sce profile resume-sport --sport climbing
+resilio profile resume-sport --sport climbing
 ```
 
 ---
 
-## sce profile list-sports
+## resilio profile list-sports
 
 List all sport commitments with scheduling and pause state.
 
 ```bash
-sce profile list-sports
+resilio profile list-sports
 ```
 
 Returns each sport with fields such as:
@@ -160,23 +160,23 @@ Returns each sport with fields such as:
 
 ---
 
-## sce profile edit
+## resilio profile edit
 
 Open profile YAML in `$EDITOR`.
 
 ```bash
-sce profile edit
-EDITOR=vim sce profile edit
+resilio profile edit
+EDITOR=vim resilio profile edit
 ```
 
 ---
 
-## sce profile analyze
+## resilio profile analyze
 
 Analyze synced activities and suggest profile setup values.
 
 ```bash
-sce profile analyze
+resilio profile analyze
 ```
 
 Typical outputs include:

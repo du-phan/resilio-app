@@ -46,7 +46,7 @@ Athlete: "Around 52 bpm"
 Coach: [Store value]
 ```
 
-**If athlete doesn't know**: "No problem - you can measure it tomorrow and add later with `sce profile set --resting-hr XX`"
+**If athlete doesn't know**: "No problem - you can measure it tomorrow and add later with `resilio profile set --resting-hr XX`"
 
 ---
 
@@ -61,7 +61,7 @@ Athlete: "About 5 years, but took a 2-year break in the middle"
 
 **Save to profile**:
 ```bash
-sce profile set --running-experience-years 5
+resilio profile set --running-experience-years 5
 ```
 
 ### Why This Matters
@@ -74,7 +74,7 @@ sce profile set --running-experience-years 5
 ### Handle Edge Cases
 
 **"Just started this year"**:
-- Calculate from first activity: `sce profile analyze` shows first activity date
+- Calculate from first activity: `resilio profile analyze` shows first activity date
 - Example: First activity was March 2025 → ~10 months = 0-1 years
 
 **"Been running since high school but stopped for a decade"**:
@@ -92,9 +92,9 @@ sce profile set --running-experience-years 5
 **Gather injury signals from data**:
 
 ```bash
-sce profile analyze                                      # Check activity gaps
-sce activity search --query "pain injury sore" --since 120d  # Search notes
-sce activity list --since 90d --has-notes --sport run      # Context
+resilio profile analyze                                      # Check activity gaps
+resilio activity search --query "pain injury sore" --since 120d  # Search notes
+resilio activity list --since 90d --has-notes --sport run      # Context
 ```
 
 ### If Gap or Pain Mention Detected
@@ -116,7 +116,7 @@ Coach: "Any past injuries I should know about? Helps me watch for warning signs.
 **NOT in profile field - use memory system**:
 
 ```bash
-sce memory add --type INJURY_HISTORY \
+resilio memory add --type INJURY_HISTORY \
   --content "Left knee tendonitis Nov 2023, fully healed, watches mileage" \
   --tags "body:knee,year:2023,status:resolved,caution:mileage" \
   --confidence high
@@ -141,7 +141,7 @@ sce memory add --type INJURY_HISTORY \
 
 **Resolved knee injury with volume trigger**:
 ```bash
-sce memory add --type INJURY_HISTORY \
+resilio memory add --type INJURY_HISTORY \
   --content "Right knee pain when volume >45km/week, resolved with strength work" \
   --tags "body:knee,trigger:volume,threshold:45km-week,status:resolved,solution:strength" \
   --confidence high
@@ -149,7 +149,7 @@ sce memory add --type INJURY_HISTORY \
 
 **Recurring achilles issue**:
 ```bash
-sce memory add --type INJURY_HISTORY \
+resilio memory add --type INJURY_HISTORY \
   --content "Left achilles tendonitis, flares with speed work, ongoing management" \
   --tags "body:achilles,trigger:speed,status:recurring,solution:warmup" \
   --confidence high
@@ -159,7 +159,7 @@ sce memory add --type INJURY_HISTORY \
 
 ## Step 4c: Sport Priority (Natural Conversation)
 
-Reference sport distribution from `sce profile analyze`:
+Reference sport distribution from `resilio profile analyze`:
 
 ```
 Coach: "Your activities show running (28%) and climbing (42%). Primary sport or equal?"
@@ -175,11 +175,11 @@ Athlete: "Equal - committed to both"
 ### Store Value
 
 ```bash
-sce profile set --running-priority equal
+resilio profile set --running-priority equal
 # OR
-sce profile set --running-priority primary
+resilio profile set --running-priority primary
 # OR
-sce profile set --running-priority secondary
+resilio profile set --running-priority secondary
 ```
 
 ---
@@ -203,7 +203,7 @@ sce profile set --running-priority secondary
 `conflict_policy` = `"ask_each_time"` | `"primary_sport_wins"` | `"running_goal_wins"`
 
 ```bash
-sce profile set --conflict-policy ask_each_time
+resilio profile set --conflict-policy ask_each_time
 ```
 
 ---
@@ -213,7 +213,7 @@ sce profile set --conflict-policy ask_each_time
 **Combine all collected data into profile creation**:
 
 ```bash
-sce profile set --name "Alex" --age 32 --max-hr 190 \
+resilio profile set --name "Alex" --age 32 --max-hr 190 \
   --resting-hr 52 --running-experience-years 5 \
   --running-priority equal --conflict-policy ask_each_time
 ```
@@ -245,8 +245,8 @@ Coach: "When did you run these? Were they official races or GPS efforts?"
 #### Step 2: Enter Each PB
 
 ```bash
-sce profile set-pb --distance 10k --time 42:30 --date 2023-06-15
-sce profile set-pb --distance 5k --time 18:45 --date 2022-05-10
+resilio profile set-pb --distance 10k --time 42:30 --date 2023-06-15
+resilio profile set-pb --distance 5k --time 18:45 --date 2022-05-10
 ```
 
 #### Step 3: Cross-Check Synced Data
@@ -257,13 +257,13 @@ Coach: "I see a strong 43:15 10K on Dec 15 — was that a race?"
 ```
 If athlete confirms and it's faster than existing PB, update:
 ```bash
-sce profile set-pb --distance 10k --time 43:15 --date 2025-12-15
+resilio profile set-pb --distance 10k --time 43:15 --date 2025-12-15
 ```
 
 #### Step 4: Verify PBs
 
 ```bash
-sce profile get   # Check personal_bests section
+resilio profile get   # Check personal_bests section
 ```
 
 **Review with athlete**:
@@ -276,7 +276,7 @@ Coach: "I have your 10K PB at 42:30 (Jun 2023, VDOT 48), 5K at 18:45 (May 2022, 
 **For long-term context**:
 
 ```bash
-sce memory add --type PERSONAL_BEST \
+resilio memory add --type PERSONAL_BEST \
   --content "10K PB: 42:30 (Jun 2023, City 10K, VDOT 48)" \
   --tags "distance:10k,vdot:48,year:2023,pb:true" \
   --confidence high
@@ -297,13 +297,13 @@ sce memory add --type PERSONAL_BEST \
 
 **Response**: "No problem - we can estimate. What's your rough 5K or 10K time?"
 
-Enter the approximate time: `sce profile set-pb --distance 5k --time 25:00 --date 2023-01-01`
+Enter the approximate time: `resilio profile set-pb --distance 5k --time 25:00 --date 2023-01-01`
 
 #### Q: Athlete has no race history
 
 **Response**: "No PBs yet? We'll establish baseline from tempo workouts. First quality run will give us VDOT estimate."
 
-Skip race entry, use `sce vdot estimate-current` after first tempo workout
+Skip race entry, use `resilio vdot estimate-current` after first tempo workout
 
 #### Q: Old PBs from years ago
 
@@ -331,7 +331,7 @@ Enter with accurate date, system tracks progression/regression from peak
 #### Step 1: Check Sport Distribution
 
 ```bash
-sce profile analyze
+resilio profile analyze
 # Examine sport_distribution and sport_percentages
 ```
 
@@ -365,12 +365,12 @@ Athlete: "Moderate to hard - I push pretty hard both sessions."
 ```
 
 ```bash
-sce profile add-sport --sport climbing --frequency 2 --unavailable-days sun --duration 120 --intensity moderate_to_hard
+resilio profile add-sport --sport climbing --frequency 2 --unavailable-days sun --duration 120 --intensity moderate_to_hard
 ```
 
 **Yoga (19%)**:
 ```bash
-sce profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
+resilio profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
 ```
 
 ### Handle Edge Cases
@@ -398,7 +398,7 @@ on Strava, or should I change running_priority to 'primary'?"
 #### Verify Collection
 
 ```bash
-sce profile list-sports
+resilio profile list-sports
 # Should show all sports >15% from analyze data
 ```
 
@@ -409,10 +409,10 @@ sce profile list-sports
 **MANDATORY: Verify other_sports matches actual activity patterns**
 
 ```bash
-sce profile validate
+resilio profile validate
 # Or manually:
-sce profile get | jq '.other_sports'
-sce profile analyze | jq '.sport_percentages'
+resilio profile get | jq '.other_sports'
+resilio profile analyze | jq '.sport_percentages'
 ```
 
 ### Check for Alignment
@@ -470,14 +470,14 @@ Athlete: "Pace - I like tangible numbers"
 
 **Update profile**:
 ```bash
-sce profile set --detail-level moderate --coaching-style direct --intensity-metric pace
+resilio profile set --detail-level moderate --coaching-style direct --intensity-metric pace
 ```
 
 ### If Athlete Says NO or "use defaults"
 
 ```
 Coach: "No problem! I'll use moderate detail, supportive tone, and pace-based workouts.
-You can adjust anytime with 'sce profile set'."
+You can adjust anytime with 'resilio profile set'."
 ```
 
 **Skip to Step 5 (Goal Setting)**
@@ -491,7 +491,7 @@ You can adjust anytime with 'sce profile set'."
 - ✅ Injury history recorded in memory system (if applicable)
 - ✅ Sport priority set (primary/equal/secondary)
 - ✅ Conflict policy chosen (ask_each_time/primary_sport_wins/running_goal_wins)
-- ✅ Profile created with `sce profile set`
+- ✅ Profile created with `resilio profile set`
 - ✅ Race history captured (PBs added manually + auto-import)
 - ✅ Other sports collected (all >15% from Strava)
 - ✅ Data validation passed (other_sports matches Strava distribution)

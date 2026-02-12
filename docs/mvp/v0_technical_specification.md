@@ -1,4 +1,4 @@
-# v0 Technical Specification — Sports Coach Engine (Running-First, Multi‑Sport Aware)
+# v0 Technical Specification — Resilio (Running-First, Multi‑Sport Aware)
 
 **Status:** Draft  
 **Last Updated:** March 2026  
@@ -61,7 +61,7 @@ easy to evolve while avoiding overengineering.
 
 ### 4.0 Claude Code as Interface
 
-**Architectural Decision:** Claude Code (the AI) is the user interface. The package provides an **API layer** (`sports_coach_engine/api/`) that Claude Code calls. This means:
+**Architectural Decision:** Claude Code (the AI) is the user interface. The package provides an **API layer** (`resilio/api/`) that Claude Code calls. This means:
 
 - **Claude Code handles:** Intent understanding, conversation management, response formatting
 - **Package provides:** Callable Python functions that return rich, structured data
@@ -77,7 +77,7 @@ easy to evolve while avoiding overengineering.
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    API Layer (PUBLIC)                            │
-│  sports_coach_engine.api.*                                       │
+│  resilio.api.*                                       │
 │  - sync_strava(), get_todays_workout(), get_current_metrics()    │
 │  - Returns: EnrichedWorkout, SyncSummary, EnrichedMetrics        │
 └─────────────────────────────────────────────────────────────────┘

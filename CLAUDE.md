@@ -18,12 +18,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Environment Setup
 
-If `sce` is not available, use the **complete-setup** skill (macOS-only in current iteration) or follow the README. Do **not** mix Poetry and venv in the same session.
+If `resilio` is not available, use the **complete-setup** skill (macOS-only in current iteration) or follow the README. Do **not** mix Poetry and venv in the same session.
 
 **Credentials (first session)**:
 
 - If `config/secrets.local.yaml` is missing or `strava.client_id` / `strava.client_secret` are empty, ask the athlete to paste them (from https://www.strava.com/settings/api).
-- Save them locally in `config/secrets.local.yaml`, then proceed with `sce auth` flow.
+- Save them locally in `config/secrets.local.yaml`, then proceed with `resilio auth` flow.
 
 ---
 
@@ -35,10 +35,10 @@ If `sce` is not available, use the **complete-setup** skill (macOS-only in curre
 
 **Use these commands**:
 
-- `sce dates today`
-- `sce dates next-monday`
-- `sce dates week-boundaries --start YYYY-MM-DD`
-- `sce dates validate --date YYYY-MM-DD --must-be monday|sunday`
+- `resilio dates today`
+- `resilio dates next-monday`
+- `resilio dates week-boundaries --start YYYY-MM-DD`
+- `resilio dates validate --date YYYY-MM-DD --must-be monday|sunday`
 
 **Weekday numbering (Python)**: 0=Monday, 6=Sunday. This is used in plan JSON (`run_days: [0, 2, 4]` = Mon/Wed/Fri).
 
@@ -79,36 +79,36 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 
 > Command runner rule:
 > - If using Poetry: prefix commands with `poetry run`
-> - If using venv: activate `.venv` and run `sce ...` directly
+> - If using venv: activate `.venv` and run `resilio ...` directly
 > - Do not mix Poetry and venv in the same session
 
 **Session initialization (always start here)**:
 
 ```bash
-sce auth status
-sce sync              # Smart sync: targets up to 365 days first-time, incremental after
-sce profile analyze   # Required after sync: report actual span; never assume 365 days
-sce status
+resilio auth status
+resilio sync              # Smart sync: targets up to 365 days first-time, incremental after
+resilio profile analyze   # Required after sync: report actual span; never assume 365 days
+resilio status
 ```
 
 **Weekly coaching workflow** - For explicit recent sync:
 ```bash
-sce sync --since 7d   # Last week only (faster for weekly analysis)
+resilio sync --since 7d   # Last week only (faster for weekly analysis)
 ```
 
 **Common coaching commands**:
 
 ```bash
-sce week
-sce profile get
-sce plan week --next
-sce goal set --type 10k --date 2026-06-01 --time 00:45:00
-sce approvals status
+resilio week
+resilio profile get
+resilio plan week --next
+resilio goal set --type 10k --date 2026-06-01 --time 00:45:00
+resilio approvals status
 ```
 
 **Lap data analysis** (workout verification):
 ```bash
-sce activity laps <activity-id>  # Display lap-by-lap breakdown
+resilio activity laps <activity-id>  # Display lap-by-lap breakdown
 ```
 
 Use this to verify workout execution quality, detect pacing errors, and analyze interval consistency. See weekly-analysis skill for interpretation guidelines.
@@ -199,7 +199,7 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 **DON'T:**
 - Mention slash commands: ~~"I can run `/first-session` for you"~~
 - Reference skills: ~~"I'll use the weekly-analysis skill"~~
-- Expose CLI commands: ~~"I'll run `sce week` to check"~~
+- Expose CLI commands: ~~"I'll run `resilio week` to check"~~
 - Reference subagents: ~~"I'll spawn a subagent to analyze"~~
 - Mention tools: ~~"Let me use the Task tool"~~
 - Tell athletes to open files: ~~"You can review the full details at /tmp/macro_plan_review.md"~~
@@ -242,19 +242,19 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 
 ## Session Pattern
 
-1. **Check auth**: `sce auth status`
-2. **Sync activities**: `sce sync`
+1. **Check auth**: `resilio auth status`
+2. **Sync activities**: `resilio sync`
    - Note: Activities stored in `data/activities/YYYY-MM/*.yaml` (monthly folders)
    - Count files, not directories: `find data/activities -name "*.yaml" | wc -l`
    - See `docs/coaching/cli/cli_data_structure.md` for details
-   - Immediately run `sce profile analyze` and report actual span using `data_window_days`, `synced_data_start`, `synced_data_end`
+   - Immediately run `resilio profile analyze` and report actual span using `data_window_days`, `synced_data_start`, `synced_data_end`
    - Never claim "last 365 days" unless `data_window_days >= 360` and no rate-limit error occurred
    - If rate limit hit, say the history is partial and offer to resume later
-3. **Verify date context**: `sce dates today`
-4. **Assess state**: `sce status`
-5. **Review memories**: `sce memory list --type INJURY_HISTORY` (and other relevant types)
+3. **Verify date context**: `resilio dates today`
+4. **Assess state**: `resilio status`
+5. **Review memories**: `resilio memory list --type INJURY_HISTORY` (and other relevant types)
 6. **Use skill or CLI** based on task complexity
-7. **Capture insights** with `sce memory add` when new patterns or constraints emerge
+7. **Capture insights** with `resilio memory add` when new patterns or constraints emerge
 
 ---
 
@@ -291,18 +291,18 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 ### Planning Approval Protocol (macro → weekly)
 
 1. **VDOT baseline proposal**: `vdot-baseline-proposal` (present in chat)
-2. **Athlete approval** → `sce approvals approve-vdot --value <VDOT>`
+2. **Athlete approval** → `resilio approvals approve-vdot --value <VDOT>`
 3. **Macro plan**:
    - Run `macro-plan-create` skill (returns `review_path`, `macro_summary`, `athlete_prompt`)
    - **CRITICAL**: Read the review doc from `review_path` and present it INLINE in chat
    - DO NOT just show a bullet-point summary—athletes need to see the complete plan structure to make an informed decision
    - The review doc is comprehensive and designed to be presented directly (includes tables, rationale, pacing, multi-sport context)
    - After presenting the full review doc, use the `athlete_prompt` to ask for approval
-4. **Athlete approval** → `sce approvals approve-macro`
+4. **Athlete approval** → `resilio approvals approve-macro`
    - After approval, the plan is automatically saved to `data/plans/current_plan_review.md` for reference
 5. **Weekly plan**: `weekly-plan-generate` (weekly JSON + review)
-6. **Athlete approval** → `sce approvals approve-week --week <N> --file /tmp/weekly_plan_wN.json`
-7. **Apply**: `weekly-plan-apply` → `sce plan populate --from-json /tmp/weekly_plan_wN.json --validate`
+6. **Athlete approval** → `resilio approvals approve-week --week <N> --file /tmp/weekly_plan_wN.json`
+7. **Apply**: `weekly-plan-apply` → `resilio plan populate --from-json /tmp/weekly_plan_wN.json --validate`
 
 ---
 
@@ -315,9 +315,9 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 
 **Validate with data**:
 
-- `sce profile analyze`
-- `sce profile add-sport ...`
-- `sce profile validate`
+- `resilio profile analyze`
+- `resilio profile add-sport ...`
+- `resilio profile validate`
 
 **Two-channel load model**: systemic load + lower-body load (see methodology).
 
@@ -342,8 +342,8 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 
 **Accessing Plans**:
 Athletes can reference saved plans at any time:
-- `sce plan export-structure --out-dir /tmp` (exports current macro plan structure)
-- `sce plan week --number N` (shows specific week details)
+- `resilio plan export-structure --out-dir /tmp` (exports current macro plan structure)
+- `resilio plan week --number N` (shows specific week details)
 - Direct file access: `data/plans/current_plan_review.md` (macro plan review)
 
 **Note**: The main agent should NEVER tell athletes to "open the file in /tmp" during approval workflows. Always present the complete plan inline in chat.

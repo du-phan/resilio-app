@@ -54,7 +54,7 @@ Show complete week-by-week structure:
 
 ### What Happens Next
 1. Review: Check volume progression, phase timing, conflicts
-2. Approval: `sce approvals approve-macro` if this works
+2. Approval: `resilio approvals approve-macro` if this works
 3. Weekly design: Week 1 with exact workouts (days, types, paces)
 4. Adaptation: Weekly review of metrics (CTL, ACWR, readiness), adjust as needed
 
@@ -69,4 +69,4 @@ Does this {total_weeks}-week structure work for you? Any concerns:
 
 If you'd like adjustments, let me know and I'll regenerate with your constraints.
 
-**Handoff**: main agent must record approval via `sce approvals approve-macro`
+**Handoff**: main agent must record approval via `resilio approvals approve-macro`

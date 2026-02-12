@@ -1,6 +1,6 @@
 {
   "skills": ["complete-setup"],
-  "query": "Help me set up the Sports Coach Engine on my Mac. I'm not technical.",
+  "query": "Help me set up the Resilio on my Mac. I'm not technical.",
   "files": [],
   "expected_behavior": [
     "Runs deterministic gates in order: repo -> platform -> interpreter -> package -> config",

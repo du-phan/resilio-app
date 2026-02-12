@@ -1,10 +1,10 @@
-# Sports Coach Engine v0 - User Scenarios Specification
+# Resilio v0 - User Scenarios Specification
 
 ## 1. Introduction
 
 ### 1.1 Purpose
 
-This document specifies the three core usage scenarios for the Sports Coach Engine v0:
+This document specifies the three core usage scenarios for the Resilio v0:
 
 1. **Scenario 1: New User Setup** - First-time athlete onboarding
 2. **Scenario 2: Existing User Weekly Cycle** - Ongoing training management
@@ -25,7 +25,7 @@ Each scenario is broken down into precise steps, mapped to technical modules (M1
 - **Single-user**: v0 assumes one athlete per repository. Multi-user support deferred to future versions.
 - **Strava required**: Activity data comes exclusively from Strava. Manual logging not supported in v0.
 - **Plan stability**: Adaptations are suggested, not auto-applied. The plan is a stable reference that changes only with user consent.
-- **Claude Code as Interface**: Claude Code (the AI) runs in the repository as the coach. It handles all natural language understanding, conversation management, and response formatting. The `sports-coach-engine` package provides callable Python functions that return structured data. Claude Code naturally understands user intent—no keyword matching or intent parsing logic is needed in the package.
+- **Claude Code as Interface**: Claude Code (the AI) runs in the repository as the coach. It handles all natural language understanding, conversation management, and response formatting. The `resilio` package provides callable Python functions that return structured data. Claude Code naturally understands user intent—no keyword matching or intent parsing logic is needed in the package.
 
 ### 1.4 Formatting Conventions
 
@@ -50,7 +50,7 @@ The system serves **multi-sport athletes**. All weekly status displays and sync 
 
 ### 2.1 User Perspective
 
-The athlete installs the Sports Coach Engine and wants to get started with personalized training. They expect:
+The athlete installs the Resilio and wants to get started with personalized training. They expect:
 
 1. Quick setup (< 10 minutes)
 2. Connection to their existing Strava data
@@ -202,7 +202,7 @@ In all interaction patterns below, Claude Code (the AI running in the terminal) 
 
 1. **User speaks naturally** - No rigid command syntax required (e.g., "sync my Strava" or "update activities" both work)
 2. **Claude Code understands intent** - Uses natural language understanding to determine what the user wants
-3. **Claude Code calls package functions** - Invokes appropriate functions from `sports_coach_engine.api` (e.g., `sync_strava()`, `get_weekly_status()`)
+3. **Claude Code calls package functions** - Invokes appropriate functions from `resilio.api` (e.g., `sync_strava()`, `get_weekly_status()`)
 4. **Package returns structured data** - Functions return Pydantic models with enriched data (e.g., `SyncResult`, `EnrichedMetrics`, `WorkoutRecommendation`)
 5. **Claude Code formats response** - Crafts conversational response using the returned data, adapting to context and conversation history
 

@@ -20,11 +20,11 @@ poetry --version >/dev/null 2>&1
 
 ```bash
 poetry install
-poetry run sce --help
-SCE_CMD="poetry run sce"
+poetry run resilio --help
+RESILIO_CMD="poetry run resilio"
 ```
 
-If `poetry run sce --help` fails, do not continue. Fix and retry.
+If `poetry run resilio --help` fails, do not continue. Fix and retry.
 
 ## venv path
 
@@ -35,8 +35,8 @@ Requires `PYTHON_CMD` already selected and valid.
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .
-sce --help
-SCE_CMD="sce"
+resilio --help
+RESILIO_CMD="resilio"
 ```
 
 ## Validation loop
@@ -44,7 +44,7 @@ SCE_CMD="sce"
 After installation:
 
 ```bash
-$SCE_CMD --help
+$RESILIO_CMD --help
 ```
 
 If validation fails:

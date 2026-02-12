@@ -1,7 +1,7 @@
 ---
 name: weekly-analysis
 description: Comprehensive weekly training review including completion checks, intensity distribution validation (80/20), multi-sport load breakdown, and pattern detection. Use when athlete asks "how was my week?", "weekly review", "analyze training", or "did I follow the plan?".
-compatibility: Codex CLI/IDE; requires local sce CLI and repo context
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # Weekly Analysis: Comprehensive Training Review
@@ -44,17 +44,17 @@ One-line definitions for other metrics:
 For faster weekly analysis, optionally sync only last week's data:
 
 ```bash
-sce sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
+resilio sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
 ```
 
-**Note**: Without `--since`, `sce sync` uses smart detection (incremental sync from last activity).
+**Note**: Without `--since`, `resilio sync` uses smart detection (incremental sync from last activity).
 
 ### Step 0.5: Check for Active Training Plan (MANDATORY)
 
 **Before analyzing the week, determine if the athlete has a structured plan:**
 
 ```bash
-sce plan week
+resilio plan week
 ```
 
 This returns the current week's planned workouts (date, workout_type, distance_km, target_rpe, pace_range, intensity_zone) plus plan context (week number, phase, total weeks, goal).
@@ -67,7 +67,7 @@ This returns the current week's planned workouts (date, workout_type, distance_k
 ### Step 1: Get Weekly Summary
 
 ```bash
-sce week
+resilio week
 ```
 
 **Parse key data**:
@@ -80,7 +80,7 @@ sce week
 
 #### Option A: Athlete on Structured Plan
 
-Cross-reference planned workouts (from Step 0.5) with actual activities (from `sce week`):
+Cross-reference planned workouts (from Step 0.5) with actual activities (from `resilio week`):
 
 1. **Map planned → actual by date:**
    - **Match**: Correct workout type on planned date
@@ -123,7 +123,7 @@ Focus on training quality without plan reference:
 **When reviewing structured workouts** (intervals, tempo, threshold), use lap data to verify execution quality:
 
 ```bash
-sce activity laps <activity-id>
+resilio activity laps <activity-id>
 ```
 
 **Quick checks** (see [lap_data_analysis.md](references/lap_data_analysis.md) for complete methodology):
@@ -147,13 +147,13 @@ sce activity laps <activity-id>
 First, export activities for analysis (if not already done):
 
 ```bash
-sce activity export --since 7d --out /tmp/week_activities.json
+resilio activity export --since 7d --out /tmp/week_activities.json
 ```
 
 Then analyze intensity distribution:
 
 ```bash
-sce analysis intensity --activities /tmp/week_activities.json --days 7
+resilio analysis intensity --activities /tmp/week_activities.json --days 7
 ```
 
 **Returns**:
@@ -175,7 +175,7 @@ sce analysis intensity --activities /tmp/week_activities.json --days 7
 ### Step 5: Multi-Sport Load Breakdown
 
 ```bash
-sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
+resilio analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
 ```
 
 **Returns**:
@@ -199,13 +199,13 @@ sce analysis load --activities [ACTIVITIES_FILE] --days 7 --priority [PRIORITY]
 
 ```bash
 # List activities with notes
-sce activity list --since 7d --has-notes
+resilio activity list --since 7d --has-notes
 
 # Search for wellness signals
-sce activity search --query "tired fatigue flat heavy" --since 7d
+resilio activity search --query "tired fatigue flat heavy" --since 7d
 
 # Search for pain/discomfort
-sce activity search --query "pain sore tight discomfort" --since 7d
+resilio activity search --query "pain sore tight discomfort" --since 7d
 ```
 
 **Patterns to identify**:
@@ -222,13 +222,13 @@ sce activity search --query "pain sore tight discomfort" --since 7d
 
 ```bash
 # Consistency pattern
-sce memory add --type TRAINING_RESPONSE \
+resilio memory add --type TRAINING_RESPONSE \
   --content "Consistently skips Tuesday runs due to work schedule" \
   --tags "schedule:tuesday,pattern:skip" \
   --confidence high
 
 # Intensity pattern
-sce memory add --type TRAINING_RESPONSE \
+resilio memory add --type TRAINING_RESPONSE \
   --content "Easy runs consistently 0.5 min/km too fast (RPE 6 instead of 4)" \
   --tags "intensity:easy,violation:pace" \
   --confidence high
@@ -293,11 +293,11 @@ Create JSON with week summary:
 **Append to log**:
 
 ```bash
-sce plan append-week --week 1 --from-json /tmp/week_1_summary.json
+resilio plan append-week --week 1 --from-json /tmp/week_1_summary.json
 ```
 
 **Confirm with athlete**:
-"Week summary logged. View anytime with: `sce plan show-log`"
+"Week summary logged. View anytime with: `resilio plan show-log`"
 
 ---
 
@@ -398,7 +398,7 @@ Coach: "Week 2 plan saved! You'll see workouts starting Monday."
 1. Show violation of 10% rule
 2. Connect to ACWR spike
 3. Recommend pull-back for next week
-4. Validate with: `sce guardrails progression --previous [X] --current [Y]`
+4. Validate with: `resilio guardrails progression --previous [X] --current [Y]`
 
 ### Q: Athlete wants to increase despite concerns (ACWR 1.35)
 

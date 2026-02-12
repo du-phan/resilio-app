@@ -55,7 +55,7 @@ The 80/20 principle is grounded in decades of research and elite athlete trainin
 
 ## Interpretation Zones
 
-From `sce analysis intensity`:
+From `resilio analysis intensity`:
 
 - **≥75% low intensity**: Compliant (excellent)
 - **70-74% low intensity**: Borderline (acceptable)
@@ -100,7 +100,7 @@ The 'too slow' feeling is a sign you're doing it right."
 **Step 1: Diagnose the problem**
 ```bash
 # Review actual paces vs prescribed zones
-sce analysis intensity --activities [FILE] --days 7 --detail
+resilio analysis intensity --activities [FILE] --days 7 --detail
 ```
 
 Look for:
@@ -127,7 +127,7 @@ Looking at your runs:
 **Step 3: Provide specific pace targets**
 ```bash
 # Get prescribed easy pace from VDOT
-sce vdot paces --vdot [ATHLETE_VDOT]
+resilio vdot paces --vdot [ATHLETE_VDOT]
 ```
 
 **Step 4: Set next week's plan**
@@ -146,7 +146,7 @@ Follow up in next weekly review to ensure athlete adjusted pace.
 
 **Capture as memory**:
 ```bash
-sce memory add --type TRAINING_RESPONSE \
+resilio memory add --type TRAINING_RESPONSE \
   --content "Easy runs consistently 0.5-1.0 min/km too fast (RPE 6 instead of 4)" \
   --tags "intensity:easy,violation:pace,pattern:consistent" \
   --confidence high

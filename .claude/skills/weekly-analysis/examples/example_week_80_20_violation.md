@@ -59,7 +59,7 @@
 
 ## Analysis: Step by Step
 
-### Step 1: Weekly Summary (`sce week`)
+### Step 1: Weekly Summary (`resilio week`)
 
 ```json
 {
@@ -100,7 +100,7 @@
 
 **Load variance +15 AU**: Actual load slightly higher than planned (easy runs run too hard).
 
-### Step 3: Intensity Distribution (`sce analysis intensity`)
+### Step 3: Intensity Distribution (`resilio analysis intensity`)
 
 ```json
 {
@@ -223,7 +223,7 @@ Quick defs (first mention only): CTL is your long-term training load—think of 
 
 1. **Send VDOT pace table**:
    ```bash
-   sce vdot paces --vdot 48
+   resilio vdot paces --vdot 48
    ```
    Share with athlete so they have reference.
 
@@ -243,7 +243,7 @@ Quick defs (first mention only): CTL is your long-term training load—think of 
 4. **Capture pattern if persists**:
    If athlete runs easy too fast again in Week 4, store as memory:
    ```bash
-   sce memory add --type TRAINING_RESPONSE \
+   resilio memory add --type TRAINING_RESPONSE \
      --content "Tendency to run easy runs 40-60 sec/km too fast (RPE 6 instead of 4), requires frequent reminders and HR caps" \
      --tags "intensity:easy,violation:pace,pattern:consistent" \
      --confidence high

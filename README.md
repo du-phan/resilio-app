@@ -26,10 +26,10 @@ cp templates/secrets.local.yaml config/secrets.local.yaml
 vim config/secrets.local.yaml
 
 # Core session flow
-poetry run sce auth status
-poetry run sce sync
-poetry run sce profile analyze
-poetry run sce status
+poetry run resilio auth status
+poetry run resilio sync
+poetry run resilio profile analyze
+poetry run resilio status
 ```
 
 For full coaching workflows and behavior rules, see `AGENTS.md` and `CLAUDE.md`.
@@ -44,21 +44,21 @@ poetry install
 poetry run pytest
 
 # Type check
-poetry run mypy sports_coach_engine
+poetry run mypy resilio
 
 # Format
-poetry run black sports_coach_engine
+poetry run black resilio
 
 # Lint
-poetry run ruff sports_coach_engine
+poetry run ruff resilio
 ```
 
 ## Architecture Snapshot
 
-- `sports_coach_engine/cli/` - Typer CLI entrypoints (`sce`)
-- `sports_coach_engine/core/` - Domain logic (metrics, planning, adaptation)
-- `sports_coach_engine/api/` - Public API layer for agents
-- `sports_coach_engine/schemas/` - Pydantic models
+- `resilio/cli/` - Typer CLI entrypoints (`resilio`)
+- `resilio/core/` - Domain logic (metrics, planning, adaptation)
+- `resilio/api/` - Public API layer for agents
+- `resilio/schemas/` - Pydantic models
 - `data/` - Local persistence (gitignored)
 
 ## Skills

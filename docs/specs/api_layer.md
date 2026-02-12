@@ -1,12 +1,12 @@
 # API Layer Specification
 
-> **Implementation status**: Most functions described here are implemented and accessible via the `sce` CLI. Some functions (e.g., `get_todays_workout`, `explain_workout`, `regenerate_plan`, `accept_suggestion`, `decline_suggestion`) are **planned** — they exist as API-layer stubs but are not yet wired to CLI commands. The CLI (`sce` commands documented in `docs/coaching/cli/`) is the authoritative interface for v0.
+> **Implementation status**: Most functions described here are implemented and accessible via the `resilio` CLI. Some functions (e.g., `get_todays_workout`, `explain_workout`, `regenerate_plan`, `accept_suggestion`, `decline_suggestion`) are **planned** — they exist as API-layer stubs but are not yet wired to CLI commands. The CLI (`resilio` commands documented in `docs/coaching/cli/`) is the authoritative interface for v0.
 
 ## 1. Overview
 
 ### 1.1 Purpose
 
-The API layer provides a clean, well-documented interface between **Claude Code** (the AI coach interface) and the **sports-coach-engine** package (domain logic). Claude Code calls these functions to fulfill user requests.
+The API layer provides a clean, well-documented interface between **Claude Code** (the AI coach interface) and the **resilio** package (domain logic). Claude Code calls these functions to fulfill user requests.
 
 ### 1.2 Design Principles
 
@@ -28,7 +28,7 @@ The API layer provides a clean, well-documented interface between **Claude Code*
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
 │                    API Layer (THIS SPEC)                         │
-│  sports_coach_engine.api.*                                       │
+│  resilio.api.*                                       │
 │  - sync_strava(), get_todays_workout(), get_current_metrics()    │
 │  - Returns: WorkoutRecommendation, SyncResult, EnrichedMetrics   │
 └─────────────────────────────────────────────────────────────────┘
@@ -47,7 +47,7 @@ The API layer provides a clean, well-documented interface between **Claude Code*
 ## 2. Package Structure
 
 ```
-sports_coach_engine/
+resilio/
 ├── __init__.py              # Re-exports from api/
 ├── api/                     # PUBLIC: Claude Code uses this
 │   ├── __init__.py          # All public exports with __all__
@@ -91,7 +91,7 @@ High-level coaching operations that combine multiple internal modules.
 from datetime import date
 from typing import Optional
 
-from sports_coach_engine.schemas import (
+from resilio.schemas import (
     WorkoutRecommendation,
     WeeklyStatus,
     TrainingStatus,
@@ -186,7 +186,7 @@ Strava synchronization and manual activity logging.
 from datetime import date, datetime
 from typing import Optional
 
-from sports_coach_engine.schemas import (
+from resilio.schemas import (
     SyncResult,
     SyncError,
     Activity,
@@ -269,7 +269,7 @@ def log_activity(
 Metrics queries with interpretive context.
 
 ```python
-from sports_coach_engine.schemas import (
+from resilio.schemas import (
     EnrichedMetrics,
     ReadinessScore,
     IntensityDistribution,
@@ -350,7 +350,7 @@ Training plan operations and adaptation management.
 ```python
 from typing import Optional
 
-from sports_coach_engine.schemas import (
+from resilio.schemas import (
     TrainingPlan,
     Goal,
     Suggestion,
@@ -461,7 +461,7 @@ Athlete profile management.
 from datetime import date
 from typing import Optional, Any
 
-from sports_coach_engine.schemas import (
+from resilio.schemas import (
     AthleteProfile,
     Goal,
 )
@@ -541,7 +541,7 @@ VDOT calculations and training pace generation based on Jack Daniels' Running Fo
 ```python
 from typing import Union, Optional
 
-from sports_coach_engine.schemas.vdot import (
+from resilio.schemas.vdot import (
     VDOTResult,
     TrainingPaces,
     RaceEquivalents,
@@ -710,7 +710,7 @@ Volume validation and recovery planning based on Daniels Running Formula and Pfi
 ```python
 from typing import Union, Optional
 
-from sports_coach_engine.schemas.guardrails import (
+from resilio.schemas.guardrails import (
     QualityVolumeValidation,
     WeeklyProgressionValidation,
     LongRunValidation,
@@ -803,7 +803,7 @@ Weekly insights, multi-sport load distribution, and holistic risk assessment.
 from typing import Union, List, Dict, Any, Optional
 from datetime import date
 
-from sports_coach_engine.schemas.analysis import (
+from resilio.schemas.analysis import (
     IntensityDistributionAnalysis,
     ActivityGapAnalysis,
     LoadDistributionAnalysis,
@@ -1050,7 +1050,7 @@ class SyncError(BaseModel):
 For all normal operations, Claude Code should use API functions:
 
 ```python
-from sports_coach_engine.api import (
+from resilio.api import (
     sync_strava,
     get_todays_workout,
     get_current_metrics,
@@ -1073,7 +1073,7 @@ metrics = get_current_metrics()
 For exploration, debugging, or custom queries, direct file access is available:
 
 ```python
-from sports_coach_engine.core.repository import RepositoryIO
+from resilio.core.repository import RepositoryIO
 
 repo = RepositoryIO()
 
@@ -1143,7 +1143,7 @@ else:
 ### 7.1 Typical Coaching Flow
 
 ```python
-from sports_coach_engine.api import (
+from resilio.api import (
     sync_strava,
     get_todays_workout,
     get_weekly_status,
@@ -1182,7 +1182,7 @@ for day in status.days:
 
 ```python
 from datetime import date
-from sports_coach_engine.api import set_goal, get_current_plan
+from resilio.api import set_goal, get_current_plan
 
 # User: "I want to run a half marathon in March"
 goal = set_goal(

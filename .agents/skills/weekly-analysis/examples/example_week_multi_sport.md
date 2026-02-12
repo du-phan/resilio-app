@@ -68,7 +68,7 @@
 
 ## Analysis: Step by Step
 
-### Step 1: Weekly Summary (`sce week`)
+### Step 1: Weekly Summary (`resilio week`)
 
 ```json
 {
@@ -94,7 +94,7 @@
 - ⚠️ TSB dropped to -22 (very productive/borderline overreached)
 - ⚠️ Readiness at 48 (low)
 
-### Step 2: Multi-Sport Load Breakdown (`sce analysis load`)
+### Step 2: Multi-Sport Load Breakdown (`resilio analysis load`)
 
 ```json
 {
@@ -237,7 +237,7 @@ When you have a climbing comp followed by a long run, you have three options:
 Since this is the first occurrence, capture as insight for future reference:
 
 ```bash
-sce memory add --type INSIGHT \
+resilio memory add --type INSIGHT \
   --content "Climbing comps (3+ hours, high intensity) generate ~600 AU systemic load and impact next-day long runs due to cardiovascular fatigue, even though legs feel okay" \
   --tags "sport:climbing,conflict:schedule,impact:long-run,fatigue:systemic" \
   --confidence medium
@@ -254,14 +254,14 @@ sce memory add --type INSIGHT \
 1. **Reduce volume to 35 km**:
    ```bash
    # AI coach creates week 7 JSON with 35km volume, then:
-   sce approvals approve-week --week 7 --file /tmp/weekly_plan_w7.json
-   sce plan populate --from-json /tmp/weekly_plan_w7.json --validate
+   resilio approvals approve-week --week 7 --file /tmp/weekly_plan_w7.json
+   resilio plan populate --from-json /tmp/weekly_plan_w7.json --validate
    ```
 
 2. **Monitor readiness mid-week**:
    ```bash
    # Wednesday check
-   sce status
+   resilio status
    # If readiness <50, adjust Friday quality session to easy
    ```
 
@@ -274,7 +274,7 @@ sce memory add --type INSIGHT \
 4. **Update conflict policy if athlete prefers consistent approach**:
    If athlete consistently chooses Option 1 (move long run to Sunday), suggest:
    ```bash
-   sce profile set --conflict-policy primary_sport_wins
+   resilio profile set --conflict-policy primary_sport_wins
    ```
    This will auto-adjust running when climbing comps conflict.
 

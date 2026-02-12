@@ -16,7 +16,7 @@ Strategic volume planning for 16-week training plans. Establishes starting point
 
 **Command**:
 ```bash
-sce guardrails safe-volume --ctl 44 --goal-type half_marathon
+resilio guardrails safe-volume --ctl 44 --goal-type half_marathon
 ```
 
 **Returns**: Recommended start (CTL-based), peak volume (race-specific), progression plan.
@@ -49,7 +49,7 @@ Minimum Weekly Volume = (N - 1) × [Easy Run Min] + [Long Run Min]
 
 ### Profile-Aware Adjustments
 
-If profile includes workout patterns (from `sce profile analyze`):
+If profile includes workout patterns (from `resilio profile analyze`):
 - Easy run minimum = 80% of `typical_easy_distance_km`
 - Long run minimum = 80% of `typical_long_run_distance_km`
 
@@ -88,14 +88,14 @@ Result: All runs above minimums, realistic lengths
 ### Validation
 
 ```bash
-sce guardrails safe-volume --ctl 44 --recent-volume 22 --run-days-per-week 4
+resilio guardrails safe-volume --ctl 44 --recent-volume 22 --run-days-per-week 4
 # Warns if 22 km < 23 km minimum for 4 runs
 ```
 
 ### Prevention
 
 1. Calculate minimums before setting run frequency
-2. Use profile-aware minimums when available: `sce profile analyze`
+2. Use profile-aware minimums when available: `resilio profile analyze`
 3. Prefer frequency reduction over unrealistic run lengths (better: 3 runs with realistic lengths than 4 runs at minimums)
 
 ---
@@ -113,7 +113,7 @@ max_weekly_volume_km = max_single_session_km × run_days_per_week
 
 **Guardrail command**:
 ```bash
-sce guardrails feasible-volume \
+resilio guardrails feasible-volume \
   --run-days 2 \
   --max-session-minutes 90 \
   --easy-pace-min-per-km 6.5 \
@@ -175,7 +175,7 @@ If `target_volume_km` exceeds the feasible max, **reduce volume** or **adjust co
 - **Optimal**: 80-110 km/week (competitive)
 - **Maximum**: 150+ km/week (elite only)
 
-**Command**: `sce guardrails safe-volume --ctl 44 --goal-type half_marathon`
+**Command**: `resilio guardrails safe-volume --ctl 44 --goal-type half_marathon`
 
 ---
 
@@ -209,7 +209,7 @@ to keep total volume feasible. Still respect the max session duration cap.
 
 **Check**:
 ```bash
-sce analysis capacity --activities activities.json --planned-volume 70
+resilio analysis capacity --activities activities.json --planned-volume 70
 ```
 
 **Returns**: `historical_max`, `capacity_utilization`, `exceeds_proven_capacity`, `risk_assessment`.
@@ -240,7 +240,7 @@ sce analysis capacity --activities activities.json --planned-volume 70
 - **45-54**: Every 3rd week
 - **55+**: Every 2-3rd week
 
-**Command**: `sce guardrails masters-recovery --age 52`
+**Command**: `resilio guardrails masters-recovery --age 52`
 
 ---
 
@@ -248,16 +248,16 @@ sce analysis capacity --activities activities.json --planned-volume 70
 
 ```bash
 # Safe starting volume
-sce guardrails safe-volume --ctl 44 --goal-type half_marathon
+resilio guardrails safe-volume --ctl 44 --goal-type half_marathon
 
 # Validate run frequency vs. volume
-sce guardrails safe-volume --ctl 44 --recent-volume 22 --run-days-per-week 4
+resilio guardrails safe-volume --ctl 44 --recent-volume 22 --run-days-per-week 4
 
 # Check capacity risk
-sce analysis capacity --activities activities.json --planned-volume 70
+resilio analysis capacity --activities activities.json --planned-volume 70
 
 # Age-adjusted recovery planning
-sce guardrails masters-recovery --age 52
+resilio guardrails masters-recovery --age 52
 ```
 
 ---

@@ -1,31 +1,31 @@
 # Coaching Scenarios Reference
 
-Detailed examples of common coaching workflows using the Sports Coach Engine CLI.
+Detailed examples of common coaching workflows using the Resilio CLI.
 
 ## Scenario 1: First Session with New Athlete (AUTH-FIRST PATTERN)
 
 ```bash
 # STEP 0: Check auth status FIRST (mandatory)
-sce auth status
+resilio auth status
 
 # If not authenticated or token expired:
 if [ $? -eq 3 ]; then
   # Guide user through OAuth flow
   echo "Let's connect your Strava account so I can access your training history."
-  sce auth url
+  resilio auth url
   # User opens browser, authorizes, copies code
-  sce auth exchange --code CODE_FROM_URL
+  resilio auth exchange --code CODE_FROM_URL
 fi
 
 # STEP 1: Now sync activities (this is why auth was required first)
-sce sync  # Imports 12+ weeks of history → provides CTL/ATL/TSB baseline
+resilio sync  # Imports 12+ weeks of history → provides CTL/ATL/TSB baseline
 
 # STEP 2: Review historical data to inform profile setup
-sce week    # See recent training patterns and activities
-sce status  # Get baseline metrics (CTL will be non-zero with history)
+resilio week    # See recent training patterns and activities
+resilio status  # Get baseline metrics (CTL will be non-zero with history)
 
 # STEP 3: Set up profile with context from historical data
-sce profile get  # Check if profile exists
+resilio profile get  # Check if profile exists
 
 # Now you can ask refined questions based on actual data:
 # "I see you average 35km/week - should we maintain this volume?"
@@ -33,7 +33,7 @@ sce profile get  # Check if profile exists
 # vs generic "How much do you run?" without any context
 
 # STEP 4: Set goal and generate plan
-sce goal set --type 10k --date 2026-06-01
+resilio goal set --type 10k --date 2026-06-01
 ```
 
 ### Detailed Profile Setup Conversation Example
@@ -80,7 +80,7 @@ C) Running goal wins (prioritize race prep)
 Athlete: "Ask me each time - my priorities shift depending on the week"
 
 # STEP 3c: Save profile
-sce profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
+resilio profile set --name "Alex" --age 32 --max-hr 190 --conflict-policy ask_each_time
 
 Coach: "Perfect! Your profile is set up. Now let's talk about your running goal..."
 ```
@@ -98,8 +98,8 @@ The AI coach should adapt the injury question based on observed activity pattern
 #### Detection Methods
 
 **1. Activity Gap Detection**:
-- Via `sce status`: CTL drop from 45→20 over 3 weeks
-- Via `sce week`: 14+ day gap between activities
+- Via `resilio status`: CTL drop from 45→20 over 3 weeks
+- Via `resilio week`: 14+ day gap between activities
 - Via activity dates: Compare timestamps for gaps
 
 **2. Injury Keywords in Notes**:
@@ -155,8 +155,8 @@ Store exactly as athlete describes - don't sanitize or categorize:
 
 ```bash
 # 1. Check for activity gaps
-sce status  # Look for CTL drops
-sce week    # Review recent activity density
+resilio status  # Look for CTL drops
+resilio week    # Review recent activity density
 
 # 2. If gap detected, ask context-aware question
 Coach: "I noticed your CTL dropped from 44 to 22 in mid-November.
@@ -172,7 +172,7 @@ Coach: "Thanks for letting me know. Is that fully healed now,
 Athlete: "It's better, but it can flare up if I increase mileage too quickly."
 
 # 4. Store detailed history
-sce profile set --injury-history "Left knee pain Nov 2025, healed but watch mileage progression"
+resilio profile set --injury-history "Left knee pain Nov 2025, healed but watch mileage progression"
 ```
 
 **📊 WHY AUTH FIRST:**
@@ -187,7 +187,7 @@ sce profile set --injury-history "Left knee pain Nov 2025, healed but watch mile
 
 ```bash
 # Get today's workout with full context
-sce today
+resilio today
 # Returns: workout, current_metrics, adaptation_triggers, rationale
 
 # Claude Code can now coach based on:
@@ -207,14 +207,14 @@ sce today
 
 ```bash
 # Get full week summary
-sce week
+resilio week
 # Returns: planned vs completed, total load, metrics, changes
 
 # Sync latest if needed
-sce sync --since 7d
+resilio sync --since 7d
 
 # Check current state
-sce status
+resilio status
 ```
 
 **Analysis Points:**
@@ -228,10 +228,10 @@ sce status
 
 ```bash
 # Set new goal (stored in profile; use macro planning flow to generate plan)
-sce goal set --type half_marathon --date 2026-09-15 --time 01:45:00
+resilio goal set --type half_marathon --date 2026-09-15 --time 01:45:00
 
 # View new plan
-sce plan show
+resilio plan show
 # Returns: All weeks with phases, workouts, volume progression
 ```
 
@@ -246,10 +246,10 @@ sce plan show
 
 ```bash
 # Update basic info
-sce profile set --name "Alex" --age 32 --max-hr 190
+resilio profile set --name "Alex" --age 32 --max-hr 190
 
 # Update training preferences
-sce profile set --run-priority primary --conflict-policy ask_each_time
+resilio profile set --run-priority primary --conflict-policy ask_each_time
 ```
 
 **When to Update Profile:**
@@ -263,7 +263,7 @@ sce profile set --run-priority primary --conflict-policy ask_each_time
 
 ```bash
 # Get today's workout and check for triggers
-result=$(sce today)
+result=$(resilio today)
 
 # Parse triggers
 triggers=$(echo "$result" | jq -r '.data.adaptation_triggers')
@@ -288,13 +288,13 @@ C) Proceed as planned - moderate risk (~15% risk index)
 
 ```bash
 # After injury recovery, assess current fitness
-sce status  # Check CTL drop during recovery
+resilio status  # Check CTL drop during recovery
 
 # Sync recent activities to understand training interruption
-sce sync --since 30d
+resilio sync --since 30d
 
 # Regenerate plan with conservative restart
-sce goal set --type [same_goal] --date [adjusted_date]
+resilio goal set --type [same_goal] --date [adjusted_date]
 
 # Present updated plan for review
 # Adjust phases: longer base rebuild, shorter peak
@@ -311,7 +311,7 @@ sce goal set --type [same_goal] --date [adjusted_date]
 
 ```bash
 # Check upcoming week's plan
-sce week
+resilio week
 
 # Athlete mentions: "I have a climbing competition Saturday"
 # Review lower-body load implications
@@ -337,13 +337,13 @@ Based on your "equal priority" policy, I'm leaning toward A or B.
 
 ```bash
 # 1 week before race
-sce today --date [race_date - 7 days]
+resilio today --date [race_date - 7 days]
 
 # Check taper plan
-sce week
+resilio week
 
 # Verify readiness trends
-sce status
+resilio status
 ```
 
 **Race Week Coaching:**
@@ -357,7 +357,7 @@ sce status
 
 ```bash
 # Day after race - check status
-sce status  # TSB will be very negative
+resilio status  # TSB will be very negative
 
 # Recommend recovery period based on race distance:
 # - 5K: 3-5 days easy
@@ -366,7 +366,7 @@ sce status  # TSB will be very negative
 # - Marathon: 14-21 days easy + full recovery week
 
 # Monitor readiness and injury/illness flags
-sce week  # Track recovery progression
+resilio week  # Track recovery progression
 ```
 
 **Recovery Coaching:**
@@ -378,7 +378,7 @@ sce week  # Track recovery progression
 
 ## Scenario 11: Pre-Plan Constraints Discussion (BEFORE Plan Generation)
 
-**Context**: After profile setup and goal setting, BEFORE calling `sce plan regen`
+**Context**: After profile setup and goal setting, BEFORE calling `resilio plan regen`
 
 **Why This Matters**:
 - Generic defaults (2-4 runs/week, all 7 days available, 90min sessions) don't reflect reality
@@ -429,7 +429,7 @@ Coach: "Excellent! Let me update your profile with these constraints."
 ### Update Profile with Constraints
 
 ```bash
-sce profile set \
+resilio profile set \
   --min-run-days 4 \
   --max-run-days 4 \
   --unavailable-days "monday,wednesday,friday" \
@@ -463,7 +463,7 @@ Example:
 1. Profile setup (basic info, sport priorities, conflict policy)
 2. **→ THIS SCENARIO: Constraints discussion** ←
 3. Goal setting
-4. Plan skeleton generation (`sce plan regen`)
+4. Plan skeleton generation (`resilio plan regen`)
 5. Plan design (weekly structure)
 6. Plan presentation and approval
 
@@ -492,19 +492,19 @@ Example:
 # ========================================
 
 # Check what week we just completed
-sce dates today
+resilio dates today
 # Returns: {"date": "2026-01-26", "day_name": "Sunday", "week_boundary": "end"}
 
 # Get weekly summary
-sce week
+resilio week
 # Shows: Week 1 (Jan 20-26), 4 workouts, 23 km total
 
 # Optional: Analyze intensity distribution if you have activities JSON
-# sce analysis intensity --activities /tmp/activities_7d.json --days 7
+# resilio analysis intensity --activities /tmp/activities_7d.json --days 7
 # Returns: 82% easy, 18% hard (good 80/20 compliance)
 
 # Check current metrics (post-week-1)
-sce status
+resilio status
 # Returns: CTL 46.2 (+2.2 from 44.0), ACWR 1.05 (safe), readiness 72 (good)
 
 # ========================================
@@ -526,7 +526,7 @@ sce status
 # ========================================
 
 # Load macro plan to see Week 2 target
-sce plan show --format json | jq '.weeks[] | select(.week_number == 2)'
+resilio plan show --format json | jq '.weeks[] | select(.week_number == 2)'
 # Returns:
 # {
 #   "week_number": 2,
@@ -570,15 +570,15 @@ sce plan show --format json | jq '.weeks[] | select(.week_number == 2)'
 # → Keep VDOT at 48.0 (no recalibration)
 
 # If there WAS a signal:
-# sce vdot calculate --race-type 10k --time 42:00
-# sce vdot paces --vdot 49
+# resilio vdot calculate --race-type 10k --time 42:00
+# resilio vdot paces --vdot 49
 
 # ========================================
 # PART 6: Generate Week 2 Workouts
 # ========================================
 
 # Generate detailed workouts for Week 2
-sce plan generate-week \
+resilio plan generate-week \
   --week 2 \
   --run-days "0,2,4,5" \
   --long-run-day 5 \
@@ -604,7 +604,7 @@ sce plan generate-week \
 # ========================================
 
 # Validate BEFORE presenting to athlete
-sce plan validate-week --file /tmp/weekly_plan_w2.json
+resilio plan validate-week --file /tmp/weekly_plan_w2.json
 
 # Returns:
 # {
@@ -669,8 +669,8 @@ Does this look good to you? Any adjustments needed?"
 # ========================================
 
 # After athlete approval, save to system
-sce approvals approve-week --week 2 --file /tmp/weekly_plan_w2.json
-sce plan populate --from-json /tmp/weekly_plan_w2.json --validate
+resilio approvals approve-week --week 2 --file /tmp/weekly_plan_w2.json
+resilio plan populate --from-json /tmp/weekly_plan_w2.json --validate
 
 # Returns:
 # {
@@ -684,14 +684,14 @@ sce plan populate --from-json /tmp/weekly_plan_w2.json --validate
 # }
 
 # Week 2 now available for daily coaching
-sce today  # Will show Monday's workout (4.5 km easy run)
+resilio today  # Will show Monday's workout (4.5 km easy run)
 
 # ========================================
 # PART 10: Repeat Next Week
 # ========================================
 
 # After Week 2 completes (Feb 2), repeat this workflow:
-# 1. Analyze Week 2 completion (`sce week`), intensity, CTL progression
+# 1. Analyze Week 2 completion (`resilio week`), intensity, CTL progression
 # 2. Check macro plan for Week 3 target
 # 3. Assess volume adjustment (did athlete struggle? Need downgrade?)
 # 4. Recalibrate VDOT if performance breakthrough
@@ -713,7 +713,7 @@ sce today  # Will show Monday's workout (4.5 km easy run)
 # - Activity notes: "felt tired all week"
 
 # Decision: Reduce Week 3 volume by 10%
-sce plan generate-week \
+resilio plan generate-week \
   --week 3 \
   --run-days "0,2,4,6" \
   --long-run-day 6 \
@@ -742,14 +742,14 @@ This is exactly what adaptive planning is for!"
 # During Week 4, athlete runs a 10K race: 42:00 (previous estimate was 45:00)
 
 # Recalibrate VDOT
-sce vdot calculate --race-type 10k --time 42:00
+resilio vdot calculate --race-type 10k --time 42:00
 # Returns: VDOT 49.0 (was 48.0)
 
-sce vdot paces --vdot 49
+resilio vdot paces --vdot 49
 # Get new training paces (all ~5 sec/km faster)
 
 # Generate Week 5 with updated VDOT
-sce plan generate-week \
+resilio plan generate-week \
   --week 5 \
   --run-days "0,2,4,6" \
   --long-run-day 6 \
@@ -778,9 +778,9 @@ Week 5 workouts will reflect these updated paces. Your fitness is improving!"
 # Athlete: "I have a work trip Thursday-Friday next week, can we shift workouts?"
 
 # Option 1: Regenerate with profile update
-sce profile set --unavailable-days "wednesday,thursday,friday"  # Keep Mon/Tue/Sat/Sun
+resilio profile set --unavailable-days "wednesday,thursday,friday"  # Keep Mon/Tue/Sat/Sun
 
-sce plan generate-week \
+resilio plan generate-week \
   --week 5 \
   --run-days "0,1,5,6" \
   --long-run-day 6 \
@@ -852,13 +852,13 @@ not separate "analysis" and "planning" sessions.
 
 **Step 1: Check profile**:
 ```bash
-sce profile get | jq '{running_priority, other_sports}'
+resilio profile get | jq '{running_priority, other_sports}'
 # Returns: {"running_priority": "primary", "other_sports": []}
 ```
 
 **Step 2: Check actual activity data**:
 ```bash
-sce profile analyze
+resilio profile analyze
 # Returns: sport_percentages: {"climb": 42.0, "run": 28.0, "yoga": 15.0, ...}
 ```
 
@@ -876,18 +876,18 @@ load in my fatigue calculations. That's why you feel tired but my metrics say yo
 **Step 4: Collect missing data**:
 ```bash
 # Climbing (42% - significant)
-sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity hard
+resilio profile add-sport --sport climbing --frequency 3 --duration 120 --intensity hard
 
 # Yoga (15% - just above threshold)
-sce profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
+resilio profile add-sport --sport yoga --frequency 1 --duration 60 --intensity easy
 ```
 
 **Step 5: Verify fix**:
 ```bash
-sce profile validate
+resilio profile validate
 # Should return: {"valid": true, "issues": []}
 
-sce status
+resilio status
 # CTL/ACWR now reflect true load
 ```
 
@@ -902,7 +902,7 @@ for your Monday climbing session - I'll move the tempo run to Wednesday instead.
 ### Key Teaching Points
 
 **Data-driven validation**:
-- Use `sce profile analyze` to see actual sport distribution
+- Use `resilio profile analyze` to see actual sport distribution
 - Sports >15% of activities should always be tracked
 - `running_priority` determines conflict resolution, NOT whether to track sports
 
@@ -919,14 +919,14 @@ for your Monday climbing session - I'll move the tempo run to Wednesday instead.
 
 **Prevention**:
 - Make Step 4f-validation mandatory in first-session workflow
-- Run `sce profile validate` before generating first macro plan
+- Run `resilio profile validate` before generating first macro plan
 - Include validation reminder in weekly-analysis skill
 
 ---
 
 ## Tips for Effective Scenario-Based Coaching
 
-1. **Always start with data**: Run `sce status` or `sce today` before giving advice
+1. **Always start with data**: Run `resilio status` or `resilio today` before giving advice
 2. **Reference actual metrics**: Don't say "rest today" - say "Your ACWR is 1.5 (danger) and readiness is 35 (very low) - let's rest"
 3. **Use AskUserQuestion for choices**: Present options with trade-offs, let athlete decide
 4. **Explain the why**: Link recommendations to CTL, ACWR, readiness, or training phase

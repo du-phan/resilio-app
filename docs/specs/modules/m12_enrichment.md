@@ -884,8 +884,8 @@ Claude Code crafts: Natural conversational response
 
 ```python
 # In api/metrics.py
-from sports_coach_engine.core.enrichment import enrich_metrics
-from sports_coach_engine.core.workflows import run_metrics_refresh
+from resilio.core.enrichment import enrich_metrics
+from resilio.core.workflows import run_metrics_refresh
 
 
 def get_current_metrics() -> EnrichedMetrics:

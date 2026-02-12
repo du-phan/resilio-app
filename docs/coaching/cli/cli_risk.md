@@ -5,21 +5,21 @@
 Holistic risk analysis and training stress forecasting.
 
 **Commands in this category:**
-- `sce risk assess` - Multi-factor risk assessment
-- `sce risk recovery-window` - Estimate recovery timeline
-- `sce risk forecast` - Project CTL/ATL/TSB 1-4 weeks ahead
-- `sce risk taper-status` - Verify taper progression
+- `resilio risk assess` - Multi-factor risk assessment
+- `resilio risk recovery-window` - Estimate recovery timeline
+- `resilio risk forecast` - Project CTL/ATL/TSB 1-4 weeks ahead
+- `resilio risk taper-status` - Verify taper progression
 
 ---
 
-## sce risk assess
+## resilio risk assess
 
 Multi-factor risk assessment combining ACWR, readiness, TSB, and recent load.
 
 **Usage:**
 
 ```bash
-sce risk assess --metrics current_metrics.json \
+resilio risk assess --metrics current_metrics.json \
     --recent last_7d_activities.json \
     --planned today_workout.json
 ```
@@ -69,14 +69,14 @@ sce risk assess --metrics current_metrics.json \
 
 ---
 
-## sce risk recovery-window
+## resilio risk recovery-window
 
 Estimate recovery timeline to return to safe training zones.
 
 **Usage:**
 
 ```bash
-sce risk recovery-window --trigger ACWR_ELEVATED \
+resilio risk recovery-window --trigger ACWR_ELEVATED \
     --value 1.35 --threshold 1.3
 ```
 
@@ -86,14 +86,14 @@ sce risk recovery-window --trigger ACWR_ELEVATED \
 
 ---
 
-## sce risk forecast
+## resilio risk forecast
 
 Project CTL/ATL/TSB/ACWR 1-4 weeks ahead to identify risk windows.
 
 **Usage:**
 
 ```bash
-sce risk forecast --weeks 3 \
+resilio risk forecast --weeks 3 \
     --metrics current_metrics.json \
     --plan planned_weeks.json
 ```
@@ -120,14 +120,14 @@ sce risk forecast --weeks 3 \
 
 ---
 
-## sce risk taper-status
+## resilio risk taper-status
 
 Verify taper progression toward race day freshness.
 
 **Usage:**
 
 ```bash
-sce risk taper-status --race-date 2026-03-15 \
+resilio risk taper-status --race-date 2026-03-15 \
     --metrics current_metrics.json \
     --recent-weeks last_3_weeks.json
 ```

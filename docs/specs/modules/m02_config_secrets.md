@@ -439,7 +439,7 @@ M2 owns the following files (read-only access except for token refresh):
 #### `config/settings.yaml`
 
 ```yaml
-# Sports Coach Engine Configuration
+# Resilio Configuration
 # Non-secret settings for the application
 
 # File paths (relative to repository root)
@@ -494,12 +494,12 @@ strava:
 
 | Environment Variable | Config Path | Description |
 |---------------------|-------------|-------------|
-| `SCE_STRAVA_CLIENT_ID` | `secrets.strava.client_id` | Strava OAuth client ID |
-| `SCE_STRAVA_CLIENT_SECRET` | `secrets.strava.client_secret` | Strava OAuth client secret |
-| `SCE_STRAVA_ACCESS_TOKEN` | `secrets.strava.access_token` | Current access token |
-| `SCE_STRAVA_REFRESH_TOKEN` | `secrets.strava.refresh_token` | Token for refresh |
-| `SCE_STRAVA_TOKEN_EXPIRES_AT` | `secrets.strava.token_expires_at` | Token expiration timestamp |
-| `SCE_HISTORY_IMPORT_WEEKS` | `settings.strava.history_import_weeks` | Initial import depth |
+| `RESILIO_STRAVA_CLIENT_ID` | `secrets.strava.client_id` | Strava OAuth client ID |
+| `RESILIO_STRAVA_CLIENT_SECRET` | `secrets.strava.client_secret` | Strava OAuth client secret |
+| `RESILIO_STRAVA_ACCESS_TOKEN` | `secrets.strava.access_token` | Current access token |
+| `RESILIO_STRAVA_REFRESH_TOKEN` | `secrets.strava.refresh_token` | Token for refresh |
+| `RESILIO_STRAVA_TOKEN_EXPIRES_AT` | `secrets.strava.token_expires_at` | Token expiration timestamp |
+| `RESILIO_HISTORY_IMPORT_WEEKS` | `settings.strava.history_import_weeks` | Initial import depth |
 
 ### 4.3 Validation Rules
 
@@ -643,15 +643,15 @@ import os
 from typing import Any
 
 SETTINGS_ENV_MAP = {
-    "SCE_HISTORY_IMPORT_WEEKS": "strava.history_import_weeks",
+    "RESILIO_HISTORY_IMPORT_WEEKS": "strava.history_import_weeks",
 }
 
 SECRETS_ENV_MAP = {
-    "SCE_STRAVA_CLIENT_ID": "strava.client_id",
-    "SCE_STRAVA_CLIENT_SECRET": "strava.client_secret",
-    "SCE_STRAVA_ACCESS_TOKEN": "strava.access_token",
-    "SCE_STRAVA_REFRESH_TOKEN": "strava.refresh_token",
-    "SCE_STRAVA_TOKEN_EXPIRES_AT": "strava.token_expires_at",
+    "RESILIO_STRAVA_CLIENT_ID": "strava.client_id",
+    "RESILIO_STRAVA_CLIENT_SECRET": "strava.client_secret",
+    "RESILIO_STRAVA_ACCESS_TOKEN": "strava.access_token",
+    "RESILIO_STRAVA_REFRESH_TOKEN": "strava.refresh_token",
+    "RESILIO_STRAVA_TOKEN_EXPIRES_AT": "strava.token_expires_at",
 }
 
 
@@ -867,7 +867,7 @@ API Layer → M1 (workflows) → M5 (strava) → M2::get_valid_strava_token()
 ### 7.2 How Other Modules Call M2
 
 ```python
-from sports_coach_engine.core.config import load_config, get_valid_strava_token, ConfigError
+from resilio.core.config import load_config, get_valid_strava_token, ConfigError
 
 # M1, M5, and others call load_config() at startup
 config = load_config()
@@ -909,7 +909,7 @@ M2 does not emit events. It is a synchronous configuration provider (except for 
 ```python
 import pytest
 from pathlib import Path
-from sports_coach_engine.m02_config import (
+from resilio.m02_config import (
     load_config, validate_secrets, refresh_strava_token,
     is_token_expired, ConfigError, ConfigErrorType
 )
@@ -951,7 +951,7 @@ class TestLoadConfig:
     def test_applies_environment_variable_overrides(self, tmp_path: Path, monkeypatch):
         """Should use env vars over file values."""
         # Setup config files
-        monkeypatch.setenv("SCE_STRAVA_CLIENT_ID", "env_client_id")
+        monkeypatch.setenv("RESILIO_STRAVA_CLIENT_ID", "env_client_id")
 
         result = load_config(tmp_path)
 
@@ -1224,7 +1224,7 @@ All configuration files are located in `config/` at the repository root:
 ### 9.4 Project Structure
 
 ```
-sports_coach_engine/
+resilio/
 ├── __init__.py
 ├── m02_config/
 │   ├── __init__.py

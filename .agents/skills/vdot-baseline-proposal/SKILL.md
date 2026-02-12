@@ -1,7 +1,7 @@
 ---
 name: vdot-baseline-proposal
 description: Proposes a baseline VDOT and returns evidence plus a single approval prompt for the coach. Use when a macro plan needs an approved baseline VDOT.
-compatibility: Codex CLI/IDE; requires local sce CLI and repo context
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # VDOT Baseline Proposal (Executor)
@@ -11,7 +11,7 @@ Use CLI only. Present the review directly in chat for the coach to use.
 ## Preconditions (block if missing)
 
 - Goal exists (race type/date) and profile exists
-- Metrics available (`sce status`)
+- Metrics available (`resilio status`)
 
 If missing, return a blocking checklist and stop.
 
@@ -42,10 +42,10 @@ One-line definitions for other metrics:
 1. Gather evidence:
 
 ```bash
-sce profile get
-sce status
-sce vdot estimate-current --lookback-days 90  # Longer lookback for continuity analysis
-sce activity list --since 30d --sport run
+resilio profile get
+resilio status
+resilio vdot estimate-current --lookback-days 90  # Longer lookback for continuity analysis
+resilio activity list --since 30d --sport run
 ```
 
 **NEW: Understanding estimate-current output:**
@@ -65,7 +65,7 @@ Strategy (automatic via `vdot estimate-current`):
   - Uses Daniels' Table 9.2 decay methodology
 - **No race**: Use pace analysis (quality workouts → HR-detected easy runs)
 - **Insufficient data**: Return error asking athlete to establish baseline via:
-  - Adding a PB (`sce profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD`)
+  - Adding a PB (`resilio profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD`)
   - Running quality workouts (tempo, threshold, interval)
   - Running easy runs consistently (requires max_hr in profile)
 
@@ -74,7 +74,7 @@ The system will NOT provide a CTL-based guess - we need actual pace data.
 3. Get pace ranges:
 
 ```bash
-sce vdot paces --vdot <VDOT>
+resilio vdot paces --vdot <VDOT>
 ```
 
 4. Present directly in chat:
@@ -84,7 +84,7 @@ sce vdot paces --vdot <VDOT>
 - Pace table (easy/tempo/interval/long)
 - Single approval prompt text for the athlete
 - Handoff note: coach must record approval via
-  `sce approvals approve-vdot --value <VDOT>`
+  `resilio approvals approve-vdot --value <VDOT>`
 
 ## References (load only if needed)
 

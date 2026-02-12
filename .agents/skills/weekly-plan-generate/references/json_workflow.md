@@ -4,17 +4,17 @@
 
 ```bash
 # 1. Generate macro template and fill it
-poetry run sce plan template-macro --total-weeks 16 --out /tmp/macro_template.json
+poetry run resilio plan template-macro --total-weeks 16 --out /tmp/macro_template.json
 # Fill /tmp/macro_template.json (replace nulls)
 
 # 2. Create plan skeleton (auto-persists to data/plans/current_plan.yaml)
-# (Requires approved baseline VDOT: sce approvals approve-vdot --value <VDOT>)
-poetry run sce plan create-macro --goal-type half_marathon --race-date 2026-06-01 \
+# (Requires approved baseline VDOT: resilio approvals approve-vdot --value <VDOT>)
+poetry run resilio plan create-macro --goal-type half_marathon --race-date 2026-06-01 \
   --start-date 2026-01-20 --total-weeks 16 --current-ctl 44 --baseline-vdot 48 \
   --macro-template-json /tmp/macro_template.json
 
 # 3. Generate week 1 JSON (coach decides pattern inputs)
-poetry run sce plan generate-week \
+poetry run resilio plan generate-week \
   --week 1 \
   --run-days "0,2,6" \
   --long-run-day 6 \
@@ -24,16 +24,16 @@ poetry run sce plan generate-week \
   --out /tmp/weekly_plan_w1.json
 
 # 4. Validate JSON before presenting to athlete
-poetry run sce plan validate-week --file /tmp/weekly_plan_w1.json
+poetry run resilio plan validate-week --file /tmp/weekly_plan_w1.json
 
 # 5. Record approval
-poetry run sce approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
+poetry run resilio approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
 
 # 6. Populate week 1 into skeleton (after athlete approval)
-poetry run sce plan populate --from-json /tmp/weekly_plan_w1.json --validate
+poetry run resilio plan populate --from-json /tmp/weekly_plan_w1.json --validate
 
 # 7. Verify
-poetry run sce plan show
+poetry run resilio plan show
 ```
 
 ---
@@ -193,20 +193,20 @@ System handles all arithmetic and object creation:
 
 ```bash
 # Step 1: Create skeleton (16 weeks, NO workout_pattern)
-sce plan create-macro ...
+resilio plan create-macro ...
 # Creates: data/plans/current_plan.yaml with stub weeks
 
 # Step 2: Generate week 1 JSON (coach decides pattern inputs)
 # Saved to: /tmp/weekly_plan_w1.json
 
 # Step 3: Validate week 1
-sce plan validate-week --file /tmp/weekly_plan_w1.json
+resilio plan validate-week --file /tmp/weekly_plan_w1.json
 
 # Step 4: Record approval
-sce approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
+resilio approvals approve-week --week 1 --file /tmp/weekly_plan_w1.json
 
 # Step 5: Populate week 1 into skeleton (after approval)
-sce plan populate --from-json /tmp/weekly_plan_w1.json --validate
+resilio plan populate --from-json /tmp/weekly_plan_w1.json --validate
 ```
 
 **Result**: Plan skeleton with 16 stub weeks, week 1 has workouts, weeks 2-16 are empty.
@@ -217,17 +217,17 @@ Each week after completing previous week:
 
 ```bash
 # Analyze completed week
-sce week  # Review adherence, metrics
+resilio week  # Review adherence, metrics
 
 # AI coach creates next week JSON (e.g., week 2)
 # Based on week 1 response, current CTL/ACWR, readiness
 
 # Validate
-sce plan validate-week --file /tmp/weekly_plan_w2.json
+resilio plan validate-week --file /tmp/weekly_plan_w2.json
 
 # Record approval + populate (merges into existing plan)
-sce approvals approve-week --week 2 --file /tmp/weekly_plan_w2.json
-sce plan populate --from-json /tmp/weekly_plan_w2.json --validate
+resilio approvals approve-week --week 2 --file /tmp/weekly_plan_w2.json
+resilio plan populate --from-json /tmp/weekly_plan_w2.json --validate
 ```
 
 **Key point**: `populate` merges weeks. Existing weeks are preserved, new weeks are added/updated.
@@ -245,7 +245,7 @@ sce plan populate --from-json /tmp/weekly_plan_w2.json --validate
 
 **Validation**:
 ```bash
-poetry run sce dates validate --date 2026-01-20 --must-be monday
+poetry run resilio dates validate --date 2026-01-20 --must-be monday
 # Returns: {"valid": true, "day_name": "Monday"}
 ```
 
@@ -268,11 +268,11 @@ poetry run sce dates validate --date 2026-01-20 --must-be monday
 
 ```bash
 # Get today and next Monday
-poetry run sce dates today
-poetry run sce dates next-monday
+poetry run resilio dates today
+poetry run resilio dates next-monday
 
 # Get week boundaries
-poetry run sce dates week-boundaries --start 2026-01-20
+poetry run resilio dates week-boundaries --start 2026-01-20
 # Returns: {"start": "2026-01-20", "end": "2026-01-26"}
 ```
 
@@ -280,7 +280,7 @@ poetry run sce dates week-boundaries --start 2026-01-20
 
 ## Validation Rules
 
-`sce plan validate-week --file <json>` checks:
+`resilio plan validate-week --file <json>` checks:
 
 1. **Volume discrepancy**: Sum of workout distances vs target_volume_km
    - <5%: Acceptable
@@ -379,7 +379,7 @@ run_days = list(range(MAX_RUN_DAYS))  # e.g., [0,1,2,3] for 4 runs
 ### ✅ Right: Use suggest-run-count
 
 ```bash
-poetry run sce plan suggest-run-count --volume 20 --max-runs 4 --phase base
+poetry run resilio plan suggest-run-count --volume 20 --max-runs 4 --phase base
 # Returns: recommended_runs=3 (warns 4 runs would create sub-5km runs)
 ```
 

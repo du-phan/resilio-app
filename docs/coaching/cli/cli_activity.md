@@ -5,12 +5,12 @@
 Commands to list and search activities with their notes (description, private_note). These tools surface raw data for the AI coach to interpret.
 
 **Commands in this category:**
-- `sce activity list` - List activities in a date range with their notes
-- `sce activity search` - Search activities by text content in notes
+- `resilio activity list` - List activities in a date range with their notes
+- `resilio activity search` - Search activities by text content in notes
 
 ---
 
-## sce activity list
+## resilio activity list
 
 List activities in a date range with their notes.
 
@@ -18,19 +18,19 @@ List activities in a date range with their notes.
 
 ```bash
 # List activities from last 30 days (default)
-sce activity list
+resilio activity list
 
 # List activities from last 60 days
-sce activity list --since 60d
+resilio activity list --since 60d
 
 # Filter by sport type
-sce activity list --since 30d --sport run
+resilio activity list --since 30d --sport run
 
 # Only activities with notes
-sce activity list --since 14d --has-notes
+resilio activity list --since 14d --has-notes
 
 # Specific date range
-sce activity list --since 2026-01-01
+resilio activity list --since 2026-01-01
 ```
 
 **Parameters:**
@@ -79,7 +79,7 @@ sce activity list --since 2026-01-01
 
 ---
 
-## sce activity search
+## resilio activity search
 
 Search activities by text content in notes.
 
@@ -87,13 +87,13 @@ Search activities by text content in notes.
 
 ```bash
 # Search for ankle mentions
-sce activity search --query "ankle"
+resilio activity search --query "ankle"
 
 # Multiple keywords (OR match)
-sce activity search --query "tired fatigue sore"
+resilio activity search --query "tired fatigue sore"
 
 # Filter by sport and time period
-sce activity search --query "pain" --sport run --since 60d
+resilio activity search --query "pain" --sport run --since 60d
 ```
 
 **Parameters:**

@@ -2,9 +2,9 @@
 
 **Goal:** Add a CLI helper that exports the *stored* macro plan structure into validation-ready JSON so the AI coach validates the real plan, not a manually re-entered approximation.
 
-**Architecture:** Introduce an API-level `export_plan_structure()` that derives phase counts, weekly volumes, recovery weeks, and race week from `current_plan.yaml`, then expose it via `sce plan export-structure` which writes JSON files for `validate-structure` and returns a JSON envelope with paths + data. Update skills/docs to use this CLI helper. This keeps the workflow CLI-only and preserves AI-driven planning while guaranteeing schema correctness.
+**Architecture:** Introduce an API-level `export_plan_structure()` that derives phase counts, weekly volumes, recovery weeks, and race week from `current_plan.yaml`, then expose it via `resilio plan export-structure` which writes JSON files for `validate-structure` and returns a JSON envelope with paths + data. Update skills/docs to use this CLI helper. This keeps the workflow CLI-only and preserves AI-driven planning while guaranteeing schema correctness.
 
-**Tech Stack:** Python CLI (Typer), API layer (`sports_coach_engine/api/plan.py`), JSON files, Markdown docs/skills.
+**Tech Stack:** Python CLI (Typer), API layer (`resilio/api/plan.py`), JSON files, Markdown docs/skills.
 
 ---
 
@@ -12,7 +12,7 @@
 
 **Files:**
 
-- Modify: `sports_coach_engine/api/plan.py`
+- Modify: `resilio/api/plan.py`
 - Test: `tests/unit/test_api_plan.py`
 
 **Step 1: Write the failing test (race week resolved from plan weeks)**
@@ -45,7 +45,7 @@ Expected: FAIL (function missing)
 
 **Step 5: Implement minimal API helper**
 
-Add to `sports_coach_engine/api/plan.py`:
+Add to `resilio/api/plan.py`:
 - `PlanStructureExport` dataclass with:
   - `total_weeks`, `goal_type`, `race_week`
   - `phases` (dict phase -> weeks)
@@ -75,18 +75,18 @@ Expected: PASS
 **Step 7: Commit**
 
 ```bash
-git add tests/unit/test_api_plan.py sports_coach_engine/api/plan.py
+git add tests/unit/test_api_plan.py resilio/api/plan.py
 git commit -m "feat: export macro plan structure from stored plan"
 ```
 
 ---
 
-### Task 2: Add CLI command `sce plan export-structure`
+### Task 2: Add CLI command `resilio plan export-structure`
 
 **Files:**
 
-- Modify: `sports_coach_engine/cli/commands/plan.py`
-- Modify: `sports_coach_engine/api/__init__.py`
+- Modify: `resilio/cli/commands/plan.py`
+- Modify: `resilio/api/__init__.py`
 
 **Step 1: Write the failing CLI test (optional)**
 
@@ -114,21 +114,21 @@ Add to `plan.py`:
 
 **Step 3: Update API exports**
 
-Expose `export_plan_structure` in `sports_coach_engine/api/__init__.py` for CLI usage.
+Expose `export_plan_structure` in `resilio/api/__init__.py` for CLI usage.
 
 **Step 4: Manual sanity check**
 
 Run:
 ```bash
-sce plan export-structure --out-dir /tmp
+resilio plan export-structure --out-dir /tmp
 ```
 Expected: JSON envelope + files created in `/tmp`
 
 **Step 5: Commit**
 
 ```bash
-git add sports_coach_engine/cli/commands/plan.py sports_coach_engine/api/__init__.py
-git commit -m "feat: add sce plan export-structure"
+git add resilio/cli/commands/plan.py resilio/api/__init__.py
+git commit -m "feat: add resilio plan export-structure"
 ```
 
 ---
@@ -145,8 +145,8 @@ git commit -m "feat: add sce plan export-structure"
 
 Replace manual JSON creation with:
 ```bash
-sce plan export-structure --out-dir /tmp
-sce plan validate-structure \
+resilio plan export-structure --out-dir /tmp
+resilio plan validate-structure \
   --total-weeks <N> \
   --goal-type <GOAL> \
   --phases /tmp/plan_phases.json \
@@ -157,7 +157,7 @@ sce plan validate-structure \
 
 **Step 2: Update CLI docs**
 
-Add a new section for `sce plan export-structure` with usage and outputs.
+Add a new section for `resilio plan export-structure` with usage and outputs.
 Add it to the CLI index tables.
 
 **Step 3: Commit**
@@ -178,7 +178,7 @@ git commit -m "docs: use export-structure for macro validation"
 **Step 1: Export from current plan**
 
 ```bash
-sce plan export-structure --out-dir /tmp
+resilio plan export-structure --out-dir /tmp
 ```
 
 **Expected output from `current_plan.yaml`:**
@@ -196,7 +196,7 @@ sce plan export-structure --out-dir /tmp
 **Step 2: Validate structure**
 
 ```bash
-sce plan validate-structure \
+resilio plan validate-structure \
   --total-weeks 9 \
   --goal-type marathon \
   --phases /tmp/plan_phases.json \
@@ -219,7 +219,7 @@ Expected: validation output against the *stored* macro plan.
 
 Run: `rg -n "plan_phases.json|weekly_volumes_list.json|recovery_weeks.json" .`
 
-**Step 2: Update references to point to `sce plan export-structure`**
+**Step 2: Update references to point to `resilio plan export-structure`**
 
 **Step 3: Commit**
 

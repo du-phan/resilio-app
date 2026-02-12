@@ -2,11 +2,11 @@
 
 > **Quick Links**: [Back to Index](index.md)
 
-Fundamental concepts for working with Sports Coach Engine CLI commands.
+Fundamental concepts for working with Resilio CLI commands.
 
 ## JSON Response Structure
 
-All `sce` commands return JSON with this consistent structure:
+All `resilio` commands return JSON with this consistent structure:
 
 ```json
 {
@@ -41,7 +41,7 @@ Don't just read raw values - use the interpretations:
 "Your CTL is 44"
 
 # ✅ Good: Use interpretations
-result=$(sce status)
+result=$(resilio status)
 ctl=$(echo "$result" | jq -r '.data.ctl.value')
 interpretation=$(echo "$result" | jq -r '.data.ctl.interpretation')
 echo "Your CTL is $ctl ($interpretation)"
@@ -55,7 +55,7 @@ echo "Your CTL is $ctl ($interpretation)"
 Always check exit codes after command execution:
 
 ```bash
-sce status
+resilio status
 exit_code=$?
 ```
 
@@ -64,8 +64,8 @@ exit_code=$?
 | Code  | Meaning                | Error Type                    | Action                              |
 | ----- | ---------------------- | ----------------------------- | ----------------------------------- |
 | **0** | Success                | -                             | Parse JSON and proceed              |
-| **2** | Config/Setup Missing   | `config_missing`              | Run `sce init` to initialize        |
-| **3** | Authentication Failure | `auth_error`                  | Run `sce auth url` to refresh token |
+| **2** | Config/Setup Missing   | `config_missing`              | Run `resilio init` to initialize        |
+| **3** | Authentication Failure | `auth_error`                  | Run `resilio auth url` to refresh token |
 | **4** | Network/Rate Limit     | `network_error`, `rate_limit` | Retry with exponential backoff      |
 | **5** | Invalid Input          | `validation_error`            | Check parameters and retry          |
 | **1** | Internal Error         | `internal_error`              | Report issue with traceback         |
@@ -73,28 +73,28 @@ exit_code=$?
 ### Error Handling Pattern
 
 ```bash
-sce sync
+resilio sync
 case $? in
   0)
     echo "Sync successful"
     ;;
   2)
-    echo "Config missing - run: sce init"
-    sce init
+    echo "Config missing - run: resilio init"
+    resilio init
     ;;
   3)
     echo "Auth expired - refreshing token"
-    sce auth url
+    resilio auth url
     # Wait for user to authorize...
     ;;
   4)
     echo "Network issue - retrying in 30s"
     sleep 30
-    sce sync
+    resilio sync
     ;;
   5)
     echo "Invalid parameters - check command syntax"
-    sce sync --help
+    resilio sync --help
     ;;
   *)
     echo "Internal error - check logs"
@@ -118,7 +118,7 @@ esac
 
 ```bash
 # Extract specific field
-result=$(sce status)
+result=$(resilio status)
 ctl=$(echo "$result" | jq -r '.data.ctl.value')
 echo "CTL: $ctl"
 
@@ -138,7 +138,7 @@ fi
 ### Combined Error Handling
 
 ```bash
-sce status
+resilio status
 exit_code=$?
 
 case $exit_code in
@@ -146,10 +146,10 @@ case $exit_code in
     echo "Success"
     ;;
   2)
-    echo "Run 'sce init' first"
+    echo "Run 'resilio init' first"
     ;;
   3)
-    echo "Auth expired - run 'sce auth url'"
+    echo "Auth expired - run 'resilio auth url'"
     ;;
   4)
     echo "Network/rate limit - retry later"

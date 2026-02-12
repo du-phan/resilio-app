@@ -12,7 +12,7 @@
 
 **Impact**: Immediate ACWR spike >1.3, injury risk within 3 weeks, demoralizing start.
 
-**Solution**: Starting volume = 80-100% of current CTL (not arbitrary). Use `sce guardrails safe-volume --ctl X` to validate.
+**Solution**: Starting volume = 80-100% of current CTL (not arbitrary). Use `resilio guardrails safe-volume --ctl X` to validate.
 
 **Example**: CTL 22 (beginner) → start 22km, build +5-8%/week. NOT 50km Week 1.
 
@@ -41,7 +41,7 @@
 **Why wrong**: Defeats adaptability (can't adjust based on training response), creates rigid plan, increases error surface area.
 
 **Correct pattern**:
-- **Macro plan** (via `sce plan create-macro`): All 16 weeks with `target_volume_km` + `workout_structure_hints`, NO workout_pattern
+- **Macro plan** (via `resilio plan create-macro`): All 16 weeks with `target_volume_km` + `workout_structure_hints`, NO workout_pattern
 - **Week 1** (generated via weekly-plan-generate): ONLY week 1 with complete workout_pattern
 - **Weeks 2-16**: Remain as volume targets until generated progressively (via weekly-plan-generate)
 
@@ -96,7 +96,7 @@
 
 **Solution**:
 - **Single-sport athletes**: `target_systemic_load_au: [0.0, 0.0, ...]` is CORRECT (calculated later from running volume)
-- **Multi-sport athletes**: Calculate total systemic load targets using `sce analysis load`, then fill macro template with planned targets
+- **Multi-sport athletes**: Calculate total systemic load targets using `resilio analysis load`, then fill macro template with planned targets
 
 **Example (EQUAL priority, 12-week half marathon + climbing)**:
 ```json
@@ -123,7 +123,7 @@ Week 9 systemic load (125 AU) = 50 km running (50 AU) + climbing sessions (60 AU
 - EQUAL: Reduced volumes (40-50 km half marathon)
 - SECONDARY: Maintenance only (25-30 km)
 
-**Use**: `sce guardrails safe-volume --priority equal`
+**Use**: `resilio guardrails safe-volume --priority equal`
 
 ---
 
@@ -150,10 +150,10 @@ Write down, show confirmation before generating macro plan.
 **Solution - MANDATORY**: Always use computational tools for dates:
 ```bash
 # Get next Monday for plan start
-sce dates next-monday
+resilio dates next-monday
 
 # Validate all week start dates are Monday
-sce dates validate --date 2026-01-20 --must-be monday
+resilio dates validate --date 2026-01-20 --must-be monday
 ```
 
 **Critical rule**: ALL weeks start Monday (weekday 0), end Sunday (weekday 6). NEVER trust mental date arithmetic.
@@ -188,14 +188,14 @@ sce dates validate --date 2026-01-20 --must-be monday
 ## Essential Checklist (Before Presenting Macro Plan)
 
 - [ ] Constraints confirmed in writing (run days, max duration, other sports)
-- [ ] Starting volume = 80-100% of CTL (validated via `sce guardrails safe-volume`)
+- [ ] Starting volume = 80-100% of CTL (validated via `resilio guardrails safe-volume`)
 - [ ] Phase allocation: Base (≥4 weeks), Build (≥4 weeks), Peak (≥2 weeks), Taper (2 weeks)
 - [ ] Recovery weeks scheduled (every 4-5 weeks during base/build)
 - [ ] Weekly progression: 5-7% most weeks, 10% max
 - [ ] Multi-sport load planned:
   - [ ] Single-sport: `target_systemic_load_au: [0.0, 0.0, ...]` ✓
-  - [ ] Multi-sport: Calculate systemic load targets via `sce analysis load`, fill macro template
-- [ ] Week start dates verified Monday: `sce dates validate --date <date> --must-be monday`
+  - [ ] Multi-sport: Calculate systemic load targets via `resilio analysis load`, fill macro template
+- [ ] Week start dates verified Monday: `resilio dates validate --date <date> --must-be monday`
 - [ ] Volume targets present (`target_volume_km`), NO workout_pattern for weeks 2-16
 - [ ] Markdown presentation created: `/tmp/macro_plan_review_YYYY_MM_DD.md`
 - [ ] **Athlete approval obtained BEFORE generating Week 1**

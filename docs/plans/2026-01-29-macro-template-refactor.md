@@ -2,9 +2,9 @@
 
 **Goal:** Make macro plan creation template-first and CLI-driven: generate a blank macro template with required fields, have the AI coach fill it, then create the plan from that template. Remove the old manual JSON path and require the template schema.
 
-**Architecture:** Add `build_macro_template()` in the API and expose `sce plan template-macro` in the CLI to emit a blank template with placeholders. Refactor `sce plan create-macro` to require the template schema (`template_version`, `total_weeks`, `volumes_km`, `workout_structure_hints`) and to reject placeholders explicitly. Update skills/docs to use the new template-first flow and remove manual JSON instructions. No backward compatibility.
+**Architecture:** Add `build_macro_template()` in the API and expose `resilio plan template-macro` in the CLI to emit a blank template with placeholders. Refactor `resilio plan create-macro` to require the template schema (`template_version`, `total_weeks`, `volumes_km`, `workout_structure_hints`) and to reject placeholders explicitly. Update skills/docs to use the new template-first flow and remove manual JSON instructions. No backward compatibility.
 
-**Tech Stack:** Python CLI (Typer), API layer (`sports_coach_engine/api/plan.py`), JSON templates, Markdown docs/skills.
+**Tech Stack:** Python CLI (Typer), API layer (`resilio/api/plan.py`), JSON templates, Markdown docs/skills.
 
 ---
 
@@ -12,7 +12,7 @@
 
 **Files:**
 
-- Modify: `sports_coach_engine/api/plan.py`
+- Modify: `resilio/api/plan.py`
 - Test: `tests/unit/test_api_plan.py`
 
 **Step 1: Write failing test (template shape + placeholders)**
@@ -33,7 +33,7 @@ Expected: FAIL (function missing)
 
 **Step 3: Implement minimal API helper**
 
-Add to `sports_coach_engine/api/plan.py`:
+Add to `resilio/api/plan.py`:
 - `build_macro_template(total_weeks: int)`
   - Validate total_weeks > 0
   - Return dict:
@@ -55,18 +55,18 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-git add tests/unit/test_api_plan.py sports_coach_engine/api/plan.py
+git add tests/unit/test_api_plan.py resilio/api/plan.py
 git commit -m "feat: add macro plan template generator"
 ```
 
 ---
 
-### Task 2: Add CLI command `sce plan template-macro`
+### Task 2: Add CLI command `resilio plan template-macro`
 
 **Files:**
 
-- Modify: `sports_coach_engine/cli/commands/plan.py`
-- Modify: `sports_coach_engine/api/__init__.py`
+- Modify: `resilio/cli/commands/plan.py`
+- Modify: `resilio/api/__init__.py`
 
 **Step 1: Implement CLI command**
 
@@ -82,12 +82,12 @@ Add to `plan.py`:
 
 **Step 2: Export API helper**
 
-Expose `build_macro_template` in `sports_coach_engine/api/__init__.py`.
+Expose `build_macro_template` in `resilio/api/__init__.py`.
 
 **Step 3: Manual sanity check**
 
 ```bash
-sce plan template-macro --total-weeks 4 --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks 4 --out /tmp/macro_template.json
 ```
 
 Expected: file written with null placeholders.
@@ -95,17 +95,17 @@ Expected: file written with null placeholders.
 **Step 4: Commit**
 
 ```bash
-git add sports_coach_engine/cli/commands/plan.py sports_coach_engine/api/__init__.py
-git commit -m "feat: add sce plan template-macro"
+git add resilio/cli/commands/plan.py resilio/api/__init__.py
+git commit -m "feat: add resilio plan template-macro"
 ```
 
 ---
 
-### Task 3: Refactor `sce plan create-macro` to require template schema
+### Task 3: Refactor `resilio plan create-macro` to require template schema
 
 **Files:**
 
-- Modify: `sports_coach_engine/cli/commands/plan.py`
+- Modify: `resilio/cli/commands/plan.py`
 
 **Step 1: Rename flag**
 
@@ -116,7 +116,7 @@ git commit -m "feat: add sce plan template-macro"
 
 - Require `template_version == "macro_template_v1"`
 - Require `total_weeks` in template matches CLI `--total-weeks`
-- If missing, return validation error with next_steps: `sce plan template-macro ...`
+- If missing, return validation error with next_steps: `resilio plan template-macro ...`
 
 **Step 3: Reject placeholders explicitly**
 
@@ -133,7 +133,7 @@ Add a placeholder scan before validating:
 **Step 5: Commit**
 
 ```bash
-git add sports_coach_engine/cli/commands/plan.py
+git add resilio/cli/commands/plan.py
 git commit -m "refactor: require macro template for create-macro"
 ```
 
@@ -152,17 +152,17 @@ git commit -m "refactor: require macro template for create-macro"
 
 New flow:
 ```bash
-sce plan template-macro --total-weeks <N> --out /tmp/macro_template.json
+resilio plan template-macro --total-weeks <N> --out /tmp/macro_template.json
 # AI coach fills template
-sce plan create-macro ... --macro-template-json /tmp/macro_template.json
-sce plan export-structure --out-dir /tmp
-sce plan validate-structure ...
+resilio plan create-macro ... --macro-template-json /tmp/macro_template.json
+resilio plan export-structure --out-dir /tmp
+resilio plan validate-structure ...
 ```
 
 **Step 2: Update CLI docs**
 
-- Add `sce plan template-macro`
-- Update `sce plan create-macro` to reference `--macro-template-json`
+- Add `resilio plan template-macro`
+- Update `resilio plan create-macro` to reference `--macro-template-json`
 - Remove any manual JSON instructions
 
 **Step 3: Commit**

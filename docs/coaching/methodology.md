@@ -1,6 +1,6 @@
 # Training Methodology Reference
 
-Comprehensive guide to the training principles, metrics, and methodologies used in Sports Coach Engine.
+Comprehensive guide to the training principles, metrics, and methodologies used in Resilio.
 
 ## Table of Contents
 
@@ -157,7 +157,7 @@ ACWR = acute_load / chronic_load
 
 ### Two-Channel Load Model
 
-Sports Coach Engine uses a **two-channel load model** to accurately account for multi-sport training:
+Resilio uses a **two-channel load model** to accurately account for multi-sport training:
 
 1. **Systemic load** (`systemic_load_au`): Cardio + whole-body fatigue → feeds CTL/ATL/TSB/ACWR
 2. **Lower-body load** (`lower_body_load_au`): Leg strain + impact → gates quality/long runs
@@ -293,7 +293,7 @@ Minimum workout durations prevent unrealistic short workouts when weekly volume 
 - Tempo runs: 40 minutes total (including warmup/cooldown)
 - Intervals: 35 minutes total (including warmup/cooldown)
 
-**Profile-aware minimums**: Use `sce profile analyze` to populate `typical_*` fields so minimums scale to the athlete's history. If weekly volume is too low to meet minimums at the current run frequency, reduce run count rather than prescribing unrealistic short runs.
+**Profile-aware minimums**: Use `resilio profile analyze` to populate `typical_*` fields so minimums scale to the athlete's history. If weekly volume is too low to meet minimums at the current run frequency, reduce run count rather than prescribing unrealistic short runs.
 
 **Max session constraint**: Always cap workouts at the athlete's `max_time_per_session_minutes`. If the weekly volume target can't be achieved within that cap, lower weekly volume or adjust constraints (never schedule over-cap sessions).
 
@@ -313,7 +313,7 @@ Minimum workout durations prevent unrealistic short workouts when weekly volume 
 
 ## Evidence-Based Methodologies
 
-Sports Coach Engine synthesizes principles from multiple proven training systems:
+Resilio synthesizes principles from multiple proven training systems:
 
 ### 1. Jack Daniels' VDOT System
 
@@ -413,7 +413,7 @@ Sports Coach Engine synthesizes principles from multiple proven training systems
 - Key workouts: long run, tempo, intervals
 - Cross-training fills aerobic volume (cycling, swimming, etc.)
 
-**Sports Coach Engine Adaptation**:
+**Resilio Adaptation**:
 
 - Use FIRST structure for low-frequency running
 - Account for systemic load from other sports (climbing, cycling, etc.)
@@ -431,7 +431,7 @@ Sports Coach Engine synthesizes principles from multiple proven training systems
 
 ### Core Innovation: AI Reasoning + Computational Tools
 
-**THE PARADIGM SHIFT**: Every other training app uses hardcoded algorithms to generate plans and suggestions. Sports Coach Engine uses **AI reasoning + computational tools** to enable truly personalized, context-aware, explainable coaching.
+**THE PARADIGM SHIFT**: Every other training app uses hardcoded algorithms to generate plans and suggestions. Resilio uses **AI reasoning + computational tools** to enable truly personalized, context-aware, explainable coaching.
 
 ### Traditional Apps (Algorithm-Driven)
 
@@ -448,7 +448,7 @@ Problem: Can't handle "I climb Tuesdays, have knee history, prefer morning runs"
 - Can't handle edge cases or multi-sport complexity
 - Can't learn from conversation or memories
 
-### Sports Coach Engine (Toolkit-Driven)
+### Resilio (Toolkit-Driven)
 
 ```
 Toolkit: calculate_periodization(), validate_guardrails(), create_workout()
@@ -571,7 +571,7 @@ The two-channel load model requires planning:
 
 ```bash
 # Calculate running volumes using guardrails
-sce guardrails safe-volume --ctl 44.0  # → 35-50 km safe range
+resilio guardrails safe-volume --ctl 44.0  # → 35-50 km safe range
 
 # Fill macro template:
 # weekly_volumes_km: [40.0, 42.0, 45.0, ...]
@@ -582,7 +582,7 @@ sce guardrails safe-volume --ctl 44.0  # → 35-50 km safe range
 
 ```bash
 # 1. Analyze current multi-sport load distribution
-sce analysis load
+resilio analysis load
 
 # 2. Calculate total systemic load targets
 # Example: Week 8 target = 118 AU total systemic load
@@ -604,7 +604,7 @@ sce analysis load
 
 ### For Daily Coaching
 
-1. **Always check current metrics first**: `sce status`
+1. **Always check current metrics first**: `resilio status`
 2. **Reference actual data**: "Your ACWR is 1.35..." not "Maybe rest today"
 3. **Use triggers as coaching cues**: ACWR elevated → discuss options
 4. **Consider multi-sport context**: "You climbed yesterday (340 AU systemic, 52 AU lower-body)"

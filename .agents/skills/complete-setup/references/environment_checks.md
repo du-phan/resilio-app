@@ -21,7 +21,7 @@ Run checks in this order only:
 ### 1) Repo root
 
 ```bash
-[ -f pyproject.toml ] && [ -d sports_coach_engine ]
+[ -f pyproject.toml ] && [ -d resilio ]
 ```
 
 ### 2) Platform
@@ -59,10 +59,10 @@ fi
 ### 5) Package runnable check
 
 ```bash
-if command -v sce >/dev/null 2>&1; then
-  sce --help
+if command -v resilio >/dev/null 2>&1; then
+  resilio --help
 elif poetry --version >/dev/null 2>&1; then
-  poetry run sce --help
+  poetry run resilio --help
 else
   false
 fi
@@ -71,8 +71,8 @@ fi
 ### 6) Config check (only after package runnable)
 
 ```bash
-sce status
-# or: poetry run sce status
+resilio status
+# or: poetry run resilio status
 ```
 
 Interpretation:
@@ -86,10 +86,10 @@ Environment is ready when all pass:
 
 - [ ] `uname` is `Darwin`
 - [ ] `PYTHON_CMD` resolved and version is >= 3.11
-- [ ] `sce --help` (or `poetry run sce --help`) succeeds
+- [ ] `resilio --help` (or `poetry run resilio --help`) succeeds
 - [ ] `config/settings.yaml` exists
 - [ ] `config/secrets.local.yaml` exists
-- [ ] `sce status` (or `poetry run sce status`) succeeds
+- [ ] `resilio status` (or `poetry run resilio status`) succeeds
 
 ## Safety reminders
 

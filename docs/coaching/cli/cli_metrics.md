@@ -5,20 +5,20 @@
 Commands to get current training metrics, weekly summaries, and daily workout recommendations.
 
 **Commands in this category:**
-- `sce status` - Get current training metrics with interpretations
-- `sce week` - Get weekly summary with planned vs completed activities
-- `sce today` - Get today's workout recommendation with full context
+- `resilio status` - Get current training metrics with interpretations
+- `resilio week` - Get weekly summary with planned vs completed activities
+- `resilio today` - Get today's workout recommendation with full context
 
 ---
 
-## sce status
+## resilio status
 
 Get current training metrics with interpretations.
 
 **Usage:**
 
 ```bash
-sce status
+resilio status
 ```
 
 **Returns:**
@@ -73,14 +73,14 @@ sce status
 
 ---
 
-## sce week
+## resilio week
 
 Get weekly summary with planned vs completed activities.
 
 **Usage:**
 
 ```bash
-sce week
+resilio week
 ```
 
 **Returns:**
@@ -132,7 +132,7 @@ sce week
 
 ---
 
-## sce today
+## resilio today
 
 Get today's workout recommendation with full context.
 
@@ -140,10 +140,10 @@ Get today's workout recommendation with full context.
 
 ```bash
 # Today's workout
-sce today
+resilio today
 
 # Specific date
-sce today --date 2026-01-20
+resilio today --date 2026-01-20
 ```
 
 **Returns:**

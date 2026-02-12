@@ -5,21 +5,21 @@
 Computational date utilities for training plans. Training weeks always run Monday-Sunday. Never do mental date math; always use these commands.
 
 **Commands in this category:**
-- `sce dates today` - Current date and next Monday
-- `sce dates next-monday` - Calculate the next Monday from a given date
-- `sce dates week-boundaries` - Get Monday-Sunday range for a week
-- `sce dates validate` - Verify a date is a specific weekday
+- `resilio dates today` - Current date and next Monday
+- `resilio dates next-monday` - Calculate the next Monday from a given date
+- `resilio dates week-boundaries` - Get Monday-Sunday range for a week
+- `resilio dates validate` - Verify a date is a specific weekday
 
 ---
 
-## sce dates today
+## resilio dates today
 
 Get today's date with day name and next Monday.
 
 **Usage:**
 
 ```bash
-sce dates today
+resilio dates today
 ```
 
 **Returns:**
@@ -31,15 +31,15 @@ sce dates today
 
 ---
 
-## sce dates next-monday
+## resilio dates next-monday
 
 Get the next Monday from a given date (or today by default).
 
 **Usage:**
 
 ```bash
-sce dates next-monday
-sce dates next-monday --from-date 2026-01-17
+resilio dates next-monday
+resilio dates next-monday --from-date 2026-01-17
 ```
 
 **Returns:**
@@ -50,14 +50,14 @@ sce dates next-monday --from-date 2026-01-17
 
 ---
 
-## sce dates week-boundaries
+## resilio dates week-boundaries
 
 Get Monday-Sunday boundaries for a week.
 
 **Usage:**
 
 ```bash
-sce dates week-boundaries --start 2026-01-19
+resilio dates week-boundaries --start 2026-01-19
 ```
 
 **Returns:**
@@ -68,15 +68,15 @@ sce dates week-boundaries --start 2026-01-19
 
 ---
 
-## sce dates validate
+## resilio dates validate
 
 Validate that a date is a specific weekday.
 
 **Usage:**
 
 ```bash
-sce dates validate --date 2026-01-19 --must-be monday
-sce dates validate --date 2026-01-25 --must-be sunday
+resilio dates validate --date 2026-01-19 --must-be monday
+resilio dates validate --date 2026-01-25 --must-be sunday
 ```
 
 **Returns:**

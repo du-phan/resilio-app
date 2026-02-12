@@ -24,7 +24,7 @@ Use in athlete-facing outputs. Do not repeat unless the athlete asks. For multi-
 
 ### Calculating VDOT
 ```bash
-sce vdot calculate --race-type 10k --time 42:30
+resilio vdot calculate --race-type 10k --time 42:30
 # Returns: VDOT 48
 ```
 
@@ -147,7 +147,7 @@ sce vdot calculate --race-type 10k --time 42:30
 
 ### From VDOT
 ```bash
-sce vdot paces --vdot 48
+resilio vdot paces --vdot 48
 ```
 
 **Returns**:
@@ -161,7 +161,7 @@ R-pace: 3:50-4:10/km (800m repeats)
 
 ### Adjusting for Conditions
 ```bash
-sce vdot adjust --pace 5:00 --condition altitude --severity 7000
+resilio vdot adjust --pace 5:00 --condition altitude --severity 7000
 # Returns adjusted pace for 7,000 ft elevation
 ```
 
@@ -334,19 +334,19 @@ sce vdot adjust --pace 5:00 --condition altitude --severity 7000
 
 ```bash
 # Calculate VDOT from race
-sce vdot calculate --race-type 10k --time 42:30
+resilio vdot calculate --race-type 10k --time 42:30
 
 # Get training paces
-sce vdot paces --vdot 48
+resilio vdot paces --vdot 48
 
 # Predict equivalent race times
-sce vdot predict --race-type 10k --time 42:30
+resilio vdot predict --race-type 10k --time 42:30
 
 # Apply six-second rule (novice runners)
-sce vdot six-second --mile-time 7:00
+resilio vdot six-second --mile-time 7:00
 
 # Adjust pace for conditions
-sce vdot adjust --pace 5:00 --condition altitude --severity 7000
+resilio vdot adjust --pace 5:00 --condition altitude --severity 7000
 ```
 
 ---

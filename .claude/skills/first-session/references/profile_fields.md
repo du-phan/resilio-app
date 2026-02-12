@@ -2,7 +2,7 @@
 
 ## Overview
 
-The profile system supports 28 fields accessible via `sce profile set` and `sce profile get`. Use natural conversation to gather most values, not chat-based numbered options.
+The profile system supports 28 fields accessible via `resilio profile set` and `resilio profile get`. Use natural conversation to gather most values, not chat-based numbered options.
 
 ---
 
@@ -15,7 +15,7 @@ The profile system supports 28 fields accessible via `sce profile set` and `sce 
 ```
 Coach: "What's your name?"
 Athlete: "Alex"
-Command: sce profile set --name "Alex"
+Command: resilio profile set --name "Alex"
 ```
 
 ### age (integer)
@@ -25,7 +25,7 @@ Command: sce profile set --name "Alex"
 ```
 Coach: "How old are you?"
 Athlete: "32"
-Command: sce profile set --age 32
+Command: resilio profile set --age 32
 ```
 
 ---
@@ -34,12 +34,12 @@ Command: sce profile set --age 32
 
 ### max-hr (integer)
 **What**: Maximum heart rate
-**How to gather**: Reference `sce profile analyze` data first
+**How to gather**: Reference `resilio profile analyze` data first
 **Example**:
 ```
 Coach: "Looking at your Strava data, your peak HR is 199 bpm. Use that as your max HR?"
 Athlete: "Yes" OR "Actually, I think it's 190"
-Command: sce profile set --max-hr 199
+Command: resilio profile set --max-hr 199
 ```
 
 **If no data available**: Use age-based estimate (220 - age) as starting point, verify later
@@ -47,7 +47,7 @@ Command: sce profile set --max-hr 199
 ### resting-hr (integer, optional)
 **What**: Resting heart rate (morning, before getting up)
 **How to gather**: Natural conversation
-**Example**: `sce profile set --resting-hr 52`
+**Example**: `resilio profile set --resting-hr 52`
 
 ---
 
@@ -60,13 +60,13 @@ Command: sce profile set --max-hr 199
 ```
 Coach: "How many days per week can you realistically run?"
 Athlete: "4 days works best for me"
-Command: sce profile set --max-run-days 4
+Command: resilio profile set --max-run-days 4
 ```
 
 ### min-run-days (integer, optional)
 **What**: Minimum running days per week
 **Default**: 3 if not specified
-**Example**: `sce profile set --min-run-days 3`
+**Example**: `resilio profile set --min-run-days 3`
 
 ### max-session-minutes (integer)
 **What**: Longest session duration in minutes
@@ -75,7 +75,7 @@ Command: sce profile set --max-run-days 4
 ```
 Coach: "What's the longest time you can spend on a long run?"
 Athlete: "About 2 hours max"
-Command: sce profile set --max-session-minutes 120
+Command: resilio profile set --max-session-minutes 120
 ```
 
 ### unavailable-days (comma-separated)
@@ -88,7 +88,7 @@ Command: sce profile set --max-session-minutes 120
 ```
 Coach: "Are there any days you absolutely CANNOT run?"
 Athlete: "Tuesdays and Thursdays - that's climbing night"
-Command: sce profile set --unavailable-days "tuesday,thursday"
+Command: resilio profile set --unavailable-days "tuesday,thursday"
 ```
 
 **If athlete says "all days work"**: Don't specify --unavailable-days (defaults to empty)
@@ -111,7 +111,7 @@ Command: sce profile set --unavailable-days "tuesday,thursday"
 ```
 Coach: "Your activities show running (28%) and climbing (42%). Which is your primary sport?"
 Athlete: "They're equal - I'm committed to both"
-Command: sce profile set --run-priority equal
+Command: resilio profile set --run-priority equal
 ```
 
 ### conflict-policy (string)
@@ -141,13 +141,13 @@ Command: sce profile set --run-priority equal
 
 1. **Frequency only** (fully flexible):
 ```bash
-sce profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
+resilio profile add-sport --sport climbing --frequency 3 --duration 120 --intensity moderate_to_hard
 # "I climb 3x/week but the days change"
 ```
 
 2. **Frequency + unavailable days**:
 ```bash
-sce profile add-sport --sport yoga --frequency 2 --unavailable-days "sunday" --duration 60 --intensity easy
+resilio profile add-sport --sport yoga --frequency 2 --unavailable-days "sunday" --duration 60 --intensity easy
 # "I do yoga twice a week, but not Sundays"
 ```
 
@@ -155,37 +155,37 @@ sce profile add-sport --sport yoga --frequency 2 --unavailable-days "sunday" --d
 Use this when an athlete temporarily stops a sport (e.g., focus on running, injury, illness).
 
 ```bash
-sce profile pause-sport --sport climbing --reason focus_running
-sce profile resume-sport --sport climbing
+resilio profile pause-sport --sport climbing --reason focus_running
+resilio profile resume-sport --sport climbing
 ```
 
 **List all sports**:
 ```bash
-sce profile list-sports
+resilio profile list-sports
 ```
 
 **Remove sport**:
 ```bash
-sce profile remove-sport --sport yoga
+resilio profile remove-sport --sport yoga
 ```
 
 ---
 
 ## Goal & Race Information
 
-### current-goal-distance (string, set via sce goal)
+### current-goal-distance (string, set via resilio goal)
 **What**: Current race distance goal
 **Values**: "5k", "10k", "half_marathon", "marathon"
-**Set via**: `sce goal --type half_marathon --date 2026-06-01`
+**Set via**: `resilio goal --type half_marathon --date 2026-06-01`
 
-### current-goal-date (date, set via sce goal)
+### current-goal-date (date, set via resilio goal)
 **What**: Race date
 **Format**: YYYY-MM-DD
-**Set via**: Same `sce goal` command above
+**Set via**: Same `resilio goal` command above
 
 ### current-goal-time (string, optional)
 **What**: Goal race time (e.g., "1:30:00" for half marathon)
-**Set via**: `sce goal --type half_marathon --date 2026-06-01 --time "1:30:00"`
+**Set via**: `resilio goal --type half_marathon --date 2026-06-01 --time "1:30:00"`
 
 ---
 
@@ -211,7 +211,7 @@ See main SKILL.md Step 4b for memory-based injury storage.
 **What**: Daniels' VDOT fitness score
 **Source**: Calculated from recent race times or tempo efforts
 **Usage**: Determines training pace zones
-**Command**: `sce vdot calculate --race-type 10k --time 42:30`
+**Command**: `resilio vdot calculate --race-type 10k --time 42:30`
 
 ### ctl-baseline (float, auto)
 **What**: CTL at start of plan
@@ -224,30 +224,30 @@ See main SKILL.md Step 4b for memory-based injury storage.
 
 ### View Profile
 ```bash
-sce profile get
+resilio profile get
 # Returns JSON with all fields
 ```
 
 ### Edit Profile (Advanced)
 ```bash
-sce profile edit
+resilio profile edit
 # Opens profile in $EDITOR (vim, nano, etc.)
 ```
 
 ### Analyze Strava Data
 ```bash
-sce profile analyze
+resilio profile analyze
 # Returns suggested values from synced activities
 ```
 
 ### Set Multiple Fields at Once
 ```bash
-sce profile set --name "Alex" --age 32 --max-hr 190 --max-run-days 4 --conflict-policy ask_each_time
+resilio profile set --name "Alex" --age 32 --max-hr 190 --max-run-days 4 --conflict-policy ask_each_time
 ```
 
 ### Update Individual Field
 ```bash
-sce profile set --max-hr 185
+resilio profile set --max-hr 185
 # Only updates max-hr, leaves other fields unchanged
 ```
 
@@ -260,7 +260,7 @@ sce profile set --max-hr 185
 - `age`
 - `max-hr`
 - `max-run-days`
-- Current goal (set via `sce goal`)
+- Current goal (set via `resilio goal`)
 
 ### Optional But Recommended
 - `max-session-minutes` (defaults to 180 if not set)
@@ -288,9 +288,9 @@ sce profile set --max-hr 185
 | unavailable-days | csv | No (default: empty) | Natural conversation |
 | run-priority | string | Yes if multi-sport | Natural conversation |
 | conflict-policy | string | Yes if multi-sport | **chat-based numbered options** |
-| current-goal-distance | string | Yes | `sce goal` command |
-| current-goal-date | date | Yes | `sce goal` command |
-| current-goal-time | string | No | `sce goal` command |
+| current-goal-distance | string | Yes | `resilio goal` command |
+| current-goal-date | date | Yes | `resilio goal` command |
+| current-goal-time | string | No | `resilio goal` command |
 | vdot | float | Auto | Calculated from races |
 | ctl-baseline | float | Auto | Set when plan created |
 | training-age | integer | Auto | From Strava analysis |
@@ -302,4 +302,4 @@ sce profile set --max-hr 185
 ## Additional Resources
 
 - **CLI Reference**: [Profile Commands](../../../docs/coaching/cli/cli_profile.md)
-- **Profile JSON schema**: See `sports_coach_engine/models/profile.py`
+- **Profile JSON schema**: See `resilio/models/profile.py`
