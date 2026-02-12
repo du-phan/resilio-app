@@ -23,7 +23,6 @@ from sports_coach_engine.api.metrics import get_current_metrics, get_readiness, 
 from sports_coach_engine.api.plan import get_current_plan, regenerate_plan, PlanError
 from sports_coach_engine.api.profile import get_profile, update_profile, set_goal, ProfileError
 from sports_coach_engine.schemas.profile import AthleteProfile, Goal, GoalType, TrainingConstraints, ConflictPolicy, Weekday, RunningPriority
-from sports_coach_engine.schemas.enrichment import SyncSummary
 from sports_coach_engine.schemas.activity import NormalizedActivity
 
 

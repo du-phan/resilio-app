@@ -29,7 +29,6 @@ from sports_coach_engine.schemas.enrichment import (
     PaceGuidance,
     PrimarySignals,
     ReadinessSummary,
-    SyncSummary,
     WorkoutRationale,
 )
 from sports_coach_engine.schemas.metrics import DailyMetrics, WeeklySummary

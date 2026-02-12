@@ -81,6 +81,10 @@ sce auth status
 sce sync  # First-time: targets up to 365 days automatically
 ```
 
+**Operational monitoring**:
+- Use `sce sync --status` to check if sync is actively running, lock health, heartbeat progress, and persisted resume cursor state.
+- Do not use `ps` polling or ad-hoc process grep to infer sync status.
+
 **Post-sync overview (MANDATORY)**
 After every `sce sync`, give the athlete a brief overview. Use the sync command output (JSON envelope or success message); run `sce profile analyze` to get the exact date range.
 

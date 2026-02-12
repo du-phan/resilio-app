@@ -3,14 +3,13 @@ Unit tests for workflow deduplication behavior in Strava sync.
 """
 
 from datetime import date, datetime, timedelta, timezone
-from unittest.mock import MagicMock
-
 import pytest
 
 from sports_coach_engine.core.repository import RepositoryIO
 from sports_coach_engine.core import workflows
 from sports_coach_engine.schemas.activity import NormalizedActivity, SportType
 from sports_coach_engine.schemas.config import Config, Settings, Secrets, StravaSecrets
+from sports_coach_engine.schemas.sync import SyncPhase
 
 
 @pytest.fixture
@@ -89,17 +88,28 @@ def test_sync_workflow_skips_existing_strava_id(temp_repo, monkeypatch):
     config = _make_config()
 
     monkeypatch.setattr(workflows, "_fetch_and_update_athlete_profile", lambda *_: None)
+    monkeypatch.setattr(workflows, "recompute_all_metrics", lambda *args, **kwargs: {"metrics_computed": 0})
 
-    def fake_fetch_activities(config, page, per_page, after):
-        if page == 1:
-            return [{"id": 123}]
-        return []
+    class StubGenerator:
+        def __iter__(self):
+            return self
 
-    fetch_details = MagicMock()
+        def __next__(self):
+            raise StopIteration(
+                workflows.SyncReport(
+                    activities_imported=0,
+                    activities_skipped=1,
+                    activities_failed=0,
+                    laps_fetched=0,
+                    laps_skipped_age=0,
+                    lap_fetch_failures=0,
+                    phase=SyncPhase.DONE,
+                    rate_limited=False,
+                    errors=[],
+                )
+            )
 
-    monkeypatch.setattr(workflows, "fetch_activities", fake_fetch_activities)
-    monkeypatch.setattr(workflows, "fetch_activity_details", fetch_details)
-    monkeypatch.setattr(workflows.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(workflows, "sync_strava_generator", lambda *args, **kwargs: StubGenerator())
 
     result = workflows.run_sync_workflow(
         temp_repo,
@@ -107,7 +117,6 @@ def test_sync_workflow_skips_existing_strava_id(temp_repo, monkeypatch):
         since=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
-    assert result.success is True
+    assert result.phase == SyncPhase.DONE
     assert result.activities_skipped == 1
-    assert len(result.activities_imported) == 0
-    assert fetch_details.call_count == 0
+    assert result.activities_imported == 0

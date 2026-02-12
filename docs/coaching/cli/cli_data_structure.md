@@ -101,7 +101,11 @@ Progress messages show:
 **To monitor in real-time** (separate terminal):
 ```bash
 watch -n 2 'find data/activities -name "*.yaml" | wc -l'
+# or use built-in sync observability:
+sce sync --status
 ```
+
+`sce sync --status` reports persisted resume cursor state (`data/athlete/training_history.yaml`) and live heartbeat progress (`config/.sync_progress.json`).
 
 ### After Sync Completion
 

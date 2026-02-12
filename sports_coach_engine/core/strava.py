@@ -23,7 +23,7 @@ OAuth Flow:
 """
 
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Generator
+from typing import Optional, Callable
 from uuid import uuid4
 import logging
 import time
@@ -42,9 +42,9 @@ from sports_coach_engine.schemas.activity import (
     ActivitySource,
     LapData,
     RawActivity,
-    SyncResult,
 )
 from sports_coach_engine.schemas.config import Config
+from sports_coach_engine.schemas.sync import SyncPhase, SyncReport
 
 
 # ============================================================
@@ -380,6 +380,12 @@ def fetch_activity_details(config: Config, activity_id: str) -> dict:
 
             if response.status_code == 401:
                 raise StravaAuthError("Invalid or expired token")
+            elif response.status_code == 429:
+                retry_after = response.headers.get("Retry-After")
+                raise StravaRateLimitError(
+                    "Rate limit exceeded",
+                    retry_after=int(retry_after) if retry_after else None,
+                )
             elif response.status_code != 200:
                 raise StravaAPIError(
                     f"Activity detail fetch failed: {response.status_code}",
@@ -540,6 +546,8 @@ def sync_strava_generator(
     lookback_days: Optional[int] = DEFAULT_SYNC_LOOKBACK_DAYS,
     existing_ids: Optional[set[str]] = None,
     since: Optional[datetime] = None,
+    before: Optional[int] = None,
+    progress_hook: Optional[Callable[[dict], None]] = None,
 ):
     """
     Sync activities from Strava (Greedy Reverse-Chronological) as a generator.
@@ -565,7 +573,7 @@ def sync_strava_generator(
         RawActivity: Each activity as it's fetched and mapped
 
     Returns:
-        SyncResult: Final sync result (via StopIteration)
+        SyncReport: Final sync report (via StopIteration)
 
     Raises:
         StravaAuthError: If authentication fails
@@ -611,6 +619,7 @@ def sync_strava_generator(
     start_time = datetime.now(timezone.utc)
     activities_yielded = 0
     errors = []
+    activity_failures = 0
     skipped_count = 0
     lap_fetch_failures = 0  # Track lap fetch failures for user visibility
     laps_fetched = 0  # Track successful lap fetches
@@ -620,27 +629,71 @@ def sync_strava_generator(
     current_month = None  # Will be set to (year, month) tuple
     month_activity_count = 0
 
-    # Pagination loop (Newest -> Oldest)
-    page = 1
+    # Cursor-based pagination loop (newest -> oldest)
+    page = 0
+    cursor_before = before
     stop_sync = False
     rate_limit_hit = False
 
+    def emit_progress(payload: dict) -> None:
+        if progress_hook is None:
+            return
+        try:
+            progress_hook(payload)
+        except Exception:
+            logger.debug("Progress hook failed", exc_info=True)
+
     try:
+        emit_progress(
+            {
+                "phase": SyncPhase.FETCHING.value,
+                "current_page": page,
+                "activities_seen": activities_yielded,
+                "activities_skipped": skipped_count,
+                "activities_failed": activity_failures,
+                "cursor_before_timestamp": cursor_before,
+            }
+        )
+
         while not stop_sync:
             try:
-                # Fetch page of activities
-                logger.debug(f"Fetching page {page}...")
+                # Fetch one page bounded by current cursor
+                page += 1
+                logger.debug("Fetching cursor page %s (before=%s)...", page, cursor_before)
+                emit_progress(
+                    {
+                        "phase": SyncPhase.FETCHING.value,
+                        "current_page": page,
+                        "activities_seen": activities_yielded,
+                        "activities_skipped": skipped_count,
+                        "activities_failed": activity_failures,
+                        "cursor_before_timestamp": cursor_before,
+                    }
+                )
                 activities_page = fetch_activities(
                     config,
-                    page=page,
+                    page=1,
                     per_page=50,
-                    # Intentionally NO 'after' param to get newest first (default)
+                    before=cursor_before,
                 )
 
                 if not activities_page:
                     break  # No more activities
 
+                oldest_timestamp_in_page = None
                 for activity_summary in activities_page:
+                    # Track cursor boundary from summary payload
+                    try:
+                        summary_start = activity_summary.get("start_date") or activity_summary.get("start_date_local")
+                        if summary_start:
+                            summary_ts = int(
+                                datetime.fromisoformat(summary_start.replace("Z", "+00:00")).timestamp()
+                            )
+                            if oldest_timestamp_in_page is None or summary_ts < oldest_timestamp_in_page:
+                                oldest_timestamp_in_page = summary_ts
+                    except (ValueError, TypeError):
+                        pass
+
                     # Check date cutoff
                     try:
                         act_date_str = activity_summary["start_date_local"]
@@ -710,6 +763,17 @@ def sync_strava_generator(
                         raw_activity = map_strava_to_raw(activity_detail, laps_data=laps_data)
                         activities_yielded += 1
                         yield raw_activity  # Stream immediately
+                        emit_progress(
+                            {
+                                "phase": SyncPhase.FETCHING.value,
+                                "current_page": page,
+                                "activities_seen": activities_yielded,
+                                "activities_skipped": skipped_count,
+                                "activities_failed": activity_failures,
+                                "current_month": f"{act_date.year:04d}-{act_date.month:02d}",
+                                "cursor_before_timestamp": cursor_before,
+                            }
+                        )
 
                         # Show progress when moving to a new month (reverse chronological: newest → oldest)
                         activity_month = (act_date.year, act_date.month)
@@ -737,22 +801,40 @@ def sync_strava_generator(
                         break
                     except Exception as e:
                         errors.append(f"Activity {activity_summary['id']}: {str(e)}")
+                        activity_failures += 1
                         continue
 
                 if stop_sync:
                     break
 
-                page += 1
+                if oldest_timestamp_in_page is None:
+                    errors.append("Failed to compute pagination cursor from fetched page")
+                    break
+
+                # Next page should fetch activities older than the oldest item in this page.
+                cursor_before = max(oldest_timestamp_in_page - 1, 0)
+
+                emit_progress(
+                    {
+                        "phase": SyncPhase.FETCHING.value,
+                        "current_page": page,
+                        "activities_seen": activities_yielded,
+                        "activities_skipped": skipped_count,
+                        "activities_failed": activity_failures,
+                        "cursor_before_timestamp": cursor_before,
+                    }
+                )
+
                 # Respect rate limits between pages
                 time.sleep(DEFAULT_WAIT_BETWEEN_REQUESTS)
 
             except StravaRateLimitError:
-                 logger.warning(f"Strava rate limit hit during page {page} fetch. Pausing sync.")
-                 print(f"[Sync] Rate limit reached at {activities_yielded} activities. Pausing sync.", flush=True)
-                 print(f"[Sync] Data saved successfully. Run 'sce sync' again in 15 minutes to continue.", flush=True)
-                 rate_limit_hit = True
-                 stop_sync = True
-                 break
+                logger.warning(f"Strava rate limit hit during page {page} fetch. Pausing sync.")
+                print(f"[Sync] Rate limit reached at {activities_yielded} activities. Pausing sync.", flush=True)
+                print(f"[Sync] Data saved successfully. Run 'sce sync' again in 15 minutes to continue.", flush=True)
+                rate_limit_hit = True
+                stop_sync = True
+                break
             except Exception as e:
                 errors.append(f"Page {page} fetch failed: {str(e)}")
                 break
@@ -767,22 +849,39 @@ def sync_strava_generator(
         end_time = datetime.now(timezone.utc)
         duration = (end_time - start_time).total_seconds()
 
-        # Create sync result
-        sync_result = SyncResult(
-            success=len(errors) == 0,
-            activities_fetched=0,
-            activities_new=activities_yielded,
-            activities_updated=0,
+        phase = SyncPhase.DONE
+        if rate_limit_hit:
+            phase = SyncPhase.PAUSED_RATE_LIMIT
+        elif errors:
+            phase = SyncPhase.FAILED
+
+        if rate_limit_hit:
+            errors.append("Strava API Rate Limit Reached - Sync Paused")
+
+        # Create sync report
+        sync_result = SyncReport(
+            activities_imported=activities_yielded,
             activities_skipped=skipped_count,
-            errors=errors,
-            sync_duration_seconds=duration,
+            activities_failed=activity_failures,
             laps_fetched=laps_fetched,
             laps_skipped_age=laps_skipped_age,
             lap_fetch_failures=lap_fetch_failures,
+            phase=phase,
+            rate_limited=rate_limit_hit,
+            errors=errors,
         )
 
-        if rate_limit_hit:
-            sync_result.errors.append("Strava API Rate Limit Reached - Sync Paused")
+        emit_progress(
+            {
+                "phase": phase.value,
+                "current_page": page,
+                "activities_seen": activities_yielded,
+                "activities_skipped": skipped_count,
+                "activities_failed": activity_failures,
+                "cursor_before_timestamp": cursor_before,
+                "sync_duration_seconds": duration,
+            }
+        )
 
         # Return via generator protocol
         return sync_result

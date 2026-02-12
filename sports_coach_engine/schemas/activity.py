@@ -133,31 +133,6 @@ class RawActivity(BaseModel):
     raw_data: dict = Field(default_factory=dict)  # Full API response
 
 
-class SyncState(BaseModel):
-    """
-    Tracks Strava sync progress for incremental syncs.
-    Field names match M4's training_history.yaml schema.
-    """
-
-    last_strava_sync_at: Optional[datetime] = None
-    last_strava_activity_id: Optional[str] = None
-
-
-class SyncResult(BaseModel):
-    """Result of a sync operation."""
-
-    success: bool
-    activities_fetched: int
-    activities_new: int
-    activities_updated: int
-    activities_skipped: int
-    errors: list[str] = Field(default_factory=list)
-    sync_duration_seconds: float
-    laps_fetched: int = 0  # Laps successfully fetched
-    laps_skipped_age: int = 0  # Laps skipped due to age filter (historical sync)
-    lap_fetch_failures: int = 0  # Laps fetch attempts that failed
-
-
 class ManualActivityInput(BaseModel):
     """User-provided activity data for manual logging."""
 

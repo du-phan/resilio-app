@@ -21,7 +21,6 @@ from sports_coach_engine.core.strava import (
     check_duplicate,
     create_manual_activity,
     sync_strava_generator,
-    SyncResult,
     StravaAuthError,
     StravaRateLimitError,
     StravaAPIError,
@@ -31,6 +30,7 @@ from sports_coach_engine.schemas.activity import (
     RawActivity,
 )
 from sports_coach_engine.schemas.config import Config, Secrets, Settings
+from sports_coach_engine.schemas.sync import SyncReport
 
 
 # ============================================================
@@ -266,6 +266,25 @@ class TestActivityFetching:
 
         assert activity["id"] == 123456789
         assert activity["private_note"] == "Felt strong"
+
+    @patch("sports_coach_engine.core.strava.httpx.Client")
+    @patch("sports_coach_engine.core.strava.get_valid_token")
+    def test_fetch_activity_details_rate_limit_error(self, mock_get_token, mock_client_class, mock_config):
+        """Should raise StravaRateLimitError on 429 response."""
+        mock_get_token.return_value = "valid_token"
+
+        mock_response = Mock()
+        mock_response.status_code = 429
+        mock_response.headers.get.return_value = "120"
+
+        mock_client = MagicMock()
+        mock_client.__enter__.return_value.get.return_value = mock_response
+        mock_client_class.return_value = mock_client
+
+        with pytest.raises(StravaRateLimitError) as exc_info:
+            fetch_activity_details(mock_config, "123")
+
+        assert exc_info.value.retry_after == 120
 
     @patch("sports_coach_engine.core.strava.httpx.Client")
     @patch("sports_coach_engine.core.strava.get_valid_token")
@@ -776,19 +795,22 @@ class TestSync:
         gen = sync_strava_generator(mock_config)
 
         activities = []
-        try:
-            for activity in gen:
-                activities.append(activity)
-        except StopIteration as e:
-            sync_result = e.value
+        sync_result = None
+        while True:
+            try:
+                activities.append(next(gen))
+            except StopIteration as e:
+                sync_result = e.value
+                break
 
-            # Should have partial results
-            assert len(activities) == 1
-            assert activities[0].id == "strava_1"
+        # Should have partial results
+        assert len(activities) == 1
+        assert activities[0].id == "strava_1"
 
-            # SyncResult should indicate rate limit
-            assert any("Rate Limit" in str(err) for err in sync_result.errors)
-            assert sync_result.activities_new == 1
+        # SyncReport should indicate rate limit
+        assert isinstance(sync_result, SyncReport)
+        assert any("Rate Limit" in str(err) for err in sync_result.errors)
+        assert sync_result.activities_imported == 1
 
     @patch("sports_coach_engine.core.strava.fetch_activity_details")
     @patch("sports_coach_engine.core.strava.fetch_activities")
@@ -822,19 +844,22 @@ class TestSync:
         gen = sync_strava_generator(mock_config, existing_ids=existing_ids)
 
         activities = []
-        try:
-            for activity in gen:
-                activities.append(activity)
-        except StopIteration as e:
-            sync_result = e.value
+        sync_result = None
+        while True:
+            try:
+                activities.append(next(gen))
+            except StopIteration as e:
+                sync_result = e.value
+                break
 
-            # Should only yield activity 2
-            assert len(activities) == 1
-            assert activities[0].id == "strava_2"
+        # Should only yield activity 2
+        assert len(activities) == 1
+        assert activities[0].id == "strava_2"
 
-            # SyncResult should show 2 skipped
-            assert sync_result.activities_skipped == 2
-            assert sync_result.activities_new == 1
+        # SyncReport should show 2 skipped
+        assert isinstance(sync_result, SyncReport)
+        assert sync_result.activities_skipped == 2
+        assert sync_result.activities_imported == 1
 
 
 # ============================================================

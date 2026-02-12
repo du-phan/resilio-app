@@ -2,7 +2,7 @@
 
 ## Positioning
 
-Sports Coach Engine helps athletes improve running without shrinking the rest of their training life.
+Resilio helps athletes improve running without shrinking the rest of their training life.
 It is explicitly positioned for hybrid multi-sport life (running plus other sports), not triathlon-plan positioning.
 
 ## Message Hierarchy
@@ -25,7 +25,7 @@ It is explicitly positioned for hybrid multi-sport life (running plus other spor
 ## Moat Statement (Must Preserve)
 
 Many mainstream training products are built as run-only or triathlon-centric planning experiences.
-Sports Coach Engine is built for hybrid training reality:
+Resilio is built for hybrid training reality:
 running plus sports such as bouldering, pilates, HIIT, surfing, cycling, and strength, with adaptation based on total load.
 
 ## Claim Style Guardrails

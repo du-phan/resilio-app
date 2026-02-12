@@ -224,45 +224,6 @@ class LoadInterpretation(BaseModel):
 
 
 # ============================================================
-# SYNC SUMMARY MODELS
-# ============================================================
-
-
-class SyncSummary(BaseModel):
-    """Enriched summary of a sync operation."""
-
-    activities_imported: int
-    activities_skipped: int
-    activities_failed: int
-
-    # What was imported (brief)
-    activity_types: list[str]        # ["Running", "Cycling", "Bouldering"]
-    total_duration_minutes: int
-    total_load_au: float
-
-    # Profile updates
-    profile_fields_updated: Optional[list[str]] = None  # Fields auto-filled from Strava athlete profile
-
-    # Metric changes
-    metrics_before: Optional[EnrichedMetrics] = None
-    metrics_after: Optional[EnrichedMetrics] = None  # None if enrichment fails
-    metric_changes: list[str]        # ["CTL +2", "TSB -5"]
-
-    # Suggestions
-    suggestions_generated: int
-    suggestion_summaries: list[str]  # ["Consider rest day tomorrow"]
-
-    # Errors
-    has_errors: bool
-    error_summaries: list[str]
-
-    model_config = ConfigDict(
-        use_enum_values=True,
-        populate_by_name=True,
-    )
-
-
-# ============================================================
 # SUGGESTION ENRICHMENT MODELS
 # ============================================================
 

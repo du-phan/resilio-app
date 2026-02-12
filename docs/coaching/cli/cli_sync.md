@@ -31,6 +31,21 @@ sce sync              # Smart detection
 - Automatic - no manual window calculation needed
 - Truly incremental - works whether it's been 1 day or 60 days since last sync
 
+### Sync Status (Observability)
+
+```bash
+sce sync --status
+```
+
+Returns a JSON status snapshot without running sync:
+- `running`: Whether an active non-stale sync lock exists
+- `lock`: PID/timing/staleness for `config/.workflow_lock`
+- `progress`: Last heartbeat from `config/.sync_progress.json`
+- `resume_state`: Persisted backfill cursor state
+- `activity_files_count`: Current number of synced activity files
+
+`resume_state` is sourced from `data/athlete/training_history.yaml` and `progress` is sourced from `config/.sync_progress.json`.
+
 ---
 
 ## Explicit Sync Windows
@@ -247,6 +262,9 @@ Wait 15 minutes and run 'sce sync' again to continue.
 $ sce sync
 Incremental sync: fetching activities since 2025-06-01 (245 days)...
 Synced 32 new activities from Strava.
+
+# Check runtime status at any time (another terminal)
+$ sce sync --status
 ```
 
 ---
