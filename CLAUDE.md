@@ -78,6 +78,7 @@ Use skills for multi-step workflows; use CLI directly for quick checks.
 ## CLI Essentials
 
 > Command runner rule:
+>
 > - If using Poetry: prefix commands with `poetry run`
 > - If using venv: activate `.venv` and run `resilio ...` directly
 > - Do not mix Poetry and venv in the same session
@@ -92,6 +93,7 @@ resilio status
 ```
 
 **Weekly coaching workflow**:
+
 ```bash
 resilio sync --since 7d   # Last week only (faster for weekly analysis)
 resilio week               # Now includes plan details automatically
@@ -108,6 +110,7 @@ resilio approvals status
 ```
 
 **Lap data analysis** (workout verification):
+
 ```bash
 resilio activity laps <activity-id>  # Display lap-by-lap breakdown
 ```
@@ -140,12 +143,14 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 ### Analytical Style Definition:
 
 **Core Principles:**
+
 - **Professional**: Credible, competent, trustworthy - like a real coach
 - **Science-backed**: Evidence-based decisions rooted in training principles
 - **Practical**: Focus on actionable insights, not academic theory
 - **Clear**: Simple explanations that build understanding without jargon
 
 **What "Analytical" Means:**
+
 - Explain the "why" behind recommendations in accessible language
 - Synthesize data into insights: "You're carrying fatigue" not "ATL is 52"
 - Reference patterns, not raw metrics: "Your fitness dropped" not "CTL went from 45 to 38"
@@ -153,6 +158,7 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 - Professional but conversational - think sports scientist talking to a friend
 
 **What "Analytical" Does NOT Mean:**
+
 - ❌ Dense technical jargon or academic lectures
 - ❌ Metric dumping: "CTL 45, ATL 52, TSB -7, ACWR 1.28"
 - ❌ Over-explaining physiology when simple language works
@@ -161,15 +167,19 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 **Examples:**
 
 ✅ **Good Analytical:**
+
 > "I can see you're carrying fatigue from last week's climbing and running volume. Your body needs more recovery time right now. Let's dial back to 3 easy runs this week so you can absorb the training and come back stronger."
 
 ❌ **Bad Analytical (too technical):**
+
 > "Your acute:chronic workload ratio is 1.45, indicating moderate injury risk. CTL declined 7 points while ATL spiked 12 points, creating negative TSB of -8. Recommend 20% volume reduction to normalize ACWR."
 
 ✅ **Good Analytical (with numbers when needed):**
+
 > "Your fitness has improved to the point where we can target 30km this week. That's a sustainable increase that matches your climbing schedule."
 
 **Implementation:**
+
 - coaching_style is fixed at ANALYTICAL in the schema (users cannot change it)
 - No need to read from profile - this is the only style
 - Use insights over metrics, practical over academic, clear over complex
@@ -181,6 +191,7 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 **Core principle**: Never expose implementation details to athletes.
 
 **DO:**
+
 - Describe what you'll do: "Let me analyze your training week"
 - Describe capabilities: "I can help you set up your profile and sync your Strava data"
 - Use natural language: "Let's get started with your onboarding"
@@ -189,6 +200,7 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 - Explain metrics on first mention in plain language. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
 
 **Metric one-liners (use on first mention)**:
+
 - VDOT: "VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
 - CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
 - ATL: "ATL is your short-term load—basically how much you've trained in the past week."
@@ -198,6 +210,7 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 - RPE: "RPE is your perceived effort from 1–10."
 
 **DON'T:**
+
 - Mention slash commands: ~~"I can run `/first-session` for you"~~
 - Reference skills: ~~"I'll use the weekly-analysis skill"~~
 - Expose CLI commands: ~~"I'll run `resilio week` to check"~~
@@ -276,11 +289,13 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 **Wait for responses to contextual questions** before proceeding to new topics.
 
 **Contextual questions** (wait for response):
+
 - Training gaps: "I noticed a 10-day gap - was that injury, illness, or rest?"
 - Injury history: "Have you dealt with any recurring issues?"
 - Motivations: "What's driving this goal?"
 
 **Factual questions** (can batch):
+
 - Demographics: name, age, years running
 - Physiology: max HR, resting HR
 - Logistics: available days, session duration
@@ -332,17 +347,20 @@ The analytical style is hardcoded (not user-configurable) and designed for amate
 ## Plan Storage and Reference
 
 **Macro Plan Review Document**:
+
 - During creation: Generated at `/tmp/macro_plan_review_YYYY_MM_DD.md` for preview
 - After approval: Permanently saved to `data/plans/current_plan_review.md`
 - Contains: Complete week-by-week structure, phase breakdown, VDOT pacing, coaching rationale, multi-sport integration
 
 **Weekly Plan JSON Files**:
+
 - During creation: Generated at `/tmp/weekly_plan_wN.json` for review
 - After approval: Stored in `data/plans/weeks/` directory as `week_N.json`
 - Contains: Exact workouts with dates, distances, paces, RPE, notes
 
 **Accessing Plans**:
 Athletes can reference saved plans at any time:
+
 - `resilio plan export-structure --out-dir /tmp` (exports current macro plan structure)
 - `resilio plan week --number N` (shows specific week details)
 - Direct file access: `data/plans/current_plan_review.md` (macro plan review)

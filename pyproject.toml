@@ -1,20 +1,29 @@
-[tool.poetry]
+[project]
 name = "resilio"
 version = "0.1.0"
 description = "AI-powered adaptive running coach for multi-sport athletes"
-authors = ["Du Phan"]
 readme = "README.md"
-packages = [{include = "resilio"}]
+requires-python = ">=3.11,<4.0"
+authors = [{name = "Du Phan"}]
+license = {text = "MIT"}
+dependencies = [
+    "pydantic>=2.5,<3.0",
+    "pyyaml>=6.0,<7.0",
+    "requests>=2.31,<3.0",
+    "python-dateutil>=2.8,<3.0",
+    "httpx>=0.25.0,<0.26.0",
+    "tenacity>=8.0.0,<9.0.0",
+    "typer>=0.21.1,<0.22.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-pydantic = "^2.5"
-pyyaml = "^6.0"
-requests = "^2.31"
-python-dateutil = "^2.8"
-httpx = "^0.25.0"
-tenacity = "^8.0.0"
-typer = "^0.21.1"
+[project.scripts]
+resilio = "resilio.cli:app"
+
+[project.urls]
+Repository = "https://github.com/du-phan/resilio-app"
+
+[tool.poetry]
+packages = [{include = "resilio"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4"
@@ -22,9 +31,6 @@ pytest-cov = "^4.1"
 black = "^23.0"
 mypy = "^1.7"
 ruff = "^0.1"
-
-[tool.poetry.scripts]
-resilio = "resilio.cli:app"
 
 [build-system]
 requires = ["poetry-core"]
