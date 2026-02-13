@@ -11,6 +11,8 @@ Codex or Claude Code terminal sessions with local YAML/JSON persistence.
 
 **Methodology focus (current):** Resilio is currently strongest on running methodology, grounded in frameworks from Daniels' _Running Formula_, Pfitzinger's _Advanced Marathoning_, Fitzgerald's _80/20 Running_, and FIRST's _Run Less, Run Faster_.
 
+**Strava data usage:** During setup, Resilio connects to Strava to download and leverage the athlete's training data for analysis, planning, and adaptations. The AI coach will guide you through authentication, sync, and any rate-limit pauses.
+
 ## Start Here (2 steps)
 
 1. Open this folder in **Claude Code** or **Codex**.
