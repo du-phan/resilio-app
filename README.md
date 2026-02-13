@@ -3,11 +3,13 @@
 AI-powered adaptive coach for multi-sport athletes, designed to run entirely inside
 Codex or Claude Code terminal sessions with local YAML/JSON persistence.
 
-> **How to use Resilio:** Open this folder in **Claude Code** or **Codex**, then chat with the assistant.
+**How to use Resilio:**
+
+> Open this folder in **Claude Code** or **Codex**, then chat with the assistant.
 >
 > The assistant acts as your AI coach. Resilio provides the tools, training methodology, and local data the coach uses to guide your training.
->
-> **Methodology focus (current):** Resilio is currently strongest on running methodology, grounded in frameworks from Daniels' _Running Formula_, Pfitzinger's _Advanced Marathoning_, Fitzgerald's _80/20 Running_, and FIRST's _Run Less, Run Faster_.
+
+**Methodology focus (current):** Resilio is currently strongest on running methodology, grounded in frameworks from Daniels' _Running Formula_, Pfitzinger's _Advanced Marathoning_, Fitzgerald's _80/20 Running_, and FIRST's _Run Less, Run Faster_.
 
 ## Start Here (2 steps)
 
