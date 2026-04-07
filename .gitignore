@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 config/.workflow_lock
+config/.sync_progress.json
 .DS_Store
 __pycache__/
 *.py[codz]
