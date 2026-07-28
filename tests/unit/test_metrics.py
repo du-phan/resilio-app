@@ -32,12 +32,13 @@ from resilio.schemas.metrics import (
     CTLZone,
 )
 from resilio.schemas.activity import (
-    NormalizedActivity,
+    CanonicalActivity,
     SessionType,
     SportType,
     SurfaceType,
     LoadCalculation,
 )
+from tests.factories import make_activity, move_activity
 
 
 # ============================================================
@@ -56,9 +57,9 @@ def temp_repo(tmp_path, monkeypatch):
 @pytest.fixture
 def sample_run_activity():
     """Create sample running activity with loads."""
-    activity = NormalizedActivity(
+    activity = make_activity(
         id="test_run_1",
-        source="strava",
+        source="upload",
         sport_type=SportType.RUN,
         name="Morning Run",
         date=date(2026, 1, 12),
@@ -76,7 +77,7 @@ def sample_run_activity():
     )
 
     # Add calculated loads (M8 output)
-    activity.calculated = LoadCalculation(
+    activity.calculated_load = LoadCalculation(
         activity_id="test_run_1",
         duration_minutes=45,
         estimated_rpe=6,
@@ -97,9 +98,9 @@ def sample_run_activity():
 @pytest.fixture
 def sample_climb_activity():
     """Create sample climbing activity with loads."""
-    activity = NormalizedActivity(
+    activity = make_activity(
         id="test_climb_1",
-        source="strava",
+        source="upload",
         sport_type=SportType.CLIMB,
         name="Indoor Climbing",
         date=date(2026, 1, 12),
@@ -111,7 +112,7 @@ def sample_climb_activity():
     )
 
     # Add calculated loads
-    activity.calculated = LoadCalculation(
+    activity.calculated_load = LoadCalculation(
         activity_id="test_climb_1",
         duration_minutes=90,
         estimated_rpe=6,
@@ -139,10 +140,11 @@ def cold_start_scenario(tmp_path, monkeypatch, sample_run_activity):
     start_date = date(2026, 1, 1)
     for i in range(5):
         current_date = start_date + timedelta(days=i)
-        activity = sample_run_activity
-        activity.id = f"test_run_{i}"
-        activity.date = current_date
-        activity.calculated.activity_id = f"test_run_{i}"
+        activity = move_activity(
+            sample_run_activity,
+            local_activity_id=f"test_run_{i}",
+            local_date=current_date,
+        )
 
         # Create activity file
         year_month = f"{current_date.year}-{current_date.month:02d}"
@@ -164,10 +166,11 @@ def full_history_scenario(tmp_path, monkeypatch, sample_run_activity):
     start_date = date(2026, 1, 1)
     for i in range(50):
         current_date = start_date + timedelta(days=i)
-        activity = sample_run_activity
-        activity.id = f"test_run_{i}"
-        activity.date = current_date
-        activity.calculated.activity_id = f"test_run_{i}"
+        activity = move_activity(
+            sample_run_activity,
+            local_activity_id=f"test_run_{i}",
+            local_date=current_date,
+        )
 
         # Create activity file
         year_month = f"{current_date.year}-{current_date.month:02d}"
@@ -1206,10 +1209,11 @@ class TestWeeklySummary:
             year_month = f"{current_date.year}-{current_date.month:02d}"
             (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
-            activity = sample_run_activity
-            activity.id = f"test_run_{i}"
-            activity.date = current_date
-            activity.calculated.activity_id = f"test_run_{i}"
+            activity = move_activity(
+                sample_run_activity,
+                local_activity_id=f"test_run_{i}",
+                local_date=current_date,
+            )
 
             activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
@@ -1234,9 +1238,9 @@ class TestWeeklySummary:
             # First 4 easy, last 1 quality
             session_type = SessionType.EASY if i < 4 else SessionType.QUALITY
 
-            activity = NormalizedActivity(
+            activity = make_activity(
                 id=f"test_run_{i}",
-                source="strava",
+                source="upload",
                 sport_type=SportType.RUN,
                 name="Run",
                 date=current_date,
@@ -1250,7 +1254,7 @@ class TestWeeklySummary:
             # TSS: RPE 4 = 56.3 (1h × 0.75² × 100), RPE 8 = 100.0 (1h × 1.00² × 100)
             tss_value = 56.3 if session_type == SessionType.EASY else 100.0
 
-            activity.calculated = LoadCalculation(
+            activity.calculated_load = LoadCalculation(
                 activity_id=f"test_run_{i}",
                 duration_minutes=60,
                 estimated_rpe=4 if session_type == SessionType.EASY else 8,
@@ -1292,9 +1296,9 @@ class TestWeeklySummary:
             year_month = f"{current_date.year}-{current_date.month:02d}"
             (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
-            activity = NormalizedActivity(
+            activity = make_activity(
                 id=f"test_activity_{i}",
-                source="strava",
+                source="upload",
                 sport_type=sport,
                 name="Activity",
                 date=current_date,
@@ -1305,7 +1309,7 @@ class TestWeeklySummary:
                 updated_at=datetime.now(),
             )
 
-            activity.calculated = LoadCalculation(
+            activity.calculated_load = LoadCalculation(
                 activity_id=f"test_activity_{i}",
                 duration_minutes=60,
                 estimated_rpe=7,
@@ -1357,10 +1361,11 @@ class TestEdgeCases:
             year_month = f"{current_date.year}-{current_date.month:02d}"
             (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
-            activity = sample_run_activity
-            activity.id = f"test_run_{i}"
-            activity.date = current_date
-            activity.calculated.activity_id = f"test_run_{i}"
+            activity = move_activity(
+                sample_run_activity,
+                local_activity_id=f"test_run_{i}",
+                local_date=current_date,
+            )
 
             activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
@@ -1401,12 +1406,12 @@ class TestEdgeCases:
             (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
             if load > 0:  # Only create activity if non-zero load
-                activity = sample_run_activity
-                activity.id = f"test_run_{i}"
-                activity.date = current_date
-                activity.calculated.activity_id = f"test_run_{i}"
-                activity.calculated.systemic_load_au = float(load)
-                activity.calculated.lower_body_load_au = float(load)
+                activity = move_activity(
+                    sample_run_activity,
+                    local_activity_id=f"test_run_{i}",
+                    local_date=current_date,
+                    systemic_load_au=float(load),
+                )
 
                 activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
                 temp_repo.write_yaml(activity_path, activity)
@@ -1435,9 +1440,9 @@ class TestEdgeCases:
         target_date = date(2026, 1, 12)
 
         # Create activity with extreme load
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="extreme_load",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             name="Ultra Marathon",
             date=target_date,
@@ -1448,7 +1453,7 @@ class TestEdgeCases:
             updated_at=datetime.now(),
         )
 
-        activity.calculated = LoadCalculation(
+        activity.calculated_load = LoadCalculation(
             activity_id="extreme_load",
             duration_minutes=600,
             estimated_rpe=8,
@@ -1548,10 +1553,11 @@ class TestBatchOperations:
             year_month = f"{current_date.year}-{current_date.month:02d}"
             (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
-            activity = sample_run_activity
-            activity.id = f"test_run_{i}"
-            activity.date = current_date
-            activity.calculated.activity_id = f"test_run_{i}"
+            activity = move_activity(
+                sample_run_activity,
+                local_activity_id=f"test_run_{i}",
+                local_date=current_date,
+            )
 
             activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)
@@ -1573,10 +1579,11 @@ class TestBatchOperations:
             year_month = f"{current_date.year}-{current_date.month:02d}"
             (temp_repo.repo_root / "data" / "activities" / year_month).mkdir(parents=True, exist_ok=True)
 
-            activity = sample_run_activity
-            activity.id = f"test_run_{i}"
-            activity.date = current_date
-            activity.calculated.activity_id = f"test_run_{i}"
+            activity = move_activity(
+                sample_run_activity,
+                local_activity_id=f"test_run_{i}",
+                local_date=current_date,
+            )
 
             activity_path = f"data/activities/{year_month}/{current_date.isoformat()}_run.yaml"
             temp_repo.write_yaml(activity_path, activity)

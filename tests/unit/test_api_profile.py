@@ -6,9 +6,11 @@ Tests get_profile(), update_profile(), and set_goal().
 
 import pytest
 from datetime import date, timedelta
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 from resilio.api.profile import (
+    _load_all_activities,
     create_profile,
     get_profile,
     update_profile,
@@ -18,6 +20,11 @@ from resilio.api.profile import (
     pause_sport_in_profile,
     resume_sport_in_profile,
     ProfileError,
+)
+from resilio.schemas.activity import (
+    ActivityOrigin,
+    ActivityOriginKind,
+    RecordingProvider,
 )
 from resilio.schemas.profile import (
     AthleteProfile,
@@ -32,11 +39,34 @@ from resilio.schemas.profile import (
     WeatherPreferences,
 )
 from resilio.schemas.repository import RepoError, RepoErrorType
+from tests.factories import make_activity
 
 
 # ============================================================
 # FIXTURES
 # ============================================================
+
+
+def test_profile_activity_loader_excludes_external_tombstones() -> None:
+    active = make_activity(id="active")
+    deleted = make_activity(id="deleted").model_copy(
+        update={
+            "status": "external_deleted",
+            "origin": ActivityOrigin(
+                kind=ActivityOriginKind.HISTORICAL_IMPORT,
+                recording_provider=RecordingProvider.WAHOO,
+                intervals_icu_activity_id="external-deleted",
+            ),
+            "calculated_load": None,
+        }
+    )
+    repo = Mock()
+    repo.list_files.return_value = [Path("active.yaml"), Path("deleted.yaml")]
+    repo.read_yaml.side_effect = [active, deleted]
+
+    activities = _load_all_activities(repo)
+
+    assert [activity.id for activity in activities] == ["active"]
 
 
 @pytest.fixture

@@ -9,9 +9,11 @@ guardrails (80/20 rule, long run caps, hard/easy separation).
 
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from typing import Optional, List, Literal
-from datetime import date
+from datetime import date, time
 from enum import Enum
 import uuid
+
+from resilio.schemas.structured_workout import StructuredWorkout, WorkoutSport
 
 
 # ============================================================
@@ -142,6 +144,17 @@ class WorkoutPrescription(BaseModel):
     # ============================================================
 
     date: date
+    start_time_local: Optional[time] = Field(
+        default=None,
+        description=(
+            "Local wall-clock start time; required for deterministic device "
+            "publication when sport settings have no default"
+        ),
+    )
+    sport: WorkoutSport = Field(
+        default=WorkoutSport.RUN,
+        description="Device workout sport; persisted on every planned workout",
+    )
     day_of_week: int = Field(..., ge=0, le=6, description="Day of week (0=Monday, 6=Sunday)")
     workout_type: WorkoutType = Field(..., description="Workout classification")
     distance_km: float = Field(..., ge=0, description="Total session distance in km (warmup + work + cooldown)")
@@ -155,10 +168,9 @@ class WorkoutPrescription(BaseModel):
     # REQUIRED FOR QUALITY WORKOUTS: AI Coach Designs Structure
     # ============================================================
 
-    # Structured workouts (required for tempo/intervals, null for easy/long)
-    intervals: Optional[list[dict]] = Field(
+    structured_workout: Optional[StructuredWorkout] = Field(
         None,
-        description="For tempo/intervals: [{'distance': '800m', 'reps': 4, 'recovery': '2:00'}]"
+        description="Typed recursive workout steps for deterministic device publishing",
     )
 
     # Warmup/cooldown (coaching decision - varies by workout type)
@@ -261,9 +273,20 @@ class WorkoutPrescription(BaseModel):
             }
             self.purpose = type_to_purpose.get(self.workout_type, "Aerobic development")
 
-        # NOTE: intervals, warmup_km, cooldown_km, key_workout are coaching decisions
+        # NOTE: workout steps, warmup/cooldown, and priority are coaching decisions.
         # DO NOT auto-set them - coach must explicitly design these for athlete execution
 
+        return self
+
+    @model_validator(mode="after")
+    def structured_sport_matches_workout(self) -> "WorkoutPrescription":
+        if (
+            self.structured_workout is not None
+            and self.structured_workout.sport != self.sport
+        ):
+            raise ValueError("structured_workout sport must match workout sport")
+        if self.workout_type == WorkoutType.REST and self.structured_workout is not None:
+            raise ValueError("rest days cannot contain a structured workout")
         return self
 
     model_config = ConfigDict(
@@ -419,6 +442,27 @@ class WeekPlan(BaseModel):
     # Metadata
     is_recovery_week: bool = Field(False, description="Is this a scheduled recovery week?")
     notes: Optional[str] = Field(None, description="Week-level notes or adjustments")
+
+    @model_validator(mode="before")
+    @classmethod
+    def inherit_workout_context(cls, value):
+        """Make the parent week the sole source for repeated workout context."""
+        if not isinstance(value, dict):
+            return value
+        week_number = value.get("week_number")
+        phase = value.get("phase")
+        enriched_workouts = []
+        for raw in value.get("workouts") or []:
+            if not isinstance(raw, dict):
+                enriched_workouts.append(raw)
+                continue
+            workout = dict(raw)
+            if week_number is not None:
+                workout.setdefault("week_number", week_number)
+            if phase is not None:
+                workout.setdefault("phase", phase)
+            enriched_workouts.append(workout)
+        return {**value, "workouts": enriched_workouts}
 
     model_config = ConfigDict(
         use_enum_values=True,

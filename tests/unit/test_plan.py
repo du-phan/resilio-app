@@ -89,6 +89,35 @@ class TestWorkoutStructureHints:
         with pytest.raises(ValidationError):
             LongRunHints(emphasis="steady", pct_range=[30, 60])
 
+
+def test_week_plan_inherits_workout_week_and_phase() -> None:
+    week = WeekPlan.model_validate(
+        {
+            "week_number": 3,
+            "phase": "build",
+            "start_date": "2026-08-17",
+            "end_date": "2026-08-23",
+            "target_volume_km": 5,
+            "target_systemic_load_au": 0,
+            "workout_structure_hints": (
+                DEFAULT_WORKOUT_STRUCTURE_HINTS.model_dump(mode="json")
+            ),
+            "workouts": [
+                {
+                    "date": "2026-08-17",
+                    "sport": "run",
+                    "day_of_week": 0,
+                    "workout_type": "easy",
+                    "distance_km": 5,
+                    "target_rpe": 3,
+                }
+            ],
+        }
+    )
+
+    assert week.workouts[0].week_number == 3
+    assert week.workouts[0].phase == "build"
+
     def test_goal_type_from_string(self):
         """Goal types should be creatable from string values."""
         assert GoalType("5k") == GoalType.FIVE_K
@@ -799,9 +828,9 @@ class TestWorkoutCreation:
         assert workout.intensity_zone == "zone_4"
         assert workout.target_rpe == 7
 
-        # Should have interval structure
-        assert workout.intervals is not None
-        assert len(workout.intervals) > 0
+        # Exact device steps are a coaching decision and must be typed before
+        # publication; the quantitative template does not invent them.
+        assert workout.structured_workout is None
 
         # Should have warmup/cooldown
         assert workout.warmup_km > 0
@@ -829,8 +858,7 @@ class TestWorkoutCreation:
         assert workout.intensity_zone == "zone_5"
         assert workout.target_rpe == 8
 
-        # Should have intervals
-        assert workout.intervals is not None
+        assert workout.structured_workout is None
 
         # Should reference VO2max
         assert "vo2max" in workout.purpose.lower()
@@ -1024,14 +1052,15 @@ class TestWorkoutTemplates:
         assert "recovery" in template["purpose"].lower()
 
     def test_get_tempo_template(self):
-        """Should return tempo workout template with intervals."""
+        """Should expose the typed structure slot without legacy free-form steps."""
         from resilio.core.plan import get_workout_template, WorkoutType
 
         template = get_workout_template(WorkoutType.TEMPO)
 
         assert template["duration_minutes"] == 45
         assert template["target_rpe"] == 7
-        assert "intervals" in template
+        assert "structured_workout" in template
+        assert template["structured_workout"] is None
 
 
 class TestWorkoutModification:
@@ -1435,6 +1464,63 @@ class TestWeekValidation:
         # Should NOT have volume mismatch violations
         volume_violations = [v for v in violations if v.rule == "volume_mismatch"]
         assert len(volume_violations) == 0
+
+    def test_validate_week_excludes_cycle_from_run_volume_and_minimums(self):
+        """Cycling distance and duration must not trigger running guardrails."""
+        from resilio.core.plan import validate_week
+        from resilio.schemas.plan import WeekPlan, WorkoutPrescription
+
+        workouts = [
+            WorkoutPrescription(
+                id="run",
+                week_number=1,
+                day_of_week=2,
+                date=date(2026, 8, 5),
+                sport="run",
+                workout_type=WorkoutType.EASY,
+                phase=PlanPhase.BASE,
+                duration_minutes=35,
+                distance_km=5.0,
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=3,
+                purpose="Easy run",
+            ),
+            WorkoutPrescription(
+                id="ride",
+                week_number=1,
+                day_of_week=6,
+                date=date(2026, 8, 9),
+                sport="cycle",
+                workout_type=WorkoutType.EASY,
+                phase=PlanPhase.BASE,
+                duration_minutes=45,
+                distance_km=0.0,
+                intensity_zone=IntensityZone.ZONE_2,
+                target_rpe=3,
+                purpose="Easy ride",
+            ),
+        ]
+        week = WeekPlan(
+            week_number=1,
+            phase=PlanPhase.BASE,
+            start_date=date(2026, 8, 3),
+            end_date=date(2026, 8, 9),
+            target_volume_km=5.0,
+            target_systemic_load_au=60.0,
+            workout_structure_hints=DEFAULT_WORKOUT_STRUCTURE_HINTS,
+            workouts=workouts,
+        )
+
+        violations = validate_week(
+            week,
+            {
+                "typical_easy_distance_km": 6.25,
+                "typical_easy_duration_min": 35.0,
+            },
+        )
+
+        assert not [v for v in violations if v.rule == "volume_mismatch"]
+        assert not [v for v in violations if "too_short" in v.rule.lower()]
 
 
 class TestLongRunProgression:

@@ -152,7 +152,7 @@ def profile_get_command(ctx: typer.Context) -> None:
     - Preferences: Run priorities, conflict policies
     - History: Injury patterns, PRs
 
-    Secrets (Strava tokens) are redacted for security.
+    Credentials are excluded from profile output.
     """
     # Call API
     result = get_profile()
@@ -424,7 +424,7 @@ def profile_analyze_command(ctx: typer.Context) -> None:
     - Weekly volume averages (run distance)
     - Multi-sport frequency and priorities
 
-    Pure computation on local data - no Strava API calls.
+    Pure computation on local data with no external API calls.
 
     Example:
         resilio profile analyze
@@ -673,10 +673,10 @@ def profile_list_sports_command(ctx: typer.Context) -> None:
 
 @app.command(name="validate")
 def profile_validate_command(ctx: typer.Context) -> None:
-    """Validate profile completeness against actual Strava data.
+    """Validate profile completeness against canonical activity data.
 
     Checks if other_sports is populated for all significant activities
-    (>15% of total) in your Strava data.
+    (>15% of total) in canonical history.
     """
     from resilio.api.profile import validate_profile_completeness
 

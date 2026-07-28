@@ -15,12 +15,13 @@ from resilio.core.vdot.continuity import (
     _calculate_cross_training_adjustment,
 )
 from resilio.schemas.vdot import ConfidenceLevel
-from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import CanonicalActivity
+from tests.factories import make_activity
 
 
-def create_run(activity_date: date, sport_type: str = "run") -> NormalizedActivity:
+def create_run(activity_date: date, sport_type: str = "run") -> CanonicalActivity:
     """Helper to create a minimal run activity."""
-    return NormalizedActivity(
+    return make_activity(
         id=f"test_{activity_date.isoformat()}",
         source="manual",
         date=activity_date,
@@ -55,7 +56,12 @@ class TestBreakDetection:
                 activities.append(create_run(current))
             current += timedelta(days=1)
 
-        result = detect_training_breaks(activities, race_date, lookback_months=2)
+        result = detect_training_breaks(
+            activities,
+            race_date,
+            lookback_months=2,
+            as_of_date=date(2026, 2, 4),
+        )
 
         assert result.continuity_score >= 0.75
         assert result.longest_break_days == 0
@@ -82,7 +88,12 @@ class TestBreakDetection:
             create_run(date(2026, 2, 4)),  # Today
         ]
 
-        result = detect_training_breaks(activities, race_date, lookback_months=2)
+        result = detect_training_breaks(
+            activities,
+            race_date,
+            lookback_months=2,
+            as_of_date=date(2026, 2, 4),
+        )
 
         assert result.continuity_score < 1.0  # Not perfect continuity
         # Should have 1 break period (week 2)
@@ -104,7 +115,12 @@ class TestBreakDetection:
             create_run(date(2026, 2, 4)),  # Today - end with activity
         ]
 
-        result = detect_training_breaks(activities, race_date, lookback_months=2)
+        result = detect_training_breaks(
+            activities,
+            race_date,
+            lookback_months=2,
+            as_of_date=date(2026, 2, 4),
+        )
 
         # Should detect at least the significant breaks
         assert len(result.break_periods) >= 1

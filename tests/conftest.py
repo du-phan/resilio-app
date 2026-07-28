@@ -2,8 +2,23 @@
 Pytest configuration and shared fixtures.
 """
 
-import pytest
+import socket
 from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def prohibit_live_network(monkeypatch):
+    """Fail automated tests that attempt a real socket connection."""
+
+    def blocked_connect(*_args, **_kwargs):
+        raise AssertionError(
+            "Live network is prohibited in automated tests; use a fake or MockTransport"
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", blocked_connect)
+    monkeypatch.setattr(socket, "create_connection", blocked_connect)
 
 
 @pytest.fixture

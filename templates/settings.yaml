@@ -9,15 +9,18 @@ paths:
   plans_dir: "data/plans"
   state_dir: "data/state"
 
-# Strava API configuration
-strava:
-  api_base_url: "https://www.strava.com/api/v3"
-  token_url: "https://www.strava.com/oauth/token"
-  auth_url: "https://www.strava.com/oauth/authorize"
-  scopes:
-    - "read"
-    - "activity:read_all"
-  history_import_weeks: 12  # How many weeks to import on first setup
+# External activity/calendar integration
+intervals_icu:
+  api_base_url: "https://intervals.icu/api/v1"
+  athlete_alias: "0"
+  history_start_date: "2022-01-20"
+  initial_window_days: 90
+  incremental_overlap_days: 30
+  full_reconciliation_days: 30
+  list_limit: 1000
+  detail_batch_size: 100
+  max_read_attempts: 4
+  request_timeout_seconds: 30
 
 # Training calculation defaults
 training_defaults:

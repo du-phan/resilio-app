@@ -33,7 +33,7 @@ Coach: [Store for later]
 ### Max HR (reference analyzed data)
 
 ```
-Coach: "Looking at your Strava data, peak HR is 199 bpm. Use that as your max HR?"
+Coach: "Looking at your activity history, peak HR is 199 bpm. Use that as your max HR?"
 Athlete: "Yes" OR "Actually, I think it's 190"
 Coach: [Store actual value]
 ```
@@ -83,7 +83,7 @@ resilio profile set --running-experience-years 5
 
 **"Not sure"**:
 - Skip field, mark in notes: "Running experience not specified during onboarding"
-- Can estimate from Strava first activity date if available
+- Can estimate from the first canonical activity date if available
 
 ---
 
@@ -230,9 +230,10 @@ resilio profile set --name "Alex" --age 32 --max-hr 190 \
 
 PBs provide accurate fitness baseline + motivational context. Even old PBs reveal progression/regression.
 
-**CRITICAL**: Strava sync only captures last 6 months (180 days). PBs older than 6 months won't be auto-detected. **Manual entry is PRIMARY workflow.**
+**CRITICAL**: Synced activity history is evidence, but it may not contain older
+personal bests. Ask the athlete for missing historical race performances.
 
-### Workflow: Manual Entry FIRST, Then Auto-Import
+### Workflow: Athlete History Plus Canonical Evidence
 
 #### Step 1: Ask Directly for PBs
 
@@ -315,7 +316,8 @@ Enter with accurate date, system tracks progression/regression from peak
 
 ## Step 4f: Other Sports Collection (Data-Driven, MANDATORY)
 
-**CRITICAL: Check Strava data and collect ALL significant activities, regardless of running_priority.**
+**CRITICAL: Check canonical history and collect context for all significant
+activities, regardless of `running_priority`.**
 
 ### Why This Matters
 
@@ -340,7 +342,7 @@ resilio profile analyze
 **Reference actual data**:
 
 ```
-Coach: "Looking at your last 6 months (180 days) on Strava:
+Coach: "Looking at your available canonical activity history:
 - Climbing: 40% (30 sessions)
 - Running: 31% (23 sessions)
 - Yoga: 19% (14 sessions)
@@ -385,13 +387,15 @@ when there's a conflict, the marathon training will take priority. Sound good?"
 
 → Still collect other_sports, just set conflict_policy appropriately
 
-#### If running_priority='equal' but Strava shows >85% running
+#### If running_priority='equal' but history shows >85% running
 
 ```
-Coach: "Your Strava shows mostly running (91%). Do you have other sports not tracked
-on Strava, or should I change running_priority to 'primary'?"
+Coach: "Your activity history shows mostly running (91%). Are other sports
+missing from the connected account, or should I change running priority to
+'primary'?"
 
-→ If other sports off Strava: Collect manually
+→ If other sports are absent: have the athlete record them in Intervals.icu,
+sync again, and then validate the distribution
 → If truly just running: Update running_priority="primary"
 ```
 
@@ -423,7 +427,7 @@ resilio profile analyze | jq '.sport_percentages'
 ### If Validation Shows Missing Sports
 
 ```
-Coach: "I see a mismatch. Your Strava shows {sport} at {percentage}%, but it's not
+Coach: "I see a mismatch. Your activity history shows {sport} at {percentage}%, but it's not
 in your profile. Let me add it now before we continue."
 ```
 
@@ -493,8 +497,8 @@ You can adjust anytime with 'resilio profile set'."
 - ✅ Conflict policy chosen (ask_each_time/primary_sport_wins/running_goal_wins)
 - ✅ Profile created with `resilio profile set`
 - ✅ Race history captured (PBs added manually + auto-import)
-- ✅ Other sports collected (all >15% from Strava)
-- ✅ Data validation passed (other_sports matches Strava distribution)
+- ✅ Other sports collected (all >15% in canonical history)
+- ✅ Data validation passed (`other_sports` matches canonical distribution)
 - ✅ Communication preferences set (or defaults accepted)
 
 **Return to main workflow** → Step 5: Goal Setting

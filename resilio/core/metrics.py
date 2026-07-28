@@ -27,7 +27,7 @@ from resilio.core.paths import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.activity import (
-    NormalizedActivity,
+    CanonicalActivity,
     SessionType,
     SportType,
 )
@@ -327,7 +327,7 @@ def compute_weekly_summary(
         for activity in day_activities:
             total_activities += 1
 
-            if hasattr(activity, "calculated"):
+            if activity.status == "active" and activity.calculated is not None:
                 total_systemic_load += activity.calculated.systemic_load_au
                 total_lower_body_load += activity.calculated.lower_body_load_au
 
@@ -418,10 +418,9 @@ def aggregate_daily_load(
     Returns:
         DailyLoad with summed systemic and lower-body loads
     """
-    # Build path pattern: activities/{YYYY-MM}/{YYYY-MM-DD}_*.yaml
+    # Canonical filenames are stable IDs; filter the month archive by record date.
     year_month = f"{target_date.year}-{target_date.month:02d}"
-    date_str = target_date.isoformat()
-    pattern = f"{activities_month_dir(year_month)}/{date_str}_*.yaml"
+    pattern = f"{activities_month_dir(year_month)}/*.yaml"
 
     # Find all matching activity files
     activity_files = repo.list_files(pattern)
@@ -432,13 +431,17 @@ def aggregate_daily_load(
     activities_summary = []
 
     for file_path in activity_files:
-        activity = repo.read_yaml(file_path, NormalizedActivity)
+        activity = repo.read_yaml(file_path, CanonicalActivity)
 
         if activity is None:
             continue  # Skip if read failed
 
-        # Extract loads from calculated section
-        if hasattr(activity, "calculated"):
+        if (
+            isinstance(activity, CanonicalActivity)
+            and activity.date == target_date
+            and activity.status == "active"
+            and activity.calculated is not None
+        ):
             systemic_load = activity.calculated.systemic_load_au
             lower_body_load = activity.calculated.lower_body_load_au
 
@@ -449,10 +452,10 @@ def aggregate_daily_load(
             # Add summary info
             activities_summary.append({
                 "id": activity.id,
-                "sport_type": activity.sport_type.value if isinstance(activity.sport_type, SportType) else activity.sport_type,
+                "sport_type": activity.sport_type,
                 "systemic_load_au": systemic_load,
                 "lower_body_load_au": lower_body_load,
-                "session_type": activity.calculated.session_type.value if hasattr(activity.calculated.session_type, 'value') else activity.calculated.session_type,
+                "session_type": activity.calculated.session_type,
             })
 
     return DailyLoad(
@@ -722,7 +725,7 @@ def compute_readiness(
 
 
 def compute_intensity_distribution(
-    activities: list[NormalizedActivity],
+    activities: list[CanonicalActivity],
 ) -> IntensityDistribution:
     """
     Compute weekly intensity distribution for 80/20 tracking.
@@ -743,7 +746,7 @@ def compute_intensity_distribution(
     high_minutes = 0.0
 
     for activity in activities:
-        if not hasattr(activity, "calculated"):
+        if activity.status != "active" or activity.calculated is None:
             continue
 
         duration = activity.duration_minutes
@@ -857,7 +860,7 @@ def compute_metrics_batch(
     Compute daily metrics for a date range.
 
     Useful for:
-    - Initial historical computation after Strava sync
+    - Initial historical computation after completed-activity sync
     - Recomputation after activity corrections
     - Backfilling missing metrics
 
@@ -965,18 +968,21 @@ def _read_previous_metrics(target_date: date, repo: RepositoryIO) -> Optional[Da
     return result
 
 
-def _read_activities_for_date(target_date: date, repo: RepositoryIO) -> list[NormalizedActivity]:
+def _read_activities_for_date(target_date: date, repo: RepositoryIO) -> list[CanonicalActivity]:
     """Read all activities for a specific date."""
     year_month = f"{target_date.year}-{target_date.month:02d}"
-    date_str = target_date.isoformat()
-    pattern = f"{activities_month_dir(year_month)}/{date_str}_*.yaml"
+    pattern = f"{activities_month_dir(year_month)}/*.yaml"
 
     activity_files = repo.list_files(pattern)
     activities = []
 
     for file_path in activity_files:
-        activity = repo.read_yaml(file_path, NormalizedActivity)
-        if activity:
+        activity = repo.read_yaml(file_path, CanonicalActivity)
+        if (
+            isinstance(activity, CanonicalActivity)
+            and activity.date == target_date
+            and activity.status == "active"
+        ):
             activities.append(activity)
 
     return activities

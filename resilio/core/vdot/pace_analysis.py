@@ -19,7 +19,7 @@ from resilio.schemas.vdot import (
     EasyPaceData,
     PaceAnalysisResult,
 )
-from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import CanonicalActivity
 from resilio.core.vdot.tables import VDOT_TABLE
 
 
@@ -40,7 +40,7 @@ def calculate_easy_hr_range(max_hr: int) -> Tuple[int, int]:
     return (min_hr, max_hr_zone)
 
 
-def is_easy_effort_by_hr(activity: NormalizedActivity, max_hr: int) -> bool:
+def is_easy_effort_by_hr(activity: CanonicalActivity, max_hr: int) -> bool:
     """
     Check if activity is an easy effort based on heart rate.
 
@@ -58,7 +58,7 @@ def is_easy_effort_by_hr(activity: NormalizedActivity, max_hr: int) -> bool:
     return min_hr <= activity.average_hr <= max_hr_zone
 
 
-def is_quality_workout(activity: NormalizedActivity) -> bool:
+def is_quality_workout(activity: CanonicalActivity) -> bool:
     """
     Check if activity is a quality workout (tempo, threshold, interval).
 
@@ -130,7 +130,7 @@ def find_vdot_from_easy_pace(pace_sec_per_km: int) -> Optional[int]:
 
 
 def analyze_recent_paces(
-    activities: List[NormalizedActivity],
+    activities: List[CanonicalActivity],
     lookback_days: int,
     max_hr: Optional[int] = None
 ) -> PaceAnalysisResult:

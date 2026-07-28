@@ -14,7 +14,7 @@ Design:
 from datetime import date
 from typing import Optional
 
-from resilio.core.config import load_config
+from resilio.core.config import load_settings
 from resilio.core.repository import RepositoryIO
 
 # Cache config to avoid repeated file reads
@@ -27,14 +27,14 @@ def _get_paths():
     global _config_cache, _config_cache_root
     repo = RepositoryIO()
     if _config_cache is None or _config_cache_root != repo.repo_root:
-        config_result = load_config(repo.repo_root)
+        config_result = load_settings(repo.repo_root)
         if hasattr(config_result, "error_type"):
             # Config load failed, use defaults
             from resilio.schemas.config import PathSettings
 
             _config_cache = PathSettings()
         else:
-            _config_cache = config_result.settings.paths
+            _config_cache = config_result.paths
         _config_cache_root = repo.repo_root
     return _config_cache
 
@@ -81,15 +81,6 @@ def athlete_profile_path() -> str:
         Path to profile.yaml (e.g., "data/athlete/profile.yaml")
     """
     return f"{get_athlete_dir()}/profile.yaml"
-
-
-def athlete_training_history_path() -> str:
-    """Get path to training history.
-
-    Returns:
-        Path to training_history.yaml
-    """
-    return f"{get_athlete_dir()}/training_history.yaml"
 
 
 def athlete_memories_path() -> str:

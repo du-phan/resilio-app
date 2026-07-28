@@ -1,7 +1,7 @@
 """
 resilio metrics - Manage training metrics.
 
-Commands for recomputing metrics from local activity files without syncing from Strava.
+Commands for recomputing metrics from the canonical local activity archive.
 """
 
 from datetime import datetime
@@ -9,9 +9,9 @@ from typing import Optional
 
 import typer
 
+from resilio.cli.output import OutputEnvelope, output_json
+from resilio.core.metrics_workflow import recompute_all_metrics
 from resilio.core.repository import RepositoryIO
-from resilio.core.workflows import recompute_all_metrics
-from resilio.cli.output import output_json, OutputEnvelope
 
 app = typer.Typer(name="metrics", help="Manage training metrics")
 
@@ -34,12 +34,12 @@ def recompute_metrics(
     Recompute metrics from activity files on disk.
 
     Reads all activity files, recomputes daily metrics (including rest days),
-    and updates weekly summary. Does NOT sync from Strava.
+    and updates weekly summary. It does not contact the external service.
 
     Use cases:
     - Fix metric calculation bugs without re-syncing
     - Backfill rest days for historical data
-    - Regenerate metrics after manual activity edits
+    - Regenerate metrics after a verified archive repair
 
     Examples:
         resilio metrics recompute                          # Full recompute

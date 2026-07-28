@@ -47,7 +47,7 @@ Command: resilio profile set --weather-location "Lyon, France"
 **How to gather**: Reference `resilio profile analyze` data first
 **Example**:
 ```
-Coach: "Looking at your Strava data, your peak HR is 199 bpm. Use that as your max HR?"
+Coach: "Looking at your activity history, your peak HR is 199 bpm. Use that as your max HR?"
 Athlete: "Yes" OR "Actually, I think it's 190"
 Command: resilio profile set --max-hr 199
 ```
@@ -203,7 +203,7 @@ resilio profile remove-sport --sport yoga
 
 ### training-age (integer, auto)
 **What**: Years of consistent running training
-**Source**: Calculated from Strava history analysis
+**Source**: Calculated from canonical activity history
 **Usage**: Informs training volume progression rate
 
 ### injury-history (deprecated - use memory system)
@@ -244,7 +244,7 @@ resilio profile edit
 # Opens profile in $EDITOR (vim, nano, etc.)
 ```
 
-### Analyze Strava Data
+### Analyze Canonical Activity Data
 ```bash
 resilio profile analyze
 # Returns suggested values from synced activities
@@ -306,7 +306,7 @@ resilio profile set --max-hr 185
 | current-goal-time | string | No | `resilio goal` command |
 | vdot | float | Auto | Calculated from races |
 | ctl-baseline | float | Auto | Set when plan created |
-| training-age | integer | Auto | From Strava analysis |
+| training-age | integer | Auto | From activity-history analysis |
 
 **Plus**: Sport-specific constraints via `add-sport` (unlimited sports)
 

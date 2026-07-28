@@ -23,7 +23,7 @@ from resilio.core.repository import RepositoryIO
 from resilio.schemas.repository import RepoError
 from resilio.schemas.activity import (
     LoadCalculation,
-    NormalizedActivity,
+    CanonicalActivity,
     SessionType,
     SportType,
     SurfaceType,
@@ -86,7 +86,7 @@ DEFAULT_MULTIPLIERS = {
 
 
 def compute_load(
-    activity: NormalizedActivity,
+    activity: CanonicalActivity,
     estimated_rpe: int,
     repo: Optional[RepositoryIO] = None,
 ) -> LoadCalculation:
@@ -134,7 +134,7 @@ def compute_load(
     # Classify session type
     session_type = classify_session_type(
         rpe=estimated_rpe,
-        workout_type=activity.workout_type,
+        is_race=(activity.source_sport_subtype or "").upper() == "RACE",
     )
 
     # Apply interval adjustment if applicable
@@ -219,7 +219,7 @@ def calculate_base_effort_tss(rpe: int, duration_minutes: int) -> float:
 def adjust_tss_for_intervals(
     base_tss: float,
     session_type: SessionType,
-    activity: NormalizedActivity,
+    activity: CanonicalActivity,
 ) -> tuple[float, str]:
     """
     Adjust TSS for interval training to account for recovery periods.
@@ -239,7 +239,7 @@ def adjust_tss_for_intervals(
     Detection heuristics:
     - Keywords: "intervals", "repeats", "x", "reps", "@"
     - Session type: QUALITY or RACE with high RPE
-    - Workout type: Strava structured workout flag
+    - Structured segments or a quality/race classification
     """
     # Check for interval indicators
     text = f"{activity.name} {activity.description or ''}".lower()
@@ -247,7 +247,7 @@ def adjust_tss_for_intervals(
 
     is_intervals = (
         any(kw in text for kw in interval_keywords)
-        or activity.workout_type == 3  # Strava "workout" type
+        or bool(activity.segments)
         or (session_type in [SessionType.QUALITY, SessionType.RACE])
     )
 
@@ -323,7 +323,7 @@ def get_multipliers(
 
 
 def adjust_multipliers(
-    activity: NormalizedActivity,
+    activity: CanonicalActivity,
     systemic_mult: float,
     lower_body_mult: float,
 ) -> tuple[float, float, list[str]]:
@@ -381,7 +381,7 @@ def adjust_multipliers(
         adjustments.append("Long duration (>120min): +0.05 systemic")
 
     # Race effort adjustment
-    if activity.workout_type == 1:  # Strava race type
+    if (activity.source_sport_subtype or "").upper() == "RACE":
         systemic_mult += 0.10
         adjustments.append("Race effort: +0.10 systemic")
 
@@ -390,7 +390,7 @@ def adjust_multipliers(
 
 def classify_session_type(
     rpe: int,
-    workout_type: Optional[int] = None,
+    is_race: bool = False,
 ) -> SessionType:
     """
     Classify session type based on RPE and workout type.
@@ -400,17 +400,17 @@ def classify_session_type(
     - RPE 5-6: MODERATE (steady-state, zone 3)
     - RPE 7-8: QUALITY (tempo, intervals, threshold)
     - RPE 9-10: RACE (competition)
-    - workout_type=1: Always RACE (overrides RPE)
+    - Explicit race classification: Always RACE (overrides RPE)
 
     Args:
         rpe: Rate of Perceived Exertion (1-10)
-        workout_type: Optional Strava workout type (1=race)
+        is_race: Whether the source classified the activity as a race
 
     Returns:
         SessionType enum value
     """
     # Race flag always wins
-    if workout_type == 1:
+    if is_race:
         return SessionType.RACE
 
     # Classify by RPE
@@ -430,7 +430,7 @@ def classify_session_type(
 
 
 def compute_loads_batch(
-    activities: list[tuple[NormalizedActivity, int]],
+    activities: list[tuple[CanonicalActivity, int]],
     repo: Optional[RepositoryIO] = None,
 ) -> list[LoadCalculation]:
     """
@@ -479,27 +479,13 @@ def persist_load_to_activity(
         LoadCalculationError: If file update fails
     """
     # Read existing activity
-    activity = repo.read_yaml(activity_path, NormalizedActivity)
+    activity = repo.read_yaml(activity_path, CanonicalActivity)
     if isinstance(activity, (Exception, RepoError)):
         raise LoadCalculationError(f"Failed to read activity: {activity}")
 
-    # Create updated activity with calculated fields
-    # Note: We update the internal dict to add the calculated section
-    # This preserves all original fields while adding load data
-    activity_dict = activity.model_dump(mode="json")
-    activity_dict["calculated"] = {
-        "estimated_rpe": load.estimated_rpe,
-        "base_effort_au": load.base_effort_au,
-        "systemic_multiplier": load.systemic_multiplier,
-        "lower_body_multiplier": load.lower_body_multiplier,
-        "systemic_load_au": load.systemic_load_au,
-        "lower_body_load_au": load.lower_body_load_au,
-        "session_type": load.session_type.value,
-        "multiplier_adjustments": load.multiplier_adjustments,
-    }
-
-    # Re-create activity with calculated fields
-    updated_activity = NormalizedActivity(**activity_dict)
+    updated_activity = activity.model_copy(
+        update={"calculated_load": load},
+    )
 
     # Write back atomically
     result = repo.write_yaml(activity_path, updated_activity)

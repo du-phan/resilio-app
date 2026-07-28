@@ -19,7 +19,6 @@ from resilio.schemas.profile import (
     Weekday,
     RunningPriority,
     ConflictPolicy,
-    StravaConnection,
 )
 
 
@@ -38,21 +37,12 @@ class TestPhase1Integration:
         }
         (tmp_path / "config" / "settings.yaml").write_text(yaml.dump(settings))
 
-        secrets = {
-            "strava": {
-                "client_id": "12345",
-                "client_secret": "s" * 40,
-                "access_token": "token",
-                "refresh_token": "refresh",
-                "token_expires_at": 1704067200,
-            }
-        }
-        (tmp_path / "config" / "secrets.local.yaml").write_text(yaml.dump(secrets))
-
         monkeypatch.chdir(tmp_path)
 
         # Step 1: Load config
-        config = load_config()
+        config = load_config(
+            environment={"INTERVALS_ICU_API_KEY": "test-key-never-sent"}
+        )
         assert not isinstance(config, ConfigError)
         assert config.settings.paths.athlete_dir == "data/athlete"
 
@@ -67,7 +57,6 @@ class TestPhase1Integration:
             name="Integration Test Athlete",
             created_at="2026-01-12",
             age=32,
-            strava=StravaConnection(athlete_id="12345678"),
             running_experience_years=5,
             running_priority=RunningPriority.SECONDARY,
             primary_sport="bouldering",

@@ -49,7 +49,7 @@ One-line definitions for other metrics:
 For faster weekly analysis, optionally sync only last week's data:
 
 ```bash
-resilio sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
+resilio sync  # Incremental sync uses the configured overlap window
 ```
 
 **Note**: Without `--since`, `resilio sync` uses smart detection (incremental sync from last activity).

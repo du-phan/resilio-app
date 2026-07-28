@@ -15,7 +15,8 @@ from resilio.core.vdot.pace_analysis import (
     find_vdot_from_easy_pace,
     analyze_recent_paces,
 )
-from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import CanonicalActivity
+from tests.factories import make_activity
 
 
 def create_run(
@@ -25,7 +26,7 @@ def create_run(
     name: str = "Run",
     average_hr: int = None,
     is_treadmill: bool = False
-) -> NormalizedActivity:
+) -> CanonicalActivity:
     """Helper to create a run activity with specific properties."""
     from resilio.schemas.activity import SportType, SurfaceType, DataQuality
 
@@ -34,7 +35,7 @@ def create_run(
     surface_type = SurfaceType.TREADMILL if is_treadmill else SurfaceType.ROAD
     has_gps_data = not is_treadmill
 
-    return NormalizedActivity(
+    return make_activity(
         id=f"test_{activity_date.isoformat()}_{name}",
         source="manual",
         date=activity_date,

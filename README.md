@@ -1,100 +1,58 @@
 # Resilio
 
-AI-powered adaptive coach for multi-sport athletes, designed to run with
-Claude Code and Codex in both app and CLI environments, with local YAML/JSON persistence.
+Resilio is a local AI-assisted running coach for multi-sport athletes. It
+imports completed activities through Intervals.icu, computes load/readiness
+locally, adapts plans using the athlete’s complete training context, and can
+publish owned run and cycling workouts back to the external calendar.
 
-**How to use Resilio:**
+Open this repository in Claude Code or Codex and ask to get started. The
+assistant guides environment setup, account validation, sync, profile
+onboarding, goals, and training plans.
 
-> Open this folder in **Claude Code** or **Codex**, then chat with the assistant.
->
-> The assistant acts as your AI coach. Resilio provides the tools, training methodology, and local data the coach uses to guide your training.
-
-Resilio works in both app and CLI versions of Claude Code and Codex. For most users, we recommend the app versions because they are more user-friendly.
-
-**Methodology focus (current):** Resilio is currently strongest on running methodology, grounded in frameworks from Daniels' _Running Formula_, Pfitzinger's _Advanced Marathoning_, Fitzgerald's _80/20 Running_, and FIRST's _Run Less, Run Faster_.
-
-**Strava data usage:** During setup, Resilio connects to Strava to download and leverage the athlete's training data for analysis, planning, and adaptations. The AI coach will guide you through authentication, sync, and any rate-limit pauses.
-
-## Start Here (Recommended: App)
-
-1. Get the project files:
-   - **New to GitHub**: Download [v0.2.0 ZIP](https://github.com/du-phan/resilio-app/archive/refs/tags/v0.2.0.zip), unzip it, then use the extracted folder.
-   - **If you use Git**:
-     ```bash
-     git clone https://github.com/du-phan/resilio-app.git
-     cd resilio-app
-     ```
-2. Open this project in your app of choice:
-   - **Claude app**: Open Claude app -> **Code** -> **Add folder** (select this repository).
-   - **Codex app**: Open Codex app -> **Add new project** (select this repository folder).
-3. Start chatting with the assistant (for example: "Let's get started"). The assistant guides setup, authentication, sync, and profile onboarding.
-
-## Alternative: CLI
-
-If you prefer terminal workflows, you can also use Claude Code CLI or Codex CLI by launching them from this repository folder.
-
-## Quick Links
-
-- `AGENTS.md` - Codex usage, skills, coaching protocols
-- `CLAUDE.md` - Claude Code usage, coaching protocols
-- `docs/coaching/cli/index.md` - CLI command index
-- `docs/coaching/methodology.md` - Training methodology
-- `docs/coaching/scenarios.md` - Practical coaching scenarios
-
-## Coach Quickstart (CLI Commands)
+## Setup
 
 ```bash
-# Install dependencies (Poetry recommended)
 poetry install
+poetry run resilio init
+```
 
-# Create config
-mkdir -p config
-cp templates/settings.yaml config/settings.yaml
-cp templates/secrets.local.yaml config/secrets.local.yaml
+Add the personal Intervals.icu API key to the permission-restricted
+`.env.local` created by `resilio init`:
 
-# Add Strava credentials (edit with your preferred editor)
-${EDITOR:-vim} config/secrets.local.yaml
+```text
+INTERVALS_ICU_API_KEY=your-personal-api-key
+```
 
-# Core session flow
+Then validate and import:
+
+```bash
 poetry run resilio auth status
 poetry run resilio sync
 poetry run resilio profile analyze
 poetry run resilio status
 ```
 
-You can run those commands manually, or simply start chatting and let the assistant guide the same flow.
-For full coaching workflows and behavior rules, see `AGENTS.md` and `CLAUDE.md`.
+Garmin, Wahoo, climbing, bouldering, yoga, strength, and other recorded or
+manual activities should flow into Intervals.icu first. Resilio retains its
+canonical local history and remains authoritative for coaching calculations.
 
-## Developer Quickstart
+Free Intervals.icu accounts should be opened at least once every 90 days so
+the account does not become dormant and stop processing new files.
+
+## Development
 
 ```bash
-# Install dependencies
-poetry install
-
-# Run tests
 poetry run pytest
-
-# Type check
 poetry run mypy resilio
-
-# Format
-poetry run black resilio
-
-# Lint
-poetry run ruff resilio
+poetry run ruff check resilio tests
 ```
 
-## Architecture Snapshot
+Start with [AGENTS.md](AGENTS.md) and the
+[documentation index](docs/index.md). The architecture is summarized in
+[docs/reference/architecture-map.md](docs/reference/architecture-map.md).
 
-- `resilio/cli/` - Typer CLI entrypoints (`resilio`)
-- `resilio/core/` - Domain logic (metrics, planning, adaptation)
-- `resilio/api/` - Public API layer for agents
-- `resilio/schemas/` - Pydantic models
-- `data/` - Local persistence (gitignored)
-
-## Skills
-
-Skills live in `.agents/skills` (Codex) and `.claude/skills` (Claude Code). For selection rules and workflows, see `AGENTS.md` and `CLAUDE.md`.
+Skills are authored in `.agents/skills`; `.claude/skills` is a mechanically
+validated discovery mirror.
 
 ## License
 

@@ -1,8 +1,6 @@
 ---
 name: complete-setup
 description: Sets up the Resilio environment for non-technical users on macOS with safe, gated validation. Use when users ask to get started, install dependencies, or recover an interrupted setup session.
-allowed-tools: Bash, Read, Write, AskUserQuestion
-argument-hint: ""
 ---
 
 # Complete Setup (macOS only)
@@ -184,7 +182,7 @@ ls -la config/
 Config is ready only when both files exist:
 
 - `config/settings.yaml`
-- `config/secrets.local.yaml`
+- `.env.local`
 
 ## Phase 5: Final verification + handoff
 
@@ -201,7 +199,8 @@ Successful completion message should include:
 - `resilio` runnable
 - config initialized
 
-Then hand off to `first-session` for Strava credentials/auth + profile setup.
+Then hand off to `first-session` for API-key validation, activity import, and
+profile setup.
 
 ## References
 

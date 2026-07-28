@@ -2,14 +2,14 @@
 Unit tests for RPE estimate selection logic.
 
 Tests the confidence-based priority system for selecting the best RPE estimate
-from multiple sources (user input, HR-based, pace-based, Strava, duration heuristic).
+from multiple sources (user input, HR-based, pace-based, preserved history, duration heuristic).
 
 This verifies the fix for Bug #1: RPE selection should prioritize high-confidence
 estimates over low-confidence ones, not just take the first estimate.
 """
 
 import pytest
-from resilio.core.workflows import select_best_rpe_estimate
+from resilio.core.rpe import select_best_rpe_estimate
 from resilio.schemas.activity import RPEEstimate, RPESource
 
 
@@ -38,21 +38,21 @@ def test_priority_hr_based_over_pace():
     assert select_best_rpe_estimate(estimates) == 7
 
 
-def test_priority_pace_based_over_strava():
-    """Pace-based should win over Strava when no user input or HR data."""
+def test_priority_pace_based_over_historical():
+    """Pace-based should win over preserved history when no user input or HR data."""
     estimates = [
         RPEEstimate(value=5, source=RPESource.DURATION_HEURISTIC, confidence="low", reasoning="Duration"),
-        RPEEstimate(value=6, source=RPESource.STRAVA_RELATIVE, confidence="medium", reasoning="Strava"),
+        RPEEstimate(value=6, source=RPESource.HISTORICAL_RELATIVE_EFFORT, confidence="medium", reasoning="preserved history"),
         RPEEstimate(value=7, source=RPESource.PACE_BASED, confidence="medium", reasoning="Pace"),
     ]
     assert select_best_rpe_estimate(estimates) == 7
 
 
-def test_priority_strava_over_duration():
-    """Strava should win over duration heuristic."""
+def test_priority_historical_over_duration():
+    """preserved history should win over duration heuristic."""
     estimates = [
         RPEEstimate(value=5, source=RPESource.DURATION_HEURISTIC, confidence="low", reasoning="Duration"),
-        RPEEstimate(value=6, source=RPESource.STRAVA_RELATIVE, confidence="medium", reasoning="Strava"),
+        RPEEstimate(value=6, source=RPESource.HISTORICAL_RELATIVE_EFFORT, confidence="medium", reasoning="preserved history"),
     ]
     assert select_best_rpe_estimate(estimates) == 6
 
@@ -165,16 +165,16 @@ def test_scenario_user_override_hard_workout():
     assert select_best_rpe_estimate(estimates) == 8
 
 
-def test_scenario_no_hr_data_use_strava():
+def test_scenario_no_hr_data_use_historical():
     """
-    Activity without HR data: Strava relative effort should be used.
+    Activity without HR data: preserved history relative effort should be used.
     This is reasonable fallback for activities where HR wasn't recorded.
     """
     estimates = [
         RPEEstimate(value=5, source=RPESource.DURATION_HEURISTIC, confidence="low", reasoning="45min run"),
-        RPEEstimate(value=6, source=RPESource.STRAVA_RELATIVE, confidence="medium", reasoning="Strava relative effort"),
+        RPEEstimate(value=6, source=RPESource.HISTORICAL_RELATIVE_EFFORT, confidence="medium", reasoning="preserved history relative effort"),
     ]
-    # Expected: Strava (RPE 6) should win over duration heuristic
+    # Expected: preserved history (RPE 6) should win over duration heuristic
     assert select_best_rpe_estimate(estimates) == 6
 
 
@@ -187,7 +187,7 @@ def test_all_sources_present_user_wins():
     """When all 5 sources present, user input should win."""
     estimates = [
         RPEEstimate(value=5, source=RPESource.DURATION_HEURISTIC, confidence="low", reasoning="Duration"),
-        RPEEstimate(value=6, source=RPESource.STRAVA_RELATIVE, confidence="medium", reasoning="Strava"),
+        RPEEstimate(value=6, source=RPESource.HISTORICAL_RELATIVE_EFFORT, confidence="medium", reasoning="preserved history"),
         RPEEstimate(value=7, source=RPESource.PACE_BASED, confidence="medium", reasoning="Pace"),
         RPEEstimate(value=8, source=RPESource.HR_BASED, confidence="high", reasoning="HR"),
         RPEEstimate(value=9, source=RPESource.USER_INPUT, confidence="high", reasoning="User"),
@@ -201,7 +201,7 @@ def test_single_estimate_always_used():
         RPESource.USER_INPUT,
         RPESource.HR_BASED,
         RPESource.PACE_BASED,
-        RPESource.STRAVA_RELATIVE,
+        RPESource.HISTORICAL_RELATIVE_EFFORT,
         RPESource.DURATION_HEURISTIC,
     ]:
         estimates = [RPEEstimate(value=7, source=source, confidence="high", reasoning="Test")]

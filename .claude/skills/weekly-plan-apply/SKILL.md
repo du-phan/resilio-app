@@ -1,10 +1,7 @@
 ---
 name: weekly-plan-apply
-description: Applies an approved weekly plan JSON to the plan store after validation. Use only after athlete approval is recorded by the main agent.
-disable-model-invocation: false
-context: fork
-allowed-tools: Bash, Read, Write
-argument-hint: "approved_file=<path>"
+description: Applies an approved weekly plan JSON to the plan store after validation. Use only after athlete approval is recorded by the coach.
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # Weekly Plan Apply (Executor)
@@ -54,7 +51,7 @@ the provided payload path. If they don't match, return a blocking checklist and 
 resilio plan validate-week --file <APPROVED_FILE>
 ```
 If validation fails (exit code ≠ 0), include the full error output in a blocking
-checklist. Do NOT attempt to fix the JSON — return the error to the main agent.
+checklist. Do NOT attempt to fix the JSON — return the error to the coach.
 
 **Step 3 — Apply:**
 ```bash

@@ -44,7 +44,7 @@ Primary evidence source:
 1. AI reasoning plus quantitative toolkit, not a rigid rule engine.
 2. Multi-sport load model (systemic + lower-body) for real adaptation.
 3. Explainable tradeoffs and transparent coaching rationale.
-4. Local-first workflow with explicit Strava boundaries.
+4. Local-first workflow with explicit Intervals.icu boundaries.
 5. Built for hybrid training across everyday sport mixes (for example running + bouldering/pilates/HIIT/surfing), not triathlon-style event planning.
 
 ## Primary Outcome
@@ -69,9 +69,9 @@ Visitor starts a coaching session by using the starter prompt.
 
 1. Supported setup workflow: macOS, Linux.
 2. Unsupported setup workflow: Windows, WSL.
-3. Strava account plus one-time app credentials are required.
-4. First sync may pause on Strava API limits and resume later.
-5. Project data is local-first with Strava used for auth and sync.
+3. Intervals.icu account plus one-time app credentials are required.
+4. First sync may pause on Intervals.icu API limits and resume later.
+5. Project data is local-first with Intervals.icu used for auth and sync.
 
 ## Source-of-Truth References
 

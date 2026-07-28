@@ -63,7 +63,7 @@ Help me get started. I train across multiple sports. Guide me step by step.
 2. Multi-sport-aware adaptation.
 3. Explainable recommendation style.
 4. Local-first project data model.
-5. Strava-dependent auth and sync workflow.
+5. Intervals.icu-dependent auth and sync workflow.
 6. Hybrid training support beyond triathlon-style framing.
 
 ## Prohibited Claims
@@ -79,7 +79,7 @@ Help me get started. I train across multiple sports. Guide me step by step.
 
 1. Explicit support matrix must be visible.
 2. Rate-limit caveat must be framed as expected behavior.
-3. Privacy section must state local-first plus Strava boundary.
+3. Privacy section must state local-first plus Intervals.icu boundary.
 
 ## Tone Rules
 

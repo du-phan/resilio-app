@@ -225,6 +225,6 @@ Implications for final landing expression:
 
 1. Lead with the problem: rigid plans vs real multi-sport life.
 2. Show mechanism without implementation noise: "conversation-first AI coach" and "data-grounded adaptation".
-3. Preserve trust early: support limits, Strava dependency, local-first boundary.
+3. Preserve trust early: support limits, Intervals.icu dependency, local-first boundary.
 4. Keep final visuals minimal, modern, and high-signal, with one dominant conversion action.
 5. Make the moat explicit: hybrid lifestyle training (running + other sports) and not triathlon-plan positioning.

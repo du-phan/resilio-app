@@ -244,6 +244,7 @@ class TestValidateWeekPlanMaxSession:
             "workouts": [
                 {
                     "date": "2026-02-16",
+                    "sport": "run",
                     "day_of_week": 0,
                     "workout_type": "rest",
                     "distance_km": 0,
@@ -254,6 +255,49 @@ class TestValidateWeekPlanMaxSession:
 
         plan_path = _write_week_plan(tmp_path, week)
         result = validate_week_plan(plan_path)
+
+        assert result["is_valid"] is True
+
+    @patch("resilio.api.profile.get_profile")
+    def test_cycle_distance_is_excluded_from_run_volume(
+        self,
+        mock_get_profile,
+        tmp_path,
+    ):
+        """Weekly target distance describes running, not cycling volume."""
+        mock_get_profile.return_value = SimpleNamespace(
+            constraints=SimpleNamespace(max_time_per_session_minutes=90)
+        )
+        week = {
+            "week_number": 1,
+            "phase": "base",
+            "start_date": "2026-08-03",
+            "end_date": "2026-08-09",
+            "target_volume_km": 5.0,
+            "target_systemic_load_au": 60.0,
+            "workouts": [
+                {
+                    "date": "2026-08-05",
+                    "sport": "run",
+                    "day_of_week": 2,
+                    "workout_type": "easy",
+                    "distance_km": 5,
+                    "duration_minutes": 35,
+                    "target_rpe": 3,
+                },
+                {
+                    "date": "2026-08-09",
+                    "sport": "cycle",
+                    "day_of_week": 6,
+                    "workout_type": "easy",
+                    "distance_km": 20,
+                    "duration_minutes": 45,
+                    "target_rpe": 3,
+                },
+            ],
+        }
+
+        result = validate_week_plan(_write_week_plan(tmp_path, week))
 
         assert result["is_valid"] is True
 
@@ -904,7 +948,7 @@ class TestRegeneratePlan:
     @patch("resilio.api.plan.run_plan_generation")
     def test_regenerate_plan_workflow_failure(self, mock_workflow, mock_repo_cls, mock_log):
         """Test regenerating plan with workflow failure."""
-        from resilio.core.workflows import WorkflowError
+        from resilio.core.workflow_types import WorkflowError
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo

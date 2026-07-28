@@ -23,6 +23,7 @@ from resilio.schemas.vdot import (
     ConditionType,
     ConfidenceLevel,
 )
+from tests.factories import make_activity
 
 
 # ============================================================
@@ -450,10 +451,10 @@ class TestVDOTEstimationRaceHistoryFallback:
         """Mock RepositoryIO to return a dummy easy run (not a quality workout)."""
         from unittest.mock import Mock
         from datetime import date, datetime, timedelta
-        from resilio.schemas.activity import DataQuality, NormalizedActivity, SportType, SurfaceType
+        from resilio.schemas.activity import DataQuality, CanonicalActivity, SportType, SurfaceType
 
         activity_date = date.today() - timedelta(days=days_ago)
-        dummy_activity = NormalizedActivity(
+        dummy_activity = make_activity(
             id=f"test_{activity_date.isoformat()}",
             source="manual",
             date=activity_date,

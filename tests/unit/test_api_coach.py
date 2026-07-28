@@ -198,7 +198,7 @@ class TestGetTodaysWorkout:
     @patch("resilio.api.coach.run_adaptation_check")
     def test_get_todays_workout_workflow_error(self, mock_workflow, mock_repo_cls, mock_log):
         """Test workout retrieval with workflow error."""
-        from resilio.core.workflows import WorkflowError
+        from resilio.core.workflow_types import WorkflowError
 
         mock_repo = Mock()
         mock_repo_cls.return_value = mock_repo

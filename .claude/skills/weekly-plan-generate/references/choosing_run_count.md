@@ -6,12 +6,12 @@
 
 ## Solution
 
-**Strongly recommended**: Before creating workout pattern JSON, consult the system for optimal run count.
+**Before creating workout pattern JSON**, consult the system for optimal run count.
 
 **This step is NOT optional** - skipping it can lead to presentation discrepancies where you generate one workout count but present another to the athlete.
 
 ```bash
-resilio plan suggest-run-count --volume 23 --max-runs 4 --phase base
+poetry run resilio plan suggest-run-count --volume 23 --max-runs 4 --phase base
 ```
 
 ## Example Output
@@ -50,13 +50,13 @@ resilio plan suggest-run-count --volume 23 --max-runs 4 --phase base
 
 ```bash
 # For each week, determine optimal run count:
-resilio plan suggest-run-count --volume 23 --max-runs 4 --phase base
+poetry run resilio plan suggest-run-count --volume 23 --max-runs 4 --phase base
 # Output: Recommend 3 runs
 
-resilio plan suggest-run-count --volume 30 --max-runs 4 --phase base
+poetry run resilio plan suggest-run-count --volume 30 --max-runs 4 --phase base
 # Output: Recommend 4 runs
 
-resilio plan suggest-run-count --volume 21 --max-runs 4 --phase recovery
+poetry run resilio plan suggest-run-count --volume 21 --max-runs 4 --phase recovery
 # Output: Recommend 3 runs (recovery weeks use fewer days)
 ```
 

@@ -172,12 +172,6 @@ class CommunicationPreferences(BaseModel):
 WeatherPreferences = WeatherLocation
 
 
-class StravaConnection(BaseModel):
-    """Strava connection info."""
-
-    athlete_id: str
-
-
 class PBEntry(BaseModel):
     """Personal best for a single distance."""
 
@@ -196,9 +190,6 @@ class AthleteProfile(BaseModel):
 
     # Vital Signs
     vital_signs: Optional[VitalSigns] = None
-
-    # Strava Connection
-    strava: Optional[StravaConnection] = None
 
     # Running Background
     running_experience_years: Optional[float] = Field(default=None, ge=0)

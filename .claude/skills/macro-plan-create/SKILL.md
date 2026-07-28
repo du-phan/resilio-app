@@ -1,9 +1,7 @@
 ---
 name: macro-plan-create
 description: Creates a macro plan skeleton from an approved baseline VDOT and writes a review doc with an approval prompt for the main agent. Use after baseline VDOT approval.
-disable-model-invocation: false
-allowed-tools: Bash, Read, Write
-argument-hint: "baseline_vdot=<number>"
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # Macro Plan Create (Executor)
@@ -182,7 +180,7 @@ Note: In Example 2, `target_systemic_load_au` represents total aerobic load acro
   - Multi-sport athletes: Plan total systemic load targets using `resilio analysis load` (running + cross-training + other sports)
 - `workout_structure_hints` length MUST equal `total_weeks`; each entry must conform to WorkoutStructureHints:
   - `quality.max_sessions`: 0–3
-  - `quality.types`: list of QualityType (e.g., tempo, intervals, strides_only, race_specific)
+  - `quality.types`: list of QualityType (e.g., tempo, intervals, strides_only, race_pace)
   - `long_run.emphasis`: one of easy, steady, progression, race_specific
   - `long_run.pct_range`: [min, max] in 15–35
   - `intensity_balance.low_intensity_pct`: 0.75–0.95

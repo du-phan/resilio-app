@@ -347,7 +347,7 @@ def estimate_current_vdot(
 
     from resilio.core.paths import get_activities_dir
     from resilio.core.repository import RepositoryIO, ReadOptions
-    from resilio.schemas.activity import NormalizedActivity
+    from resilio.schemas.activity import CanonicalActivity
     from resilio.core.vdot.continuity import detect_training_breaks, calculate_vdot_decay
     from resilio.core.vdot.pace_analysis import analyze_recent_paces
     from resilio.api.profile import get_profile, ProfileError
@@ -362,15 +362,22 @@ def estimate_current_vdot(
         if not activity_files:
             return VDOTError(
                 error_type="not_found",
-                message="No activities found. Run 'resilio sync' to import activities from Strava.",
+                message=(
+                    "No activities found. Run 'resilio sync' to import "
+                    "completed activities."
+                ),
             )
 
         # Load all activities (we need full history for break detection)
-        all_activities: list[NormalizedActivity] = []
+        all_activities: list[CanonicalActivity] = []
         for activity_file in activity_files:
-            result = repo.read_yaml(str(activity_file), NormalizedActivity, ReadOptions())
-            if isinstance(result, NormalizedActivity):
-                if result.sport_type.lower() in ["run", "trail_run", "virtual_run"]:
+            result = repo.read_yaml(str(activity_file), CanonicalActivity, ReadOptions())
+            if isinstance(result, CanonicalActivity):
+                if (
+                    result.status == "active"
+                    and result.sport_type.lower()
+                    in ["run", "trail_run", "treadmill_run", "track_run"]
+                ):
                     all_activities.append(result)
 
         if not all_activities:

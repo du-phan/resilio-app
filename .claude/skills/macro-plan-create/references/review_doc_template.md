@@ -69,4 +69,4 @@ Does this {total_weeks}-week structure work for you? Any concerns:
 
 If you'd like adjustments, let me know and I'll regenerate with your constraints.
 
-**Handoff**: main agent must record approval via `resilio approvals approve-macro`
+**Handoff**: coach must record approval via `resilio approvals approve-macro`

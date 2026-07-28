@@ -228,16 +228,12 @@ class TestProfileService:
         repo = RepositoryIO()
         service = ProfileService(repo)
 
-        from resilio.schemas.profile import (
-            StravaConnection,
-            OtherSport,
-        )
+        from resilio.schemas.profile import OtherSport
 
         profile = AthleteProfile(
             name="Complete Profile",
             created_at="2026-01-12",
             age=32,
-            strava=StravaConnection(athlete_id="12345678"),
             running_experience_years=5,
             current_weekly_run_km=28.0,
             running_priority=RunningPriority.SECONDARY,
@@ -275,7 +271,6 @@ class TestProfileService:
         loaded = service.load_profile()
         assert loaded is not None
         assert loaded.age == 32
-        assert loaded.strava.athlete_id == "12345678"
         assert len(loaded.other_sports) == 1
         assert loaded.other_sports[0].sport == "bouldering"
 

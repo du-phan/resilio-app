@@ -1,9 +1,7 @@
 ---
 name: weekly-plan-generate
 description: Designs exact workouts for a single week using AI coaching judgment and writes a validated JSON file without applying it. Use for Week 1 and all subsequent weeks.
-disable-model-invocation: false
 allowed-tools: Bash, Read, Write
-argument-hint: "[optional-notes]"
 ---
 
 # Weekly Plan Generate (Workout Designer)
@@ -120,6 +118,8 @@ resilio profile get  # Load athlete profile including other_sports
 ```bash
 resilio weather week --start <WEEK_START>
 ```
+
+### Weather Context & Adjustments
 
 - Weather data is coaching context for day selection — use it alongside training load,
   athlete state, and spacing rules when deciding which day gets which session.
@@ -262,6 +262,7 @@ Create explicit workout JSON manually with exact distances. Example structure:
       "workouts": [
         {
           "date": "2026-02-03",
+          "sport": "run",
           "day_of_week": 0,
           "workout_type": "easy",
           "distance_km": 8.0,
@@ -271,19 +272,61 @@ Create explicit workout JSON manually with exact distances. Example structure:
         },
         {
           "date": "2026-02-05",
+          "sport": "run",
           "day_of_week": 2,
           "workout_type": "tempo",
           "distance_km": 10.0,
           "pace_range": "5:20-5:35",
           "target_rpe": 7,
-          "intervals": [
-            {
-              "duration_minutes": 20,
-              "pace": "5:25-5:30",
-              "type": "threshold",
-              "recovery": "0"
-            }
-          ],
+          "structured_workout": {
+            "sport": "run",
+            "steps": [
+              {
+                "kind": "steady",
+                "duration": {"unit": "meters", "value": 2500},
+                "target": {
+                  "mode": "pace",
+                  "unit": "seconds_per_kilometer",
+                  "minimum": 360,
+                  "maximum": 390
+                },
+                "intensity": "warmup"
+              },
+              {
+                "kind": "steady",
+                "duration": {"unit": "meters", "value": 4000},
+                "target": {
+                  "mode": "pace",
+                  "unit": "seconds_per_kilometer",
+                  "minimum": 325,
+                  "maximum": 330
+                },
+                "intensity": "interval"
+              },
+              {
+                "kind": "steady",
+                "duration": {"unit": "meters", "value": 2000},
+                "target": {
+                  "mode": "pace",
+                  "unit": "seconds_per_kilometer",
+                  "minimum": 360,
+                  "maximum": 390
+                },
+                "intensity": "active"
+              },
+              {
+                "kind": "steady",
+                "duration": {"unit": "meters", "value": 1500},
+                "target": {
+                  "mode": "pace",
+                  "unit": "seconds_per_kilometer",
+                  "minimum": 370,
+                  "maximum": 400
+                },
+                "intensity": "cooldown"
+              }
+            ]
+          },
           "warmup_km": 2.5,
           "cooldown_km": 1.5,
           "key_workout": true,
@@ -291,6 +334,7 @@ Create explicit workout JSON manually with exact distances. Example structure:
         },
         {
           "date": "2026-02-09",
+          "sport": "run",
           "day_of_week": 6,
           "workout_type": "long_run",
           "distance_km": 12.0,
@@ -310,9 +354,13 @@ Create explicit workout JSON manually with exact distances. Example structure:
 **CRITICAL REQUIREMENTS**:
 
 - Workouts MUST sum exactly to target_volume_km (±0.1km tolerance)
-- **Required fields (all workouts)**: date, day_of_week, workout_type, distance_km, pace_range, target_rpe
+- **Required fields (all workouts)**: date, sport, day_of_week, workout_type, distance_km, pace_range, target_rpe
+- **Device publication time**: every workout with `structured_workout` must include
+  `start_time_local` (`HH:MM:SS`) so plan-wide publication is deterministic
 - **Structure fields (YOU must design these - critical for athlete execution)**:
-  - `intervals`: For tempo/interval workouts, define exact structure (e.g., `[{"duration_minutes": 20, "pace": "5:30-5:40", "type": "threshold", "recovery": "0"}]`). Omit for easy/long runs.
+  - `structured_workout`: For tempo, interval, repetition, progression, and any other workout intended for device publishing, define exact typed steps. Use `steady`, `ramp`, and recursive `repeat` steps; unit-explicit durations and targets are mandatory. Omit only when the workout is intentionally coaching-only and will not be published.
+  - The top-level `sport` and `structured_workout.sport` must match (`run` or `cycle`). Rest days cannot contain `structured_workout`.
+  - Pace targets use integer seconds per kilometre, HR targets use bpm or an explicit percentage unit, and power targets use watts or `%FTP`. Never encode targets or recoveries as prose.
   - `warmup_km`: Design based on workout type (0 for easy/long, 1.5-2.5km for tempo, 2.0-3.0km for intervals)
   - `cooldown_km`: Design based on workout type (0 for easy/long, 1.0-2.0km for tempo, 1.5-2.0km for intervals)
   - `key_workout`: Mark 1-2 priority sessions per week that athlete shouldn't skip (typically long run + one quality session)

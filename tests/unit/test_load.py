@@ -19,11 +19,12 @@ from resilio.core.load import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.activity import (
-    NormalizedActivity,
+    CanonicalActivity,
     SessionType,
     SportType,
     SurfaceType,
 )
+from tests.factories import make_activity
 
 
 # ============================================================
@@ -34,9 +35,9 @@ from resilio.schemas.activity import (
 @pytest.fixture
 def basic_run_activity():
     """Create basic running activity for testing."""
-    return NormalizedActivity(
+    return make_activity(
         id="test_run_1",
-        source="strava",
+        source="upload",
         sport_type=SportType.RUN,
         name="Morning Run",
         date=date(2026, 1, 12),
@@ -89,9 +90,9 @@ class TestLoadCalculation:
 
     def test_treadmill_reduces_lower_body_load(self):
         """Treadmill should reduce lower-body multiplier to 0.9."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_treadmill",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             surface_type=SurfaceType.TREADMILL,
             name="Treadmill Run",
@@ -113,9 +114,9 @@ class TestLoadCalculation:
 
     def test_trail_running_increases_both_loads(self):
         """Trail running should increase both multipliers."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_trail",
-            source="strava",
+            source="upload",
             sport_type=SportType.TRAIL_RUN,
             surface_type=SurfaceType.TRAIL,
             name="Trail Run",
@@ -138,9 +139,9 @@ class TestLoadCalculation:
 
     def test_climbing_is_mostly_upper_body(self):
         """Climbing should have low lower-body multiplier."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_climb",
-            source="strava",
+            source="upload",
             sport_type=SportType.CLIMB,
             name="Bouldering Session",
             date=date(2026, 1, 12),
@@ -161,7 +162,7 @@ class TestLoadCalculation:
 
     def test_unknown_sports_use_conservative_defaults(self):
         """Unknown sports should use conservative multipliers."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_other",
             source="manual",
             sport_type=SportType.OTHER,
@@ -190,7 +191,7 @@ class TestMultiplierAdjustments:
 
     def test_leg_day_increases_lower_body_multiplier(self):
         """Leg-focused strength should add +0.25 lower-body."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_strength",
             source="manual",
             sport_type=SportType.STRENGTH,
@@ -213,7 +214,7 @@ class TestMultiplierAdjustments:
 
     def test_upper_body_day_decreases_lower_body_multiplier(self):
         """Upper-body strength should reduce lower-body multiplier."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_strength",
             source="manual",
             sport_type=SportType.STRENGTH,
@@ -236,9 +237,9 @@ class TestMultiplierAdjustments:
 
     def test_high_elevation_increases_both_multipliers(self):
         """High elevation should increase both multipliers."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_hill_run",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             name="Hill Repeats",
             date=date(2026, 1, 12),
@@ -261,15 +262,15 @@ class TestMultiplierAdjustments:
 
     def test_race_effort_increases_systemic_multiplier(self):
         """Race effort should increase systemic multiplier."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_race",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             name="10K Race",
             date=date(2026, 1, 12),
             duration_minutes=47,
             duration_seconds=2820,
-            workout_type=1,  # Strava race flag
+            workout_type=1,  # historical race flag
             created_at=datetime.now(),
             updated_at=datetime.now(),
         )
@@ -309,11 +310,10 @@ class TestSessionClassification:
         assert classify_session_type(9) == SessionType.RACE
         assert classify_session_type(10) == SessionType.RACE
 
-    def test_workout_type_race_overrides_rpe(self):
-        """workout_type=1 should override RPE classification."""
-        # Even with low RPE, race flag should classify as RACE
-        assert classify_session_type(5, workout_type=1) == SessionType.RACE
-        assert classify_session_type(7, workout_type=1) == SessionType.RACE
+    def test_explicit_race_classification_overrides_rpe(self):
+        """An explicit provider-neutral race classification overrides RPE."""
+        assert classify_session_type(5, is_race=True) == SessionType.RACE
+        assert classify_session_type(7, is_race=True) == SessionType.RACE
 
     def test_session_type_included_in_load_calculation(self, basic_run_activity):
         """Session type should be included in LoadCalculation."""
@@ -336,20 +336,15 @@ class TestEdgeCases:
 
     def test_zero_duration_raises_error(self):
         """Zero duration should raise InvalidLoadInputError."""
-        activity = NormalizedActivity(
-            id="test_invalid",
-            source="manual",
-            sport_type=SportType.RUN,
-            name="Invalid",
-            date=date(2026, 1, 12),
-            duration_minutes=0,  # Invalid
-            duration_seconds=0,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
-        )
-
-        with pytest.raises(InvalidLoadInputError, match="duration_minutes must be positive"):
-            compute_load(activity, estimated_rpe=5)
+        with pytest.raises(Exception, match="greater than 0"):
+            make_activity(
+                id="test_invalid",
+                source="manual",
+                sport_type=SportType.RUN,
+                name="Invalid",
+                date=date(2026, 1, 12),
+                duration_seconds=0,
+            )
 
     def test_invalid_rpe_raises_error(self, basic_run_activity):
         """RPE outside 1-10 range should raise error."""
@@ -361,9 +356,9 @@ class TestEdgeCases:
 
     def test_long_duration_adjustment(self):
         """Duration >120min should increase systemic multiplier."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="test_long",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             name="Long Run",
             date=date(2026, 1, 12),
@@ -457,9 +452,9 @@ class TestBatchOperations:
         """Should compute loads for multiple activities."""
         activities = [
             (
-                NormalizedActivity(
+                make_activity(
                     id="run_1",
-                    source="strava",
+                    source="upload",
                     sport_type=SportType.RUN,
                     name="Run 1",
                     date=date(2026, 1, 12),
@@ -471,7 +466,7 @@ class TestBatchOperations:
                 6,
             ),
             (
-                NormalizedActivity(
+                make_activity(
                     id="climb_1",
                     source="manual",
                     sport_type=SportType.CLIMB,
@@ -502,9 +497,9 @@ class TestBatchOperations:
         activities = [
             # Valid activity
             (
-                NormalizedActivity(
+                make_activity(
                     id="valid",
-                    source="strava",
+                    source="upload",
                     sport_type=SportType.RUN,
                     name="Valid",
                     date=date(2026, 1, 12),
@@ -515,20 +510,19 @@ class TestBatchOperations:
                 ),
                 6,
             ),
-            # Invalid activity (zero duration)
+            # Invalid calculation request (RPE outside the domain).
             (
-                NormalizedActivity(
+                make_activity(
                     id="invalid",
                     source="manual",
                     sport_type=SportType.RUN,
                     name="Invalid",
                     date=date(2026, 1, 12),
-                    duration_minutes=0,
-                    duration_seconds=0,
+                    duration_seconds=2700,
                     created_at=datetime.now(),
                     updated_at=datetime.now(),
                 ),
-                5,
+                0,
             ),
         ]
 
@@ -549,9 +543,9 @@ class TestLoadIntegration:
 
     def test_full_load_calculation_pipeline(self):
         """Should run complete load calculation successfully."""
-        activity = NormalizedActivity(
+        activity = make_activity(
             id="integration_test",
-            source="strava",
+            source="upload",
             sport_type=SportType.TRAIL_RUN,
             surface_type=SurfaceType.TRAIL,
             name="Trail Run with Elevation",
@@ -592,9 +586,9 @@ class TestLoadIntegration:
     def test_multi_sport_day_different_loads(self):
         """Different sports should produce different load profiles."""
         # Morning run
-        run = NormalizedActivity(
+        run = make_activity(
             id="morning_run",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             name="Easy Run",
             date=date(2026, 1, 12),
@@ -606,7 +600,7 @@ class TestLoadIntegration:
         )
 
         # Evening climb
-        climb = NormalizedActivity(
+        climb = make_activity(
             id="evening_climb",
             source="manual",
             sport_type=SportType.CLIMB,

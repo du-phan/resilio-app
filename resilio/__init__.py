@@ -5,10 +5,10 @@ This package provides an API layer for Claude Code to deliver personalized coach
 based on multi-sport training load, injury prevention, and evidence-based methodology.
 
 Usage:
-    from resilio.api import sync_strava, get_todays_workout
+    from resilio.api import sync_activities, get_todays_workout
 
     # Sync activities
-    result = sync_strava()
+    result = sync_activities()
 
     # Get today's workout
     workout = get_todays_workout()
@@ -28,10 +28,7 @@ __version__ = "0.1.0"
 #     get_weekly_status,
 #     get_training_status,
 # )
-# from resilio.api.sync import (
-#     sync_strava,
-#     log_activity,
-# )
+# from resilio.api.sync import sync_activities
 # from resilio.api.metrics import (
 #     get_current_metrics,
 #     get_readiness,
@@ -59,8 +56,7 @@ __all__ = [
     # "get_training_status",
 
     # Sync operations
-    # "sync_strava",
-    # "log_activity",
+    # "sync_activities",
 
     # Metrics operations
     # "get_current_metrics",

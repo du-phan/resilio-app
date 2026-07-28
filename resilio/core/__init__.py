@@ -5,12 +5,12 @@ These modules are NOT imported directly by Claude Code. They are called
 by the API layer to implement coaching functionality.
 
 Modules (M1-M13):
-    - M1 workflows: Multi-step operation orchestration
+    - Workflows: Multi-step operation orchestration
     - M2 config: Configuration and secrets
     - M3 repository: File I/O operations
     - M4 profile: Athlete profile service
-    - M5 strava: Strava API integration
-    - M6 normalization: Activity normalization
+    - Activity sync: External import and reconciliation
+    - Canonical activity schemas: Normalized local archive
     - M7 notes: Notes and RPE analysis
     - M8 load: Load calculation
     - M9 metrics: CTL/ATL/TSB computation

@@ -1,147 +1,21 @@
-# Activity Commands
+# Activity commands
 
-> **Quick Links**: [Back to Index](index.md) | [Core Concepts](core_concepts.md)
-
-Commands to list and search activities with their notes (description, private_note). These tools surface raw data for the AI coach to interpret.
-
-**Commands in this category:**
-- `resilio activity list` - List activities in a date range with their notes
-- `resilio activity search` - Search activities by text content in notes
-
----
-
-## resilio activity list
-
-List activities in a date range with their notes.
-
-**Usage:**
+Canonical completed activities are read from
+`data/activities/YYYY-MM/<local_activity_id>.yaml`.
 
 ```bash
-# List activities from last 30 days (default)
-resilio activity list
-
-# List activities from last 60 days
-resilio activity list --since 60d
-
-# Filter by sport type
-resilio activity list --since 30d --sport run
-
-# Only activities with notes
-resilio activity list --since 14d --has-notes
-
-# Specific date range
-resilio activity list --since 2026-01-01
+resilio activity list --since 30d
+resilio activity list --since 60d --sport run
+resilio activity search --query "ankle fatigue" --since 90d
+resilio activity export --since 28d --out /tmp/activities.json
+resilio activity laps <local-activity-id>
 ```
 
-**Parameters:**
+`list` and `search` expose derived convenience values such as kilometres and
+minutes, while persisted activity v2 stores SI base units. `laps` presents the
+provider-neutral `segments` collection, which may come from historical laps or
+external intervals.
 
-- `--since` (optional): Time period - '30d' for 30 days, or 'YYYY-MM-DD' (default: 30d)
-- `--sport` (optional): Filter by sport type (e.g., 'run', 'climb', 'cycle', 'yoga')
-- `--has-notes` (optional): Only return activities with description or private_note
-
-**Returns:**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "activities": [
-      {
-        "id": "strava_17050189802",
-        "date": "2026-01-14",
-        "sport": "run",
-        "name": "Evening Run",
-        "duration_minutes": 35,
-        "distance_km": 5.27,
-        "average_hr": 157.1,
-        "description": "",
-        "private_note": "30 minutes @ 6:00 min/km. At minute 10, the right ankle started to feel a bit weird..."
-      }
-    ],
-    "count": 15,
-    "date_range": {
-      "start": "2025-12-17",
-      "end": "2026-01-17"
-    },
-    "filters": {
-      "sport": null,
-      "has_notes": false
-    }
-  }
-}
-```
-
-**Use cases:**
-
-- Review recent training notes for patterns
-- Find activities with injury/illness mentions
-- Get context for coaching decisions
-
----
-
-## resilio activity search
-
-Search activities by text content in notes.
-
-**Usage:**
-
-```bash
-# Search for ankle mentions
-resilio activity search --query "ankle"
-
-# Multiple keywords (OR match)
-resilio activity search --query "tired fatigue sore"
-
-# Filter by sport and time period
-resilio activity search --query "pain" --sport run --since 60d
-```
-
-**Parameters:**
-
-- `--query` (required): Keywords to search (space-separated = OR match)
-- `--since` (optional): Time period (default: 30d)
-- `--sport` (optional): Filter by sport type
-
-**Returns:**
-
-```json
-{
-  "ok": true,
-  "data": {
-    "matches": [
-      {
-        "id": "strava_17050189802",
-        "date": "2026-01-14",
-        "sport": "run",
-        "name": "Evening Run",
-        "duration_minutes": 35,
-        "matched_field": "private_note",
-        "matched_keywords": ["ankle"],
-        "matched_text": "...right ankle started to feel a bit weird and not comfortable...",
-        "full_note": "30 minutes @ 6:00 min/km. At minute 10, the right ankle..."
-      }
-    ],
-    "query": "ankle",
-    "total_matches": 4,
-    "activities_searched": 45,
-    "date_range": {
-      "start": "2025-12-17",
-      "end": "2026-01-17"
-    },
-    "filters": {
-      "sport": null
-    }
-  }
-}
-```
-
-**Use cases:**
-
-- Find injury/pain mentions across activities
-- Search for fatigue/illness signals
-- Identify recurring patterns
-- Gather evidence for memory creation
-
----
-
-**Navigation**: [Back to Index](index.md) | [Next: Metrics Commands](cli_metrics.md)
+There is no active local manual-entry command. Record manual climbing,
+bouldering, yoga, strength, or other sessions in Intervals.icu and sync them.
+Historical local manual records remain preserved as historical imports.

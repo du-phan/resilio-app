@@ -465,11 +465,16 @@ def interpret_load(
             break
 
     # Combined assessment based on sport
-    if sport_type in {"climb", "bouldering", "swimming"}:
+    if sport_type in {"climb", "bouldering", "swim", "swimming"}:
         combined = f"Good {systemic_desc} with minimal leg stress"
-    elif sport_type in {"cycling"}:
+    elif sport_type in {"cycle", "cycling"}:
         combined = f"{systemic_desc.title()} with low running-specific stress"
-    elif sport_type in {"run", "trail_run"}:
+    elif sport_type in {
+        "run",
+        "trail_run",
+        "treadmill_run",
+        "track_run",
+    }:
         combined = f"{systemic_desc.title()} running session"
     else:
         combined = f"{systemic_desc.title()}"

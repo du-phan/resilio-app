@@ -1,154 +1,125 @@
-"""
-Unit tests for M2 - Config & Secrets module.
+"""Secret-safe runtime configuration tests."""
 
-Tests configuration loading, validation, and repository root detection.
-"""
+from pathlib import Path
 
 import pytest
-import yaml
-from pathlib import Path
 
 from resilio.core.config import ConfigError, get_repo_root, load_config
 from resilio.schemas.config import Config, ConfigErrorType
 
 
-class TestGetRepoRoot:
-    """Tests for get_repo_root function."""
-
-    def test_get_repo_root_finds_git_directory(self):
-        """Should find repo root via .git directory."""
-        root = get_repo_root()
-        assert (root / ".git").exists()
-
-    def test_get_repo_root_finds_claude_md(self):
-        """Should find repo root via CLAUDE.md."""
-        root = get_repo_root()
-        assert (root / "CLAUDE.md").exists()
-
-    def test_get_repo_root_raises_when_not_in_repo(self, tmp_path, monkeypatch):
-        """Should raise when not in repository."""
-        monkeypatch.chdir(tmp_path)
-        with pytest.raises(FileNotFoundError, match="Could not find repository root"):
-            get_repo_root()
+def _settings(root: Path, content: str = "{}\n") -> None:
+    (root / ".git").mkdir()
+    (root / "config").mkdir()
+    (root / "config" / "settings.yaml").write_text(content)
 
 
-class TestLoadConfig:
-    """Tests for load_config function."""
+def test_get_repo_root_finds_repository() -> None:
+    assert (get_repo_root() / ".git").exists()
 
-    def test_load_config_succeeds_with_valid_files(self, tmp_path, monkeypatch):
-        """Should load valid config files."""
-        # Setup config directory
-        config_dir = tmp_path / "config"
-        config_dir.mkdir()
 
-        # Write valid settings.yaml
-        settings = {
-            "paths": {
-                "athlete_dir": "data/athlete",
-                "activities_dir": "data/activities",
-                "metrics_dir": "data/metrics",
-                "plans_dir": "data/plans",
-            }
-        }
-        with open(config_dir / "settings.yaml", "w") as f:
-            yaml.dump(settings, f)
+def test_get_repo_root_raises_outside_repository(tmp_path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        get_repo_root()
 
-        # Write valid secrets.local.yaml
-        secrets = {
-            "strava": {
-                "client_id": "12345",
-                "client_secret": "s" * 40,
-                "access_token": "token",
-                "refresh_token": "refresh",
-                "token_expires_at": 1704067200,
-            }
-        }
-        with open(config_dir / "secrets.local.yaml", "w") as f:
-            yaml.dump(secrets, f)
 
-        # Create .git to mark as repo root
-        (tmp_path / ".git").mkdir()
+def test_explicit_fake_environment_loads_without_local_file(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _settings(tmp_path)
+    monkeypatch.chdir(tmp_path)
 
-        # Test
-        monkeypatch.chdir(tmp_path)
-        result = load_config()
+    result = load_config(
+        environment={"INTERVALS_ICU_API_KEY": "fake-injected-test-key"}
+    )
 
-        assert not isinstance(result, ConfigError)
-        assert isinstance(result, Config)
-        assert result.settings.paths.athlete_dir == "data/athlete"
+    assert isinstance(result, Config)
+    assert (
+        result.intervals_icu_api_key.get_secret_value()
+        == "fake-injected-test-key"
+    )
+    assert "fake-injected-test-key" not in repr(result)
+    assert result.settings.intervals_icu.initial_window_days == 90
 
-    def test_load_config_error_missing_settings(self, tmp_path, monkeypatch):
-        """Should return error when settings.yaml missing."""
-        (tmp_path / ".git").mkdir()
-        (tmp_path / "config").mkdir()
-        monkeypatch.chdir(tmp_path)
 
-        result = load_config()
+def test_omitted_environment_reads_env_local_without_mutating_process(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    _settings(tmp_path)
+    (tmp_path / ".env.local").write_text(
+        "INTERVALS_ICU_API_KEY=local-test-value\n"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("INTERVALS_ICU_API_KEY", raising=False)
 
-        assert isinstance(result, ConfigError)
-        assert result.error_type == ConfigErrorType.FILE_NOT_FOUND
+    result = load_config()
 
-    def test_load_config_error_missing_secrets(self, tmp_path, monkeypatch):
-        """Should return error when secrets.local.yaml missing."""
-        (tmp_path / ".git").mkdir()
-        config_dir = tmp_path / "config"
-        config_dir.mkdir()
+    assert isinstance(result, Config)
+    assert result.intervals_icu_api_key.get_secret_value() == "local-test-value"
+    assert "INTERVALS_ICU_API_KEY" not in __import__("os").environ
 
-        # Create settings but not secrets
-        settings = {"paths": {"athlete_dir": "data/athlete"}}
-        with open(config_dir / "settings.yaml", "w") as f:
-            yaml.dump(settings, f)
 
-        monkeypatch.chdir(tmp_path)
-        result = load_config()
+@pytest.mark.parametrize(
+    ("environment", "message"),
+    [
+        ({}, "missing or empty"),
+        ({"INTERVALS_ICU_API_KEY": "   "}, "missing or empty"),
+    ],
+)
+def test_missing_injected_key_is_typed_and_redacted(
+    tmp_path,
+    monkeypatch,
+    environment,
+    message,
+) -> None:
+    _settings(tmp_path)
+    monkeypatch.chdir(tmp_path)
 
-        assert isinstance(result, ConfigError)
-        assert result.error_type == ConfigErrorType.FILE_NOT_FOUND
-        assert "secrets" in result.message.lower()
+    result = load_config(environment=environment)
 
-    def test_load_config_error_invalid_yaml(self, tmp_path, monkeypatch):
-        """Should return error for malformed YAML."""
-        (tmp_path / ".git").mkdir()
-        config_dir = tmp_path / "config"
-        config_dir.mkdir()
+    assert isinstance(result, ConfigError)
+    assert result.error_type == ConfigErrorType.MISSING_SECRET
+    assert message in result.message
 
-        # Write invalid YAML
-        (config_dir / "settings.yaml").write_text("invalid: yaml: content:")
 
-        monkeypatch.chdir(tmp_path)
-        result = load_config()
+def test_missing_env_local_is_typed(tmp_path, monkeypatch) -> None:
+    _settings(tmp_path)
+    monkeypatch.chdir(tmp_path)
 
-        assert isinstance(result, ConfigError)
-        assert result.error_type == ConfigErrorType.PARSE_ERROR
+    result = load_config()
 
-    def test_load_config_uses_defaults_for_optional_fields(self, tmp_path, monkeypatch):
-        """Should populate defaults for optional fields."""
-        (tmp_path / ".git").mkdir()
-        config_dir = tmp_path / "config"
-        config_dir.mkdir()
+    assert isinstance(result, ConfigError)
+    assert result.error_type == ConfigErrorType.MISSING_SECRET
+    assert ".env.local" in result.message
 
-        # Minimal settings (use all defaults)
-        settings = {}
-        with open(config_dir / "settings.yaml", "w") as f:
-            yaml.dump(settings, f)
 
-        secrets = {
-            "strava": {
-                "client_id": "12345",
-                "client_secret": "s" * 40,
-                "access_token": "token",
-                "refresh_token": "refresh",
-                "token_expires_at": 1704067200,
-            }
-        }
-        with open(config_dir / "secrets.local.yaml", "w") as f:
-            yaml.dump(secrets, f)
+def test_missing_settings_and_invalid_yaml_are_distinct(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "config").mkdir()
+    monkeypatch.chdir(tmp_path)
+    missing = load_config(environment={"INTERVALS_ICU_API_KEY": "fake"})
+    assert isinstance(missing, ConfigError)
+    assert missing.error_type == ConfigErrorType.FILE_NOT_FOUND
 
-        monkeypatch.chdir(tmp_path)
-        result = load_config()
+    (tmp_path / "config" / "settings.yaml").write_text(
+        "not: [valid\n"
+    )
+    malformed = load_config(environment={"INTERVALS_ICU_API_KEY": "fake"})
+    assert isinstance(malformed, ConfigError)
+    assert malformed.error_type == ConfigErrorType.PARSE_ERROR
 
-        assert not isinstance(result, ConfigError)
-        # Check default values are populated
-        assert result.settings.training_defaults.ctl_time_constant == 42
-        assert result.settings.training_defaults.atl_time_constant == 7
-        assert result.settings.paths.athlete_dir == "data/athlete"
+
+def test_unknown_settings_are_rejected(tmp_path, monkeypatch) -> None:
+    _settings(tmp_path, "unknown_section: true\n")
+    monkeypatch.chdir(tmp_path)
+
+    result = load_config(environment={"INTERVALS_ICU_API_KEY": "fake"})
+
+    assert isinstance(result, ConfigError)
+    assert result.error_type == ConfigErrorType.VALIDATION_ERROR

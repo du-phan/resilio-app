@@ -46,6 +46,7 @@ from resilio.schemas.plan import (
     MasterPlan,
 )
 from resilio.core.guardrails.volume import validate_workout_minimums
+from resilio.core.plan_guardrails import running_workouts
 from resilio.core.paths import (
     current_plan_path,
     get_plans_dir,
@@ -406,7 +407,7 @@ WORKOUT_DEFAULTS = {
         "intensity_zone": IntensityZone.ZONE_4,
         "target_rpe": 7,
         "purpose": "Improve lactate threshold - the pace you can sustain for ~60 minutes",
-        "intervals": [{"type": "tempo_block", "duration_minutes": 20}],
+        "structured_workout": None,
         "warmup_km": 2.0,
         "cooldown_km": 1.5,
     },
@@ -415,7 +416,7 @@ WORKOUT_DEFAULTS = {
         "intensity_zone": IntensityZone.ZONE_5,
         "target_rpe": 8,
         "purpose": "Boost VO2max - maximum aerobic capacity",
-        "intervals": [{"type": "800m", "reps": 6, "recovery": "400m jog"}],
+        "structured_workout": None,
         "warmup_km": 2.5,
         "cooldown_km": 1.5,
     },
@@ -774,8 +775,7 @@ def create_workout(
         hr_range_low = hr_ranges.get("low")
         hr_range_high = hr_ranges.get("high")
 
-    # Get interval structure
-    intervals = defaults.get("intervals")
+    structured_workout = defaults.get("structured_workout")
     warmup_km = defaults.get("warmup_km", 0.0)
     cooldown_km = defaults.get("cooldown_km", 0.0)
 
@@ -803,7 +803,7 @@ def create_workout(
         pace_range_max_km=pace_range_max_km,
         hr_range_low=hr_range_low,
         hr_range_high=hr_range_high,
-        intervals=intervals,
+        structured_workout=structured_workout,
         warmup_km=warmup_km,
         cooldown_km=cooldown_km,
         purpose=purpose,
@@ -1137,7 +1137,7 @@ def get_workout_template(workout_type: WorkoutType) -> dict:
             "intensity_zone": IntensityZone,
             "target_rpe": int,
             "purpose": str,
-            "intervals": Optional[list[dict]],
+            "structured_workout": Optional[StructuredWorkout],
             "warmup_km": float,
             "cooldown_km": float
         }
@@ -1195,7 +1195,7 @@ def create_downgraded_workout(
         pace_range_max_km=original.pace_range_max_km,
         hr_range_low=original.hr_range_low,
         hr_range_high=original.hr_range_high,
-        intervals=None,  # Remove intervals
+        structured_workout=None,
         warmup_km=0.0,
         cooldown_km=0.0,
         purpose=f"Downgraded from {original.workout_type} - {easy_defaults['purpose']}",
@@ -1226,18 +1226,6 @@ def create_shortened_workout(
     # Calculate reduction percentage
     reduction_pct = duration_minutes / original.duration_minutes
 
-    # Adjust interval structure if present
-    new_intervals = None
-    if original.intervals and reduction_pct < 1.0:
-        new_intervals = []
-        for interval in original.intervals:
-            adjusted_interval = dict(interval)
-            if "duration_minutes" in adjusted_interval:
-                adjusted_interval["duration_minutes"] = int(adjusted_interval["duration_minutes"] * reduction_pct)
-            elif "reps" in adjusted_interval:
-                adjusted_interval["reps"] = max(1, int(adjusted_interval["reps"] * reduction_pct))
-            new_intervals.append(adjusted_interval)
-
     return WorkoutPrescription(
         id=original.id,
         week_number=original.week_number,
@@ -1253,7 +1241,7 @@ def create_shortened_workout(
         pace_range_max_km=original.pace_range_max_km,
         hr_range_low=original.hr_range_low,
         hr_range_high=original.hr_range_high,
-        intervals=new_intervals,
+        structured_workout=original.structured_workout,
         warmup_km=original.warmup_km,
         cooldown_km=original.cooldown_km,
         purpose=original.purpose,
@@ -1374,7 +1362,10 @@ def validate_week(
                 ))
 
     # Check volume distribution (actual vs target)
-    actual_volume_km = sum(w.distance_km for w in week_plan.workouts if w.distance_km)
+    run_workouts = running_workouts(week_plan.workouts)
+    actual_volume_km = sum(
+        workout.distance_km for workout in run_workouts if workout.distance_km
+    )
     target_volume_km = week_plan.target_volume_km
     if target_volume_km > 0:
         volume_diff_km = abs(actual_volume_km - target_volume_km)
@@ -1394,7 +1385,11 @@ def validate_week(
             ))
 
     # Check long run cap
-    long_runs = [w for w in week_plan.workouts if w.workout_type == WorkoutType.LONG_RUN]
+    long_runs = [
+        workout
+        for workout in run_workouts
+        if workout.workout_type == WorkoutType.LONG_RUN
+    ]
     if long_runs and week_plan.target_volume_km > 0:
         long_run = long_runs[0]
         long_run_km = long_run.distance_km or (long_run.duration_minutes / 60 * 6)  # Assume 10min/km
@@ -1423,7 +1418,7 @@ def validate_week(
             ))
 
     # Validate individual workout minimums (profile-aware)
-    for workout in week_plan.workouts:
+    for workout in run_workouts:
         # Get workout type as string (handle both string and enum cases)
         wtype = workout.workout_type.value if hasattr(workout.workout_type, 'value') else workout.workout_type
 
@@ -1483,20 +1478,20 @@ def validate_guardrails(
         violations.extend(week_violations)
 
     # Check 80/20 distribution across full plan
-    total_run_days = sum(len([w for w in week.workouts if w.workout_type != WorkoutType.REST]) for week in plan.weeks)
+    plan_runs = [
+        workout
+        for week in plan.weeks
+        for workout in running_workouts(week.workouts)
+        if workout.workout_type != WorkoutType.REST
+    ]
+    total_run_days = len(plan_runs)
     if total_run_days >= 3 * len(plan.weeks):  # Avg ≥3 run days/week
         total_easy_minutes = sum(
-            w.duration_minutes
-            for week in plan.weeks
-            for w in week.workouts
-            if w.target_rpe <= 6
+            workout.duration_minutes
+            for workout in plan_runs
+            if workout.target_rpe <= 6
         )
-        total_minutes = sum(
-            w.duration_minutes
-            for week in plan.weeks
-            for w in week.workouts
-            if w.workout_type != WorkoutType.REST
-        )
+        total_minutes = sum(workout.duration_minutes for workout in plan_runs)
 
         if total_minutes > 0:
             easy_pct = (total_easy_minutes / total_minutes) * 100
@@ -2092,7 +2087,7 @@ def assess_monthly_completion(
         month_number: Month that was assessed (1-indexed)
         week_numbers: Weeks assessed (e.g., [1, 2, 3, 4])
         planned_workouts: List of planned workouts from monthly plan
-        completed_activities: List of actual activities from Strava
+        completed_activities: List of canonical completed activities
         starting_ctl: CTL at month start
         ending_ctl: CTL at month end
         target_ctl: Target CTL for month end (from macro plan)

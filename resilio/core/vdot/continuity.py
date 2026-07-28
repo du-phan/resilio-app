@@ -20,15 +20,15 @@ from resilio.schemas.vdot import (
     VDOTDecayResult,
     ConfidenceLevel,
 )
-from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import CanonicalActivity
 from resilio.utils.dates import get_week_boundaries
 
 
 def group_by_training_week(
-    activities: List[NormalizedActivity],
+    activities: List[CanonicalActivity],
     start_date: date,
     end_date: date
-) -> dict[date, List[NormalizedActivity]]:
+) -> dict[date, List[CanonicalActivity]]:
     """
     Group activities by training week (Monday-Sunday).
 
@@ -63,9 +63,10 @@ def group_by_training_week(
 
 
 def detect_training_breaks(
-    activities: List[NormalizedActivity],
+    activities: List[CanonicalActivity],
     race_date: date,
-    lookback_months: int = 18
+    lookback_months: int = 18,
+    as_of_date: Optional[date] = None,
 ) -> BreakAnalysis:
     """
     Detect training breaks (consecutive weeks with no runs) since race.
@@ -76,20 +77,20 @@ def detect_training_breaks(
     Args:
         activities: All activities (pre-filtered to runs only)
         race_date: Race date to analyze from
-        lookback_months: Months to look back from today
+        lookback_months: Months to look back from the analysis date
+        as_of_date: Deterministic analysis date; defaults to the current date
 
     Returns:
         BreakAnalysis with continuity metrics and break periods
     """
-    from datetime import date as dt_date
-
-    today = dt_date.today()
+    today = as_of_date or date.today()
     analysis_start = max(race_date, today - timedelta(days=lookback_months * 30))
 
     # Filter to runs only (should already be filtered, but be explicit)
     runs = [
         a for a in activities
-        if a.sport_type.lower() in ["run", "trail_run", "virtual_run"]
+        if a.sport_type.lower()
+        in ["run", "trail_run", "treadmill_run", "track_run"]
         and analysis_start <= a.date <= today
     ]
 

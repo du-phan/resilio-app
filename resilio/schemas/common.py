@@ -2,15 +2,14 @@
 Common schemas used across multiple modules.
 """
 
-from datetime import date, datetime
 from enum import Enum
-from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class SchemaType(str, Enum):
     """Types of data schemas in the system."""
+
     ACTIVITY = "activity"
     PROFILE = "profile"
     DAILY_METRICS = "daily_metrics"
@@ -18,7 +17,6 @@ class SchemaType(str, Enum):
     PLAN = "plan"
     WORKOUT = "workout"
     MEMORIES = "memories"
-    TRAINING_HISTORY = "training_history"
     PENDING_SUGGESTIONS = "pending_suggestions"
     SETTINGS = "settings"
 

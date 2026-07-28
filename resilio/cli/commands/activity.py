@@ -6,16 +6,17 @@ These tools compute/gather data - the AI coach interprets and decides.
 """
 
 from datetime import date, datetime, timedelta
-from pathlib import Path
 from typing import Optional
-import re
 
 import typer
 
+from resilio.cli.output import (
+    create_error_envelope,
+    create_success_envelope,
+    output_json,
+)
 from resilio.core.repository import RepositoryIO
-from resilio.schemas.activity import NormalizedActivity
-from resilio.cli.output import output_json, create_success_envelope, create_error_envelope
-
+from resilio.schemas.activity import CanonicalActivity
 
 # Create activity subcommand app
 app = typer.Typer(
@@ -23,6 +24,8 @@ app = typer.Typer(
     help="List and search activities",
     no_args_is_help=True,
 )
+
+GARMIN_DATA_ATTRIBUTION = "Activity data provided by Garmin"
 
 
 def _parse_since(since: str) -> date:
@@ -82,9 +85,11 @@ def _load_activities_in_range(
 
     for file_path in activity_files:
         # Read activity file
-        result = repo.read_yaml(file_path, NormalizedActivity)
-        if isinstance(result, NormalizedActivity):
+        result = repo.read_yaml(file_path, CanonicalActivity)
+        if isinstance(result, CanonicalActivity):
             activity = result
+            if activity.status != "active":
+                continue
 
             # Filter by date range
             if not (start_date <= activity.date <= end_date):
@@ -103,6 +108,11 @@ def _load_activities_in_range(
                 continue
 
             # Build activity dict with relevant fields
+            attribution = (
+                GARMIN_DATA_ATTRIBUTION
+                if activity.origin.recording_provider == "garmin"
+                else None
+            )
             activities.append({
                 "id": activity.id,
                 "date": activity.date.isoformat(),
@@ -113,6 +123,7 @@ def _load_activities_in_range(
                 "average_hr": activity.average_hr,
                 "description": description,
                 "private_note": private_note,
+                "attribution": attribution,
             })
 
     # Sort by date descending (most recent first)
@@ -145,24 +156,25 @@ def _search_activities(
         # Check for any keyword match (OR)
         matched_keywords = []
         matched_field = None
-        matched_text = ""
 
         for keyword in keywords:
             if keyword in description:
                 matched_keywords.append(keyword)
                 if not matched_field:
                     matched_field = "description"
-                    matched_text = activity["description"]
             if keyword in private_note:
                 matched_keywords.append(keyword)
                 if not matched_field or matched_field == "description":
                     # Prefer private_note if it has the match
                     matched_field = "private_note"
-                    matched_text = activity["private_note"]
 
         if matched_keywords:
             # Create context snippet around the first match
-            full_note = activity["private_note"] if matched_field == "private_note" else activity["description"]
+            full_note = (
+                activity["private_note"]
+                if matched_field == "private_note"
+                else activity["description"]
+            )
 
             # Find the first keyword and extract surrounding context
             lower_note = full_note.lower()
@@ -191,6 +203,7 @@ def _search_activities(
                 "matched_keywords": list(set(matched_keywords)),
                 "matched_text": snippet,
                 "full_note": full_note,
+                "attribution": activity["attribution"],
             })
 
     return matches
@@ -416,9 +429,11 @@ def activity_export_command(
 
         exported = []
         for file_path in activity_files:
-            result = repo.read_yaml(file_path, NormalizedActivity)
-            if isinstance(result, NormalizedActivity):
+            result = repo.read_yaml(file_path, CanonicalActivity)
+            if isinstance(result, CanonicalActivity):
                 activity = result
+                if activity.status != "active":
+                    continue
 
                 # Filter by date range
                 if not (start_date <= activity.date <= end_date):
@@ -470,7 +485,10 @@ def activity_export_command(
 
 def activity_laps_command(
     ctx: typer.Context,
-    activity_id: str = typer.Argument(..., help="Activity ID (e.g., strava_12345678901)"),
+    activity_id: str = typer.Argument(
+        ...,
+        help="Canonical local activity ID",
+    ),
     format: str = typer.Option("table", help="Output format: table|json"),
 ) -> None:
     """
@@ -482,8 +500,8 @@ def activity_laps_command(
     - How much elevation per lap?
 
     Examples:
-        resilio activity laps strava_12345678901
-        resilio activity laps strava_12345678901 --format json
+        resilio activity laps act_i_0123456789abcdef01234567
+        resilio activity laps act_i_0123456789abcdef01234567 --format json
     """
     try:
         repo = RepositoryIO()
@@ -499,8 +517,8 @@ def activity_laps_command(
 
         activity = None
         for file_path in activity_files:
-            result = repo.read_yaml(file_path, NormalizedActivity)
-            if isinstance(result, NormalizedActivity) and result.id == activity_id:
+            result = repo.read_yaml(file_path, CanonicalActivity)
+            if isinstance(result, CanonicalActivity) and result.id == activity_id:
                 activity = result
                 break
 
@@ -515,7 +533,10 @@ def activity_laps_command(
         if not activity.has_laps or not activity.laps:
             envelope = create_error_envelope(
                 error_type="not_available",
-                message=f"No lap data available for {activity.name}. This activity doesn't have lap markers from Strava.",
+                message=(
+                    f"No segment data available for {activity.name}. "
+                    "This activity has no imported lap or interval markers."
+                ),
             )
             output_json(envelope)
             raise typer.Exit(code=4)
@@ -552,7 +573,7 @@ def activity_laps_command(
         raise typer.Exit(code=0)
 
 
-def _display_laps_table(activity: NormalizedActivity) -> None:
+def _display_laps_table(activity: CanonicalActivity) -> None:
     """Display laps in human-readable table format using Rich."""
     from rich.console import Console
     from rich.table import Table
@@ -575,7 +596,11 @@ def _display_laps_table(activity: NormalizedActivity) -> None:
         pace = lap.pace_per_km or "—"
         avg_hr = f"{int(lap.average_hr)}" if lap.average_hr else "—"
         max_hr = f"{int(lap.max_hr)}" if lap.max_hr else "—"
-        elev = f"{int(lap.total_elevation_gain_meters)}m" if lap.total_elevation_gain_meters else "—"
+        elev = (
+            f"{int(lap.total_elevation_gain_meters)}m"
+            if lap.total_elevation_gain_meters
+            else "—"
+        )
 
         table.add_row(
             str(lap.lap_index),
@@ -594,8 +619,14 @@ def _display_laps_table(activity: NormalizedActivity) -> None:
     total_time = sum(lap.moving_time_seconds for lap in activity.laps)
     avg_pace_s = (total_time / total_dist / 60) if total_dist > 0 else 0
 
-    console.print(f"\n[bold]Total:[/bold] {total_dist:.2f} km in {_format_duration(total_time)}")
-    console.print(f"[bold]Avg Pace:[/bold] {int(avg_pace_s)}:{int((avg_pace_s % 1) * 60):02d} /km")
+    console.print(
+        f"\n[bold]Total:[/bold] {total_dist:.2f} km in "
+        f"{_format_duration(total_time)}"
+    )
+    console.print(
+        f"[bold]Avg Pace:[/bold] {int(avg_pace_s)}:"
+        f"{int((avg_pace_s % 1) * 60):02d} /km"
+    )
 
 
 def _format_duration(seconds: int) -> str:
@@ -612,5 +643,7 @@ def _format_duration(seconds: int) -> str:
 # Register commands
 app.command(name="list", help="List activities in a date range")(activity_list_command)
 app.command(name="search", help="Search activities by text content")(activity_search_command)
-app.command(name="export", help="Export activities as JSON for analysis commands")(activity_export_command)
+app.command(name="export", help="Export activities as JSON for analysis commands")(
+    activity_export_command
+)
 app.command(name="laps", help="Display lap-by-lap breakdown for a workout")(activity_laps_command)

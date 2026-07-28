@@ -6,7 +6,7 @@ Resilio. All commands return structured JSON for easy parsing.
 
 Usage:
     resilio init                        # Initialize data directories
-    resilio sync                        # Import activities from Strava
+    resilio sync                        # Import completed activities
     resilio status                      # Get current training metrics
     resilio today                       # Get today's workout
     resilio vdot calculate              # Calculate VDOT from race performance
@@ -56,7 +56,26 @@ def main(
 
 
 # Import and register commands
-from resilio.cli.commands import auth, metrics, plan, profile, vdot, guardrails, analysis, memory, activity, dates, performance, goal, approvals, weather
+from resilio.cli.commands import (
+    activity,
+    activity_backfill,
+    activity_review,
+    analysis,
+    approvals,
+    auth,
+    dates,
+    goal,
+    guardrails,
+    memory,
+    metrics,
+    migration,
+    performance,
+    plan,
+    profile,
+    vdot,
+    weather,
+    workout,
+)
 from resilio.cli.commands.init_cmd import init_command
 from resilio.cli.commands.status import status_command
 from resilio.cli.commands.sync import sync_command
@@ -65,13 +84,13 @@ from resilio.cli.commands.week import week_command
 
 # Register commands
 app.command(name="init", help="Initialize data directories and config")(init_command)
-app.command(name="sync", help="Import activities from Strava")(sync_command)
+app.command(name="sync", help="Import completed activities")(sync_command)
 app.command(name="status", help="Get current training metrics")(status_command)
 app.command(name="today", help="Get today's workout recommendation")(today_command)
 app.command(name="week", help="Get weekly training summary")(week_command)
 
 # Register subcommands
-app.add_typer(auth.app, name="auth", help="Manage Strava authentication")
+app.add_typer(auth.app, name="auth", help="Validate external account access")
 app.add_typer(metrics.app, name="metrics", help="Manage training metrics")
 app.add_typer(plan.app, name="plan", help="Manage training plans")
 app.add_typer(profile.app, name="profile", help="Manage athlete profile")
@@ -83,6 +102,22 @@ app.add_typer(analysis.risk_app, name="risk", help="Risk assessment commands")
 app.add_typer(weather.app, name="weather", help="Weather forecast for planning context")
 app.add_typer(memory.app, name="memory", help="Manage athlete memories and insights")
 app.add_typer(activity.app, name="activity", help="List and search activities")
+app.add_typer(
+    activity_backfill.app,
+    name="activity-backfill",
+    help="Operate the approved historical bouldering publication",
+)
+app.add_typer(
+    activity_review.app,
+    name="activity-review",
+    help="Review possible completed-activity matches",
+)
 app.add_typer(dates.app, name="dates", help="Date utilities for training plan generation")
 app.add_typer(performance.app, name="performance", help="Performance baseline and fitness tracking")
 app.add_typer(approvals.app, name="approvals", help="Manage approval state for planning workflows")
+app.add_typer(workout.app, name="workout", help="Publish structured planned workouts")
+app.add_typer(
+    migration.app,
+    name="activity-migration",
+    help="Inspect or operate the canonical activity migration",
+)

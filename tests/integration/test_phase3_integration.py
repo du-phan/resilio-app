@@ -22,7 +22,7 @@ from resilio.core.metrics import (
     MetricsCalculationError,
 )
 from resilio.schemas.activity import (
-    NormalizedActivity,
+    CanonicalActivity,
     LoadCalculation,
     SessionType,
     SportType,
@@ -37,6 +37,7 @@ from resilio.schemas.metrics import (
     ReadinessLevel,
     ConfidenceLevel,
 )
+from tests.factories import make_activity
 
 
 class TestPhase3Integration:
@@ -131,7 +132,9 @@ class TestPhase3Integration:
 
         # Create activity with injury flag in notes
         activity = self._create_run_activity(target_date, 40, 5, "easy", 140, 5)
-        activity.private_note = "Knee pain during run. Sharp discomfort on left knee."
+        activity.notes.private_note = (
+            "Knee pain during run. Sharp discomfort on left knee."
+        )
 
         # Note: M7 (Notes Analyzer) would normally extract this to flags
         # For integration test, we'll manually add the flag
@@ -158,15 +161,15 @@ class TestPhase3Integration:
         session_type: str,
         avg_hr: int,
         rpe: int,
-    ) -> NormalizedActivity:
+    ) -> CanonicalActivity:
         """Create a realistic running activity with M8 load calculation."""
         base_effort = rpe * duration_min
         systemic_load = base_effort * 1.0  # Running multiplier
         lower_body_load = base_effort * 1.0
 
-        return NormalizedActivity(
+        return make_activity(
             id=f"run_{date.isoformat()}",
-            source="strava",
+            source="upload",
             sport_type=SportType.RUN,
             name=f"{session_type.title()} Run",
             date=date,
@@ -200,15 +203,15 @@ class TestPhase3Integration:
 
     def _create_climb_activity(
         self, date: date, duration_min: int, rpe: int
-    ) -> NormalizedActivity:
+    ) -> CanonicalActivity:
         """Create a realistic climbing activity with M8 load calculation."""
         base_effort = rpe * duration_min
         systemic_load = base_effort * 0.6  # Climbing: 60% systemic
         lower_body_load = base_effort * 0.1  # 10% lower-body
 
-        return NormalizedActivity(
+        return make_activity(
             id=f"climb_{date.isoformat()}",
-            source="strava",
+            source="upload",
             sport_type=SportType.CLIMB,
             name="Rock Climbing Session",
             date=date,
@@ -235,13 +238,13 @@ class TestPhase3Integration:
 
     def _create_yoga_activity(
         self, date: date, duration_min: int, rpe: int
-    ) -> NormalizedActivity:
+    ) -> CanonicalActivity:
         """Create a realistic yoga activity with M8 load calculation."""
         base_effort = rpe * duration_min
         systemic_load = base_effort * 0.35  # Yoga: 35% systemic
         lower_body_load = base_effort * 0.1  # 10% lower-body
 
-        return NormalizedActivity(
+        return make_activity(
             id=f"yoga_{date.isoformat()}",
             source="manual",
             sport_type=SportType.YOGA,

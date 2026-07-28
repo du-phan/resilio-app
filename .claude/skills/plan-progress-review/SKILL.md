@@ -1,8 +1,7 @@
 ---
 name: plan-progress-review
 description: Reviews training progress across all completed weeks of the current plan. Use when athlete asks "how is my training going so far?", "recap my marathon training", "how have the past N weeks been?", or any question spanning multiple training weeks — NOT single-week analysis.
-allowed-tools: Bash, Read, Write
-argument-hint: ""
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # Plan Progress Review: Multi-Week Training Assessment
@@ -18,15 +17,18 @@ consistent?" when synced data can answer it. Use the data; reserve questions for
 only data can't provide (scheduling reasons, how an injury felt, etc.).
 
 **Communication guideline**: Present findings naturally. Say "Let me review your marathon
-training progress" not "I'll use plan-progress-review." See CLAUDE.md "Athlete-Facing
+training progress" not "I'll use plan-progress-review." See AGENTS.md "Athlete-Facing
 Communication Guidelines."
 
-**CLI execution rule**: Always attempt commands via the Bash tool before concluding they
+**CLI execution rule**: Always attempt commands via the shell tool before concluding they
 cannot be run. Never tell athletes to run commands in their terminal, even if an initial
-attempt fails — try alternatives first (see CLAUDE.md "CLI Failure Rule").
+attempt fails — try alternatives first (see AGENTS.md "CLI Failure Rule").
 
-**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions.
-Do not repeat unless the athlete asks.
+**Metric explainer rule (athlete-facing)**:
+On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short,
+plain-language definition. If multiple metrics appear together, use a single "Quick defs"
+line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes,
+add a brief clause tying the metric to total work across running + other sports.
 
 ---
 

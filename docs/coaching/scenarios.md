@@ -10,8 +10,8 @@ resilio auth status
 
 # If not authenticated or token expired:
 if [ $? -eq 3 ]; then
-  # Guide user through OAuth flow
-  echo "Let's connect your Strava account so I can access your training history."
+  # Collect the personal API key without echoing it, then validate again.
+  echo "Let's connect your Intervals.icu account so I can access your training history."
   resilio auth url
   # User opens browser, authorizes, copies code
   resilio auth exchange --code CODE_FROM_URL
@@ -50,7 +50,7 @@ Athlete: "Alex"
 Coach: "Nice to meet you, Alex! How old are you?"
 Athlete: "32"
 
-Coach: "Perfect. Looking at your Strava data, your resting HR averages around 55. Do you know your max heart rate?"
+Coach: "Perfect. Looking at your Intervals.icu data, your resting HR averages around 55. Do you know your max heart rate?"
 Athlete: "Yeah, I tested it last month - it's about 190"
 
 Coach: "Great, that helps with zone calculations. I notice you do climbing and running. Which is your primary sport?"
@@ -875,7 +875,7 @@ resilio profile analyze
 
 **Step 3: Identify mismatch**:
 ```
-Coach: "I see a mismatch. Your Strava shows:
+Coach: "I see a mismatch. Your Intervals.icu shows:
 - Climbing: 42% (39 sessions in last 120 days)
 - Running: 28% (26 sessions)
 - Yoga: 15% (14 sessions)

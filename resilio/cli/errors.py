@@ -5,11 +5,10 @@ Maps domain-specific API errors (ProfileError, SyncError, etc.) to standardized
 CLI exit codes that Claude Code can branch on.
 """
 
-from typing import Any, Union
+from typing import Any
 
 from resilio.api.helpers import get_error_message, is_error
 from resilio.cli.output import OutputEnvelope, create_error_envelope, create_success_envelope
-
 
 # Exit codes (following plan specification)
 EXIT_SUCCESS = 0
@@ -38,15 +37,24 @@ def get_exit_code_for_error_type(error_type: str) -> int:
         "no_goal": EXIT_CONFIG_MISSING,
         "insufficient_data": EXIT_CONFIG_MISSING,
         "config": EXIT_CONFIG_MISSING,
+        "missing_secret": EXIT_CONFIG_MISSING,
         # Auth issues
         "auth": EXIT_AUTH_FAILURE,
+        "authentication_rejected": EXIT_AUTH_FAILURE,
+        "authorization_rejected": EXIT_AUTH_FAILURE,
         # Network / service issues
         "rate_limit": EXIT_NETWORK_ERROR,
+        "rate_limited": EXIT_NETWORK_ERROR,
         "network": EXIT_NETWORK_ERROR,
+        "transport": EXIT_NETWORK_ERROR,
         "api_error": EXIT_VALIDATION_ERROR,
         # Validation issues
         "validation": EXIT_VALIDATION_ERROR,
         "invalid_input": EXIT_VALIDATION_ERROR,
+        "invalid_payload": EXIT_VALIDATION_ERROR,
+        "unsupported_sport": EXIT_VALIDATION_ERROR,
+        "publication_safety": EXIT_VALIDATION_ERROR,
+        "backfill_safety": EXIT_VALIDATION_ERROR,
         "out_of_range": EXIT_VALIDATION_ERROR,
         # Calculation failures
         "calculation_failed": EXIT_INTERNAL_ERROR,
@@ -93,11 +101,8 @@ def api_result_to_envelope(
                     error_data[key] = value
 
         # Add next_steps guidance for common errors
-        if error_type == "auth":
-            error_data["next_steps"] = (
-                "Run: resilio auth url to get authorization link, "
-                "then resilio auth exchange --code YOUR_CODE"
-            )
+        if error_type in {"auth", "authentication_rejected"}:
+            error_data["next_steps"] = "Check INTERVALS_ICU_API_KEY in .env.local"
         elif error_type == "config":
             error_data["next_steps"] = "Run: resilio init to create data directories and config"
         elif error_type == "no_goal":

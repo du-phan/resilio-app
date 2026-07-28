@@ -1,8 +1,7 @@
 ---
 name: weekly-analysis
 description: Comprehensive weekly training review including completion checks, intensity distribution validation (80/20), multi-sport load breakdown, and pattern detection. Works for both completed weeks and mid-week check-ins. Use when athlete asks "how was my week?", "how's my week going?", "weekly review", "analyze training", "did I follow the plan?", or "how am I doing this week?".
-allowed-tools: Bash, Read, Write, AskUserQuestion
-argument-hint: ""
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # Weekly Analysis: Comprehensive Training Review
@@ -18,16 +17,28 @@ This skill provides complete weekly training analysis by:
 
 **Key principle**: Use computational tools to calculate metrics; apply coaching judgment to interpret patterns.
 
-**Communication guideline**: Present findings naturally. Say "Let me review your week" not "I'll use weekly-analysis." See CLAUDE.md "Athlete-Facing Communication Guidelines."
+**Communication guideline**: Present findings naturally. Say "Let me review your week" not "I'll use weekly-analysis." See AGENTS.md "Athlete-Facing Communication Guidelines."
 
-**CLI execution rule**: Always attempt commands via the Bash tool before
+**CLI execution rule**: Always attempt commands via the shell tool before
 concluding they cannot be run. Never tell athletes to run commands in their
 terminal, even if an initial attempt fails — try alternatives first
-(see CLAUDE.md "CLI Failure Rule").
+(see AGENTS.md "CLI Failure Rule").
 
-**Conversational flow**: See CLAUDE.md "Conversational Pacing" for guidance on when to wait for athlete responses vs. batching questions.
+**Conversational flow**: See AGENTS.md "Conversational Pacing" for guidance on when to wait for athlete responses vs. batching questions.
 
-**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Do not repeat unless the athlete asks.
+**Metric explainer rule (athlete-facing)**:
+On first mention of any metric (VDOT/CTL/ATL/TSB/ACWR/Readiness/RPE), add a short, plain-language definition. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling). Optionally add: "Want more detail, or is that enough for now?"
+
+Use this exact VDOT explainer on first mention:
+"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
+
+One-line definitions for other metrics:
+- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
+- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
+- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
+- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
+- RPE: "RPE is your perceived effort from 1–10."
 
 ---
 
@@ -38,7 +49,7 @@ terminal, even if an initial attempt fails — try alternatives first
 For faster weekly analysis, optionally sync only last week's data:
 
 ```bash
-resilio sync --since 7d  # Quick sync (5-10 seconds vs 20-30 seconds for full sync)
+resilio sync  # Incremental sync uses the configured overlap window
 ```
 
 **Note**: Without `--since`, `resilio sync` uses smart detection (incremental sync from last activity).
@@ -343,7 +354,7 @@ resilio plan append-week --week 1 --from-json /tmp/week_1_summary.json
 Run the executor flow:
 
 1. `weekly-plan-generate` → creates weekly JSON + presents review in chat
-2. Athlete approval (main agent)
+2. Athlete approval (coach records it, then proceeds)
 3. `weekly-plan-apply` → validates + persists approved week
 
 **Context to pass to weekly-plan-generate** (as notes argument):

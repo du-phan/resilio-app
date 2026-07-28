@@ -21,7 +21,8 @@ def init_command(ctx: typer.Context) -> None:
 
     Creates:
     - data/athlete/, data/activities/, data/metrics/, data/plans/ directories
-    - config/ directory with settings.yaml and secrets.local.yaml templates
+    - config/ directory with settings.yaml
+    - .env.local API-key template
 
     Safe to run multiple times - won't overwrite existing files.
     """
@@ -70,8 +71,9 @@ def init_command(ctx: typer.Context) -> None:
             "created": created,
             "skipped": skipped,
             "next_steps": [
-                "Edit config/secrets.local.yaml with your Strava credentials",
-                "Run: resilio auth url to get OAuth authorization link",
+                "Set INTERVALS_ICU_API_KEY in .env.local",
+                "Run: resilio auth status",
+                "Log in to Intervals.icu at least once every 90 days on a free account",
             ],
         },
     )
@@ -90,7 +92,7 @@ def _setup_config_files(
     created: List[str],
     skipped: List[str],
 ) -> None:
-    """Set up configuration files (settings.yaml, secrets.local.yaml).
+    """Set up non-secret settings and the local environment template.
 
     Args:
         repo_root: Repository root path
@@ -124,44 +126,24 @@ paths:
   plans_dir: "data/plans"
   state_dir: "data/state"
 
-# Strava API endpoints
-strava:
-  auth_url: "https://www.strava.com/oauth/authorize"
-  token_url: "https://www.strava.com/oauth/token"
-  api_base: "https://www.strava.com/api/v3"
-  scopes: ["activity:read_all"]
+# External activity/calendar integration
+intervals_icu:
+  api_base_url: "https://intervals.icu/api/v1"
+  athlete_alias: "0"
+  history_start_date: "2022-01-20"
 """
             )
             created.append(str(settings_file.relative_to(repo_root)))
     else:
         skipped.append(str(settings_file.relative_to(repo_root)))
 
-    # secrets.local.yaml
-    secrets_file = config_dir / "secrets.local.yaml"
-    secrets_template = templates_dir / "secrets.local.yaml"
-
-    if not secrets_file.exists():
-        if secrets_template.exists():
-            shutil.copy(secrets_template, secrets_file)
-            created.append(str(secrets_file.relative_to(repo_root)))
-        else:
-            # Fallback: create template inline
-            secrets_file.write_text(
-                """# DO NOT COMMIT THIS FILE
-# Add to .gitignore immediately
-
-_schema:
-  format_version: "1.0.0"
-  schema_type: "secrets"
-
-strava:
-  client_id: "YOUR_CLIENT_ID"
-  client_secret: "YOUR_CLIENT_SECRET"
-  access_token: null
-  refresh_token: null
-  token_expires_at: null
-"""
-            )
-            created.append(str(secrets_file.relative_to(repo_root)))
+    environment_file = repo_root / ".env.local"
+    if not environment_file.exists():
+        environment_file.write_text(
+            "# DO NOT COMMIT THIS FILE\n"
+            "INTERVALS_ICU_API_KEY=\n"
+        )
+        environment_file.chmod(0o600)
+        created.append(str(environment_file.relative_to(repo_root)))
     else:
-        skipped.append(str(secrets_file.relative_to(repo_root)))
+        skipped.append(str(environment_file.relative_to(repo_root)))

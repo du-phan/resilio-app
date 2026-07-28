@@ -25,7 +25,6 @@ def test_create_macro_derives_benchmark_date(tmp_path, monkeypatch):
     template = {
         "template_version": "macro_template_v1",
         "total_weeks": total_weeks,
-        "volumes_km": [20.0, 21.0, 22.0, 18.0],
         "weekly_volumes_km": [20.0, 21.0, 22.0, 18.0],
         "target_systemic_load_au": [0.0, 0.0, 0.0, 0.0],
         "workout_structure_hints": [

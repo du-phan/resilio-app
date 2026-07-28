@@ -1,159 +1,18 @@
-"""
-Activity schemas - Complete data models for Phase 2 (M5, M6, M7, M8).
+"""Provider-neutral activity, analysis, and training-load contracts."""
 
-This module contains all Pydantic models for the activity processing pipeline:
-- RawActivity: Raw data from Strava API or manual input (M5)
-- NormalizedActivity: Standardized activity format (M6)
-- RPE and Analysis models: Notes analysis results (M7)
-- Load models: Training load calculations (M8)
-"""
+from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Annotated, Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-
-# ============================================================
-# M5 - STRAVA INTEGRATION MODELS
-# ============================================================
-
-
-class LapData(BaseModel):
-    """
-    Individual lap/split from Strava (manual or auto-lap).
-
-    Laps enable workout verification, pacing analysis, and HR drift detection.
-    Used by analytical CLI tools to validate execution against planned workouts.
-    """
-
-    # Identity
-    lap_index: int  # 1-based sequence number
-    name: Optional[str] = None  # "Lap 1", "Warmup" (if athlete labels)
-
-    # Time
-    elapsed_time_seconds: int  # Total including stops
-    moving_time_seconds: int  # Active time only
-    start_date: datetime
-    start_date_local: datetime
-
-    # Distance
-    distance_meters: float
-
-    # Pace (pre-computed for display)
-    average_speed_mps: Optional[float] = None  # m/s
-    max_speed_mps: Optional[float] = None
-    pace_per_km: Optional[str] = None  # "5:23" format for running
-
-    # Heart Rate
-    average_hr: Optional[float] = None
-    max_hr: Optional[float] = None
-
-    # Elevation
-    total_elevation_gain_meters: Optional[float] = None
-
-    # Power & Cadence (cycling, future use)
-    average_watts: Optional[float] = None
-    max_watts: Optional[float] = None
-    average_cadence: Optional[float] = None
-
-    # Stream indices (for future GPS overlay)
-    start_index: Optional[int] = None
-    end_index: Optional[int] = None
-
-    # Split type
-    split_type: str = "auto"  # "auto" | "manual" (Strava doesn't distinguish; assume auto)
-
-
-class ActivitySource(str, Enum):
-    """Source of activity data."""
-
-    STRAVA = "strava"
-    MANUAL = "manual"
-
-
-class StravaWorkoutType(int, Enum):
-    """Strava workout_type values for running (undocumented)."""
-
-    DEFAULT = 0
-    RACE = 1
-    LONG_RUN = 2
-    WORKOUT = 3
-
-
-class RawActivity(BaseModel):
-    """
-    Raw activity data as received from source (Strava or manual input).
-    Passed to M6 for normalization.
-    """
-
-    # Identity
-    id: str
-    source: ActivitySource
-
-    # Core fields
-    sport_type: str  # e.g., "Run", "Ride", "Climb"
-    sub_type: Optional[str] = None  # e.g., "TrailRun", "VirtualRide"
-    name: str  # Activity title
-    date: date
-    start_time: Optional[datetime] = None  # Local start time
-
-    # Effort metrics
-    duration_seconds: int
-    distance_meters: Optional[float] = None
-    elevation_gain_meters: Optional[float] = None
-
-    # Heart rate (Strava returns floats)
-    average_hr: Optional[float] = None
-    max_hr: Optional[float] = None
-    has_hr_data: bool = False
-
-    # User input
-    description: Optional[str] = None  # Public description
-    private_note: Optional[str] = None  # Private notes (Strava premium)
-    perceived_exertion: Optional[int] = None  # User-entered RPE (1-10)
-
-    # Strava-specific
-    workout_type: Optional[int] = None  # Race=1, Long run=2, Workout=3
-    suffer_score: Optional[int] = None  # Strava relative effort
-    has_polyline: bool = False  # GPS data present
-    gear_id: Optional[str] = None  # Equipment used
-    device_name: Optional[str] = None  # Recording device
-
-    # Timestamps
-    strava_created_at: Optional[datetime] = None
-    strava_updated_at: Optional[datetime] = None
-
-    # Lap data (fetched from /activities/{id}/laps endpoint)
-    laps: list[LapData] = Field(default_factory=list)
-    has_laps: bool = False
-
-    # Metadata
-    raw_data: dict = Field(default_factory=dict)  # Full API response
-
-
-class ManualActivityInput(BaseModel):
-    """User-provided activity data for manual logging."""
-
-    sport_type: str
-    date: date
-    duration_minutes: int
-    distance_km: Optional[float] = None
-    description: Optional[str] = None
-    perceived_exertion: Optional[int] = Field(None, ge=1, le=10)
-    average_hr: Optional[int] = Field(None, ge=30, le=250)
-
-    model_config = ConfigDict(extra="forbid")
-
-
-# ============================================================
-# M6 - ACTIVITY NORMALIZATION MODELS
-# ============================================================
+NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 
 
 class SportType(str, Enum):
-    """Canonical sport types."""
+    """Canonical sport types used by every downstream calculation."""
 
     RUN = "run"
     TRAIL_RUN = "trail_run"
@@ -171,8 +30,6 @@ class SportType(str, Enum):
 
 
 class SurfaceType(str, Enum):
-    """Running surface types."""
-
     ROAD = "road"
     TRAIL = "trail"
     TRACK = "track"
@@ -183,159 +40,544 @@ class SurfaceType(str, Enum):
 
 
 class DataQuality(str, Enum):
-    """Reliability indicator for activity data."""
-
-    HIGH = "high"  # GPS + HR + verified source
-    MEDIUM = "medium"  # Some data missing or inferred
-    LOW = "low"  # Minimal data, heavy inference
-    TREADMILL = "treadmill"  # Pace unreliable, HR prioritized
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    TREADMILL = "treadmill"
 
 
-class NormalizedActivity(BaseModel):
-    """
-    Fully normalized activity ready for downstream processing.
-    This is the schema for activities/YYYY-MM/*.yaml files.
-    """
+class ActivityStatus(str, Enum):
+    ACTIVE = "active"
+    EXTERNAL_DELETED = "external_deleted"
 
-    # Schema metadata
-    schema_metadata: dict = Field(
-        default_factory=lambda: {"format_version": "1.0.0", "schema_type": "activity"},
-        alias="_schema",
+
+class ActivityOriginKind(str, Enum):
+    INTERVALS_ICU = "intervals_icu"
+    HISTORICAL_IMPORT = "historical_import"
+
+
+class RecordingProvider(str, Enum):
+    GARMIN = "garmin"
+    WAHOO = "wahoo"
+    MANUAL = "manual"
+    UPLOAD = "upload"
+    OTHER = "other"
+    UNKNOWN = "unknown"
+
+
+class SegmentOriginKind(str, Enum):
+    HISTORICAL_SEGMENT = "historical_segment"
+    INTERVALS_ICU_INTERVAL = "intervals_icu_interval"
+
+
+class SchemaDescriptor(BaseModel):
+    name: str = Field(default="resilio.activity", frozen=True)
+    version: int = Field(default=2, frozen=True)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def require_activity_v2(self) -> "SchemaDescriptor":
+        if self.name != "resilio.activity" or self.version != 2:
+            raise ValueError("activity archive requires _schema name=resilio.activity version=2")
+        return self
+
+
+class ActivityOccurrence(BaseModel):
+    local_date: date
+    start_time_utc: Optional[datetime] = None
+    start_time_local: Optional[datetime] = None
+    timezone: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("start_time_utc")
+    @classmethod
+    def utc_must_be_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None:
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("start_time_utc must be timezone-aware")
+            if value.utcoffset().total_seconds() != 0:
+                value = value.astimezone(timezone.utc)
+        return value
+
+    @field_validator("start_time_local")
+    @classmethod
+    def local_time_must_be_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("start_time_local must be timezone-aware")
+        return value
+
+    @model_validator(mode="after")
+    def local_date_matches_timestamp(self) -> "ActivityOccurrence":
+        if self.start_time_local is not None and self.start_time_local.date() != self.local_date:
+            raise ValueError("local_date must match start_time_local")
+        return self
+
+
+class ActivityDuration(BaseModel):
+    elapsed_seconds: int = Field(gt=0, le=2_678_400)
+    moving_seconds: int = Field(ge=0, le=2_678_400)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def moving_not_longer_than_elapsed(self) -> "ActivityDuration":
+        if self.moving_seconds > self.elapsed_seconds:
+            raise ValueError("moving_seconds cannot exceed elapsed_seconds")
+        return self
+
+
+class HeartRateMeasurements(BaseModel):
+    average_beats_per_minute: Optional[float] = Field(
+        default=None, ge=20, le=260, allow_inf_nan=False
+    )
+    maximum_beats_per_minute: Optional[float] = Field(
+        default=None, ge=20, le=260, allow_inf_nan=False
     )
 
-    # Identity
-    id: str
-    source: str  # "strava" | "manual"
+    model_config = ConfigDict(extra="forbid")
 
-    # Core fields (required)
-    sport_type: SportType
-    sub_type: Optional[str] = None  # Original Strava sub-type if present
-    name: str
-    date: date
-    day_of_week: Optional[int] = None  # 0=Monday, 1=Tuesday, ..., 6=Sunday (ISO 8601)
-    day_of_week_name: Optional[str] = None  # "Monday", "Tuesday", etc.
-    start_time: Optional[datetime] = None
-    duration_minutes: int
-    duration_seconds: int
+    @model_validator(mode="after")
+    def average_not_above_maximum(self) -> "HeartRateMeasurements":
+        if (
+            self.average_beats_per_minute is not None
+            and self.maximum_beats_per_minute is not None
+            and self.average_beats_per_minute > self.maximum_beats_per_minute
+        ):
+            raise ValueError("average heart rate cannot exceed maximum heart rate")
+        return self
 
-    # Distance (optional for non-distance sports)
-    distance_km: Optional[float] = None
-    distance_meters: Optional[float] = None
-    elevation_gain_m: Optional[float] = None
 
-    # Heart rate (optional, Strava returns floats)
-    average_hr: Optional[float] = None
-    max_hr: Optional[float] = None
-    has_hr_data: bool = False
+class PowerMeasurements(BaseModel):
+    average_watts: Optional[float] = Field(default=None, ge=0, le=3_000, allow_inf_nan=False)
+    maximum_watts: Optional[float] = Field(default=None, ge=0, le=5_000, allow_inf_nan=False)
+    weighted_average_watts: Optional[float] = Field(
+        default=None, ge=0, le=3_000, allow_inf_nan=False
+    )
 
-    # User notes
+    model_config = ConfigDict(extra="forbid")
+
+
+class CadenceMeasurements(BaseModel):
+    average_revolutions_per_minute: Optional[float] = Field(
+        default=None, ge=0, le=300, allow_inf_nan=False
+    )
+    maximum_revolutions_per_minute: Optional[float] = Field(
+        default=None, ge=0, le=400, allow_inf_nan=False
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ActivityNotes(BaseModel):
     description: Optional[str] = None
     private_note: Optional[str] = None
 
-    # Strava-specific (preserved for reference)
-    workout_type: Optional[int] = None  # 1=race, 2=long, 3=workout
-    suffer_score: Optional[int] = None
-    perceived_exertion: Optional[int] = None  # User-entered 1-10
+    model_config = ConfigDict(extra="forbid")
 
-    # Surface and quality
-    surface_type: SurfaceType = SurfaceType.UNKNOWN
-    surface_type_confidence: str = "low"  # "high" | "low"
+
+class PerceivedEffortSource(str, Enum):
+    ATHLETE = "athlete"
+    HISTORICAL_RELATIVE_EFFORT = "historical_relative_effort"
+    INFERRED = "inferred"
+
+
+class PerceivedEffort(BaseModel):
+    value: int = Field(ge=1, le=10)
+    source: PerceivedEffortSource
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ActivityDevice(BaseModel):
+    name: Optional[str] = None
+    gear_external_id: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ActivityClassification(BaseModel):
+    surface: SurfaceType = SurfaceType.UNKNOWN
     data_quality: DataQuality = DataQuality.MEDIUM
-
-    # GPS data
     has_gps_data: bool = False
 
-    # Lap data (from Strava laps endpoint)
-    laps: list[LapData] = Field(default_factory=list)
-    has_laps: bool = False
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
-    # Equipment
-    gear_id: Optional[str] = None
 
-    # Timestamps
-    created_at: datetime
-    updated_at: datetime
-    synced_at: Optional[datetime] = None
+class ActivitySegment(BaseModel):
+    index: int = Field(ge=1)
+    name: Optional[str] = None
+    origin_kind: SegmentOriginKind
+    elapsed_seconds: int = Field(gt=0, le=2_678_400)
+    moving_seconds: int = Field(ge=0, le=2_678_400)
+    distance_meters: NonNegativeFloat = 0.0
+    start_time_utc: Optional[datetime] = None
+    start_time_local: Optional[datetime] = None
+    average_speed_meters_per_second: Optional[float] = Field(
+        default=None, ge=0, le=100, allow_inf_nan=False
+    )
+    maximum_speed_meters_per_second: Optional[float] = Field(
+        default=None, ge=0, le=150, allow_inf_nan=False
+    )
+    heart_rate: Optional[HeartRateMeasurements] = None
+    elevation_gain_meters: Optional[NonNegativeFloat] = None
+    power: Optional[PowerMeasurements] = None
+    cadence: Optional[CadenceMeasurements] = None
 
-    # Calculated load (added by M8 Load Engine)
-    calculated: Optional["LoadCalculation"] = None
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    @model_validator(mode="after")
+    def validate_duration(self) -> "ActivitySegment":
+        if self.moving_seconds > self.elapsed_seconds:
+            raise ValueError("segment moving_seconds cannot exceed elapsed_seconds")
+        return self
+
+    # Provider-neutral computed views used by lap/segment presentation.
+    @property
+    def lap_index(self) -> int:
+        return self.index
+
+    @property
+    def elapsed_time_seconds(self) -> int:
+        return self.elapsed_seconds
+
+    @property
+    def moving_time_seconds(self) -> int:
+        return self.moving_seconds
+
+    @property
+    def average_speed_mps(self) -> Optional[float]:
+        return self.average_speed_meters_per_second
+
+    @property
+    def max_speed_mps(self) -> Optional[float]:
+        return self.maximum_speed_meters_per_second
+
+    @property
+    def pace_per_km(self) -> Optional[str]:
+        speed = self.average_speed_meters_per_second
+        if not speed:
+            return None
+        seconds = int(round(1000 / speed))
+        return f"{seconds // 60}:{seconds % 60:02d}"
+
+    @property
+    def average_hr(self) -> Optional[float]:
+        return self.heart_rate.average_beats_per_minute if self.heart_rate else None
+
+    @property
+    def max_hr(self) -> Optional[float]:
+        return self.heart_rate.maximum_beats_per_minute if self.heart_rate else None
+
+    @property
+    def total_elevation_gain_meters(self) -> Optional[float]:
+        return self.elevation_gain_meters
+
+    @property
+    def average_watts(self) -> Optional[float]:
+        return self.power.average_watts if self.power else None
+
+    @property
+    def max_watts(self) -> Optional[float]:
+        return self.power.maximum_watts if self.power else None
+
+    @property
+    def average_cadence(self) -> Optional[float]:
+        return self.cadence.average_revolutions_per_minute if self.cadence else None
+
+
+class ActivityOrigin(BaseModel):
+    kind: ActivityOriginKind
+    recording_provider: RecordingProvider = RecordingProvider.UNKNOWN
+    intervals_icu_activity_id: Optional[str] = None
+    upstream_external_id: Optional[str] = None
+    original_file_sha256: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    @model_validator(mode="after")
+    def external_origin_requires_id(self) -> "ActivityOrigin":
+        if self.kind == ActivityOriginKind.INTERVALS_ICU and not self.intervals_icu_activity_id:
+            raise ValueError("intervals_icu origin requires intervals_icu_activity_id")
+        return self
+
+
+class ActivityAudit(BaseModel):
+    imported_at_utc: datetime
+    external_created_at_utc: Optional[datetime] = None
+    external_sync_at_utc: Optional[datetime] = None
+    external_fingerprint_sha256: Optional[str] = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("imported_at_utc", "external_created_at_utc", "external_sync_at_utc")
+    @classmethod
+    def audit_timestamps_are_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("audit timestamps must be timezone-aware")
+        return value.astimezone(timezone.utc) if value is not None else None
+
+
+class SessionType(str, Enum):
+    EASY = "easy"
+    MODERATE = "moderate"
+    QUALITY = "quality"
+    RACE = "race"
+
+
+class LoadCalculation(BaseModel):
+    """Provider-neutral load result; only base SI duration is persisted."""
+
+    activity_id: str
+    duration_seconds: int = Field(gt=0, le=2_678_400)
+    estimated_rpe: int = Field(ge=1, le=10)
+    sport: str
+    surface: Optional[str] = None
+    base_effort_au: NonNegativeFloat
+    systemic_multiplier: float = Field(ge=0, le=3, allow_inf_nan=False)
+    lower_body_multiplier: float = Field(ge=0, le=3, allow_inf_nan=False)
+    adjustments: list[str] = Field(default_factory=list)
+    systemic_load_au: NonNegativeFloat
+    lower_body_load_au: NonNegativeFloat
+    session_type: SessionType
+    algorithm_version: str = "resilio-load-v1"
+
+    model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     @model_validator(mode="before")
     @classmethod
-    def compute_day_of_week(cls, data):
-        """Automatically compute day_of_week fields from date if not provided."""
-        if isinstance(data, dict):
-            # Only compute if fields are not already set
-            if data.get("day_of_week") is None or data.get("day_of_week_name") is None:
-                activity_date = data.get("date")
-                if activity_date:
-                    # Handle both date objects and string dates
-                    if isinstance(activity_date, str):
-                        from datetime import datetime as dt
-
-                        activity_date = dt.strptime(activity_date, "%Y-%m-%d").date()
-
-                    # Compute day of week (0=Monday, ..., 6=Sunday per ISO 8601)
-                    day_of_week = activity_date.weekday()
-                    day_names = [
-                        "Monday",
-                        "Tuesday",
-                        "Wednesday",
-                        "Thursday",
-                        "Friday",
-                        "Saturday",
-                        "Sunday",
-                    ]
-                    day_of_week_name = day_names[day_of_week]
-
-                    # Set the computed values
-                    data["day_of_week"] = day_of_week
-                    data["day_of_week_name"] = day_of_week_name
-
+    def accept_computation_views(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        data = dict(value)
+        if "duration_seconds" not in data and "duration_minutes" in data:
+            data["duration_seconds"] = int(data.pop("duration_minutes")) * 60
+        if "sport" not in data and "sport_type" in data:
+            data["sport"] = data.pop("sport_type")
+        if "surface" not in data and "surface_type" in data:
+            data["surface"] = data.pop("surface_type")
+        if "adjustments" not in data and "multiplier_adjustments" in data:
+            data["adjustments"] = data.pop("multiplier_adjustments")
         return data
 
+    @property
+    def duration_minutes(self) -> int:
+        return self.duration_seconds // 60
+
+    @property
+    def sport_type(self) -> str:
+        return self.sport
+
+    @property
+    def surface_type(self) -> Optional[str]:
+        return self.surface
+
+    @property
+    def multiplier_adjustments(self) -> list[str]:
+        return self.adjustments
+
+
+class CanonicalActivity(BaseModel):
+    """The only persisted completed-activity schema."""
+
+    schema_info: SchemaDescriptor = Field(
+        default_factory=SchemaDescriptor,
+        validation_alias="_schema",
+        serialization_alias="_schema",
+    )
+    local_activity_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    status: ActivityStatus = ActivityStatus.ACTIVE
+    sport: SportType
+    source_sport_type: str = Field(min_length=1, max_length=120)
+    source_sport_subtype: Optional[str] = Field(default=None, max_length=120)
+    name: str = Field(min_length=1, max_length=500)
+    occurrence: ActivityOccurrence
+    duration: ActivityDuration
+    distance_meters: Optional[float] = Field(
+        default=None, ge=0, le=10_000_000, allow_inf_nan=False
+    )
+    elevation_gain_meters: Optional[float] = Field(
+        default=None, ge=0, le=100_000, allow_inf_nan=False
+    )
+    heart_rate: Optional[HeartRateMeasurements] = None
+    power: Optional[PowerMeasurements] = None
+    cadence: Optional[CadenceMeasurements] = None
+    notes: ActivityNotes = Field(default_factory=ActivityNotes)
+    perceived_effort: Optional[PerceivedEffort] = None
+    device: ActivityDevice = Field(default_factory=ActivityDevice)
+    classification: ActivityClassification = Field(default_factory=ActivityClassification)
+    segments: list[ActivitySegment] = Field(default_factory=list)
+    origin: ActivityOrigin
+    audit: ActivityAudit
+    calculated_load: Optional[LoadCalculation] = None
+
     model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
         use_enum_values=True,
-        populate_by_name=True,  # Allow both field name and alias
+        validate_assignment=True,
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_non_v2_persisted_records(cls, value: Any) -> Any:
+        if not isinstance(value, dict):
+            return value
+        if "schema_metadata" in value:
+            raise ValueError("legacy activity schema is not readable as CanonicalActivity v2")
+        schema = value.get("_schema")
+        if schema is not None:
+            if not isinstance(schema, dict) or schema.get("name") != "resilio.activity":
+                raise ValueError("invalid activity _schema name")
+            if schema.get("version") != 2:
+                raise ValueError("activity archive requires schema version 2")
+        return value
 
-class NormalizationResult(BaseModel):
-    """Result of normalizing a single activity."""
+    @model_validator(mode="after")
+    def validate_external_identity(self) -> "CanonicalActivity":
+        if self.origin.kind == ActivityOriginKind.INTERVALS_ICU:
+            if not self.local_activity_id.startswith("act_i_"):
+                raise ValueError("new Intervals.icu activities require an act_i_ local ID")
+        if self.status == ActivityStatus.EXTERNAL_DELETED:
+            if self.origin.intervals_icu_activity_id is None:
+                raise ValueError("only externally linked activities can be external_deleted")
+        return self
 
-    activity: NormalizedActivity
-    file_path: str
-    was_updated: bool  # True if existing file was updated
-    warnings: list[str] = Field(default_factory=list)
+    # Provider-neutral computed views for calculations/presentation. These are
+    # intentionally not Pydantic computed fields, so they are never persisted.
+    @property
+    def id(self) -> str:
+        return self.local_activity_id
 
+    @property
+    def sport_type(self) -> str:
+        return str(self.sport)
 
-# ============================================================
-# M7 - NOTES & RPE ANALYZER MODELS
-# ============================================================
+    @property
+    def sub_type(self) -> Optional[str]:
+        return self.source_sport_subtype
+
+    @property
+    def date(self) -> date:
+        return self.occurrence.local_date
+
+    @property
+    def day_of_week(self) -> int:
+        return self.date.weekday()
+
+    @property
+    def day_of_week_name(self) -> str:
+        return self.date.strftime("%A")
+
+    @property
+    def start_time(self) -> Optional[datetime]:
+        return self.occurrence.start_time_local or self.occurrence.start_time_utc
+
+    @property
+    def duration_seconds(self) -> int:
+        return self.duration.elapsed_seconds
+
+    @property
+    def duration_minutes(self) -> int:
+        return self.duration.elapsed_seconds // 60
+
+    @property
+    def distance_km(self) -> Optional[float]:
+        return self.distance_meters / 1000 if self.distance_meters is not None else None
+
+    @property
+    def elevation_gain_m(self) -> Optional[float]:
+        return self.elevation_gain_meters
+
+    @property
+    def average_hr(self) -> Optional[float]:
+        return self.heart_rate.average_beats_per_minute if self.heart_rate else None
+
+    @property
+    def max_hr(self) -> Optional[float]:
+        return self.heart_rate.maximum_beats_per_minute if self.heart_rate else None
+
+    @property
+    def has_hr_data(self) -> bool:
+        return self.heart_rate is not None and (
+            self.heart_rate.average_beats_per_minute is not None
+            or self.heart_rate.maximum_beats_per_minute is not None
+        )
+
+    @property
+    def description(self) -> Optional[str]:
+        return self.notes.description
+
+    @property
+    def private_note(self) -> Optional[str]:
+        return self.notes.private_note
+
+    @property
+    def perceived_exertion(self) -> Optional[int]:
+        return self.perceived_effort.value if self.perceived_effort else None
+
+    @property
+    def surface_type(self) -> str:
+        return str(self.classification.surface)
+
+    @property
+    def data_quality(self) -> str:
+        return str(self.classification.data_quality)
+
+    @property
+    def has_gps_data(self) -> bool:
+        return self.classification.has_gps_data
+
+    @property
+    def laps(self) -> list[ActivitySegment]:
+        return self.segments
+
+    @property
+    def has_laps(self) -> bool:
+        return bool(self.segments)
+
+    @property
+    def gear_id(self) -> Optional[str]:
+        return self.device.gear_external_id
+
+    @property
+    def created_at(self) -> datetime:
+        return self.audit.external_created_at_utc or self.audit.imported_at_utc
+
+    @property
+    def updated_at(self) -> datetime:
+        return self.audit.external_sync_at_utc or self.audit.imported_at_utc
+
+    @property
+    def synced_at(self) -> Optional[datetime]:
+        return self.audit.external_sync_at_utc
+
+    @property
+    def calculated(self) -> Optional[LoadCalculation]:
+        return self.calculated_load
 
 
 class RPESource(str, Enum):
-    """Source of RPE estimate."""
-
-    USER_INPUT = "user_input"  # Explicit Strava perceived_exertion
-    HR_BASED = "hr_based"  # Derived from HR zones
-    PACE_BASED = "pace_based"  # Derived from pace vs VDOT zones (running only)
-    TEXT_BASED = "text_based"  # Extracted from notes
-    STRAVA_RELATIVE = "strava_relative"  # Normalized suffer_score
-    DURATION_HEURISTIC = "duration_heuristic"  # Sport + duration fallback
+    USER_INPUT = "user_input"
+    HR_BASED = "hr_based"
+    PACE_BASED = "pace_based"
+    TEXT_BASED = "text_based"
+    HISTORICAL_RELATIVE_EFFORT = "historical_relative_effort"
+    DURATION_HEURISTIC = "duration_heuristic"
 
 
 class FlagSeverity(str, Enum):
-    """Severity level for health flags."""
-
-    MILD = "mild"  # Informational, no action required
-    MODERATE = "moderate"  # Consider adjustments
-    SEVERE = "severe"  # Requires rest or medical attention
+    MILD = "mild"
+    MODERATE = "moderate"
+    SEVERE = "severe"
 
 
 class BodyPart(str, Enum):
-    """Tracked body parts for injury flags."""
-
     KNEE = "knee"
     ANKLE = "ankle"
     CALF = "calf"
@@ -351,34 +593,26 @@ class BodyPart(str, Enum):
 
 
 class RPEEstimate(BaseModel):
-    """RPE estimate with source and confidence."""
-
-    value: int  # 1-10
+    value: int = Field(ge=1, le=10)
     source: RPESource
-    confidence: str  # "high" | "medium" | "low"
-    reasoning: str  # Explanation for the estimate
+    confidence: str
+    reasoning: str
 
 
 class RPEConflict(BaseModel):
-    """Detected conflict between RPE sources."""
-
     estimates: list[RPEEstimate]
-    spread: int  # Difference between max and min
+    spread: int
     resolved_value: int
     resolution_method: str
 
 
 class TreadmillDetection(BaseModel):
-    """Result of treadmill/indoor detection."""
-
     is_treadmill: bool
-    confidence: str  # "high" | "low"
-    signals: list[str] = Field(default_factory=list)  # Evidence for detection
+    confidence: str
+    signals: list[str] = Field(default_factory=list)
 
 
 class InjuryFlag(BaseModel):
-    """Detected injury or pain signal."""
-
     body_part: BodyPart
     severity: FlagSeverity
     keywords_found: list[str] = Field(default_factory=list)
@@ -387,8 +621,6 @@ class InjuryFlag(BaseModel):
 
 
 class IllnessFlag(BaseModel):
-    """Detected illness signal."""
-
     severity: FlagSeverity
     symptoms: list[str] = Field(default_factory=list)
     keywords_found: list[str] = Field(default_factory=list)
@@ -397,8 +629,6 @@ class IllnessFlag(BaseModel):
 
 
 class ContextualFactors(BaseModel):
-    """Environmental or situational factors."""
-
     is_fasted: bool = False
     heat_mentioned: bool = False
     cold_mentioned: bool = False
@@ -409,107 +639,22 @@ class ContextualFactors(BaseModel):
 
 
 class AnalysisResult(BaseModel):
-    """
-    Complete analysis result for an activity (Toolkit Paradigm).
-
-    Returns multiple RPE estimates from quantitative sources.
-    Claude Code uses these estimates with conversation context to
-    determine final RPE. Injury and illness extraction
-    are handled by Claude Code via natural conversation.
-    """
-
     activity_id: str
-
-    # RPE estimates from all available quantitative sources
-    # Claude Code chooses which to use based on context
     rpe_estimates: list[RPEEstimate] = Field(default_factory=list)
-
-    # Treadmill detection (multi-signal scoring)
     treadmill_detection: TreadmillDetection
-
-    # Metadata
     analyzed_at: datetime
-    notes_present: bool  # Whether notes/description available for Claude to parse
-
-
-# ============================================================
-# M8 - LOAD ENGINE MODELS
-# ============================================================
-
-
-class SessionType(str, Enum):
-    """Training session intensity classification."""
-
-    EASY = "easy"  # Recovery, zone 1-2, RPE 1-4
-    MODERATE = "moderate"  # Steady-state, zone 3, RPE 5-6
-    QUALITY = "quality"  # Tempo, intervals, threshold, RPE 7-8
-    RACE = "race"  # Competition or time trial, RPE 9-10
+    notes_present: bool
 
 
 class SportMultipliers(BaseModel):
-    """Load multipliers for a sport type."""
-
     sport: str
-    systemic: float  # 0.0 - 1.5
-    lower_body: float  # 0.0 - 1.5
+    systemic: float
+    lower_body: float
     description: str
 
 
-class LoadCalculation(BaseModel):
-    """Complete load calculation for an activity."""
-
-    activity_id: str
-
-    # Input values
-    duration_minutes: int
-    estimated_rpe: int
-    sport_type: str
-    surface_type: Optional[str] = None
-
-    # Base calculation
-    base_effort_au: float
-
-    # Multipliers used
-    systemic_multiplier: float
-    lower_body_multiplier: float
-    multiplier_adjustments: list[str] = Field(
-        default_factory=list
-    )  # Explanations for any adjustments
-
-    # Final loads
-    systemic_load_au: float
-    lower_body_load_au: float
-
-    # Session classification
-    session_type: SessionType
-
-
 class MultiplierAdjustment(BaseModel):
-    """Record of an adjustment made to base multipliers."""
-
     reason: str
-    channel: str  # "systemic" | "lower_body"
+    channel: str
     original: float
     adjusted: float
-
-
-# ============================================================
-# LEGACY MODELS (for backwards compatibility)
-# ============================================================
-
-
-class Activity(BaseModel):
-    """Base activity model (legacy)."""
-
-    id: str
-    source: str
-    sport_type: str
-    date: date
-    duration_minutes: int
-    distance_km: Optional[float] = None
-
-
-class ProcessedActivity(BaseModel):
-    """Activity after full processing pipeline (to be implemented in Phase 3)."""
-
-    pass

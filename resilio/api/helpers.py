@@ -39,6 +39,7 @@ def is_error(result) -> bool:
     from resilio.api.analysis import AnalysisError
     from resilio.api.validation import ValidationError
     from resilio.api.weather import WeatherError
+    from resilio.api.publication import PublicationError
 
     return isinstance(
         result,
@@ -53,6 +54,7 @@ def is_error(result) -> bool:
             AnalysisError,
             ValidationError,
             WeatherError,
+            PublicationError,
         ),
     )
 
@@ -68,7 +70,7 @@ def get_error_message(result) -> Optional[str]:
         Error message string if result is an error, None otherwise
 
     Example:
-        >>> result = sync_strava()
+        >>> result = sync_activities()
         >>> if error_msg := get_error_message(result):
         ...     print(f"Sync failed: {error_msg}")
         ... else:

@@ -174,7 +174,7 @@ resilio analysis load --activities activities.json --days 7 --priority equal
 4. **Skip climbing comp** - Depends on conflict policy and race proximity
 
 **Check conflict policy** (from profile):
-- `ask_each_time`: Present options using AskUserQuestion
+- `ask_each_time`: Present options using chat-based numbered options
 - `running_goal_wins`: Keep long run, skip comp (or move comp)
 - `primary_sport_wins`: Keep comp, adjust running
 

@@ -151,7 +151,11 @@ class RepositoryIO:
 
         # Serialize to YAML
         try:
-            payload = data.model_dump(mode='json') if isinstance(data, BaseModel) else data
+            payload = (
+                data.model_dump(mode="json", by_alias=True)
+                if isinstance(data, BaseModel)
+                else data
+            )
             yaml_content = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
         except Exception as e:
             return RepoError(
@@ -379,7 +383,10 @@ class RepositoryIO:
         # Serialize to JSON
         try:
             if isinstance(data, BaseModel):
-                json_content = json.dumps(data.model_dump(mode='json'), indent=2)
+                json_content = json.dumps(
+                    data.model_dump(mode="json", by_alias=True),
+                    indent=2,
+                )
             else:
                 json_content = json.dumps(data, indent=2)
         except Exception as e:

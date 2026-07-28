@@ -13,14 +13,17 @@ import uuid
 from resilio.core.paths import current_plan_path, athlete_profile_path
 from resilio.core.repository import RepositoryIO, ReadOptions
 from resilio.schemas.repository import RepoError
-from resilio.core.workflows import run_plan_generation, WorkflowError
+from resilio.core.plan_workflow import run_plan_generation
+from resilio.core.plan_validation import (
+    validate_explicit_workouts as _validate_explicit_workouts,
+)
+from resilio.core.workflow_types import WorkflowError
 from resilio.schemas.plan import MasterPlan
 from resilio.schemas.profile import Goal, AthleteProfile
 from resilio.schemas.adaptation import Suggestion
 
 # Import for populate_plan_workouts validation
 from resilio.api.profile import get_profile, ProfileError
-
 # Import toolkit functions from core modules
 from resilio.core.plan import (
     calculate_periodization,
@@ -548,115 +551,6 @@ def _calculate_date(start_date_str: str, day_of_week: int) -> str:
 # These functions implement rule-based workout generation, violating the
 # CLI-first philosophy. AI Coach now designs exact workouts using LLM
 # capabilities; Python engine only validates and persists.
-
-
-@dataclass
-class ValidationResult:
-    """Result from validation operations."""
-    ok: bool
-    errors: list[dict]
-    warnings: list[dict]
-
-
-def _validate_explicit_workouts(
-    week_data: dict,
-    tolerance_km: float = 0.5
-) -> ValidationResult:
-    """
-    Validate explicit workout format.
-
-    Detection-only: Returns violations, never auto-fixes.
-
-    Checks:
-    - Required fields on each workout
-    - Date alignment (within week boundaries)
-    - Sum-to-target (workouts sum to target_volume_km ± tolerance)
-    - No duplicate days
-
-    Args:
-        week_data: Week dictionary with explicit workouts
-        tolerance_km: Tolerance for sum-to-target check (default 0.5km)
-
-    Returns:
-        ValidationResult with ok, errors, warnings
-    """
-    from datetime import datetime
-
-    errors = []
-    warnings = []
-
-    # Required field check
-    required_fields = ["date", "day_of_week", "workout_type", "distance_km", "target_rpe"]
-    for i, workout in enumerate(week_data.get("workouts", [])):
-        missing = [f for f in required_fields if f not in workout]
-        if missing:
-            errors.append({
-                "type": "missing_fields",
-                "workout_index": i,
-                "fields": missing,
-                "message": f"Workout {i}: Missing required fields {missing}"
-            })
-
-    # Date alignment check
-    try:
-        start = datetime.fromisoformat(week_data["start_date"]).date()
-        end = datetime.fromisoformat(week_data["end_date"]).date()
-        for i, workout in enumerate(week_data.get("workouts", [])):
-            if "date" in workout:
-                workout_date = datetime.fromisoformat(workout["date"]).date()
-                if not (start <= workout_date <= end):
-                    errors.append({
-                        "type": "date_out_of_range",
-                        "workout_index": i,
-                        "date": str(workout_date),
-                        "message": f"Workout {i}: date {workout_date} not in week {start} to {end}"
-                    })
-    except (ValueError, KeyError) as e:
-        errors.append({
-            "type": "date_parse_error",
-            "message": f"Failed to parse dates: {str(e)}"
-        })
-
-    # Sum-to-target check (CRITICAL)
-    actual = sum(w.get("distance_km", 0) for w in week_data.get("workouts", []))
-    target = week_data.get("target_volume_km", 0)
-    diff = abs(actual - target)
-
-    if diff > tolerance_km:
-        errors.append({
-            "type": "sum_mismatch",
-            "severity": "danger",
-            "actual_km": actual,
-            "target_km": target,
-            "diff_km": diff,
-            "message": f"Workouts sum to {actual:.1f}km but target is {target:.1f}km (diff: {diff:.1f}km exceeds tolerance {tolerance_km}km)",
-            "suggestion": "Adjust workout distances or update target_volume_km to match"
-        })
-    elif diff > 0.2:
-        # Warning for noticeable differences (>200m) that are within tolerance
-        warnings.append({
-            "type": "sum_mismatch_minor",
-            "actual_km": actual,
-            "target_km": target,
-            "diff_km": diff,
-            "message": f"Workouts sum to {actual:.1f}km, target is {target:.1f}km (diff: {diff:.1f}km, within tolerance but noticeable)"
-        })
-
-    # Duplicate day check
-    days_used = [w.get("day_of_week") for w in week_data.get("workouts", []) if "day_of_week" in w]
-    duplicates = [d for d in set(days_used) if days_used.count(d) > 1]
-    if duplicates:
-        errors.append({
-            "type": "duplicate_days",
-            "days": duplicates,
-            "message": f"Multiple workouts scheduled on same day(s): {duplicates}"
-        })
-
-    return ValidationResult(
-        ok=len(errors) == 0,
-        errors=errors,
-        warnings=warnings
-    )
 
 
 def validate_plan_json_structure(
@@ -1827,7 +1721,7 @@ def assess_month_completion(
         month_number: Month assessed (1-indexed)
         week_numbers: Weeks assessed (e.g., [1, 2, 3, 4])
         planned_workouts: Planned workouts from monthly plan
-        completed_activities: Actual activities from Strava
+        completed_activities: Actual activities from the canonical archive
         starting_ctl: CTL at month start
         ending_ctl: CTL at month end
         target_ctl: Target CTL for month end
@@ -2193,7 +2087,7 @@ def suggest_optimal_run_count(
     if profile:
         # Use 80% of athlete's typical distances as minimum
         # IMPORTANT: If these are missing, the calling code (skills) should:
-        # 1. Try `resilio profile analyze` to detect from Strava activities
+        # 1. Try `resilio profile analyze` using canonical activities.
         # 2. If still missing, ask athlete directly using AskUserQuestion
         # 3. Never proceed with hardcoded defaults - that's poor coaching
         typical_easy = profile.get("typical_easy_distance_km")
@@ -2630,7 +2524,7 @@ def assess_week_execution(week_number: int) -> Union[dict, PlanError]:
     """
     Analyse planned vs actual execution for a specific training week.
 
-    For each planned workout in the week, finds a matching Strava activity by date
+    For each planned workout, find a matching completed activity by date.
     and sport type, then classifies execution.
 
     Classification rules — easy / long run workouts (full-run avg pace is valid):
@@ -2659,7 +2553,7 @@ def assess_week_execution(week_number: int) -> Union[dict, PlanError]:
         ...         print(f"{ex['date']} {ex['workout_type']}: {ex['classification']}")
     """
     from resilio.core.paths import activities_month_dir
-    from resilio.schemas.activity import NormalizedActivity
+    from resilio.schemas.activity import CanonicalActivity
 
     # Load plan and target week
     plan = get_current_plan()
@@ -2705,8 +2599,8 @@ def assess_week_execution(week_number: int) -> Union[dict, PlanError]:
         month_dir = activities_month_dir(month_key)
         activity_files = repo.list_files(f"{month_dir}/*.yaml")
         for af in activity_files:
-            act = repo.read_yaml(af, NormalizedActivity, ReadOptions(allow_missing=True, should_validate=False))
-            if act is None or isinstance(act, RepoError):
+            act = repo.read_yaml(af, CanonicalActivity, ReadOptions(allow_missing=True, should_validate=False))
+            if act is None or isinstance(act, RepoError) or act.status != "active":
                 continue
             act_date = act.date if isinstance(act.date, date) else None
             if act_date is None:
@@ -2747,7 +2641,7 @@ def assess_week_execution(week_number: int) -> Union[dict, PlanError]:
         hr_low = getattr(workout, 'hr_range_low', None)
         hr_high = getattr(workout, 'hr_range_high', None)
 
-        # Compute average pace from distance + duration (NormalizedActivity has no avg_pace field)
+        # Compute average pace from distance + duration (CanonicalActivity has no avg_pace field)
         act_dist_km = getattr(activity, 'distance_km', None)
         act_dur_secs = getattr(activity, 'duration_seconds', None)
         actual_avg_pace_str = None

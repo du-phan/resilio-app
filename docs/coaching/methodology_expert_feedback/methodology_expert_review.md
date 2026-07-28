@@ -4,7 +4,7 @@
 
 **Audience**: Sport coaching experts, physiologists, and internal reviewers.
 
-**Cross-check**: Definitions, zones, thresholds, guardrails, and adaptation triggers have been verified against [methodology.md](methodology.md) and the codebase. Equations, constants, and conditions in §3.4, §4.2–4.3, §6.2, and §7 are taken directly from [resilio/core](../../../resilio/core) and related schemas.
+**Cross-check**: Definitions, zones, thresholds, guardrails, and adaptation triggers have been verified against [methodology.md](../methodology.md) and the codebase. Equations, constants, and conditions in §3.4, §4.2–4.3, §6.2, and §7 are taken directly from [resilio/core](../../../resilio/core) and related schemas.
 
 ---
 
@@ -154,9 +154,9 @@ Default for unknown RPE: `IF = 0.70`. Result is rounded to 1 decimal place.
 
 **Examples**: 60 min at RPE 3 → (1 × 0.65² × 100) ≈ 42.3 AU. 60 min at RPE 8 → 100.0 AU.
 
-**Interval adjustment** ([load.py](../../../resilio/core/load.py) `adjust_tss_for_intervals`): If the activity is detected as interval work (keywords: "interval", "repeat", "rep", "x ", "@ "; or Strava workout_type == 3; or session_type QUALITY/RACE), base TSS is multiplied by **0.85** (−15%) before applying sport multipliers. Explanation: work:rest recovery reduces effective stress.
+**Interval adjustment** ([load.py](../../../resilio/core/load.py) `adjust_tss_for_intervals`): If the activity is detected as interval work (keywords: "interval", "repeat", "rep", "x ", "@ "; or Intervals.icu workout_type == 3; or session_type QUALITY/RACE), base TSS is multiplied by **0.85** (−15%) before applying sport multipliers. Explanation: work:rest recovery reduces effective stress.
 
-**Session type classification** ([load.py](../../../resilio/core/load.py) `classify_session_type`): Strava `workout_type == 1` (race) → RACE. Else: RPE 1–4 → EASY, 5–6 → MODERATE, 7–8 → QUALITY, 9–10 → RACE.
+**Session type classification** ([load.py](../../../resilio/core/load.py) `classify_session_type`): Intervals.icu `workout_type == 1` (race) → RACE. Else: RPE 1–4 → EASY, 5–6 → MODERATE, 7–8 → QUALITY, 9–10 → RACE.
 
 **Multiplier adjustments** ([load.py](../../../resilio/core/load.py) `adjust_multipliers`): (1) **Strength**: if name/description contains leg keywords (leg, squat, deadlift, lunge, lower body) → lower-body +0.25; if upper-body keywords (upper body, bench, pull-up, shoulder, chest, back) → lower-body = max(0.15, lower_body − 0.15). (2) **Elevation**: if elevation_gain_m / (distance_m/1000) > 30 m/km → systemic +0.05, lower-body +0.10. (3) **Duration**: if duration_minutes > 120 → systemic +0.05. (4) **Race**: if workout_type == 1 → systemic +0.10.
 
@@ -164,7 +164,7 @@ Default for unknown RPE: `IF = 0.70`. Result is rounded to 1 decimal place.
 
 ### 4.3 RPE Estimation (Inputs to Load)
 
-RPE used for base effort can come from multiple sources. The package **does not** resolve conflicts; it returns all estimates and the AI/athlete chooses. Source order in the code ([notes.py](../../../resilio/core/notes.py) `estimate_rpe`): (1) Explicit user input (Strava `perceived_exertion`), (2) HR-based estimate, (3) Strava relative effort (`suffer_score`), (4) Pace-based estimate (running + VDOT in profile), (5) Duration heuristic (fallback).
+RPE used for base effort can come from multiple sources. The package **does not** resolve conflicts; it returns all estimates and the AI/athlete chooses. Source order in the code ([notes.py](../../../resilio/core/notes.py) `estimate_rpe`): (1) Explicit user input (Intervals.icu `perceived_exertion`), (2) HR-based estimate, (3) Intervals.icu relative effort (`suffer_score`), (4) Pace-based estimate (running + VDOT in profile), (5) Duration heuristic (fallback).
 
 **HR-based RPE** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_hr`): Uses `max_hr = athlete_max_hr or max_hr_activity`. **Percent-of-max zones** (exact boundaries):
 
@@ -181,7 +181,7 @@ RPE used for base effort can come from multiple sources. The package **does not*
 
 **Duration adjustment** (HR-based only): If `duration_minutes > 90` and `base_rpe >= 4` → +1 RPE; if `> 150` → +2 RPE; if `> 240` (4 h) → +3 RPE. Cap: `final_rpe = min(10, base_rpe + duration_adjustment)` (adjustment itself is capped at 3).
 
-**Strava relative effort** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_strava_relative`): `effort_per_min = suffer_score / duration_minutes`. Mapping: &lt;0.5 → RPE 2, &lt;1.0 → 4, &lt;1.5 → 5, &lt;2.0 → 6, &lt;2.5 → 7, &lt;3.0 → 8, else 9.
+**Intervals.icu relative effort** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_intervals_icu_relative`): `effort_per_min = suffer_score / duration_minutes`. Mapping: &lt;0.5 → RPE 2, &lt;1.0 → 4, &lt;1.5 → 5, &lt;2.0 → 6, &lt;2.5 → 7, &lt;3.0 → 8, else 9.
 
 **Pace-based RPE** ([notes.py](../../../resilio/core/notes.py) `estimate_rpe_from_pace`): Uses VDOT from profile. Zone paces (seconds per km): Easy = 360 − (VDOT − 40)×6; Tempo = 330 − (VDOT − 40)×5; Interval = 300 − (VDOT − 40)×5.5; Marathon ≈ (easy + tempo)/2; Repetition = interval − 30. Then: pace ≤ repetition → RPE 9, ≤ interval → 8, ≤ tempo → 7, ≤ marathon → 6, ≤ easy → 4; slower → 3. Trail_run adds +1 RPE.
 
@@ -193,7 +193,7 @@ RPE used for base effort can come from multiple sources. The package **does not*
 
 ### 5.1 Minimum History
 
-- **CTL**: Time constant 42 days (code: `CTL_DECAY = 0.976`, `CTL_ALPHA = 0.024`). TrainingPeaks states that "it takes 42 days to get concrete CTL when starting fresh"; we document a **minimum of 12 weeks (84 days)** in [cli_data.md](cli/cli_data.md) for the 42-day CTL calculation to be considered fully valid (conservative). The package can still compute CTL from day 1 using cold-start estimation (see §3.4).
+- **CTL**: Time constant 42 days (code: `CTL_DECAY = 0.976`, `CTL_ALPHA = 0.024`). TrainingPeaks states that "it takes 42 days to get concrete CTL when starting fresh"; we document a **minimum of 12 weeks (84 days)** in [cli_data.md](../cli/cli_data.md) for the 42-day CTL calculation to be considered fully valid (conservative). The package can still compute CTL from day 1 using cold-start estimation (see §3.4).
 - **ACWR**: Code constant `ACWR_MINIMUM_DAYS = 28`. ACWR is **not** computed when any of the previous 28 days is missing metrics; `calculate_acwr` returns `None` in that case.
 - **Baseline**: Code constant `BASELINE_DAYS_THRESHOLD = 14`. `baseline_established = True` when `data_days >= 14`, where `data_days` = number of days with metrics in the last 60 days (excluding the day being computed). Source: [metrics.py](../../../resilio/core/metrics.py).
 
@@ -317,7 +317,7 @@ This section states **what we do today**, the **source of uncertainty or tension
 
 ### 9.1 Base Effort Formula (Resolved)
 
-**What we do**: Base effort is computed as `hours × IF² × 100` (TSS-equivalent), with IF derived from RPE (e.g. RPE 7 → 0.95, RPE 8 → 1.00). [methodology.md](methodology.md) and the code are aligned.
+**What we do**: Base effort is computed as `hours × IF² × 100` (TSS-equivalent), with IF derived from RPE (e.g. RPE 7 → 0.95, RPE 8 → 1.00). [methodology.md](../methodology.md) and the code are aligned.
 
 **Status**: Resolved. No open question.
 
@@ -325,7 +325,7 @@ This section states **what we do today**, the **source of uncertainty or tension
 
 ### 9.2 Minimum History Before Metrics Are "Valid"
 
-**What we do**: We document **12 weeks (84 days)** as the minimum for the 42-day CTL calculation to be considered fully valid ([cli_data.md](cli/cli_data.md)). We also support baseline estimation from the first 7–14 days of load (steady-state assumption) so CTL does not stay at zero for 42 days. ACWR is not computed until 28 days of metrics exist.
+**What we do**: We document **12 weeks (84 days)** as the minimum for the 42-day CTL calculation to be considered fully valid ([cli_data.md](../cli/cli_data.md)). We also support baseline estimation from the first 7–14 days of load (steady-state assumption) so CTL does not stay at zero for 42 days. ACWR is not computed until 28 days of metrics exist.
 
 **Tension**: TrainingPeaks states "42 days to get concrete CTL when starting fresh" and "~2 months of data is enough for time constants." Our 12-week minimum is ~2× that. We do not know whether 12 weeks is appropriately conservative for volume prescription and injury-risk messaging, or unnecessarily restrictive for new athletes.
 
@@ -433,7 +433,7 @@ The following questions are designed to yield **precise, actionable guidance**. 
 
 **Context**: We need clear rules for **new athletes** (or those with little history): when can we safely use CTL for volume prescription (e.g. safe-volume range) and ACWR for injury-risk messaging? Our cold-start behaviour: when no prior metrics exist, we estimate CTL/ATL from the **next** 14 days of load (forward from the first date) and assume steady state (§3.4). ACWR is not computed until we have 28 days of metrics (days *t*−1 … *t*−28). Safe-volume ranges use CTL bands &lt;20, &lt;35, &lt;50, ≥50 (§7.1), which differ from the CTL zone labels (&lt;20, &lt;40, &lt;60, &lt;80, ≥100 in §3.2).
 
-**Current choice**: We document 12 weeks (84 days) as minimum for CTL to be "valid" ([cli_data.md](cli/cli_data.md)); we do not compute ACWR until 28 days of metrics. Baseline estimation uses 14 days forward so CTL is not zero from day 1.
+**Current choice**: We document 12 weeks (84 days) as minimum for CTL to be "valid" ([cli_data.md](../cli/cli_data.md)); we do not compute ACWR until 28 days of metrics. Baseline estimation uses 14 days forward so CTL is not zero from day 1.
 
 **Ask**: (a) What **minimum number of days or weeks** would you recommend before **relying on CTL** for starting/target weekly volume (e.g. guardrails that recommend km/week from CTL)? (b) What minimum before **using ACWR** in athlete-facing injury-risk messaging? (c) Should these minimums differ by population (e.g. beginners vs experienced, single-sport vs multi-sport)? (d) Should our **safe-volume CTL bands** (20, 35, 50) be aligned with our **CTL zone** boundaries (20, 40, 60, 80, 100), or is the current split (softer "recreational" band 25–40 km at CTL 20–35) intentional and fine? Please give specific numbers and, if possible, a brief rationale or source.
 
@@ -551,13 +551,13 @@ The following questions are designed to yield **precise, actionable guidance**. 
 
 ## 11. References (Internal)
 
-- [methodology.md](methodology.md) – Training methodology reference
-- [docs/specs/modules/m08_load_engine.md](../specs/modules/m08_load_engine.md) – Load calculation (M8)
-- [docs/specs/modules/m09_metrics_engine.md](../specs/modules/m09_metrics_engine.md) – Metrics (M9), cold start, baseline
-- [cli_data.md](cli/cli_data.md) – CTL baseline requirements (12 weeks)
+- [methodology.md](../methodology.md) – Training methodology reference
+- [docs/specs/modules/m08_load_engine.md](../../specs/modules/m08_load_engine.md) – Load calculation (M8)
+- [docs/specs/modules/m09_metrics_engine.md](../../specs/modules/m09_metrics_engine.md) – Metrics (M9), cold start, baseline
+- [cli_data.md](../cli/cli_data.md) – CTL baseline requirements (12 weeks)
 - [resilio/core/load.py](../../../resilio/core/load.py) – Base effort TSS, RPE→IF, multipliers, session type
 - [resilio/core/metrics.py](../../../resilio/core/metrics.py) – CTL/ATL/TSB/ACWR/Readiness, zones, validation
-- [resilio/core/notes.py](../../../resilio/core/notes.py) – RPE estimation (HR, Strava, pace, duration)
+- [resilio/core/notes.py](../../../resilio/core/notes.py) – RPE estimation (HR, Intervals.icu, pace, duration)
 - [resilio/core/guardrails/volume.py](../../../resilio/core/guardrails/volume.py) – Safe volume, T/I/R limits, long run, 10% rule
 - [resilio/core/guardrails/recovery.py](../../../resilio/core/guardrails/recovery.py) – Break return, masters, race/illness recovery
 - [resilio/core/analysis/risk.py](../../../resilio/core/analysis/risk.py) – Current risk, ACWR/readiness/TSB/lower-body factors

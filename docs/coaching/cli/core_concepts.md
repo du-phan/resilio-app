@@ -65,7 +65,7 @@ exit_code=$?
 | ----- | ---------------------- | ----------------------------- | ----------------------------------- |
 | **0** | Success                | -                             | Parse JSON and proceed              |
 | **2** | Config/Setup Missing   | `config_missing`              | Run `resilio init` to initialize        |
-| **3** | Authentication Failure | `auth_error`                  | Run `resilio auth url` to refresh token |
+| **3** | Authentication Failure | `authentication_rejected`     | Replace or verify the personal API key |
 | **4** | Network/Rate Limit     | `network_error`, `rate_limit` | Retry with exponential backoff      |
 | **5** | Invalid Input          | `validation_error`            | Check parameters and retry          |
 | **1** | Internal Error         | `internal_error`              | Report issue with traceback         |

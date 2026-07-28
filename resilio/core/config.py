@@ -1,162 +1,123 @@
-"""
-M2 - Config & Secrets
+"""Secret-safe runtime configuration loading."""
 
-Load configuration from settings.yaml and secrets from secrets.local.yaml.
-Validate required keys and provide explicit error messages for missing secrets.
-"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Mapping, Optional, Union
 
 import yaml
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Union
+from dotenv import dotenv_values
 
-from resilio.schemas.config import (
-    Config,
-    ConfigErrorType,
-    Secrets,
-    Settings,
-)
-
-
-# ============================================================
-# ERROR TYPES
-# ============================================================
+from resilio.schemas.config import Config, ConfigErrorType, Settings
 
 
 class ConfigError:
-    """Configuration error with details."""
+    """Typed, redacted configuration error."""
 
     def __init__(
-        self, error_type: ConfigErrorType, message: str, path: Optional[str] = None
+        self,
+        error_type: ConfigErrorType,
+        message: str,
+        path: Optional[str] = None,
     ):
         self.error_type = error_type
         self.message = message
         self.path = path
 
+    def __repr__(self) -> str:
+        return (
+            f"ConfigError(error_type={self.error_type!r}, "
+            f"message={self.message!r}, path={self.path!r})"
+        )
+
 
 ConfigResult = Union[Config, ConfigError]
-
-
-# ============================================================
-# REPOSITORY ROOT DETECTION
-# ============================================================
+SettingsResult = Union[Settings, ConfigError]
 
 
 def get_repo_root() -> Path:
-    """
-    Find repository root by walking up from current directory.
-
-    Searches for either a .git directory or CLAUDE.md file to identify
-    the repository root.
-
-    Returns:
-        Path to repository root
-
-    Raises:
-        FileNotFoundError: If root cannot be determined (walked to filesystem root)
-    """
+    """Find the repository root without consulting credentials."""
     current = Path.cwd()
-
     while True:
-        # Check for .git directory
-        if (current / ".git").exists():
+        if (current / ".git").exists() or (current / "AGENTS.md").exists():
             return current
-
-        # Check for CLAUDE.md
-        if (current / "CLAUDE.md").exists():
-            return current
-
-        # Move to parent
         parent = current.parent
-
-        # If we've reached filesystem root, fail
         if parent == current:
             raise FileNotFoundError(
-                "Could not find repository root (.git or CLAUDE.md not found). "
-                "Are you running from within the repository?"
+                "Could not find repository root (.git or AGENTS.md not found)"
             )
-
         current = parent
 
 
-# ============================================================
-# CONFIGURATION LOADING
-# ============================================================
-
-
-def load_config(repo_root: Optional[Path] = None) -> ConfigResult:
-    """
-    Load and validate complete configuration.
-
-    Args:
-        repo_root: Repository root directory (auto-detected if None)
-
-    Returns:
-        Config object or ConfigError
-
-    Load order:
-        1. Load settings.yaml (fail if missing)
-        2. Load secrets.local.yaml (fail if missing)
-        3. Validate all required fields
-    """
-    if repo_root is None:
-        repo_root = get_repo_root()
-
-    config_dir = repo_root / "config"
-
-    # Load settings
-    settings_path = config_dir / "settings.yaml"
+def load_settings(repo_root: Optional[Path] = None) -> SettingsResult:
+    """Load non-secret settings only."""
+    root = repo_root or get_repo_root()
+    settings_path = root / "config" / "settings.yaml"
     if not settings_path.exists():
         return ConfigError(
-            error_type=ConfigErrorType.FILE_NOT_FOUND,
-            message="Configuration file not found",
-            path=str(settings_path),
+            ConfigErrorType.FILE_NOT_FOUND,
+            "Configuration file not found",
+            str(settings_path),
         )
-
     try:
-        with open(settings_path) as f:
-            settings_data = yaml.safe_load(f) or {}
-    except yaml.YAMLError as e:
+        raw = yaml.safe_load(settings_path.read_text()) or {}
+    except yaml.YAMLError as exc:
         return ConfigError(
-            error_type=ConfigErrorType.PARSE_ERROR,
-            message=str(e),
-            path=str(settings_path),
+            ConfigErrorType.PARSE_ERROR,
+            f"Settings YAML is invalid: {exc}",
+            str(settings_path),
         )
-
-    # Validate settings
     try:
-        settings = Settings.model_validate(settings_data)
-    except Exception as e:
+        return Settings.model_validate(raw)
+    except Exception as exc:
         return ConfigError(
-            error_type=ConfigErrorType.VALIDATION_ERROR,
-            message=f"Settings validation failed: {e}",
+            ConfigErrorType.VALIDATION_ERROR,
+            f"Settings validation failed: {exc}",
+            str(settings_path),
         )
 
-    # Load secrets
-    secrets_path = config_dir / "secrets.local.yaml"
-    if not secrets_path.exists():
+
+def load_config(
+    repo_root: Optional[Path] = None,
+    environment: Optional[Mapping[str, str]] = None,
+) -> ConfigResult:
+    """Load settings and the personal API key without mutating global environment.
+
+    Tests and callers that already own an environment mapping must pass it
+    explicitly. Only an omitted mapping causes `.env.local` to be parsed.
+    """
+    root = repo_root or get_repo_root()
+    settings = load_settings(root)
+    if isinstance(settings, ConfigError):
+        return settings
+
+    if environment is None:
+        env_path = root / ".env.local"
+        if not env_path.exists():
+            return ConfigError(
+                ConfigErrorType.MISSING_SECRET,
+                "INTERVALS_ICU_API_KEY is not configured in .env.local",
+                str(env_path),
+            )
+        loaded = dotenv_values(env_path)
+        local_environment = {
+            str(key): str(value)
+            for key, value in loaded.items()
+            if value is not None
+        }
+    else:
+        local_environment = dict(environment)
+
+    key = local_environment.get("INTERVALS_ICU_API_KEY", "").strip()
+    if not key:
         return ConfigError(
-            error_type=ConfigErrorType.FILE_NOT_FOUND,
-            message="Secrets file not found. Copy templates/secrets.local.yaml to config/",
-            path=str(secrets_path),
+            ConfigErrorType.MISSING_SECRET,
+            "INTERVALS_ICU_API_KEY is missing or empty",
         )
 
-    try:
-        with open(secrets_path) as f:
-            secrets_data = yaml.safe_load(f) or {}
-    except yaml.YAMLError as e:
-        return ConfigError(
-            error_type=ConfigErrorType.PARSE_ERROR,
-            message=str(e),
-            path=str(secrets_path),
-        )
-
-    try:
-        secrets = Secrets.model_validate(secrets_data)
-    except Exception as e:
-        return ConfigError(
-            error_type=ConfigErrorType.VALIDATION_ERROR,
-            message=f"Secrets validation failed: {e}",
-        )
-
-    return Config(settings=settings, secrets=secrets, loaded_at=datetime.now())
+    return Config(
+        settings=settings,
+        intervals_icu_api_key=key,
+        loaded_at=datetime.now(timezone.utc),
+    )

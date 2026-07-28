@@ -2,7 +2,7 @@
 Unit tests for M7 - Notes & RPE Analyzer (Toolkit Paradigm).
 
 Tests quantitative toolkit functions:
-- RPE estimation from multiple sources (HR, pace, Strava, duration)
+- RPE estimation from multiple sources (HR, pace, preserved history, duration)
 - Treadmill detection using multi-signal scoring
 - Integration with activity analysis
 
@@ -17,17 +17,22 @@ from resilio.core.notes import (
     estimate_rpe,
     estimate_rpe_from_hr,
     estimate_rpe_from_pace,
-    estimate_rpe_from_strava_relative,
+    estimate_rpe_from_historical_relative_effort,
     estimate_rpe_from_duration,
     detect_treadmill,
     AnalysisError,
     InsufficientDataError,
 )
 from resilio.schemas.activity import (
-    NormalizedActivity,
+    ActivityClassification,
+    ActivityNotes,
+    CanonicalActivity,
+    HeartRateMeasurements,
     SportType,
     SurfaceType,
     DataQuality,
+    PerceivedEffort,
+    PerceivedEffortSource,
     RPESource,
 )
 from resilio.schemas.profile import (
@@ -40,6 +45,7 @@ from resilio.schemas.profile import (
     RunningPriority,
     ConflictPolicy,
 )
+from tests.factories import make_activity
 
 
 # ============================================================
@@ -71,9 +77,9 @@ def basic_athlete():
 @pytest.fixture
 def basic_activity():
     """Basic normalized activity for testing."""
-    return NormalizedActivity(
+    return make_activity(
         id="test_activity_001",
-        source="strava",
+        source="upload",
         sport_type=SportType.RUN,
         name="Morning Run",
         date=date(2026, 1, 10),
@@ -101,8 +107,14 @@ class TestRPEEstimation:
 
     def test_user_input_included_in_estimates(self, basic_activity, basic_athlete):
         """User-entered RPE should be included in estimates list."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = 6
+        activity = basic_activity.model_copy(
+            update={
+                "perceived_effort": PerceivedEffort(
+                    value=6,
+                    source=PerceivedEffortSource.ATHLETE,
+                )
+            }
+        )
 
         estimates = estimate_rpe(activity, basic_athlete)
 
@@ -117,9 +129,15 @@ class TestRPEEstimation:
 
     def test_hr_based_estimation_zone_mapping(self, basic_activity, basic_athlete):
         """HR-based estimation should use LTHR zones when available (more accurate)."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = None
-        activity.average_hr = 160.0  # ~86% of max HR (185) → RPE 6
+        activity = basic_activity.model_copy(
+            update={
+                "perceived_effort": None,
+                "heart_rate": HeartRateMeasurements(
+                    average_beats_per_minute=160,
+                    maximum_beats_per_minute=175,
+                ),
+            }
+        )
 
         estimates = estimate_rpe(activity, basic_athlete)
 
@@ -134,11 +152,7 @@ class TestRPEEstimation:
 
     def test_pace_based_estimation_for_running(self, basic_activity, basic_athlete):
         """Pace-based estimation should work for running activities with VDOT."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = None
-        # 7km in 2700s = 385.7s/km = 6:26/km (easy pace for VDOT 45)
-        activity.distance_km = 7.0
-        activity.duration_seconds = 2700
+        activity = basic_activity.model_copy(update={"perceived_effort": None})
 
         estimates = estimate_rpe(activity, basic_athlete)
 
@@ -153,8 +167,7 @@ class TestRPEEstimation:
 
     def test_pace_based_skipped_without_vdot(self, basic_activity):
         """Pace-based estimation should be skipped if no VDOT available."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = None
+        activity = basic_activity.model_copy(update={"perceived_effort": None})
 
         # Athlete without VDOT
         athlete = AthleteProfile(
@@ -187,30 +200,24 @@ class TestRPEEstimation:
         )
         assert pace_estimate is None
 
-    def test_strava_suffer_score_normalization(self, basic_activity, basic_athlete):
-        """Strava suffer_score should normalize to RPE scale."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = None
-        activity.suffer_score = 120  # 120 / 45min = 2.67 per min → RPE 7
+    def test_historical_relative_effort_normalization(self):
+        """Preserved relative effort should normalize to the RPE scale."""
+        estimate = estimate_rpe_from_historical_relative_effort(120, 45)
 
-        estimates = estimate_rpe(activity, basic_athlete)
-
-        # Find Strava-based estimate
-        strava_estimate = next(
-            (e for e in estimates if e.source == RPESource.STRAVA_RELATIVE), None
-        )
-        assert strava_estimate is not None
-        assert 6 <= strava_estimate.value <= 8
-        assert "suffer score" in strava_estimate.reasoning.lower()
+        assert estimate is not None
+        assert estimate.source == RPESource.HISTORICAL_RELATIVE_EFFORT
+        assert estimate.value == 8
+        assert "historical relative effort" in estimate.reasoning.lower()
 
     def test_duration_heuristic_always_available(self, basic_activity, basic_athlete):
         """Duration heuristic should always provide a fallback estimate."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = None
-        activity.has_hr_data = False
-        activity.average_hr = None
-        activity.suffer_score = None
-        activity.distance_km = None  # No pace data
+        activity = basic_activity.model_copy(
+            update={
+                "perceived_effort": None,
+                "heart_rate": None,
+                "distance_meters": None,
+            }
+        )
 
         estimates = estimate_rpe(activity, basic_athlete)
 
@@ -224,21 +231,23 @@ class TestRPEEstimation:
 
     def test_multiple_estimates_returned(self, basic_activity, basic_athlete):
         """Should return multiple estimates without resolution."""
-        activity = basic_activity.model_copy()
-        activity.perceived_exertion = 8  # User input
-        activity.average_hr = 160.0  # HR-based
-        activity.suffer_score = 120  # Strava-based
-        # Also has pace data for pace-based
+        activity = basic_activity.model_copy(
+            update={
+                "perceived_effort": PerceivedEffort(
+                    value=8,
+                    source=PerceivedEffortSource.ATHLETE,
+                )
+            }
+        )
 
         estimates = estimate_rpe(activity, basic_athlete)
 
-        # Should have at least 4 sources (user, HR, pace, Strava, duration)
+        # User input, HR, pace, and duration are independently available.
         assert len(estimates) >= 4
         sources = {e.source for e in estimates}
         assert RPESource.USER_INPUT in sources
         assert RPESource.HR_BASED in sources
         assert RPESource.PACE_BASED in sources
-        assert RPESource.STRAVA_RELATIVE in sources
         assert RPESource.DURATION_HEURISTIC in sources
 
 
@@ -396,9 +405,16 @@ class TestAnalysisIntegration:
         self, basic_activity, basic_athlete
     ):
         """Should include treadmill detection results."""
-        activity = basic_activity.model_copy()
-        activity.has_gps_data = False
-        activity.name = "Treadmill Run"
+        activity = basic_activity.model_copy(
+            update={
+                "classification": ActivityClassification(
+                    surface=SurfaceType.TREADMILL,
+                    data_quality=DataQuality.TREADMILL,
+                    has_gps_data=False,
+                ),
+                "name": "Treadmill Run",
+            }
+        )
 
         result = analyze_activity(activity, basic_athlete)
 
@@ -408,8 +424,9 @@ class TestAnalysisIntegration:
         self, basic_activity, basic_athlete
     ):
         """Should set notes_present flag when notes available."""
-        activity = basic_activity.model_copy()
-        activity.description = "Felt good today"
+        activity = basic_activity.model_copy(
+            update={"notes": ActivityNotes(description="Felt good today")}
+        )
 
         result = analyze_activity(activity, basic_athlete)
 
@@ -417,9 +434,7 @@ class TestAnalysisIntegration:
 
     def test_analyze_activity_with_no_notes(self, basic_activity, basic_athlete):
         """Should handle activity with no notes."""
-        activity = basic_activity.model_copy()
-        activity.description = None
-        activity.private_note = None
+        activity = basic_activity.model_copy(update={"notes": ActivityNotes()})
 
         result = analyze_activity(activity, basic_athlete)
 
@@ -470,9 +485,7 @@ class TestErrorHandling:
         self, basic_activity, basic_athlete
     ):
         """Should gracefully handle missing HR data."""
-        activity = basic_activity.model_copy()
-        activity.has_hr_data = False
-        activity.average_hr = None
+        activity = basic_activity.model_copy(update={"heart_rate": None})
 
         result = analyze_activity(activity, basic_athlete)
 
@@ -483,8 +496,7 @@ class TestErrorHandling:
         self, basic_activity, basic_athlete
     ):
         """Should gracefully handle missing pace data."""
-        activity = basic_activity.model_copy()
-        activity.distance_km = None
+        activity = basic_activity.model_copy(update={"distance_meters": None})
 
         result = analyze_activity(activity, basic_athlete)
 

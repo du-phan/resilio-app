@@ -1,16 +1,12 @@
 ---
 name: vdot-baseline-proposal
-description: Proposes a baseline VDOT and returns evidence plus a single approval prompt for the main agent. Use when a macro plan needs an approved baseline VDOT.
-disable-model-invocation: false
-context: fork
-agent: vdot-analyst
-allowed-tools: Bash, Read
-argument-hint: "[notes]"
+description: Proposes a baseline VDOT and returns evidence plus a single approval prompt for the coach. Use when a macro plan needs an approved baseline VDOT.
+compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
 ---
 
 # VDOT Baseline Proposal (Executor)
 
-Use CLI only. Present the review directly in chat for the main agent to use.
+Use CLI only. Present the review directly in chat for the coach to use.
 
 ## Preconditions (block if missing)
 
@@ -22,12 +18,25 @@ If missing, return a blocking checklist and stop.
 ## Interactivity & Feedback
 
 - Non-interactive: do not ask the athlete questions or call approval commands.
-- Return an `athlete_prompt` for the main agent to ask and capture approval.
-- If the athlete declines or requests changes, the main agent will re-run this skill with notes; treat notes as hard constraints and generate a new proposal.
-- If new constraints are provided (injury, schedule limits), assume the main agent updated profile/memory before re-run.
+- Return an `athlete_prompt` for the coach to ask and capture approval.
+- If the athlete declines or requests changes, the coach will re-run this skill with notes; treat notes as hard constraints and generate a new proposal.
+- If new constraints are provided (injury, schedule limits), assume the coach updated profile/memory before re-run.
 - If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
 
-**Metric explainer rule**: See CLAUDE.md "Metric one-liners" for first-mention definitions. Include them in athlete_prompt if metrics are mentioned.
+## Metric explainer rule (athlete-facing)
+
+If the athlete_prompt mentions any metrics, add a first-mention explainer. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling).
+
+Use this exact VDOT explainer on first mention:
+"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
+
+One-line definitions for other metrics:
+- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
+- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
+- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
+- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
+- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
+- RPE: "RPE is your perceived effort from 1–10."
 
 ## Workflow
 
@@ -75,7 +84,7 @@ resilio vdot paces --vdot <VDOT>
 - Recent evidence (race or key workouts)
 - Pace table (easy/tempo/interval/long)
 - Single approval prompt text for the athlete
-- Handoff note: main agent must record approval via
+- Handoff note: coach must record approval via
   `resilio approvals approve-vdot --value <VDOT>`
 
 ## References (load only if needed)

@@ -1,179 +1,138 @@
-# Workout Generation — Explicit Specification
+# Workout Generation Contract
 
-You design each workout explicitly in the `workouts` array. This leverages your coaching intelligence.
+Design every workout explicitly in the weekly JSON. `distance_km` remains the
+total coaching volume; `structured_workout` is the deterministic device
+prescription.
 
----
+## Required workout fields
 
-## Required Fields Per Workout
+- `date` (`YYYY-MM-DD`)
+- `start_time_local` (`HH:MM:SS`) for every device-published workout
+- `sport` (`run` or `cycle`)
+- `day_of_week` (`0` Monday through `6` Sunday)
+- `workout_type`
+- `distance_km` (warm-up + work + recovery + cool-down)
+- `target_rpe`
+- `warmup_km`
+- `cooldown_km`
 
-- `date` (YYYY-MM-DD)
-- `day_of_week` (0=Monday, 6=Sunday)
-- `workout_type` (easy | long_run | tempo | intervals | rest)
-- `distance_km` (total session distance: WU + work + CD)
-- `target_rpe` (1-10)
-- `warmup_km` (WU distance in km, 0 for easy/long runs)
-- `cooldown_km` (CD distance in km, 0 for easy/long runs)
+Use `pace_range`, `notes`, and `key_workout` for athlete-facing coaching. Use
+`structured_workout` for machine-readable execution. Rest days must not have a
+structured workout.
 
----
+## Typed step tree
 
-## Optional But Recommended
+`structured_workout` contains `sport` and one or more steps:
 
-- `pace_range` (e.g., "5:00-5:12" for T-pace)
-- `intervals` (for tempo/intervals/reps — see `workout_structure.md`)
-- `notes` (coaching cues, M-pace segments for long runs, strides, etc.)
-- `key_workout` (true for week's critical sessions)
+- `steady`: one duration, optional target, intensity, cadence, and cue.
+- `ramp`: one duration, start target, end target, intensity, cadence, and cue.
+- `repeat`: `repetitions` plus nested `steps`.
 
-## Notes: Athlete-Facing Adjustment Cues
+Duration variants:
 
-Workout `notes` are read by the athlete. Any conditional guidance must use a controllable metric — never RPE.
+- `{"unit": "seconds", "value": 600}`
+- `{"unit": "meters", "value": 1000}`
+- `{"unit": "until_lap_press", "nominal_seconds": 600}`
 
-❌ "If too hard, back off to RPE 6"
-✅ "If HR climbs above 175, ease pace to 5:25+/km"
-✅ "If HR climbs above 175, cut the block short and begin cooldown"
+Target variants:
 
-RPE in notes = sensation descriptor only ("should feel comfortably hard"). Pace and HR are the adjustment levers.
+- Pace: `seconds_per_kilometer`
+- Heart rate: `beats_per_minute`, `percent_lthr`, or
+  `percent_max_heart_rate`
+- Power: `watts` or `percent_ftp`
 
-**Exception**: short intervals (<2 min) and hilly terrain — effort language is appropriate when pace is unreliable. Use qualitative descriptors, not RPE numbers: e.g., "run the uphills at a controlled hard effort, keep breathing rhythmic; walk if needed" or "hold a hard-but-repeatable effort across all reps."
+Minimum and maximum are numeric and ordered. Do not put pace strings,
+recoveries, or unit suffixes inside target values.
 
----
+## Example quality workout
 
-## Notes: Primary Effort Descriptor
-
-The effort label must use spelled-out race-pace language, not "RPE X" and not coach shorthand (T-pace, M-pace):
-
-❌ "15min threshold at RPE 7"
-❌ "15min at T-pace (5:02–5:14/km)"
-✅ "15min at threshold pace (5:02–5:14/km) — roughly your 10k–15k race effort"
-✅ "5km at marathon pace (5:30–5:45/km) — your goal race pace"
-
-On first mention of an effort zone in the week's notes, include a brief race-pace anchor:
-- Easy pace → "fully conversational, could sustain for hours"
-- Marathon pace → "your goal marathon race pace"
-- Threshold pace → "roughly your 10k–15k race effort, comfortably hard"
-- Interval pace → "roughly your 3k–5k race effort, very hard"
-- Repetition pace → "near-maximal, mile race pace"
-
-`target_rpe` in the JSON schema is used for system load calculations only — never surface it as the athlete's effort cue.
-
----
-
-## Critical Volume Rule
-
-**All `distance_km` values must sum exactly to `target_volume_km`.**
-
-Verification: Before finalizing JSON, sum all `distance_km` → must equal `target_volume_km`.
-
----
-
-## Workout Structure Convention
-
-**See `references/workout_structure.md` for complete details.**
-
-Key points:
-- `distance_km` = total session distance (WU + work + CD)
-- `warmup_km` / `cooldown_km` = explicit WU/CD distances (at E-pace)
-- Work km = `distance_km - warmup_km - cooldown_km`
-- Daniels limits (T≤10%, I≤8%, R≤5%) apply to work km only
-
----
-
-## Example Weekly JSON
+This 10 km session is 2.5 km warm-up, four repetitions of 1 km work and 400 m
+recovery, then 1.9 km cool-down.
 
 ```json
 {
-  "week_number": 3,
-  "phase": "build",
-  "start_date": "2026-02-10",
-  "end_date": "2026-02-16",
-  "target_volume_km": 50.0,
-  "workout_structure_hints": {
-    "quality": {"max_sessions": 2, "types": ["tempo", "intervals"]},
-    "long_run": {"emphasis": "steady", "pct_range": [25, 30]},
-    "intensity_balance": {"low_intensity_pct": 0.82}
+  "date": "2026-02-12",
+  "sport": "run",
+  "day_of_week": 2,
+  "workout_type": "intervals",
+  "distance_km": 10.0,
+  "target_rpe": 8,
+  "pace_range": "4:45-4:55",
+  "warmup_km": 2.5,
+  "cooldown_km": 1.9,
+  "structured_workout": {
+    "sport": "run",
+    "steps": [
+      {
+        "kind": "steady",
+        "duration": {"unit": "meters", "value": 2500},
+        "target": {
+          "mode": "pace",
+          "unit": "seconds_per_kilometer",
+          "minimum": 360,
+          "maximum": 390
+        },
+        "intensity": "warmup",
+        "cue": "Finish with four relaxed strides"
+      },
+      {
+        "kind": "repeat",
+        "repetitions": 4,
+        "steps": [
+          {
+            "kind": "steady",
+            "duration": {"unit": "meters", "value": 1000},
+            "target": {
+              "mode": "pace",
+              "unit": "seconds_per_kilometer",
+              "minimum": 285,
+              "maximum": 295
+            },
+            "intensity": "interval"
+          },
+          {
+            "kind": "steady",
+            "duration": {"unit": "meters", "value": 400},
+            "target": {
+              "mode": "pace",
+              "unit": "seconds_per_kilometer",
+              "minimum": 390,
+              "maximum": 450
+            },
+            "intensity": "recovery"
+          }
+        ]
+      },
+      {
+        "kind": "steady",
+        "duration": {"unit": "meters", "value": 1900},
+        "target": {
+          "mode": "pace",
+          "unit": "seconds_per_kilometer",
+          "minimum": 370,
+          "maximum": 420
+        },
+        "intensity": "cooldown"
+      }
+    ]
   },
-  "workouts": [
-    {
-      "date": "2026-02-10",
-      "day_of_week": 0,
-      "workout_type": "easy",
-      "distance_km": 8.0,
-      "target_rpe": 4,
-      "pace_range": "6:00-6:30",
-      "warmup_km": 0.0,
-      "cooldown_km": 0.0,
-      "notes": "Recovery from weekend long run"
-    },
-    {
-      "date": "2026-02-12",
-      "day_of_week": 2,
-      "workout_type": "tempo",
-      "distance_km": 10.0,
-      "target_rpe": 7,
-      "pace_range": "5:00-5:12",
-      "warmup_km": 2.5,
-      "cooldown_km": 1.5,
-      "intervals": [
-        {
-          "duration_minutes": 20,
-          "pace": "5:00-5:12",
-          "type": "threshold"
-        }
-      ],
-      "key_workout": true,
-      "notes": "Continuous 20min tempo. 2km E-pace transition before CD."
-    },
-    {
-      "date": "2026-02-14",
-      "day_of_week": 4,
-      "workout_type": "easy",
-      "distance_km": 7.0,
-      "target_rpe": 4,
-      "pace_range": "6:00-6:30",
-      "warmup_km": 0.0,
-      "cooldown_km": 0.0,
-      "notes": "Easy aerobic run"
-    },
-    {
-      "date": "2026-02-15",
-      "day_of_week": 5,
-      "workout_type": "intervals",
-      "distance_km": 10.0,
-      "target_rpe": 8,
-      "pace_range": "4:45-4:55",
-      "warmup_km": 2.5,
-      "cooldown_km": 1.5,
-      "intervals": [
-        {
-          "distance": "1000m",
-          "reps": 5,
-          "pace": "4:45-4:55",
-          "recovery": "400m jog",
-          "type": "vo2max"
-        }
-      ],
-      "key_workout": true,
-      "notes": "Include 4-6 strides in final 500m of WU"
-    },
-    {
-      "date": "2026-02-16",
-      "day_of_week": 6,
-      "workout_type": "long_run",
-      "distance_km": 15.0,
-      "target_rpe": 5,
-      "pace_range": "6:00-6:30",
-      "warmup_km": 0.0,
-      "cooldown_km": 0.0,
-      "notes": "Pure aerobic endurance. 30% of weekly volume."
-    }
-  ]
+  "key_workout": true,
+  "notes": "Keep the first two repetitions controlled."
 }
 ```
 
-**Volume verification**: 8.0 + 10.0 + 7.0 + 10.0 + 15.0 = 50.0 km ✓
+## Validation
 
----
+- Sum all workout `distance_km` values exactly to `target_volume_km`.
+- Confirm warm-up, work, recovery, and cool-down distances match the total.
+- Apply Daniels quality limits to work distance only.
+- Keep at least 80% of training time easy.
+- Keep the long run within the configured guardrail.
+- Ensure the workout and structured-workout sports match.
+- Use a single target mode for Wahoo-bound workouts.
+- Do not use `until_lap_press` for Wahoo until support is verified.
+- Reject pace publishing without threshold pace or pace zones.
+- Reject power publishing without FTP.
 
-**Cross-references**:
-- Workout structure & distance accounting: `workout_structure.md`
-- Guardrails (80/20, Daniels limits, long run cap): `guardrails_weekly.md`
-- JSON workflow & approval: `json_workflow.md`
+Cross-reference `workout_structure.md` for distance accounting and
+`guardrails_weekly.md` for load limits.

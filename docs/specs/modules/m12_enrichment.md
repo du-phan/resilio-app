@@ -859,7 +859,7 @@ This module is called by the API layer to enrich workflow results before returni
 | ------------------------------------ | ---------------------- |
 | `api.metrics.get_current_metrics()`  | `enrich_metrics()`     |
 | `api.coach.get_todays_workout()`     | `enrich_workout()`     |
-| `api.sync.sync_strava()`             | `enrich_sync_result()` |
+| `api.sync.sync_activities()`                | `enrich_sync_result()` |
 | `api.plan.get_pending_suggestions()` | `enrich_suggestions()` |
 
 ### 6.2 Data Flow

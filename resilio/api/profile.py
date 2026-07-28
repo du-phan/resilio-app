@@ -13,7 +13,6 @@ import logging
 
 from resilio.core.paths import athlete_profile_path, get_activities_dir
 from resilio.core.repository import RepositoryIO, ReadOptions
-from resilio.core.strava import DEFAULT_SYNC_LOOKBACK_DAYS
 from resilio.schemas.repository import RepoError, RepoErrorType
 from resilio.schemas.profile import (
     AthleteProfile,
@@ -32,7 +31,10 @@ from resilio.schemas.profile import (
     PBEntry,
     WeatherPreferences,
 )
-from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import CanonicalActivity
+
+
+PROFILE_ANALYSIS_DEFAULT_DAYS = 365
 
 
 # ============================================================
@@ -242,7 +244,7 @@ def get_profile() -> Union[AthleteProfile, ProfileError]:
         - goal: Current training goal
         - constraints: Training constraints (runs per week, preferred days, etc.)
         - conflict_policy: How to handle sport conflicts
-        - strava_connection: Strava integration settings
+        - external account connectivity is managed outside the athlete profile
         - recent_races: Recent race results
         - vital_signs: Resting HR, max HR, etc.
 
@@ -294,7 +296,6 @@ def update_profile(**fields: Any) -> Union[AthleteProfile, ProfileError]:
             - conflict_policy: ConflictPolicy enum value
             - vital_signs: VitalSigns dict or object
             - recent_races: list of RecentRace
-            - strava_connection: StravaConnection dict or object
 
     Returns:
         Updated AthleteProfile
@@ -587,7 +588,7 @@ def set_goal(
 class ProfileAnalysis:
     """Analysis of synced activity data for profile setup insights.
 
-    IMPORTANT: This analyzes only the activities synced from Strava,
+    IMPORTANT: This analyzes only the activities in the canonical archive,
     NOT the athlete's complete training history. The date range reflects
     the sync window, not how long they've been training.
     """
@@ -737,21 +738,21 @@ def analyze_profile_from_activities() -> Union[ProfileAnalysis, ProfileError]:
     return analysis
 
 
-def _load_all_activities(repo: RepositoryIO) -> List[NormalizedActivity]:
+def _load_all_activities(repo: RepositoryIO) -> List[CanonicalActivity]:
     """Load all activities from data/activities/**/*.yaml."""
     pattern = "data/activities/**/*.yaml"
     activity_files = repo.list_files(pattern)
 
     activities = []
     for file_path in activity_files:
-        result = repo.read_yaml(file_path, NormalizedActivity, ReadOptions(should_validate=False))
-        if not isinstance(result, RepoError):
+        result = repo.read_yaml(file_path, CanonicalActivity, ReadOptions(should_validate=False))
+        if not isinstance(result, RepoError) and result.status == "active":
             activities.append(result)
 
     return activities
 
 
-def _find_activity_gaps(activities: List[NormalizedActivity], min_gap_days: int) -> List[Dict]:
+def _find_activity_gaps(activities: List[CanonicalActivity], min_gap_days: int) -> List[Dict]:
     """Find gaps in training > min_gap_days."""
     gaps = []
     for i in range(1, len(activities)):
@@ -769,7 +770,7 @@ def _find_activity_gaps(activities: List[NormalizedActivity], min_gap_days: int)
     return gaps
 
 
-def _analyze_heart_rate(activities: List[NormalizedActivity]) -> Dict:
+def _analyze_heart_rate(activities: List[CanonicalActivity]) -> Dict:
     """Extract HR insights."""
     hr_values = []
     avg_hr_values = []
@@ -787,11 +788,16 @@ def _analyze_heart_rate(activities: List[NormalizedActivity]) -> Dict:
     }
 
 
-def _analyze_volume(activities: List[NormalizedActivity]) -> Dict:
+def _analyze_volume(activities: List[CanonicalActivity]) -> Dict:
     """Analyze running volume patterns."""
     weekly_km = defaultdict(float)
     for a in activities:
-        if a.sport_type in ["run", "trail_run", "treadmill_run"] and a.distance_km:
+        if a.sport_type in [
+            "run",
+            "trail_run",
+            "treadmill_run",
+            "track_run",
+        ] and a.distance_km:
             week_key = a.date.isocalendar()[:2]  # (year, week)
             weekly_km[week_key] += a.distance_km
 
@@ -807,10 +813,10 @@ def _analyze_volume(activities: List[NormalizedActivity]) -> Dict:
     }
 
 
-def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
+def _analyze_workout_patterns(activities: List[CanonicalActivity]) -> Dict:
     """Compute typical workout distances/durations for profile-aware minimums.
 
-    Classifies runs from last N days (matches Strava sync window, DEFAULT_SYNC_LOOKBACK_DAYS):
+    Classifies runs from the configured profile-analysis history window:
     - Easy runs: 3-8km (typical base runs)
     - Long runs: >= 8km (weekly long runs)
 
@@ -819,11 +825,16 @@ def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
 
     Returns averages for each category to set profile-aware minimums.
     """
-    # Filter to last N days of running activities (matches Strava sync window)
-    cutoff_date = date.today() - timedelta(days=DEFAULT_SYNC_LOOKBACK_DAYS)
+    # Filter to the configured analysis window of running activities.
+    cutoff_date = date.today() - timedelta(days=PROFILE_ANALYSIS_DEFAULT_DAYS)
     recent_runs = [
         a for a in activities
-        if a.sport_type in ["run", "trail_run", "treadmill_run"]
+        if a.sport_type in [
+            "run",
+            "trail_run",
+            "treadmill_run",
+            "track_run",
+        ]
         and a.date >= cutoff_date
         and a.distance_km is not None
         and a.distance_km >= 3.0  # Exclude very short shakeout runs
@@ -877,12 +888,12 @@ def _analyze_workout_patterns(activities: List[NormalizedActivity]) -> Dict:
     }
 
 
-def _analyze_sport_distribution(activities: List[NormalizedActivity]) -> Dict:
+def _analyze_sport_distribution(activities: List[CanonicalActivity]) -> Dict:
     """Classify sport participation."""
     sport_counts = Counter(a.sport_type for a in activities)
     total = len(activities)
 
-    run_types = ["run", "trail_run", "treadmill_run"]
+    run_types = ["run", "trail_run", "treadmill_run", "track_run"]
     run_count = sum(sport_counts.get(s, 0) for s in run_types)
 
     percentages = {sport: (count / total) * 100 for sport, count in sport_counts.items()}
@@ -1225,20 +1236,20 @@ def resume_sport_in_profile(sport: str) -> Union[AthleteProfile, ProfileError]:
 
 def validate_profile_completeness() -> Union[Dict, ProfileError]:
     """
-    Validate profile completeness by comparing to actual Strava activity data.
+    Validate profile completeness against canonical activity data.
 
     Checks if other_sports is populated for athletes with significant
     non-running activity (>15% of total activities).
 
     This is data-driven validation: we compare the profile to actual observed
-    behavior from Strava, not just internal profile field consistency.
+    behavior from recorded history, not just internal profile field consistency.
 
     Returns:
         Dict with {"valid": bool, "issues": List[Dict]} where each issue includes:
         - field: "other_sports"
         - severity: "warning"
         - sport: sport name
-        - percentage: actual percentage from Strava
+        - percentage: actual percentage from canonical history
         - message: actionable remediation
     """
     # Load profile
@@ -1247,7 +1258,7 @@ def validate_profile_completeness() -> Union[Dict, ProfileError]:
         return profile_result
     profile = profile_result
 
-    # Analyze Strava data
+    # Analyze canonical activity data.
     analysis_result = analyze_profile_from_activities()
     if isinstance(analysis_result, ProfileError):
         # Can't validate without data - return valid (not an error)
@@ -1258,12 +1269,12 @@ def validate_profile_completeness() -> Union[Dict, ProfileError]:
     # Get sports currently tracked in profile
     tracked_sports = {s.sport.lower() for s in (profile.other_sports or [])}
 
-    # Check each sport in Strava data
+    # Check each sport in canonical activity data.
     sport_percentages = analysis_result.sport_percentages
 
     for sport, percentage in sport_percentages.items():
         # Skip running sports (tracked separately)
-        if sport in ["run", "trail_run", "treadmill_run"]:
+        if sport in ["run", "trail_run", "treadmill_run", "track_run"]:
             continue
 
         # If sport is significant (>15%) but not tracked
@@ -1275,7 +1286,8 @@ def validate_profile_completeness() -> Union[Dict, ProfileError]:
                     "sport": sport,
                     "percentage": percentage,
                     "message": (
-                        f"Your Strava data shows {sport} as {percentage:.1f}% of activities "
+                        f"Your activity history shows {sport} as "
+                        f"{percentage:.1f}% of activities "
                         f"({analysis_result.sport_distribution.get(sport, 0)} sessions in last 120 days), "
                         f"but it's not in other_sports. Add it for accurate load calculations: "
                         f"resilio profile add-sport --sport {sport} "

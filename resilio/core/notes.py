@@ -4,7 +4,7 @@ M7 - Notes & RPE Analyzer (Toolkit Paradigm)
 Provides quantitative toolkit functions for activity analysis.
 
 Toolkit Functions (Return Data, Not Decisions):
-- RPE estimation from multiple quantitative sources (HR, pace, Strava, duration)
+- RPE estimation from multiple quantitative sources (HR, pace, history, duration)
 - Treadmill/indoor activity detection using multi-signal scoring
 
 Claude Code Responsibilities (Uses Context to Decide):
@@ -21,7 +21,7 @@ from typing import Optional
 
 from resilio.schemas.activity import (
     AnalysisResult,
-    NormalizedActivity,
+    CanonicalActivity,
     RPEEstimate,
     RPESource,
     TreadmillDetection,
@@ -81,7 +81,7 @@ class InsufficientDataError(AnalysisError):
 
 
 def analyze_activity(
-    activity: NormalizedActivity,
+    activity: CanonicalActivity,
     athlete_profile: AthleteProfile,
 ) -> AnalysisResult:
     """
@@ -129,7 +129,7 @@ def analyze_activity(
 
 
 def estimate_rpe(
-    activity: NormalizedActivity,
+    activity: CanonicalActivity,
     athlete_profile: AthleteProfile,
 ) -> list[RPEEstimate]:
     """
@@ -139,16 +139,16 @@ def estimate_rpe(
     uses these estimates with conversation context to determine final RPE.
 
     Sources checked:
-    1. Explicit user input (Strava perceived_exertion)
+    1. Explicit athlete input
     2. HR-based estimate (when reliable HR present)
-    3. Strava relative effort normalization
+    3. Preserved historical relative-effort estimate
     4. Duration + sport heuristic (always available)
 
     Note: Text-based extraction removed - Claude Code extracts RPE from
     notes naturally during conversation.
 
     Args:
-        activity: Activity with HR, notes, suffer_score
+        activity: Activity with HR, notes, and optional perceived effort
         athlete_profile: Profile with max_hr for HR-based estimates
 
     Returns:
@@ -158,11 +158,21 @@ def estimate_rpe(
 
     # 1. User input (if explicitly entered)
     if activity.perceived_exertion:
+        source = (
+            RPESource.HISTORICAL_RELATIVE_EFFORT
+            if activity.perceived_effort
+            and activity.perceived_effort.source == "historical_relative_effort"
+            else RPESource.USER_INPUT
+        )
         user_estimate = RPEEstimate(
             value=activity.perceived_exertion,
-            source=RPESource.USER_INPUT,
+            source=source,
             confidence="high",
-            reasoning="User explicitly entered RPE in Strava",
+            reasoning=(
+                "Preserved historical relative-effort estimate"
+                if source == RPESource.HISTORICAL_RELATIVE_EFFORT
+                else "Athlete explicitly entered RPE"
+            ),
         )
         estimates.append(user_estimate)
 
@@ -179,16 +189,7 @@ def estimate_rpe(
         if hr_estimate:
             estimates.append(hr_estimate)
 
-    # 3. Strava relative effort
-    if activity.suffer_score:
-        rel_estimate = estimate_rpe_from_strava_relative(
-            suffer_score=activity.suffer_score,
-            duration_minutes=activity.duration_seconds // 60,
-        )
-        if rel_estimate:
-            estimates.append(rel_estimate)
-
-    # 4. Pace-based estimate (for running activities with pace data)
+    # 3. Pace-based estimate (for running activities with pace data)
     if activity.sport_type in ["run", "trail_run", "treadmill_run", "track_run"]:
         # Calculate average pace if distance and duration available
         if activity.distance_km and activity.distance_km > 0:
@@ -209,7 +210,7 @@ def estimate_rpe(
                 if pace_estimate:
                     estimates.append(pace_estimate)
 
-    # 5. Duration heuristic (always available as fallback)
+    # 4. Duration heuristic (always available as fallback)
     duration_estimate = estimate_rpe_from_duration(
         sport_type=activity.sport_type,
         duration_minutes=activity.duration_seconds // 60,
@@ -309,28 +310,28 @@ def estimate_rpe_from_hr(
     )
 
 
-def estimate_rpe_from_strava_relative(
-    suffer_score: int,
+def estimate_rpe_from_historical_relative_effort(
+    relative_effort: int,
     duration_minutes: int,
 ) -> Optional[RPEEstimate]:
     """
-    Normalize Strava's relative effort (suffer_score) to 1-10 RPE.
+    Normalize a preserved historical relative-effort value to 1-10 RPE.
 
-    Strava suffer_score is roughly: RPE equivalent per minute.
-    We normalize it based on typical ranges.
+    The retired archive stored a relative-effort score. Normalize it using the
+    historical calibration retained for migration continuity.
 
     Args:
-        suffer_score: Strava's relative effort score
+        relative_effort: Historical relative-effort score
         duration_minutes: Activity duration
 
     Returns:
         RPE estimate or None if data insufficient
     """
-    if suffer_score <= 0 or duration_minutes <= 0:
+    if relative_effort <= 0 or duration_minutes <= 0:
         return None
 
     # Calculate effort per minute
-    effort_per_min = suffer_score / duration_minutes
+    effort_per_min = relative_effort / duration_minutes
 
     # Map effort per minute to RPE (rough calibration)
     if effort_per_min < 0.5:
@@ -350,9 +351,12 @@ def estimate_rpe_from_strava_relative(
 
     return RPEEstimate(
         value=rpe,
-        source=RPESource.STRAVA_RELATIVE,
+        source=RPESource.HISTORICAL_RELATIVE_EFFORT,
         confidence="medium",
-        reasoning=f"Suffer score {suffer_score} / {duration_minutes}min = {effort_per_min:.1f} per min",
+        reasoning=(
+            f"Historical relative effort {relative_effort} / "
+            f"{duration_minutes}min = {effort_per_min:.1f} per min"
+        ),
     )
 
 
@@ -568,4 +572,3 @@ def detect_treadmill(
         confidence=confidence,
         signals=signals if signals else ["No treadmill signals detected"],
     )
-

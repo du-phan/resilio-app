@@ -19,12 +19,13 @@ from resilio.core.paths import (
 )
 from resilio.core.repository import RepositoryIO, ReadOptions
 from resilio.schemas.repository import RepoError
-from resilio.core.workflows import run_adaptation_check, WorkflowError
+from resilio.core.adaptation_workflow import run_adaptation_check
+from resilio.core.workflow_types import WorkflowError
 from resilio.core.enrichment import enrich_workout, enrich_metrics
 from resilio.core.metrics import compute_weekly_summary
 from resilio.schemas.enrichment import EnrichedWorkout, EnrichedMetrics
 from resilio.schemas.metrics import DailyMetrics
-from resilio.schemas.activity import NormalizedActivity
+from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.plan import MasterPlan, WorkoutPrescription
 from resilio.schemas.profile import AthleteProfile
 
@@ -369,7 +370,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
         for activity_file in activity_files:
             activity_result = repo.read_yaml(
                 activity_file,
-                NormalizedActivity,
+                CanonicalActivity,
                 ReadOptions(allow_missing=True, should_validate=True),
             )
 
@@ -397,7 +398,7 @@ def get_weekly_status() -> Union[WeeklyStatus, CoachError]:
                         ).lower(),  # "monday", "tuesday", etc.
                         "sport_type": activity.sport_type,
                         "duration_minutes": activity.duration_minutes,
-                        "distance_km": activity.distance_km,  # actual distance from Strava
+                        "distance_km": activity.distance_km,
                         "systemic_load_au": systemic_load,
                     }
                 )

@@ -88,7 +88,7 @@ Environment is ready when all pass:
 - [ ] `PYTHON_CMD` resolved and version is >= 3.11
 - [ ] `resilio --help` (or `poetry run resilio --help`) succeeds
 - [ ] `config/settings.yaml` exists
-- [ ] `config/secrets.local.yaml` exists
+- [ ] `.env.local` exists with file mode `0600`
 - [ ] `resilio status` (or `poetry run resilio status`) succeeds
 
 ## Safety reminders
