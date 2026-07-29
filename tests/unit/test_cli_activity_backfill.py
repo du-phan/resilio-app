@@ -35,6 +35,7 @@ def test_backfill_status_is_offline_and_does_not_require_env_file(tmp_path):
             "rollback_pending": 0,
             "rolled_back": 0,
         },
+        "rpe_defaulted": 0,
         "pending": 0,
     }
 
@@ -47,6 +48,19 @@ def test_apply_requires_exact_plan_and_canary_digests():
 
     assert result.exit_code == 0
     rendered = f"{result.stdout}\n{result.stderr}"
+    assert "--plan-digest" in rendered
+    assert "--canary-digest" in rendered
+
+
+def test_default_rpe_requires_value_and_exact_approval_digests():
+    result = CliRunner().invoke(
+        app,
+        ["activity-backfill", "set-default-rpe", "--help"],
+    )
+
+    assert result.exit_code == 0
+    rendered = f"{result.stdout}\n{result.stderr}"
+    assert "--value" in rendered
     assert "--plan-digest" in rendered
     assert "--canary-digest" in rendered
 

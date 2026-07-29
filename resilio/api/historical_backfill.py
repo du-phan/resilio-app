@@ -133,6 +133,7 @@ def mutate_historical_backfill(
     operation: str,
     plan_digest_sha256: str,
     canary_digest_sha256: Optional[str] = None,
+    default_rpe: Optional[int] = None,
     environment: Optional[Mapping[str, str]] = None,
     client: Optional[IntervalsIcuClient] = None,
     repo_root: Optional[Path] = None,
@@ -168,6 +169,16 @@ def mutate_historical_backfill(
             return service.rollback(
                 plan_digest_sha256=plan_digest_sha256,
                 canary_digest_sha256=canary_digest_sha256,
+            )
+        if operation == "set-default-rpe":
+            if default_rpe is None:
+                raise HistoricalActivityBackfillError(
+                    "set-default-rpe requires an explicit value"
+                )
+            return service.set_default_rpe(
+                plan_digest_sha256=plan_digest_sha256,
+                canary_digest_sha256=canary_digest_sha256,
+                value=default_rpe,
             )
         raise ValueError(f"Unsupported historical backfill operation: {operation}")
     except (

@@ -53,6 +53,7 @@ from resilio.core.historical_activity_backfill.repository import (
     save_plan,
     verify_backup,
 )
+from resilio.core.historical_activity_backfill.rpe_repair import RpeRepairMixin
 from resilio.core.locking import OperationLock
 from resilio.core.repository import RepositoryIO
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
@@ -79,7 +80,7 @@ from resilio.schemas.historical_backfill import (
 BATCH_SIZE = 25
 
 
-class HistoricalActivityBackfillService(BackfillExecutionMixin):
+class HistoricalActivityBackfillService(RpeRepairMixin, BackfillExecutionMixin):
     def __init__(
         self,
         repo: RepositoryIO,
@@ -220,11 +221,11 @@ class HistoricalActivityBackfillService(BackfillExecutionMixin):
                 "Future activity downloads must be disabled in the Intervals.icu UI "
                 "and confirmed in a new dry run before approval"
             )
-        if stage == ApprovalStage.APPLY:
+        if stage in {ApprovalStage.APPLY, ApprovalStage.RPE_DEFAULT}:
             proof = load_canary_proof(self.repo_root, plan)
             if canary_digest_sha256 != proof.canary_digest_sha256:
                 raise HistoricalActivityBackfillError(
-                    "Apply approval must bind the exact verified canary digest"
+                    f"{stage.value} approval must bind the exact verified canary digest"
                 )
         elif canary_digest_sha256 is not None:
             raise HistoricalActivityBackfillError(
@@ -437,6 +438,9 @@ class HistoricalActivityBackfillService(BackfillExecutionMixin):
             self._verify_rollback_preflight(plan)
             metrics_before = tree_digest(self.metrics_root)
             records_before = ActivityArchive(self.archive_root).load_all()
+            records_by_local = {
+                item.local_activity_id: item for item in records_before
+            }
             links_before = sum(
                 bool(item.origin.intervals_icu_activity_id)
                 for item in records_before
@@ -462,7 +466,12 @@ class HistoricalActivityBackfillService(BackfillExecutionMixin):
             restored = 0
             for receipt in receipts:
                 decision = self._decision(plan, receipt.local_activity_id)
-                _activity, rendered = self._activity_and_rendered(plan, decision)
+                rendered = self._receipt_rendered(
+                    plan,
+                    decision,
+                    receipt,
+                    records_by_local[receipt.local_activity_id],
+                )
                 remote: ActivityDTO | None
                 try:
                     remote = self._require_client().get_activity(
@@ -556,6 +565,10 @@ class HistoricalActivityBackfillService(BackfillExecutionMixin):
         return {
             "runs": runs,
             "ledger_counts": counts,
+            "rpe_defaulted": sum(
+                item.remote_athlete_rpe_override is not None
+                for item in ledger.publications.values()
+            ),
             "pending": len(ledger.pending),
         }
 

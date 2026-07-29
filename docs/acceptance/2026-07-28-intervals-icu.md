@@ -38,11 +38,12 @@ personal file contents.
 | Free-account dormancy notice | Pass | Setup and onboarding explain the 90-day login requirement |
 | Vault brief | Pass | Explicit approval was received and the active integration text now describes Intervals.icu |
 | Ignored active state | Pass | All 1,125 files validate as literal v2; the retired training-history sync file and unused entrypoints were removed; active athlete/state/plan files contain zero obsolete provider terms |
-| Offline/architecture gates | Pass | 953 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
+| Offline/architecture gates | Pass | 958 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
 | Historical backfill canary | Pass live | The corrected `RockClimbing`/`icu_rpe` canary passes exact read-back, stable repeated submission, unique ownership, and final GET. Athlete screenshot acceptance confirms the UI's `Climbing` label, date/time, 1h10 duration, title, public description, RPE 5, and omitted uploaded load |
 | Historical backfill application | Pass live | Separate approval published the remaining 403 records; all 404 have verified ownership receipts, zero pending/failed entries, and exact read-back. Immediate repeat processed zero records |
+| Historical backfill missing RPE repair | Pass live | Separate approval defaulted only the 35 exact owned publications with no remote RPE to 5, preserved 369 existing values, retained zero pending entries and exact rollback fingerprints, and left protected local state unchanged. Immediate repeat processed zero records |
 | Historical backfill feedback guard | Pass live | Full sync saw 566 rows with zero create/link/ambiguity; immediate incremental sync saw ten unchanged rows and zero mutation/review outcome. Archive remains 1,125 records with 514 links and empty review/quarantine/deletion queues |
 | Historical backfill invariants | Pass | All 433 climbing source projections/load, all 56 screenshots, profile, and exact frozen metrics digest are unchanged. The restricted `0700` backup has 2,787 verified files and is retained through 2026-10-27 |
 

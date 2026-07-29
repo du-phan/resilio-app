@@ -610,6 +610,105 @@ def test_canary_apply_repeat_feedback_sync_and_exact_rollback(
     )
 
 
+def test_default_rpe_updates_only_missing_remote_value_and_remains_rollback_safe(
+    tmp_path,
+    monkeypatch,
+):
+    service, client, archive_root = _service_fixture(tmp_path, monkeypatch)
+    plan, proof = _approved_plan(service)
+    service.apply(
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+    )
+    service.record_approval(
+        stage=ApprovalStage.RPE_DEFAULT,
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+    )
+    local_before = {
+        item.local_activity_id: item.model_dump(mode="json", by_alias=True)
+        for item in ActivityArchive(archive_root).load_all()
+    }
+    metrics_before = (tmp_path / "data/metrics/unchanged.txt").read_bytes()
+
+    result = service.set_default_rpe(
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+        value=5,
+    )
+    repeated = service.set_default_rpe(
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+        value=5,
+    )
+
+    assert result["processed"] == 1
+    assert result["preserved_existing"] == 1
+    assert result["verified_defaulted"] == 1
+    assert repeated["no_op"]
+    assert repeated["already_defaulted"] == 1
+    assert sorted(item.icu_rpe for item in client.activities.values()) == [5, 7]
+    ledger = load_ledger(service.repo)
+    assert (
+        ledger.publications["act_h_noon"].remote_athlete_rpe_override == 5
+    )
+    assert (
+        ledger.publications["act_h_canary"].remote_athlete_rpe_override is None
+    )
+    local_after = {
+        item.local_activity_id: item.model_dump(mode="json", by_alias=True)
+        for item in ActivityArchive(archive_root).load_all()
+    }
+    assert local_after == local_before
+    assert (tmp_path / "data/metrics/unchanged.txt").read_bytes() == metrics_before
+
+    rolled_back = service.rollback(
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+    )
+
+    assert rolled_back["restored"] == 2
+    assert client.activities == {}
+
+
+def test_lost_default_rpe_response_is_adopted_without_duplicate_post(
+    tmp_path,
+    monkeypatch,
+):
+    service, client, _archive_root = _service_fixture(tmp_path, monkeypatch)
+    plan, proof = _approved_plan(service)
+    service.apply(
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+    )
+    service.record_approval(
+        stage=ApprovalStage.RPE_DEFAULT,
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+    )
+    calls_before = client.bulk_calls
+    client.lose_next_response = True
+
+    with pytest.raises(IntervalsTransportError):
+        service.set_default_rpe(
+            plan_digest_sha256=plan.plan_digest_sha256,
+            canary_digest_sha256=proof.canary_digest_sha256,
+            value=5,
+        )
+
+    assert set(load_ledger(service.repo).pending) == {"act_h_noon"}
+    recovered = service.set_default_rpe(
+        plan_digest_sha256=plan.plan_digest_sha256,
+        canary_digest_sha256=proof.canary_digest_sha256,
+        value=5,
+    )
+
+    assert recovered["processed"] == 0
+    assert recovered["recovered"] == 1
+    assert client.bulk_calls == calls_before + 1
+    assert load_ledger(service.repo).pending == {}
+
+
 def test_lost_apply_response_is_recovered_without_duplicate_post(
     tmp_path,
     monkeypatch,

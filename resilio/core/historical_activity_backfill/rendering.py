@@ -189,6 +189,24 @@ def render_manual_activity(activity: CanonicalActivity) -> RenderedHistoricalAct
     )
 
 
+def with_remote_athlete_rpe(
+    rendered: RenderedHistoricalActivity,
+    value: int,
+) -> RenderedHistoricalActivity:
+    """Override only remote athlete RPE while retaining immutable local facts."""
+    if not 1 <= value <= 10:
+        raise HistoricalActivityRenderingError("Athlete RPE must be between 1 and 10")
+    payload = rendered.payload.model_copy(update={"icu_rpe": value})
+    return RenderedHistoricalActivity(
+        payload=payload,
+        time_mode=rendered.time_mode,
+        source_fingerprint_sha256=rendered.source_fingerprint_sha256,
+        payload_fingerprint_sha256=sha256_json(
+            payload.model_dump(mode="json", exclude_none=True)
+        ),
+    )
+
+
 def _remote_local_start(remote: ActivityDTO, timezone_name: str) -> datetime:
     zone = ZoneInfo(timezone_name)
     utc_start = remote.start_date.astimezone(timezone.utc)

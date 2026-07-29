@@ -65,7 +65,7 @@ def record_approval_command(
     plan_digest: str = typer.Option(..., "--plan-digest"),
     canary_digest: str | None = typer.Option(None, "--canary-digest"),
 ) -> None:
-    """Record the athlete's separate canary or application approval."""
+    """Record the athlete's separate approval for one mutation stage."""
     _emit(
         record_historical_backfill_approval(
             stage=stage,
@@ -153,4 +153,24 @@ def rollback_command(
         operation="rollback",
         plan_digest=plan_digest,
         canary_digest=canary_digest,
+    )
+
+
+@app.command("set-default-rpe")
+def set_default_rpe_command(
+    ctx: typer.Context,
+    value: int = typer.Option(..., "--value", min=1, max=10),
+    plan_digest: str = typer.Option(..., "--plan-digest"),
+    canary_digest: str = typer.Option(..., "--canary-digest"),
+) -> None:
+    """Set RPE only on exact owned backfill activities that have none."""
+    _emit(
+        mutate_historical_backfill(
+            operation="set-default-rpe",
+            plan_digest_sha256=plan_digest,
+            canary_digest_sha256=canary_digest,
+            default_rpe=value,
+            repo_root=_root(ctx),
+        ),
+        "Historical activity default RPE repair completed.",
     )

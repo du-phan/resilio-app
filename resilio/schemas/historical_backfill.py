@@ -37,6 +37,7 @@ class BackfillPhase(str, Enum):
 class ApprovalStage(str, Enum):
     CANARY = "canary"
     APPLY = "apply"
+    RPE_DEFAULT = "rpe_default"
 
 
 class PublicationStatus(str, Enum):
@@ -145,9 +146,14 @@ class BackfillApproval(BaseModel):
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     @model_validator(mode="after")
-    def apply_requires_canary(self) -> "BackfillApproval":
-        if self.stage == ApprovalStage.APPLY and not self.canary_digest_sha256:
-            raise ValueError("apply approval requires the exact canary digest")
+    def mutation_stages_require_canary(self) -> "BackfillApproval":
+        if (
+            self.stage in {ApprovalStage.APPLY, ApprovalStage.RPE_DEFAULT}
+            and not self.canary_digest_sha256
+        ):
+            raise ValueError(
+                f"{self.stage} approval requires the exact canary digest"
+            )
         if self.stage == ApprovalStage.CANARY and self.canary_digest_sha256:
             raise ValueError("canary approval must not include a canary digest")
         return self
@@ -158,7 +164,7 @@ class PendingPublicationIntent(BaseModel):
     ownership_external_id: str
     plan_digest_sha256: Sha256 = Field(pattern=r"^[0-9a-f]{64}$")
     payload_fingerprint_sha256: Sha256 = Field(pattern=r"^[0-9a-f]{64}$")
-    stage: Literal["canary", "apply"]
+    stage: Literal["canary", "apply", "rpe_default"]
     initiated_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -178,6 +184,11 @@ class HistoricalActivityPublication(BaseModel):
     published_at_utc: datetime
     verified_at_utc: datetime
     rolled_back_at_utc: Optional[datetime] = None
+    remote_athlete_rpe_override: Optional[int] = Field(
+        default=None,
+        ge=1,
+        le=10,
+    )
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 

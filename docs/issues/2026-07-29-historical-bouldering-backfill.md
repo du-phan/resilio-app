@@ -58,7 +58,14 @@
   verify.
 - Acceptance was recorded on 2026-07-29. Retain the rollback executable and
   verified backup through 2026-10-27.
-- The closing 953-test suite, architecture guard, focused Ruff, and diff
+- A post-publication ownership audit found 369 existing athlete RPE values
+  and 35 missing values across the 404 exact Resilio-owned activities. The
+  athlete separately approved defaulting only the missing values to RPE 5.
+  The checkpointed repair processed 35, preserved 369, left zero pending
+  entries, and an immediate repeat was a zero-write no-op. Local activities,
+  sync state, metrics, provenance, and calculated load were unchanged; exact
+  rollback remains receipt-bound to the repaired payload.
+- The closing 958-test suite, architecture guard, focused Ruff, and diff
   validation pass. Sync-derived retired transport labels cannot re-enter
   canonical device fields.
 

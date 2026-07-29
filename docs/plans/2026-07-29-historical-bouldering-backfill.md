@@ -97,13 +97,17 @@ resilio activity-backfill record-approval --stage apply \
   --plan-digest <sha256> --canary-digest <sha256>
 resilio activity-backfill apply \
   --plan-digest <sha256> --canary-digest <sha256>
+resilio activity-backfill record-approval --stage rpe_default \
+  --plan-digest <sha256> --canary-digest <sha256>
+resilio activity-backfill set-default-rpe --value <1-10> \
+  --plan-digest <sha256> --canary-digest <sha256>
 resilio activity-backfill resume \
   --plan-digest <sha256> --canary-digest <sha256>
 resilio activity-backfill rollback \
   --plan-digest <sha256> --canary-digest <sha256>
 ```
 
-The coach owns both approval conversations. The live mutation commands are
+The coach owns every approval conversation. The live mutation commands are
 not run as part of automated verification.
 
 ## Live acceptance result (2026-07-29)
@@ -220,6 +224,28 @@ read-back verified all 404 publications. Early, middle, recent, and multiple
 noon-adjusted calendar UI spot checks remain athlete-visible acceptance
 sampling and do not affect ownership or rollback readiness.
 
+## Approved missing-RPE repair (2026-07-29)
+
+After publication, an exact ownership audit found that 369 of the 404
+Resilio-owned activities already had their athlete-sourced RPE and 35 had no
+remote RPE. The athlete approved setting only those missing values to 5.
+Existing values were not overwritten.
+
+The repair is separately approval-gated against the immutable plan and canary
+digests, uses the shared activity-mutation lock and verified backup, writes
+durable pending intents before mutation, and updates publication receipts with
+the exact remote-only payload/read-back fingerprints. It refuses unowned,
+duplicate, identity-drifted, locally drifted, or conflicting records. Exact
+rollback reconstructs and verifies the receipt-specific RPE payload before any
+deletion.
+
+The approved repair processed 35 activities in batches of 25, preserved all
+369 existing RPE values, and left 404 exact verified ownership receipts with
+zero pending entries. A repeated live invocation processed zero records and
+proved a no-op. The local activity archive, sync state, metrics tree, source
+facts, calculated load, descriptions, and provenance were byte/hash unchanged.
+The full offline suite passes with 958 tests.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -257,7 +283,7 @@ sampling and do not affect ownership or rollback readiness.
 - [x] Current archive rendering probe confirms 433 strict payloads, 405 valid
   exact wall times, 28 noon adjustments, 396 athlete RPE values, 39 original
   public descriptions, one positive distance, and no positive elevation.
-- [x] Full offline suite passes: 953 tests, focused Ruff, architecture/link
+- [x] Full offline suite passes: 958 tests, focused Ruff, architecture/link
   guards, `git diff --check`, Poetry validation, and source/wheel builds.
 - [x] Confirm future activity downloads are disabled and execute the live dry
   run.
@@ -284,5 +310,8 @@ sampling and do not affect ownership or rollback readiness.
 - [x] Obtain athlete application approval and execute the remaining batches.
 - [x] Complete live no-op, sync, count/hash, and rollback-retention
   acceptance.
+- [x] Apply the separately approved RPE 5 default to only the 35 owned
+  publications with no remote RPE; preserve 369 existing values, exact
+  rollback, protected local state, and a repeat no-op.
 - [ ] Visually sample early, middle, recent, and multiple noon-adjusted
   calendar entries beyond the already accepted canary.

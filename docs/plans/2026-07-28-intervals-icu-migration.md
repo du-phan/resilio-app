@@ -505,6 +505,10 @@ occurrences.
   create/link/ambiguity, 514 total links, and unchanged historical
   climbing/metrics/profile/screenshot invariants. Additional calendar UI
   sampling remains tracked in the dedicated plan.
+- [x] 2026-07-29: Applied the separately approved remote-only RPE repair to
+  the 35 exact owned historical publications with no RPE. All 369 existing
+  values were preserved, protected local state remained unchanged, rollback
+  stayed receipt-bound, and the immediate repeat was a zero-write no-op.
 
 ## Discoveries
 
