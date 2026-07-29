@@ -1,6 +1,6 @@
 # Historical bouldering backfill
 
-- Status: amended canary failed closed; diagnostic retry approval pending
+- Status: corrected RPE dry run passed; new canary approval pending
 - Plan:
   [historical bouldering backfill](../plans/2026-07-29-historical-bouldering-backfill.md)
 - Parent:
@@ -30,11 +30,17 @@
 - Field-name-only diagnostics now identify future normalization without
   retaining values. All 951 tests pass, and a repeated read-only inventory
   check remains exact with the same immutable plan digest.
+- The authorized diagnostic retry matched every field except
+  `perceived_exertion` and was again deleted exactly. Intervals.icu manual
+  activities require athlete RPE in `icu_rpe`; the strict DTO, read-back,
+  inventory fingerprint, and inbound precedence now reflect that contract.
+- The corrected fresh dry run passed with a new digest, exact 433/29/404
+  accounting, 396 RPE values, zero conflicts, a verified `0700` backup, and
+  an empty ledger. All 952 tests pass.
 
 ## Remaining work
 
-- Obtain explicit approval for one diagnostic canary retry under the same
-  amended plan digest.
+- Obtain approval bound to the new corrected-payload plan digest.
 - Publish and visually verify one exact `RockClimbing` canary.
 - Record the athlete's separate application approval.
 - Apply/resume all remaining batches and execute the acceptance checklist.

@@ -429,7 +429,10 @@ and unowned deletion.
   requires a fresh plan digest and approvals; it is not a silent fallback.
   The first amended canary was created but failed strict factual read-back;
   exact cleanup verified absence. A field-name-only diagnostic retry now
-  requires explicit authorization.
+  requires explicit authorization. That authorized retry isolated the mismatch
+  to `perceived_exertion`; the manual contract instead writes athlete RPE
+  through `icu_rpe`. The corrected fresh dry run passes and invalidates every
+  earlier approval.
 - `[UNKNOWN]` Garmin/manual live fields: strict spec-derived fixtures plus
   controlled acceptance samples.
 - `[UNKNOWN]` bulk personal-key event semantics: keep single-event upserts.
@@ -708,9 +711,8 @@ Implementation evidence on 2026-07-28:
 
 Remaining acceptance gates:
 
-- The historical bouldering canary is awaiting one explicitly authorized
-  diagnostic retry under the `RockClimbing` amendment; manual yoga remains
-  pending. A live
+- The historical bouldering canary is awaiting approval for its corrected
+  `RockClimbing`/`icu_rpe` payload digest; manual yoga remains pending. A live
   Garmin/Wahoo sibling pair is now proven through the duplicate-recording
   review.
 - When the athlete starts a real plan, publish an approved run and ride and

@@ -146,7 +146,7 @@ def test_exact_wall_time_is_reinterpreted_in_paris_and_private_facts_stay_local(
     assert payload["type"] == "RockClimbing"
     assert payload["start_date_local"] == "2026-01-15T19:30:00"
     assert payload["start_date"] == "2026-01-15T18:30:00Z"
-    assert payload["perceived_exertion"] == 7.0
+    assert payload["icu_rpe"] == 7
     assert payload["description"] == "Public"
     assert "private_note" not in payload
     assert "calculated_load" not in payload
@@ -170,7 +170,7 @@ def test_date_only_activity_uses_local_noon_and_discloses_synthetic_time():
         "2026-07-15T10:00:00+00:00"
     )
     assert rendered.payload.description == NOON_DISCLOSURE
-    assert rendered.payload.perceived_exertion is None
+    assert rendered.payload.icu_rpe is None
 
 
 def test_remote_mismatch_reports_only_sanitized_field_names():
@@ -193,7 +193,7 @@ def test_remote_mismatch_reports_only_sanitized_field_names():
         elapsed_time=expected.elapsed_time,
         moving_time=0,
         description="remote-private-value-must-not-appear",
-        perceived_exertion=expected.perceived_exertion,
+        icu_rpe=expected.icu_rpe,
     )
 
     with pytest.raises(
@@ -336,7 +336,7 @@ def test_exact_owned_recovery_is_adopted_but_visible_unowned_match_conflicts():
         elapsed_time=payload.elapsed_time,
         moving_time=payload.moving_time,
         description=payload.description,
-        perceived_exertion=payload.perceived_exertion,
+        icu_rpe=payload.icu_rpe,
     )
     baseline = FrozenBackfillBaseline(
         selected=1,
@@ -407,7 +407,7 @@ class FakeBackfillClient:
             elapsed_time=payload.elapsed_time,
             moving_time=payload.moving_time,
             description=payload.description,
-            perceived_exertion=payload.perceived_exertion,
+            icu_rpe=payload.icu_rpe,
             distance=payload.distance,
             total_elevation_gain=payload.total_elevation_gain,
             source="MANUAL",

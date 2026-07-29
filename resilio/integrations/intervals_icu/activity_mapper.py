@@ -239,6 +239,7 @@ def external_fingerprint(
         "p_max": activity.p_max,
         "icu_weighted_avg_watts": activity.icu_weighted_avg_watts,
         "perceived_exertion": activity.perceived_exertion,
+        "icu_rpe": activity.icu_rpe,
         "device_name": activity.device_name,
         "external_id": activity.external_id,
         "file_type": activity.file_type,
@@ -272,9 +273,14 @@ def map_activity(
     sport = map_sport(activity.type)
     timezone_name = activity.timezone or default_timezone
     local_start = _resolve_local_start(activity, timezone_name)
+    external_rpe = (
+        activity.icu_rpe
+        if activity.icu_rpe is not None
+        else activity.perceived_exertion
+    )
     rpe_value = (
-        round(activity.perceived_exertion)
-        if activity.perceived_exertion and activity.perceived_exertion >= 1
+        round(external_rpe)
+        if external_rpe is not None and external_rpe >= 1
         else None
     )
     has_sensor_data = any(

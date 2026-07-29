@@ -148,7 +148,7 @@ def render_manual_activity(activity: CanonicalActivity) -> RenderedHistoricalAct
 
     local_start, time_mode = corrected_local_start(activity)
     athlete_rpe = (
-        float(activity.perceived_effort.value)
+        activity.perceived_effort.value
         if activity.perceived_effort is not None
         and activity.perceived_effort.source == "athlete"
         else None
@@ -166,7 +166,7 @@ def render_manual_activity(activity: CanonicalActivity) -> RenderedHistoricalAct
             activity,
             synthetic_noon=time_mode == HistoricalTimeMode.LOCAL_NOON,
         ),
-        perceived_exertion=athlete_rpe,
+        icu_rpe=athlete_rpe,
         distance=(
             activity.distance_meters
             if activity.distance_meters is not None
@@ -233,9 +233,9 @@ def assert_remote_matches(
         ("moving_time", remote.moving_time, expected.moving_time),
         ("description", remote.description, expected.description),
         (
-            "perceived_exertion",
-            remote.perceived_exertion,
-            expected.perceived_exertion,
+            "icu_rpe",
+            remote.icu_rpe,
+            expected.icu_rpe,
         ),
     )
     mismatches.extend(
@@ -276,7 +276,7 @@ def readback_fingerprint(remote: ActivityDTO) -> str:
         "elapsed_time": remote.elapsed_time,
         "moving_time": remote.moving_time,
         "description": remote.description,
-        "perceived_exertion": remote.perceived_exertion,
+        "icu_rpe": remote.icu_rpe,
         "distance": remote.distance,
         "total_elevation_gain": remote.total_elevation_gain,
     }

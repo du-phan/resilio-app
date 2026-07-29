@@ -7,8 +7,8 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: amended `RockClimbing` canary failed closed on a factual read-back
-  mismatch; one diagnostic retry approval is pending
+- Status: corrected `RockClimbing`/`icu_rpe` dry run passed; new digest-bound
+  canary approval pending
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
@@ -47,8 +47,8 @@ application, personal-key behavior remains an explicit live canary gate.
 
 The outbound payload contains only the ownership key, `RockClimbing` type,
 existing title, corrected local and UTC occurrence, timezone, elapsed/moving
-duration, existing public description, athlete-sourced RPE, and strictly
-positive distance/elevation.
+duration, existing public description, athlete-sourced Intervals.icu
+`icu_rpe`, and strictly positive distance/elevation.
 
 Private notes, calculated Resilio load, raw provenance, server-managed
 identity/source fields, device data, segments, and zero-valued measurements
@@ -154,6 +154,23 @@ the same 433/29/404 accounting, zero conflicts, empty namespace, and unchanged
 plan digest. Another POST requires an explicit athlete-authorized diagnostic
 canary attempt; it is never retried automatically.
 
+The athlete authorized that diagnostic retry. All approved fields except
+`perceived_exertion` matched, after which exact cleanup again verified
+deletion and namespace absence. The result exposed a contract error:
+Intervals.icu manual activities write athlete RPE through `icu_rpe`;
+`perceived_exertion` is a distinct source/read field. The strict write DTO,
+read-back fingerprint, external inventory fingerprint, and inbound mapper now
+use `icu_rpe`, with inbound fallback to `perceived_exertion` only when no
+Intervals.icu athlete RPE exists.
+
+A new dry run passed under run `backfill-96741af2889c3160` and plan digest
+`897930642711a1753d2e75642b31641a2bb179abf0f484ea4d68ef2088c9e04d`.
+It again proves 433 selected, 29 hidden exclusions, 404 publishable, 405
+exact-time, 28 noon-adjusted, 396 athlete RPE, zero owned recoveries, and zero
+conflicts. The new backup is restricted to `0700`, the ownership ledger is
+empty, and all 952 offline tests pass. Every earlier approval is invalid for
+this corrected payload digest.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -191,7 +208,7 @@ canary attempt; it is never retried automatically.
 - [x] Current archive rendering probe confirms 433 strict payloads, 405 valid
   exact wall times, 28 noon adjustments, 396 athlete RPE values, 39 original
   public descriptions, one positive distance, and no positive elevation.
-- [x] Full offline suite passes: 951 tests, focused Ruff, architecture/link
+- [x] Full offline suite passes: 952 tests, focused Ruff, architecture/link
   guards, `git diff --check`, Poetry validation, and source/wheel builds.
 - [x] Confirm future activity downloads are disabled and execute the live dry
   run.
@@ -206,7 +223,12 @@ canary attempt; it is never retried automatically.
   failed closed on a factual read-back mismatch and was deleted exactly.
 - [x] Add secret-safe field-name-only mismatch diagnostics and revalidate the
   unchanged external inventory and plan digest.
-- [ ] Obtain explicit approval for one diagnostic canary retry.
+- [x] Obtain explicit approval for one diagnostic canary retry; it isolated
+  the mismatch to the incorrect `perceived_exertion` write field and cleaned
+  up exactly.
+- [x] Correct manual athlete RPE to `icu_rpe`, preserve inbound source-field
+  fallback, and execute a fresh 433/29/404 dry run with zero conflicts.
+- [ ] Obtain approval for the new exact corrected-payload digest.
 - [ ] Visually accept an exact `RockClimbing` canary.
 - [ ] Obtain athlete application approval and execute the remaining batches.
 - [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention

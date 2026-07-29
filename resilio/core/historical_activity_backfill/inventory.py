@@ -115,6 +115,7 @@ def _inventory_row(row: ActivityDTO | HiddenActivityDTO) -> dict | None:
             "distance": row.distance,
             "total_elevation_gain": row.total_elevation_gain,
             "perceived_exertion": row.perceived_exertion,
+            "icu_rpe": row.icu_rpe,
         }
     return {
         "variant": "hidden",

@@ -149,6 +149,7 @@ class ActivityDTO(ExternalDTO):
     perceived_exertion: Optional[float] = Field(
         default=None, ge=0, le=10, allow_inf_nan=False
     )
+    icu_rpe: Optional[int] = Field(default=None, ge=1, le=10)
     device_name: Optional[str] = None
     external_id: Optional[str] = None
     file_type: Optional[str] = None
@@ -225,12 +226,7 @@ class ManualActivityWriteDTO(BaseModel):
     elapsed_time: int = Field(gt=0, le=2_678_400)
     moving_time: int = Field(ge=0, le=2_678_400)
     description: Optional[str] = None
-    perceived_exertion: Optional[float] = Field(
-        default=None,
-        ge=1,
-        le=10,
-        allow_inf_nan=False,
-    )
+    icu_rpe: Optional[int] = Field(default=None, ge=1, le=10)
     distance: Optional[float] = Field(
         default=None,
         gt=0,

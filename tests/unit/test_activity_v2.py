@@ -71,6 +71,20 @@ def test_climbing_variants_share_one_canonical_sport(source_type) -> None:
     assert activity.source_sport_type == source_type
 
 
+def test_intervals_rpe_precedes_source_perceived_exertion() -> None:
+    activity = map_activity(
+        _external(icu_rpe=7, perceived_exertion=4),
+        imported_at_utc=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+    assert activity.perceived_effort is not None
+    assert activity.perceived_effort.value == 7
+    assert activity.perceived_effort.source == "athlete"
+    assert external_fingerprint(_external(icu_rpe=7)) != external_fingerprint(
+        _external(icu_rpe=6)
+    )
+
+
 @pytest.mark.parametrize(
     ("source_type", "expected"),
     [

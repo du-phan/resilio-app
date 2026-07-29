@@ -290,7 +290,7 @@ def _manual_write() -> ManualActivityWriteDTO:
         elapsed_time=3600,
         moving_time=3600,
         description="Public description",
-        perceived_exertion=6,
+        icu_rpe=6,
     )
 
 
@@ -306,7 +306,7 @@ def _manual_response(**updates):
         "elapsed_time": 3600,
         "moving_time": 3600,
         "description": "Public description",
-        "perceived_exertion": 6,
+        "icu_rpe": 6,
     }
     payload.update(updates)
     return payload
@@ -329,7 +329,7 @@ def test_bulk_manual_activity_uses_strict_payload_and_personal_key_auth() -> Non
                 "elapsed_time": 3600,
                 "moving_time": 3600,
                 "description": "Public description",
-                "perceived_exertion": 6.0,
+                "icu_rpe": 6,
             }
         ]
         assert "icu_training_load" not in payload[0]
