@@ -4,7 +4,9 @@ import json
 
 from typer.testing import CliRunner
 
+from resilio.api.historical_backfill import BackfillOperationError
 from resilio.cli import app
+from resilio.cli.errors import api_result_to_envelope
 
 
 def test_backfill_status_is_offline_and_does_not_require_env_file(tmp_path):
@@ -47,3 +49,17 @@ def test_apply_requires_exact_plan_and_canary_digests():
     rendered = f"{result.stdout}\n{result.stderr}"
     assert "--plan-digest" in rendered
     assert "--canary-digest" in rendered
+
+
+def test_backfill_operation_errors_produce_failure_envelopes():
+    envelope = api_result_to_envelope(
+        BackfillOperationError(
+            error_type="invalid_payload",
+            message="sanitized provider rejection",
+        ),
+        success_message="must not be used",
+    )
+
+    assert envelope.ok is False
+    assert envelope.error_type == "invalid_payload"
+    assert envelope.message == "sanitized provider rejection"

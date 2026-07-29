@@ -16,6 +16,7 @@ from resilio.integrations.intervals_icu.errors import (
     IntervalsInvalidPayloadError,
     IntervalsRateLimitError,
     IntervalsTransportError,
+    UnsupportedSportError,
 )
 from resilio.schemas.config import Config, Settings
 
@@ -116,7 +117,7 @@ def test_nullable_sport_setting_zones_follow_live_contract() -> None:
     [
         (401, IntervalsAuthenticationError),
         (403, IntervalsAuthorizationError),
-        (422, IntervalsTransportError),
+        (422, IntervalsInvalidPayloadError),
     ],
 )
 def test_http_failures_are_distinct_and_secret_safe(status, error) -> None:
@@ -323,7 +324,7 @@ def test_bulk_manual_activity_uses_strict_payload_and_personal_key_auth() -> Non
                 "type": "Bouldering",
                 "name": "Bouldering",
                 "start_date": "2026-07-28T17:00:00Z",
-                "start_date_local": "2026-07-28T19:00:00+02:00",
+                "start_date_local": "2026-07-28T19:00:00",
                 "timezone": "Europe/Paris",
                 "elapsed_time": 3600,
                 "moving_time": 3600,
@@ -379,6 +380,7 @@ def test_bulk_manual_mutation_timeout_is_not_retried() -> None:
     [
         (401, IntervalsAuthenticationError),
         (403, IntervalsAuthorizationError),
+        (422, IntervalsInvalidPayloadError),
         (429, IntervalsRateLimitError),
         (503, IntervalsTransportError),
     ],
@@ -403,6 +405,43 @@ def test_bulk_manual_http_failure_is_not_retried(status, error) -> None:
             client.create_manual_activities([_manual_write()])
 
     assert calls == 1
+    assert "private activity response" not in str(captured.value)
+
+
+def test_bulk_manual_reports_only_matching_sanitized_type_rejections() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            422,
+            json={
+                "status": 422,
+                "error": "Activity[0] create failed: Invalid type [Bouldering]",
+            },
+        )
+    )
+
+    with IntervalsIcuClient(_config(), transport=transport) as client:
+        with pytest.raises(UnsupportedSportError) as captured:
+            client.create_manual_activities([_manual_write()])
+
+    assert captured.value.error_type == "unsupported_sport"
+    assert "Bouldering" in str(captured.value)
+
+
+def test_bulk_manual_does_not_echo_untrusted_validation_details() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            422,
+            json={
+                "status": 422,
+                "error": "Activity[0] create failed: private activity response",
+            },
+        )
+    )
+
+    with IntervalsIcuClient(_config(), transport=transport) as client:
+        with pytest.raises(IntervalsInvalidPayloadError) as captured:
+            client.create_manual_activities([_manual_write()])
+
     assert "private activity response" not in str(captured.value)
 
 

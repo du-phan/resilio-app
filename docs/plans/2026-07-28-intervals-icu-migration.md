@@ -421,8 +421,10 @@ and unowned deletion.
 - Hidden historical rows: migrated local archive remains authoritative.
 - Missing update/deletion markers: fingerprints, overlap, monthly full
   reconciliation, and detail confirmation.
-- `[UNKNOWN]` Bouldering payload: accept exact `Bouldering`, map to `climb`,
-  require a sanitized sibling fixture before release.
+- `[BLOCKED LIVE]` Bouldering payload: the manual endpoint returned HTTP 422
+  and a non-creating validation probe confirmed `Invalid type [Bouldering]`.
+  Exact `Bouldering` remains required; do not fall back silently to
+  `RockClimbing`.
 - `[UNKNOWN]` Garmin/manual live fields: strict spec-derived fixtures plus
   controlled acceptance samples.
 - `[UNKNOWN]` bulk personal-key event semantics: keep single-event upserts.
@@ -692,8 +694,10 @@ Implementation evidence on 2026-07-28:
 
 Remaining acceptance gates:
 
-- A live Bouldering and manual-yoga sample. A live Garmin/Wahoo sibling pair is
-  now proven through the duplicate-recording review.
+- A live Bouldering sample is provider-blocked because the manual write API
+  rejects exact `Bouldering`; manual yoga remains pending. A live
+  Garmin/Wahoo sibling pair is now proven through the duplicate-recording
+  review.
 - Observe the published run and cycling workouts on Garmin and Wahoo.
 - With separate mutation authorization, live-prove update/reschedule and exact
   deletion of selected Resilio-owned events.

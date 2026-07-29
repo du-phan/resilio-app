@@ -5,7 +5,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 
 class ExternalDTO(BaseModel):
@@ -252,6 +259,11 @@ class ManualActivityWriteDTO(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("start_date_local must be timezone-aware")
         return value
+
+    @field_serializer("start_date_local", when_used="json")
+    def serialize_local_wall_time(self, value: datetime) -> str:
+        """Intervals accepts local wall time without an embedded UTC offset."""
+        return value.replace(tzinfo=None).isoformat()
 
     @model_validator(mode="after")
     def moving_not_longer_than_elapsed(self) -> "ManualActivityWriteDTO":

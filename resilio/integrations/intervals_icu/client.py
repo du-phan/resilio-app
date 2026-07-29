@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 import time
 from datetime import date
 from email.utils import parsedate_to_datetime
@@ -29,6 +30,7 @@ from resilio.integrations.intervals_icu.errors import (
     IntervalsNotFoundError,
     IntervalsRateLimitError,
     IntervalsTransportError,
+    UnsupportedSportError,
 )
 from resilio.schemas.config import Config
 
@@ -88,6 +90,32 @@ class IntervalsIcuClient:
             except Exception:
                 return None
 
+    @staticmethod
+    def _rejected_activity_type(
+        response: httpx.Response,
+        request_payload: object,
+    ) -> Optional[str]:
+        """Extract only a provider type rejection proven to match our request."""
+        try:
+            error = response.json().get("error")
+        except (AttributeError, ValueError):
+            return None
+        if not isinstance(error, str):
+            return None
+        match = re.fullmatch(
+            r"Activity\[(\d+)\] create failed: Invalid type \[([A-Za-z][A-Za-z0-9]*)\]",
+            error,
+        )
+        if match is None or not isinstance(request_payload, list):
+            return None
+        index = int(match.group(1))
+        if index >= len(request_payload) or not isinstance(request_payload[index], dict):
+            return None
+        rejected_type = match.group(2)
+        if request_payload[index].get("type") != rejected_type:
+            return None
+        return rejected_type
+
     def _request(
         self,
         method: str,
@@ -134,6 +162,24 @@ class IntervalsIcuClient:
             if status == 404:
                 raise IntervalsNotFoundError(
                     "Intervals.icu resource was not found",
+                    operation=operation,
+                    status_code=status,
+                    request_id=request_id,
+                )
+            if status in {400, 422}:
+                rejected_type = self._rejected_activity_type(
+                    response,
+                    kwargs.get("json"),
+                )
+                if rejected_type is not None:
+                    raise UnsupportedSportError(
+                        f"Intervals.icu does not support activity type {rejected_type}",
+                        operation=operation,
+                        status_code=status,
+                        request_id=request_id,
+                    )
+                raise IntervalsInvalidPayloadError(
+                    "Intervals.icu rejected the request payload",
                     operation=operation,
                     status_code=status,
                     request_id=request_id,

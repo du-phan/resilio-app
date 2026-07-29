@@ -40,6 +40,7 @@ personal file contents.
 | Offline/architecture gates | Pass | 922 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
+| Historical backfill canary | Blocked live | Dry-run accounting passed with zero conflicts, but the live manual endpoint returned HTTP 422 and a non-creating validation probe confirmed `Invalid type [Bouldering]`; ownership lookup and ledger both contain zero publications |
 
 ## Exact completion-gate audit
 
@@ -56,7 +57,7 @@ personal file contents.
 | Active application cannot read the old schema | Pass | Schema validator and archive tests fail closed on legacy metadata/version |
 | Initial and repeat sync are idempotent | Pass live | Complete reconciliation followed by an immediate incremental run changed zero records and left no review/quarantine row |
 | Late edits, deletion handling, partial runs, and interrupted resume pass | Pass offline | Fingerprint updates, detail-confirmed tombstones, cursor safety, checkpoint recovery, and transactional rollback have regression coverage |
-| RockClimbing and Bouldering aggregate as `climb` | Partial live | Both variants pass strict mapper/sibling tests; RockClimbing is contract/live-supported, while a live Bouldering sample remains pending |
+| RockClimbing and Bouldering aggregate as `climb` | Blocked live | Both variants pass strict inbound mapper/sibling tests and RockClimbing is live-supported, but the live manual write endpoint rejects exact `Bouldering`; zero canaries were created |
 | Garmin, Wahoo, manual, and sensor sibling cases pass | Pass offline/live | Strict fixtures cover every provenance and HR/power/cadence case; live Garmin/Wahoo duplicate evidence exercised ownership-safe exclusion |
 | Run/cycle workouts reach Garmin/Wahoo | Partial live | Three owned workouts remain remotely intact; Garmin/Wahoo connections and forwarding toggles, unrestricted Garmin filters, run-HR prerequisites, ride FTP, and Europe/Paris account timezone all pass; physical device observation remains pending |
 | Update, reschedule, and delete affect only owned events | Partial live | Ownership, idempotency, remote-drift, update/reschedule/exact-delete, `others=false`, and recovery tests pass; selected live mutations require separate approval |
@@ -70,7 +71,7 @@ personal file contents.
 | Journey | Required evidence |
 |---|---|
 | Bouldering | One sanitized live activity imports as `climb` |
-| Historical bouldering backfill | Approved canary plus 404 verified owned manual activities; unchanged local facts/metrics and a 404-record repeat no-op |
+| Historical bouldering backfill | Provider acceptance of exact `Bouldering`, then a newly approved canary plus 404 verified owned manual activities; unchanged local facts/metrics and a 404-record repeat no-op |
 | Manual yoga | One sanitized live manual activity imports as `yoga` |
 | Run delivery | Two approved future structured runs are published; observe one on Garmin |
 | Cycling delivery | One approved future structured ride is published; observe it on Wahoo when it enters the device-forwarding window |

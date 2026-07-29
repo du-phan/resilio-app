@@ -7,8 +7,8 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: offline implementation and recovery proof complete; live dry run,
-  approvals, and acceptance pending
+- Status: live dry run complete; publication blocked because the live
+  Intervals.icu API rejects exact activity type `Bouldering`
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
@@ -104,6 +104,26 @@ resilio activity-backfill rollback \
 The coach owns both approval conversations. The live mutation commands are
 not run as part of automated verification.
 
+## Live acceptance result (2026-07-29)
+
+The live dry run reproduced the frozen baseline exactly: 433 selected, 29
+hidden exclusions, 404 publishable, 28 noon-adjusted, and zero unresolved
+conflicts. The athlete approved the deterministic canary under the immutable
+replacement plan digest
+`913b126be39f92d6719a150ab326fb54c62d886e1847042fb46fdbe758887b8d`.
+
+The manual bulk endpoint rejected the canary with HTTP 422. A non-creating
+validation probe then returned `Invalid type [Bouldering]`, proving that the
+live write contract does not accept the destination type required by this
+plan. A date-and-ownership lookup verified that zero owned canaries exist,
+and the ownership ledger has zero pending or verified publications.
+
+The application stage was not approved or started. In accordance with the
+frozen no-fallback rule, no activity was submitted as `RockClimbing`, no local
+activity or metric was changed, and the historical backfill is blocked until
+Intervals.icu accepts exact `Bouldering` or a separately approved plan changes
+the destination-type requirement.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -141,11 +161,15 @@ not run as part of automated verification.
 - [x] Current archive rendering probe confirms 433 strict payloads, 405 valid
   exact wall times, 28 noon adjustments, 396 athlete RPE values, 39 original
   public descriptions, one positive distance, and no positive elevation.
-- [x] Full offline suite passes: 945 tests, focused Ruff, architecture/link
+- [x] Full offline suite passes: 949 tests, focused Ruff, architecture/link
   guards, `git diff --check`, Poetry validation, and source/wheel builds.
-- [ ] Confirm future activity downloads are disabled and execute the live dry
+- [x] Confirm future activity downloads are disabled and execute the live dry
   run.
-- [ ] Obtain athlete canary approval and execute/visually accept the canary.
+- [x] Obtain athlete canary approval and execute the canary gate; the provider
+  rejected exact `Bouldering`, zero owned canaries were created, and the run
+  failed closed.
+- [ ] Visually accept an exact `Bouldering` canary if provider support becomes
+  available.
 - [ ] Obtain athlete application approval and execute the remaining batches.
 - [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention
   acceptance.

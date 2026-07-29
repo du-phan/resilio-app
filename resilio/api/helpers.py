@@ -5,7 +5,7 @@ Provides utilities to make error checking concise and clear when using
 the Resilio API from coaching scripts.
 """
 
-from typing import Optional, Union
+from typing import Optional
 
 
 def is_error(result) -> bool:
@@ -29,17 +29,19 @@ def is_error(result) -> bool:
         ...     print(f"Name: {profile.name}")
     """
     # Import here to avoid circular dependencies
-    from resilio.api.profile import ProfileError
-    from resilio.api.sync import SyncError
+    from resilio.api.analysis import AnalysisError
     from resilio.api.coach import CoachError
+    from resilio.api.guardrails import GuardrailsError
+    from resilio.api.historical_backfill import BackfillOperationError
     from resilio.api.metrics import MetricsError
     from resilio.api.plan import PlanError
-    from resilio.api.vdot import VDOTError
-    from resilio.api.guardrails import GuardrailsError
-    from resilio.api.analysis import AnalysisError
-    from resilio.api.validation import ValidationError
-    from resilio.api.weather import WeatherError
+    from resilio.api.profile import ProfileError
     from resilio.api.publication import PublicationError
+    from resilio.api.reconciliation import ActivityReviewError
+    from resilio.api.sync import SyncError
+    from resilio.api.validation import ValidationError
+    from resilio.api.vdot import VDOTError
+    from resilio.api.weather import WeatherError
 
     return isinstance(
         result,
@@ -52,6 +54,8 @@ def is_error(result) -> bool:
             VDOTError,
             GuardrailsError,
             AnalysisError,
+            BackfillOperationError,
+            ActivityReviewError,
             ValidationError,
             WeatherError,
             PublicationError,

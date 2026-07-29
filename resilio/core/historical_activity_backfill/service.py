@@ -162,6 +162,7 @@ class HistoricalActivityBackfillService(BackfillExecutionMixin):
         run_material = {
             "archive": archive_digest,
             "inventory": inventory_digest,
+            "decisions": sha256_json(analysis.report_payload),
             "oldest": oldest.isoformat(),
             "newest": today.isoformat(),
             "downloads_disabled_confirmed": downloads_disabled_confirmed,

@@ -143,7 +143,7 @@ def test_exact_wall_time_is_reinterpreted_in_paris_and_private_facts_stay_local(
     payload = rendered.payload.model_dump(mode="json", exclude_none=True)
 
     assert payload["type"] == "Bouldering"
-    assert payload["start_date_local"] == "2026-01-15T19:30:00+01:00"
+    assert payload["start_date_local"] == "2026-01-15T19:30:00"
     assert payload["start_date"] == "2026-01-15T18:30:00Z"
     assert payload["perceived_exertion"] == 7.0
     assert payload["description"] == "Public"
