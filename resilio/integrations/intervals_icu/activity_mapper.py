@@ -65,6 +65,7 @@ DIRECT_MAPPING = {
     "Other": SportType.OTHER,
     "Workout": SportType.OTHER,
 }
+MANUAL_MIDNIGHT_DEFAULT_HOUR = 18
 
 
 def map_sport(source_type: str) -> SportType:
@@ -165,7 +166,7 @@ def _map_segment(
     local_start: datetime,
 ) -> ActivitySegment:
     moving = interval.moving_time if interval.moving_time is not None else interval.elapsed_time
-    segment_start_utc = activity.start_date + timedelta(
+    segment_start_utc = local_start.astimezone(timezone.utc) + timedelta(
         seconds=interval.start_time
     )
     return ActivitySegment(
@@ -221,6 +222,26 @@ def _resolve_local_start(
     return supplied
 
 
+def _uses_manual_midnight_default(activity: ActivityDTO) -> bool:
+    supplied = activity.start_date_local
+    return (
+        (activity.source or "").upper() == "MANUAL"
+        and supplied.hour == 0
+        and supplied.minute == 0
+        and supplied.second == 0
+        and supplied.microsecond == 0
+    )
+
+
+def _apply_manual_midnight_default(
+    activity: ActivityDTO,
+    local_start: datetime,
+) -> datetime:
+    if _uses_manual_midnight_default(activity):
+        return local_start.replace(hour=MANUAL_MIDNIGHT_DEFAULT_HOUR)
+    return local_start
+
+
 def external_fingerprint(
     activity: ActivityDTO,
     default_timezone: Optional[str] = None,
@@ -261,6 +282,10 @@ def external_fingerprint(
             for interval in sorted(activity.icu_intervals, key=lambda item: item.id)
         ],
     }
+    if _uses_manual_midnight_default(activity):
+        # Bind existing records to this canonical time policy so a normal sync
+        # updates them once without changing remote ownership.
+        payload["manual_midnight_default_hour"] = MANUAL_MIDNIGHT_DEFAULT_HOUR
     if activity.paired_event_id is not None:
         payload["paired_event_id"] = activity.paired_event_id
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
@@ -280,7 +305,10 @@ def map_activity(
 
     sport = map_sport(activity.type)
     timezone_name = activity.timezone or default_timezone
-    local_start = _resolve_local_start(activity, timezone_name)
+    local_start = _apply_manual_midnight_default(
+        activity,
+        _resolve_local_start(activity, timezone_name),
+    )
     external_rpe = (
         activity.icu_rpe
         if activity.icu_rpe is not None
@@ -310,7 +338,7 @@ def map_activity(
         name=activity.name,
         occurrence=ActivityOccurrence(
             local_date=local_start.date(),
-            start_time_utc=activity.start_date.astimezone(timezone.utc),
+            start_time_utc=local_start.astimezone(timezone.utc),
             start_time_local=local_start,
             timezone=timezone_name,
         ),

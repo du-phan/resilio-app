@@ -158,6 +158,44 @@ def test_retired_transport_label_is_not_persisted_as_a_device() -> None:
     assert activity.device.name is None
 
 
+def test_manual_midnight_uses_six_pm_local_default() -> None:
+    activity = map_activity(
+        _external(
+            source="MANUAL",
+            start_date="2026-07-27T22:00:00Z",
+            start_date_local="2026-07-28T00:00:00+02:00",
+            device_name=None,
+        ),
+        imported_at_utc=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+    assert activity.occurrence.start_time_local.isoformat() == (
+        "2026-07-28T18:00:00+02:00"
+    )
+    assert activity.occurrence.start_time_utc.isoformat() == (
+        "2026-07-28T16:00:00+00:00"
+    )
+
+
+def test_explicit_manual_time_is_preserved() -> None:
+    activity = map_activity(
+        _external(
+            source="MANUAL",
+            start_date="2026-07-28T15:00:00Z",
+            start_date_local="2026-07-28T17:00:00+02:00",
+            device_name=None,
+        ),
+        imported_at_utc=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+    assert activity.occurrence.start_time_local.isoformat() == (
+        "2026-07-28T17:00:00+02:00"
+    )
+    assert activity.occurrence.start_time_utc.isoformat() == (
+        "2026-07-28T15:00:00+00:00"
+    )
+
+
 def test_manual_yoga_without_distance_maps_cleanly() -> None:
     activity = map_activity(
         _external(
