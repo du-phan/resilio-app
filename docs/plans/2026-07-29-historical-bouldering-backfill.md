@@ -7,8 +7,8 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: corrected `RockClimbing`/`icu_rpe` canary verified automatically;
-  athlete visual acceptance pending
+- Status: corrected `RockClimbing`/`icu_rpe` canary accepted visually;
+  separate application approval pending
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
@@ -180,6 +180,13 @@ The run has one verified receipt, zero pending intents, and no error. The
 athlete must visually accept the calendar representation before a separate
 application approval can be recorded for the remaining 403 activities.
 
+The athlete then supplied a full activity-page screenshot and accepted the
+calendar representation. Intervals.icu displays API type `RockClimbing` as
+`Climbing`; exact API read-back still proves `RockClimbing`. The screenshot
+shows 2026-04-02 at 12:30, 1h10 duration, title `Lunch Activity`, public
+description `Back to climbing! Hang board session`, and RPE 5. Uploaded load
+is absent as required; Intervals.icu's own S-RPE remains provider-calculated.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -239,7 +246,8 @@ application approval can be recorded for the remaining 403 activities.
   fallback, and execute a fresh 433/29/404 dry run with zero conflicts.
 - [x] Obtain approval for the new exact corrected-payload digest and pass the
   complete automated canary gate with one stable owned remote activity.
-- [ ] Visually accept an exact `RockClimbing` canary.
+- [x] Visually accept the exact `RockClimbing` canary; the Intervals.icu UI
+  renders its sport label as `Climbing`.
 - [ ] Obtain athlete application approval and execute the remaining batches.
 - [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention
   acceptance.

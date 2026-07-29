@@ -1,6 +1,6 @@
 # Historical bouldering backfill
 
-- Status: corrected canary verified; athlete visual acceptance pending
+- Status: corrected canary visually accepted; application approval pending
 - Plan:
   [historical bouldering backfill](../plans/2026-07-29-historical-bouldering-backfill.md)
 - Parent:
@@ -40,11 +40,12 @@
 - The athlete approved the corrected digest. Exact read-back, repeated
   submission, stable identity, unique ownership, and final GET all passed.
   The ledger contains one verified canary and zero pending entries.
+- The athlete's full-page screenshot confirms the UI displays `Climbing`,
+  2026-04-02 12:30, 1h10, `Lunch Activity`, the public description, and RPE 5.
+  Exact API read-back remains `RockClimbing`; uploaded load is absent.
 
 ## Remaining work
 
-- Obtain the athlete's visual acceptance of the verified `RockClimbing`
-  canary.
 - Record the athlete's separate application approval.
 - Apply/resume all remaining batches and execute the acceptance checklist.
 - Record the acceptance date and 90-day rollback deadline in repository and
