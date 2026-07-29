@@ -1,7 +1,8 @@
 # Intervals.icu migration acceptance record
 
 - Date: 2026-07-28
-- Status: implementation and live calendar verified; device observation pending
+- Status: implementation and owned calendar lifecycle verified; no active
+  training plan; device observation deferred
 - Plan: `docs/plans/2026-07-28-intervals-icu-migration.md`
 - Historical bouldering backfill:
   `docs/plans/2026-07-29-historical-bouldering-backfill.md`
@@ -29,15 +30,15 @@ personal file contents.
 | External deletion safety | Pass | Detail confirmation and retained tombstones are tested; live deletion review queue is empty |
 | Local metrics/coaching | Pass | 1,651 metric days through 2026-07-28; profile spans 1,638 days and 1,125 activities |
 | Sport and provenance matrix | Pass offline/live | Every documented sport variant, Bouldering/RockClimbing convergence, manual yoga, Garmin/Wahoo/manual/upload provenance, power, and cadence are covered; live Garmin/Wahoo sibling recordings exercised duplicate exclusion |
-| Structured workout model | Pass offline | Recursive steady/ramp/repeat steps, explicit targets, lap press, DST, and device preconditions pass |
-| Owned event lifecycle | Pass offline/live | Three owned events were created and recovered after live contract validation; immediate repeated publication was a three-event no-op with stable event IDs; update/reschedule/delete remain covered offline |
-| Remote ownership refresh | Pass live | A later read-only audit re-fetched all three exact event IDs; every server UID, external ID, category, sport, date, and rendered-workout hash still matches the local manifest |
-| Non-cascading deletion | Pass offline | Exact DELETE sends `others=false`; manifests reject cross-workout identity collisions |
+| Structured workout model | Pass offline/live | Recursive steady/ramp/repeat steps, explicit targets, lap press, DST, and device preconditions pass; a live parser defect established that metres require `mtr` and max-HR targets require `% HR`, and exact read-back now has regression coverage |
+| Owned event lifecycle | Pass live | Three owned acceptance events were created idempotently; two run events were corrected in place after exact ownership proof, repeated as no-ops, then all three were explicitly deleted at the athlete's request and verified absent |
+| Remote ownership refresh | Pass live | Exact refreshes proved every server UID, external ID, category, sport, date, and rendered-workout identity before update and deletion; the publication manifest is now empty |
+| Non-cascading deletion | Pass live | Exact DELETE sends `others=false`; all three selected owned events returned `404` afterward, no Resilio-owned event remained in the week, and manifests reject cross-workout identity collisions |
 | Garmin attribution | Pass offline | Garmin-derived activity list/search rows display required attribution |
 | Free-account dormancy notice | Pass | Setup and onboarding explain the 90-day login requirement |
 | Vault brief | Pass | Explicit approval was received and the active integration text now describes Intervals.icu |
 | Ignored active state | Pass | All 1,125 files validate as literal v2; the retired training-history sync file and unused entrypoints were removed; active athlete/state/plan files contain zero obsolete provider terms |
-| Offline/architecture gates | Pass | 922 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
+| Offline/architecture gates | Pass | 950 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
 | Historical backfill canary | Blocked live | Dry-run accounting passed with zero conflicts, but the live manual endpoint returned HTTP 422 and a non-creating validation probe confirmed `Invalid type [Bouldering]`; ownership lookup and ledger both contain zero publications |
@@ -59,8 +60,8 @@ personal file contents.
 | Late edits, deletion handling, partial runs, and interrupted resume pass | Pass offline | Fingerprint updates, detail-confirmed tombstones, cursor safety, checkpoint recovery, and transactional rollback have regression coverage |
 | RockClimbing and Bouldering aggregate as `climb` | Blocked live | Both variants pass strict inbound mapper/sibling tests and RockClimbing is live-supported, but the live manual write endpoint rejects exact `Bouldering`; zero canaries were created |
 | Garmin, Wahoo, manual, and sensor sibling cases pass | Pass offline/live | Strict fixtures cover every provenance and HR/power/cadence case; live Garmin/Wahoo duplicate evidence exercised ownership-safe exclusion |
-| Run/cycle workouts reach Garmin/Wahoo | Partial live | Three owned workouts remain remotely intact; Garmin/Wahoo connections and forwarding toggles, unrestricted Garmin filters, run-HR prerequisites, ride FTP, and Europe/Paris account timezone all pass; physical device observation remains pending |
-| Update, reschedule, and delete affect only owned events | Partial live | Ownership, idempotency, remote-drift, update/reschedule/exact-delete, `others=false`, and recovery tests pass; selected live mutations require separate approval |
+| Run/cycle workouts reach Garmin/Wahoo | Deferred | API-side connections, forwarding toggles, unrestricted Garmin filters, run-HR prerequisites, ride FTP, and Europe/Paris timezone pass; the athlete is not currently in a training plan, so the acceptance fixtures were removed before physical device observation |
+| Update, reschedule, and delete affect only owned events | Partial live | Ownership-safe in-place update and exact deletion are live-proven; idempotency, remote drift, reschedule, `others=false`, and recovery remain covered offline |
 | Full offline suite and structural/security/docs guards are green | Pass | See the current closing verification result below |
 | Findings-first reviews have no unresolved high-severity item | Pass | Sync, migration, ownership, data-safety, secret-safety, dependency, and cleanup reviews closed all identified high-severity findings |
 | Dependency usage is justified | Pass | Direct `requests` dependency is absent; `httpx` serves Intervals.icu and weather transport, while `tenacity` serves bounded weather retry |
@@ -73,10 +74,9 @@ personal file contents.
 | Bouldering | One sanitized live activity imports as `climb` |
 | Historical bouldering backfill | Provider acceptance of exact `Bouldering`, then a newly approved canary plus 404 verified owned manual activities; unchanged local facts/metrics and a 404-record repeat no-op |
 | Manual yoga | One sanitized live manual activity imports as `yoga` |
-| Run delivery | Two approved future structured runs are published; observe one on Garmin |
-| Cycling delivery | One approved future structured ride is published; observe it on Wahoo when it enters the device-forwarding window |
-| Update/reschedule | The same owned test events update without identity or event duplication |
-| Exact deletion | Only explicitly selected acceptance events are removed after remote ownership proof |
+| Run delivery | When the athlete starts a future plan, approve and publish a real structured run and observe it on Garmin |
+| Cycling delivery | When the athlete starts a future plan, approve and publish a real structured ride and observe it on Wahoo |
+| Update/reschedule | A future real owned event updates without identity or event duplication; in-place update is already live-proven |
 | Device configuration | API-side connections, toggles, filters, sport settings, and account timezone pass; phone/device timezones still need physical confirmation |
 
 ## Controlled device procedure

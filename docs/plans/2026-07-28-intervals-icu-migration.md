@@ -5,7 +5,8 @@ resume the work from repository state and the artifacts named here.
 
 - Owner: Resilio
 - Created: 2026-07-28
-- Status: implementation and live calendar complete; device acceptance pending
+- Status: implementation and owned calendar lifecycle complete; no active
+  training plan; device acceptance deferred
 - Acceptance record: `docs/acceptance/2026-07-28-intervals-icu.md`
 - Historical bouldering backfill:
   `docs/plans/2026-07-29-historical-bouldering-backfill.md`
@@ -667,10 +668,19 @@ Implementation evidence on 2026-07-28:
 - Exact completed-workout pairing is covered offline, including idempotency,
   ownership sport mismatch, report-only fallback, and rollback. The latest
   live full reconciliation found no exact pairs or fallback candidates.
-- Plan-wide publication created three future structured workouts. Live
-  read-back recovered event IDs `125877047`, `125877048`, and `125877049`
+- Plan-wide publication created three future structured acceptance workouts
   with server-assigned UIDs, and an immediate repeat produced three no-ops.
-  No duplicate event was created.
+  A live calendar review then found ambiguous renderer tokens: `m` was parsed
+  as minutes rather than metres and `% max HR` as power rather than heart
+  rate. The renderer now uses `mtr` and `% HR`; both run events were updated
+  in place, read back as 5,000/8,000 metres with HR targets, and repeated as
+  no-ops.
+- The athlete confirmed that no training plan is currently active and
+  explicitly requested removal of the acceptance fixtures. All three exact
+  manifest-owned events were deleted, each returned `404`, no Resilio-owned
+  event remained in the week, and the publication manifest is empty. The
+  unstarted local plan and review were hash-preserved in the plan archive and
+  removed from the active-plan paths.
 - All 41 conservative historical overlaps were reviewed with explicit athlete
   authorization. Thirty-nine candidate-bound approvals linked successfully;
   two already-owned cross-device recordings were closed through exact
@@ -698,6 +708,8 @@ Remaining acceptance gates:
   rejects exact `Bouldering`; manual yoga remains pending. A live
   Garmin/Wahoo sibling pair is now proven through the duplicate-recording
   review.
-- Observe the published run and cycling workouts on Garmin and Wahoo.
-- With separate mutation authorization, live-prove update/reschedule and exact
-  deletion of selected Resilio-owned events.
+- When the athlete starts a real plan, publish an approved run and ride and
+  observe physical Garmin/Wahoo delivery. No acceptance-only workout is left
+  on the calendar.
+- Live rescheduling remains optional acceptance evidence; ownership-safe
+  in-place update and exact deletion are now live-proven.
