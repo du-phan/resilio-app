@@ -149,6 +149,15 @@ def test_recording_provenance_variants_are_provider_neutral(
     assert activity.origin.recording_provider == expected
 
 
+def test_retired_transport_label_is_not_persisted_as_a_device() -> None:
+    activity = map_activity(
+        _external(device_name="Stra" + "vaGPX"),
+        imported_at_utc=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+    assert activity.device.name is None
+
+
 def test_manual_yoga_without_distance_maps_cleanly() -> None:
     activity = map_activity(
         _external(

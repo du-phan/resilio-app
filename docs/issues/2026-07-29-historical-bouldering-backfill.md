@@ -1,6 +1,7 @@
 # Historical bouldering backfill
 
-- Status: corrected canary visually accepted; application approval pending
+- Status: 404 applied and verified; technical acceptance complete; additional
+  visual calendar sampling pending
 - Plan:
   [historical bouldering backfill](../plans/2026-07-29-historical-bouldering-backfill.md)
 - Parent:
@@ -43,13 +44,30 @@
 - The athlete's full-page screenshot confirms the UI displays `Climbing`,
   2026-04-02 12:30, 1h10, `Lunch Activity`, the public description, and RPE 5.
   Exact API read-back remains `RockClimbing`; uploaded load is absent.
+- The separately approved application processed the remaining 403 records.
+  The ledger now contains 404 verified receipts, zero pending or failed
+  entries, and zero rollback entries. Immediate repeated application processed
+  zero records and proved a 404-record no-op.
+- Full feedback sync examined 566 rows with zero create, link, or ambiguity;
+  its immediate incremental successor found ten unchanged rows and zero
+  mutation or review outcome. Reconciliation, quarantine, and deletion queues
+  are empty.
+- Final state contains 1,125 local records and 514 external links. Historical
+  climbing facts/load, all 56 screenshot records, the profile, and the exact
+  frozen metrics digest remain unchanged. All 2,787 restricted-backup files
+  verify.
+- Acceptance was recorded on 2026-07-29. Retain the rollback executable and
+  verified backup through 2026-10-27.
+- The closing 953-test suite, architecture guard, focused Ruff, and diff
+  validation pass. Sync-derived retired transport labels cannot re-enter
+  canonical device fields.
 
 ## Remaining work
 
-- Record the athlete's separate application approval.
-- Apply/resume all remaining batches and execute the acceptance checklist.
-- Record the acceptance date and 90-day rollback deadline in repository and
-  vault continuity artifacts.
+- Visually sample early, middle, recent, and multiple noon-adjusted calendar
+  entries beyond the already accepted canary.
+- After 2026-10-27, remove the one-time executable and backup only with
+  explicit approval while retaining the sanitized receipt and canonical links.
 
-No live mutation is authorized merely by this issue. Every mutation remains
-bound to the immutable plan/canary digests and the recorded approval stage.
+Any rollback remains an explicit, digest-bound operation and may delete only
+the exact manifest-owned activities after remote ownership revalidation.

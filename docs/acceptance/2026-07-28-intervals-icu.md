@@ -1,8 +1,8 @@
 # Intervals.icu migration acceptance record
 
 - Date: 2026-07-28
-- Status: implementation and owned calendar lifecycle verified; no active
-  training plan; device observation deferred
+- Status: implementation, owned calendar lifecycle, and historical climbing
+  publication verified; no active training plan; device observation deferred
 - Plan: `docs/plans/2026-07-28-intervals-icu-migration.md`
 - Historical bouldering backfill:
   `docs/plans/2026-07-29-historical-bouldering-backfill.md`
@@ -38,10 +38,13 @@ personal file contents.
 | Free-account dormancy notice | Pass | Setup and onboarding explain the 90-day login requirement |
 | Vault brief | Pass | Explicit approval was received and the active integration text now describes Intervals.icu |
 | Ignored active state | Pass | All 1,125 files validate as literal v2; the retired training-history sync file and unused entrypoints were removed; active athlete/state/plan files contain zero obsolete provider terms |
-| Offline/architecture gates | Pass | 952 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
+| Offline/architecture gates | Pass | 953 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
 | Historical backfill canary | Pass live | The corrected `RockClimbing`/`icu_rpe` canary passes exact read-back, stable repeated submission, unique ownership, and final GET. Athlete screenshot acceptance confirms the UI's `Climbing` label, date/time, 1h10 duration, title, public description, RPE 5, and omitted uploaded load |
+| Historical backfill application | Pass live | Separate approval published the remaining 403 records; all 404 have verified ownership receipts, zero pending/failed entries, and exact read-back. Immediate repeat processed zero records |
+| Historical backfill feedback guard | Pass live | Full sync saw 566 rows with zero create/link/ambiguity; immediate incremental sync saw ten unchanged rows and zero mutation/review outcome. Archive remains 1,125 records with 514 links and empty review/quarantine/deletion queues |
+| Historical backfill invariants | Pass | All 433 climbing source projections/load, all 56 screenshots, profile, and exact frozen metrics digest are unchanged. The restricted `0700` backup has 2,787 verified files and is retained through 2026-10-27 |
 
 ## Exact completion-gate audit
 
@@ -58,7 +61,7 @@ personal file contents.
 | Active application cannot read the old schema | Pass | Schema validator and archive tests fail closed on legacy metadata/version |
 | Initial and repeat sync are idempotent | Pass live | Complete reconciliation followed by an immediate incremental run changed zero records and left no review/quarantine row |
 | Late edits, deletion handling, partial runs, and interrupted resume pass | Pass offline | Fingerprint updates, detail-confirmed tombstones, cursor safety, checkpoint recovery, and transactional rollback have regression coverage |
-| RockClimbing and Bouldering aggregate as `climb` | Partial live | Both variants pass strict inbound mapper/sibling tests; the live manual validator accepts `RockClimbing` and rejects `Bouldering`, and the athlete approved explicit `RockClimbing` publication for the historical backfill |
+| RockClimbing and Bouldering aggregate as `climb` | Pass live | Both variants pass strict inbound mapper/sibling tests; the live manual validator accepts `RockClimbing` and rejects `Bouldering`. The 404 explicitly approved `RockClimbing` publications retain their 433 local historical climb records without feedback duplicates |
 | Garmin, Wahoo, manual, and sensor sibling cases pass | Pass offline/live | Strict fixtures cover every provenance and HR/power/cadence case; live Garmin/Wahoo duplicate evidence exercised ownership-safe exclusion |
 | Run/cycle workouts reach Garmin/Wahoo | Deferred | API-side connections, forwarding toggles, unrestricted Garmin filters, run-HR prerequisites, ride FTP, and Europe/Paris timezone pass; the athlete is not currently in a training plan, so the acceptance fixtures were removed before physical device observation |
 | Update, reschedule, and delete affect only owned events | Partial live | Ownership-safe in-place update and exact deletion are live-proven; idempotency, remote drift, reschedule, `others=false`, and recovery remain covered offline |
@@ -71,8 +74,7 @@ personal file contents.
 
 | Journey | Required evidence |
 |---|---|
-| Bouldering | One sanitized live activity imports as `climb` |
-| Historical bouldering backfill | Fresh amended dry run, newly approved `RockClimbing` canary, then 404 verified owned manual activities; unchanged local facts/metrics and a 404-record repeat no-op |
+| Historical bouldering calendar sampling | Visually sample early, middle, recent, and multiple noon-adjusted calendar entries beyond the accepted canary; exact API read-back already covers all 404 |
 | Manual yoga | One sanitized live manual activity imports as `yoga` |
 | Run delivery | When the athlete starts a future plan, approve and publish a real structured run and observe it on Garmin |
 | Cycling delivery | When the athlete starts a future plan, approve and publish a real structured ride and observe it on Wahoo |

@@ -403,7 +403,7 @@ and unowned deletion.
 - [x] Only `INTERVALS_ICU_API_KEY` is required in `.env.local`.
 - [x] Auth status succeeds without key leakage.
 - [x] First import succeeds and immediate repeat creates zero duplicates.
-- [ ] Rock climbing and bouldering both appear as `climb`.
+- [x] Rock climbing and bouldering both appear as `climb`.
 - [ ] Manual yoga, Wahoo sensor data, and a Garmin activity import correctly.
 - [ ] Garmin attribution appears where required.
 - [ ] Structured run and cycling workouts reach Garmin and Wahoo.
@@ -500,9 +500,11 @@ occurrences.
   re-proved server UID, external ID, category, sport, date, and rendered-text
   ownership; a fresh incremental activity sync remained a complete no-op.
 - [ ] Phase 11 acceptance and outcomes complete.
-- [x] 2026-07-29: Implemented the ownership-safe historical bouldering
-  backfill offline; live dry run and separate canary/application approvals
-  remain tracked in the dedicated plan.
+- [x] 2026-07-29: Applied the ownership-safe historical bouldering backfill:
+  404 verified publications, immediate 404-record no-op, zero feedback-sync
+  create/link/ambiguity, 514 total links, and unchanged historical
+  climbing/metrics/profile/screenshot invariants. Additional calendar UI
+  sampling remains tracked in the dedicated plan.
 
 ## Discoveries
 
@@ -711,11 +713,12 @@ Implementation evidence on 2026-07-28:
 
 Remaining acceptance gates:
 
-- The corrected historical `RockClimbing`/`icu_rpe` canary passed every
-  automated gate and athlete screenshot acceptance; separate application
-  approval is pending. Manual yoga remains pending. A live
-  Garmin/Wahoo sibling pair is now proven through the duplicate-recording
-  review.
+- The historical `RockClimbing`/`icu_rpe` backfill is technically complete:
+  404 verified receipts, zero pending entries, immediate application no-op,
+  duplicate-free full/incremental feedback sync, and unchanged protected local
+  state. Additional early/middle/noon calendar UI sampling and manual yoga
+  remain pending. A live Garmin/Wahoo sibling pair is proven through the
+  duplicate-recording review.
 - When the athlete starts a real plan, publish an approved run and ride and
   observe physical Garmin/Wahoo delivery. No acceptance-only workout is left
   on the calendar.

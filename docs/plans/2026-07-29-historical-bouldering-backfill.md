@@ -7,16 +7,17 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: corrected `RockClimbing`/`icu_rpe` canary accepted visually;
-  separate application approval pending
+- Status: 404 activities applied and ownership-verified; repeat apply and
+  feedback sync are idempotent; visual calendar sampling beyond the accepted
+  canary remains
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
   [historical backfill issue](../issues/2026-07-29-historical-bouldering-backfill.md)
 - Vault issue:
   `projects/resilio-app/issues/issue-20260729-historical-bouldering-backfill.md`
-- Rollback retention: keep the verified backup and executable for at least
-  90 days after athlete acceptance
+- Rollback retention: keep the verified backup and executable through
+  2026-10-27, 90 days after athlete acceptance on 2026-07-29
 
 ## Frozen scope
 
@@ -187,6 +188,38 @@ shows 2026-04-02 at 12:30, 1h10 duration, title `Lunch Activity`, public
 description `Back to climbing! Hang board session`, and RPE 5. Uploaded load
 is absent as required; Intervals.icu's own S-RPE remains provider-calculated.
 
+The athlete separately approved application under plan digest
+`897930642711a1753d2e75642b31641a2bb179abf0f484ea4d68ef2088c9e04d`
+and canary-proof digest
+`3a794aeba04b5e5c74f7d5156cf9749118ce703e6099ae914c3f8d004492f527`.
+The application processed the remaining 403 activities in checkpointed
+batches and finished with 404 verified ownership receipts, zero pending or
+failed entries, and no rollback entries. Immediate identical application
+processed zero records and proved the required 404-record no-op.
+
+The acceptance full sync examined 566 external rows and created, linked, or
+made ambiguous zero local records. It refreshed external audit data on 514
+existing links, retained the two established duplicate exclusions, and
+recognized all four acknowledged quarantines. The immediate incremental sync
+examined ten recent rows; all ten were unchanged, with zero create, update,
+link, ambiguity, duplicate, quarantine, tombstone, or partial result. The
+live reconciliation, quarantine, and deletion review queues are empty.
+
+Final local verification finds 1,125 canonical records, 514 external links,
+404 backfill links, 404 verified ledger receipts, and zero pending intents.
+All 433 historical climbing source projections and calculated loads, all 56
+screenshot imports, and the athlete profile remain unchanged against the
+verified snapshot. The full sync rewrote only metric `calculated_at` metadata
+and added an empty current-day metric; after semantic equality was proved,
+the verified snapshot bytes were restored. The exact frozen metrics-tree hash
+therefore remains unchanged. All 2,787 backfill-backup files reverify and the
+backup root remains restricted to `0700`.
+
+The accepted canary provides live calendar/UI evidence, while exact API
+read-back verified all 404 publications. Early, middle, recent, and multiple
+noon-adjusted calendar UI spot checks remain athlete-visible acceptance
+sampling and do not affect ownership or rollback readiness.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -224,7 +257,7 @@ is absent as required; Intervals.icu's own S-RPE remains provider-calculated.
 - [x] Current archive rendering probe confirms 433 strict payloads, 405 valid
   exact wall times, 28 noon adjustments, 396 athlete RPE values, 39 original
   public descriptions, one positive distance, and no positive elevation.
-- [x] Full offline suite passes: 952 tests, focused Ruff, architecture/link
+- [x] Full offline suite passes: 953 tests, focused Ruff, architecture/link
   guards, `git diff --check`, Poetry validation, and source/wheel builds.
 - [x] Confirm future activity downloads are disabled and execute the live dry
   run.
@@ -248,6 +281,8 @@ is absent as required; Intervals.icu's own S-RPE remains provider-calculated.
   complete automated canary gate with one stable owned remote activity.
 - [x] Visually accept the exact `RockClimbing` canary; the Intervals.icu UI
   renders its sport label as `Climbing`.
-- [ ] Obtain athlete application approval and execute the remaining batches.
-- [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention
+- [x] Obtain athlete application approval and execute the remaining batches.
+- [x] Complete live no-op, sync, count/hash, and rollback-retention
   acceptance.
+- [ ] Visually sample early, middle, recent, and multiple noon-adjusted
+  calendar entries beyond the already accepted canary.

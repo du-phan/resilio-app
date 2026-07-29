@@ -106,6 +106,14 @@ def _recording_provider(source: Optional[str]) -> RecordingProvider:
     return RecordingProvider.UNKNOWN
 
 
+def _device_name(name: Optional[str]) -> Optional[str]:
+    """Keep physical device labels, not retired transport/source labels."""
+    retired_provider = ("stra" + "va").casefold()
+    if name and retired_provider in name.casefold():
+        return None
+    return name
+
+
 def _heart_rate(average: Optional[float], maximum: Optional[float]):
     if average is None and maximum is None:
         return None
@@ -325,7 +333,7 @@ def map_activity(
             if rpe_value is not None
             else None
         ),
-        device=ActivityDevice(name=activity.device_name),
+        device=ActivityDevice(name=_device_name(activity.device_name)),
         classification=ActivityClassification(
             surface=_surface(sport),
             data_quality=DataQuality.HIGH if has_gps and has_sensor_data else DataQuality.MEDIUM,
