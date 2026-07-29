@@ -1,6 +1,6 @@
 # Historical bouldering backfill
 
-- Status: amended dry run passed; canary approval pending
+- Status: amended canary failed closed; diagnostic retry approval pending
 - Plan:
   [historical bouldering backfill](../plans/2026-07-29-historical-bouldering-backfill.md)
 - Parent:
@@ -23,10 +23,18 @@
 - The amended dry run passed with exact 433/29/404 accounting, 28
   noon-adjusted records, zero conflicts, an empty ownership ledger, and a
   verified restricted backup.
+- The athlete approved the amended digest. The exact canary was created, but
+  strict factual read-back found a mismatch. Ownership-safe cleanup deleted
+  it, verified `404` and namespace absence, and left the ledger and local
+  archive unchanged.
+- Field-name-only diagnostics now identify future normalization without
+  retaining values. All 951 tests pass, and a repeated read-only inventory
+  check remains exact with the same immutable plan digest.
 
 ## Remaining work
 
-- Obtain a new canary approval bound to the amended plan digest.
+- Obtain explicit approval for one diagnostic canary retry under the same
+  amended plan digest.
 - Publish and visually verify one exact `RockClimbing` canary.
 - Record the athlete's separate application approval.
 - Apply/resume all remaining batches and execute the acceptance checklist.

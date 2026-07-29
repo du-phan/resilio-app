@@ -7,8 +7,8 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: amended `RockClimbing` dry run passed; digest-bound canary approval
-  pending
+- Status: amended `RockClimbing` canary failed closed on a factual read-back
+  mismatch; one diagnostic retry approval is pending
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
@@ -139,6 +139,21 @@ exact-time, 28 noon-adjusted, zero owned recoveries, and zero conflicts. The
 archive remains at 1,125 records with 110 initial external links. Its verified
 backup is restricted to `0700`; the ownership ledger remains empty.
 
+The athlete approved that exact amended digest and the canary POST created an
+owned activity, but strict factual read-back rejected at least one
+server-normalized field. Namespace-only cleanup immediately deleted the exact
+canary and verified `404` plus namespace absence. The run is failed, the
+ledger has zero pending or verified entries, and local activity facts, links,
+metrics, and sync state remain unchanged.
+
+The original failure message intentionally retained no remote values but was
+too coarse to identify the normalized field. Read-back failures now report
+only deterministic mismatched field names, never actual or approved values.
+All 951 offline tests pass. A repeated read-only inventory check reproduced
+the same 433/29/404 accounting, zero conflicts, empty namespace, and unchanged
+plan digest. Another POST requires an explicit athlete-authorized diagnostic
+canary attempt; it is never retried automatically.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -176,7 +191,7 @@ backup is restricted to `0700`; the ownership ledger remains empty.
 - [x] Current archive rendering probe confirms 433 strict payloads, 405 valid
   exact wall times, 28 noon adjustments, 396 athlete RPE values, 39 original
   public descriptions, one positive distance, and no positive elevation.
-- [x] Full offline suite passes: 950 tests, focused Ruff, architecture/link
+- [x] Full offline suite passes: 951 tests, focused Ruff, architecture/link
   guards, `git diff --check`, Poetry validation, and source/wheel builds.
 - [x] Confirm future activity downloads are disabled and execute the live dry
   run.
@@ -187,7 +202,11 @@ backup is restricted to `0700`; the ownership ledger remains empty.
   `RockClimbing`.
 - [x] Execute a fresh amended dry run with exact 433/29/404 accounting and zero
   conflicts.
-- [ ] Obtain a new exact digest-bound canary approval.
+- [x] Obtain an exact digest-bound amended canary approval; its first POST
+  failed closed on a factual read-back mismatch and was deleted exactly.
+- [x] Add secret-safe field-name-only mismatch diagnostics and revalidate the
+  unchanged external inventory and plan digest.
+- [ ] Obtain explicit approval for one diagnostic canary retry.
 - [ ] Visually accept an exact `RockClimbing` canary.
 - [ ] Obtain athlete application approval and execute the remaining batches.
 - [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention

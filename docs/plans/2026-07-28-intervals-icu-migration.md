@@ -427,6 +427,9 @@ and unowned deletion.
   The athlete explicitly approved `RockClimbing`, which the live validator
   accepts and which matches the preserved original Strava source label. This
   requires a fresh plan digest and approvals; it is not a silent fallback.
+  The first amended canary was created but failed strict factual read-back;
+  exact cleanup verified absence. A field-name-only diagnostic retry now
+  requires explicit authorization.
 - `[UNKNOWN]` Garmin/manual live fields: strict spec-derived fixtures plus
   controlled acceptance samples.
 - `[UNKNOWN]` bulk personal-key event semantics: keep single-event upserts.
@@ -705,8 +708,9 @@ Implementation evidence on 2026-07-28:
 
 Remaining acceptance gates:
 
-- The historical bouldering canary is being regenerated under the explicitly
-  approved `RockClimbing` amendment; manual yoga remains pending. A live
+- The historical bouldering canary is awaiting one explicitly authorized
+  diagnostic retry under the `RockClimbing` amendment; manual yoga remains
+  pending. A live
   Garmin/Wahoo sibling pair is now proven through the duplicate-recording
   review.
 - When the athlete starts a real plan, publish an approved run and ride and

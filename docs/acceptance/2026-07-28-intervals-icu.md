@@ -38,10 +38,10 @@ personal file contents.
 | Free-account dormancy notice | Pass | Setup and onboarding explain the 90-day login requirement |
 | Vault brief | Pass | Explicit approval was received and the active integration text now describes Intervals.icu |
 | Ignored active state | Pass | All 1,125 files validate as literal v2; the retired training-history sync file and unused entrypoints were removed; active athlete/state/plan files contain zero obsolete provider terms |
-| Offline/architecture gates | Pass | 950 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
+| Offline/architecture gates | Pass | 951 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
-| Historical backfill canary | Approval pending | The original exact-`Bouldering` canary failed closed with zero publications; the athlete approved a `RockClimbing` amendment and its fresh dry run reproduced exact 433/29/404 accounting with zero conflicts, so only the new digest-bound canary approval remains before POST |
+| Historical backfill canary | Diagnostic retry pending | The original exact-`Bouldering` canary failed closed; the approved `RockClimbing` canary was then deleted exactly after strict read-back found a factual mismatch. Field-name-only diagnostics now preserve value secrecy, and repeat inventory proof remains exact with zero owned publications |
 
 ## Exact completion-gate audit
 

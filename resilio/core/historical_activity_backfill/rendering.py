@@ -213,36 +213,53 @@ def assert_remote_matches(
     """Verify exact ownership and every athlete-authored factual field."""
     local_start = _remote_local_start(remote, expected.timezone)
     expected_local = expected.start_date_local
-    missing_measurements_are_empty = (
-        (expected.distance is not None or remote.distance in (None, 0))
-        and (
-            expected.total_elevation_gain is not None
-            or remote.total_elevation_gain in (None, 0)
-        )
+    mismatches: list[str] = []
+    comparisons = (
+        ("external_id", remote.external_id, expected.external_id),
+        ("type", remote.type, expected.type),
+        ("name", remote.name, expected.name),
+        (
+            "start_date",
+            remote.start_date.astimezone(timezone.utc),
+            expected.start_date,
+        ),
+        ("start_date_local", local_start, expected_local),
+        (
+            "timezone",
+            remote.timezone if remote.timezone is not None else expected.timezone,
+            expected.timezone,
+        ),
+        ("elapsed_time", remote.elapsed_time, expected.elapsed_time),
+        ("moving_time", remote.moving_time, expected.moving_time),
+        ("description", remote.description, expected.description),
+        (
+            "perceived_exertion",
+            remote.perceived_exertion,
+            expected.perceived_exertion,
+        ),
+    )
+    mismatches.extend(
+        field_name
+        for field_name, actual, approved in comparisons
+        if actual != approved
     )
     if (
-        remote.external_id != expected.external_id
-        or remote.type != "RockClimbing"
-        or remote.name != expected.name
-        or remote.start_date.astimezone(timezone.utc) != expected.start_date
-        or local_start != expected_local
-        or remote.timezone not in (None, expected.timezone)
-        or remote.elapsed_time != expected.elapsed_time
-        or remote.moving_time != expected.moving_time
-        or remote.description != expected.description
-        or remote.perceived_exertion != expected.perceived_exertion
-        or (
-            expected.distance is not None
-            and remote.distance != expected.distance
-        )
-        or (
-            expected.total_elevation_gain is not None
-            and remote.total_elevation_gain != expected.total_elevation_gain
-        )
-        or not missing_measurements_are_empty
+        remote.distance != expected.distance
+        and not (expected.distance is None and remote.distance == 0)
     ):
+        mismatches.append("distance")
+    if (
+        remote.total_elevation_gain != expected.total_elevation_gain
+        and not (
+            expected.total_elevation_gain is None
+            and remote.total_elevation_gain == 0
+        )
+    ):
+        mismatches.append("total_elevation_gain")
+    if mismatches:
         raise HistoricalActivityRenderingError(
-            "Remote manual activity does not match the approved factual payload"
+            "Remote manual activity does not match approved fields: "
+            + ", ".join(sorted(mismatches))
         )
 
 

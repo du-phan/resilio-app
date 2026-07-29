@@ -18,6 +18,7 @@ from resilio.core.historical_activity_backfill.inventory import (
 from resilio.core.historical_activity_backfill.rendering import (
     NOON_DISCLOSURE,
     HistoricalActivityRenderingError,
+    assert_remote_matches,
     render_manual_activity,
 )
 from resilio.core.historical_activity_backfill.repository import (
@@ -170,6 +171,39 @@ def test_date_only_activity_uses_local_noon_and_discloses_synthetic_time():
     )
     assert rendered.payload.description == NOON_DISCLOSURE
     assert rendered.payload.perceived_exertion is None
+
+
+def test_remote_mismatch_reports_only_sanitized_field_names():
+    activity = _historical_climb(
+        "act_h_diagnostic",
+        date(2026, 1, 15),
+        hour=19,
+        description="Approved public description",
+        rpe=7,
+    )
+    expected = render_manual_activity(activity).payload
+    remote = ActivityDTO(
+        id="remote-diagnostic",
+        external_id=expected.external_id,
+        type=expected.type,
+        name=expected.name,
+        start_date=expected.start_date,
+        start_date_local=expected.start_date_local,
+        timezone=expected.timezone,
+        elapsed_time=expected.elapsed_time,
+        moving_time=0,
+        description="remote-private-value-must-not-appear",
+        perceived_exertion=expected.perceived_exertion,
+    )
+
+    with pytest.raises(
+        HistoricalActivityRenderingError,
+        match=r"approved fields: description, moving_time$",
+    ) as captured:
+        assert_remote_matches(remote, expected)
+
+    assert "remote-private-value" not in str(captured.value)
+    assert "Approved public description" not in str(captured.value)
 
 
 @pytest.mark.parametrize(
