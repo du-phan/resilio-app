@@ -711,8 +711,9 @@ Implementation evidence on 2026-07-28:
 
 Remaining acceptance gates:
 
-- The historical bouldering canary is awaiting approval for its corrected
-  `RockClimbing`/`icu_rpe` payload digest; manual yoga remains pending. A live
+- The corrected historical `RockClimbing`/`icu_rpe` canary passed every
+  automated gate and is awaiting athlete visual acceptance; manual yoga
+  remains pending. A live
   Garmin/Wahoo sibling pair is now proven through the duplicate-recording
   review.
 - When the athlete starts a real plan, publish an approved run and ride and

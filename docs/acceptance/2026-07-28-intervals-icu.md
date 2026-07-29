@@ -41,7 +41,7 @@ personal file contents.
 | Offline/architecture gates | Pass | 952 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
-| Historical backfill canary | Approval pending | A value-free diagnostic isolated the amended mismatch to the incorrect `perceived_exertion` write field and cleaned up exactly. The contract now uses manual-activity `icu_rpe`; a fresh 433/29/404 dry run passes with zero conflicts and requires new digest-bound approval |
+| Historical backfill canary | Visual acceptance pending | The corrected `RockClimbing`/`icu_rpe` canary passes exact read-back, repeated submission with stable identity, one-row ownership proof, and final GET; the ledger has one verified receipt and zero pending entries |
 
 ## Exact completion-gate audit
 

@@ -7,8 +7,8 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: corrected `RockClimbing`/`icu_rpe` dry run passed; new digest-bound
-  canary approval pending
+- Status: corrected `RockClimbing`/`icu_rpe` canary verified automatically;
+  athlete visual acceptance pending
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
@@ -171,6 +171,15 @@ conflicts. The new backup is restricted to `0700`, the ownership ledger is
 empty, and all 952 offline tests pass. Every earlier approval is invalid for
 this corrected payload digest.
 
+The athlete approved the corrected plan digest. The canary passed exact
+creation read-back, identical second submission, stable destination identity,
+single-owned-row inventory, and final exact GET. The immutable canary-proof
+digest is
+`3a794aeba04b5e5c74f7d5156cf9749118ce703e6099ae914c3f8d004492f527`.
+The run has one verified receipt, zero pending intents, and no error. The
+athlete must visually accept the calendar representation before a separate
+application approval can be recorded for the remaining 403 activities.
+
 ## Acceptance
 
 - Dry run: 433 selected, 29 hidden exclusions, 404 publishable, 28
@@ -228,7 +237,8 @@ this corrected payload digest.
   up exactly.
 - [x] Correct manual athlete RPE to `icu_rpe`, preserve inbound source-field
   fallback, and execute a fresh 433/29/404 dry run with zero conflicts.
-- [ ] Obtain approval for the new exact corrected-payload digest.
+- [x] Obtain approval for the new exact corrected-payload digest and pass the
+  complete automated canary gate with one stable owned remote activity.
 - [ ] Visually accept an exact `RockClimbing` canary.
 - [ ] Obtain athlete application approval and execute the remaining batches.
 - [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention

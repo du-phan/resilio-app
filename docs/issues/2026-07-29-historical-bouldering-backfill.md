@@ -1,6 +1,6 @@
 # Historical bouldering backfill
 
-- Status: corrected RPE dry run passed; new canary approval pending
+- Status: corrected canary verified; athlete visual acceptance pending
 - Plan:
   [historical bouldering backfill](../plans/2026-07-29-historical-bouldering-backfill.md)
 - Parent:
@@ -37,11 +37,14 @@
 - The corrected fresh dry run passed with a new digest, exact 433/29/404
   accounting, 396 RPE values, zero conflicts, a verified `0700` backup, and
   an empty ledger. All 952 tests pass.
+- The athlete approved the corrected digest. Exact read-back, repeated
+  submission, stable identity, unique ownership, and final GET all passed.
+  The ledger contains one verified canary and zero pending entries.
 
 ## Remaining work
 
-- Obtain approval bound to the new corrected-payload plan digest.
-- Publish and visually verify one exact `RockClimbing` canary.
+- Obtain the athlete's visual acceptance of the verified `RockClimbing`
+  canary.
 - Record the athlete's separate application approval.
 - Apply/resume all remaining batches and execute the acceptance checklist.
 - Record the acceptance date and 90-day rollback deadline in repository and
