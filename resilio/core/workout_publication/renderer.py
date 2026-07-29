@@ -27,7 +27,8 @@ def _duration(value: StepDuration) -> str:
     if value.unit == StepDurationUnit.UNTIL_LAP_PRESS:
         return "lap"
     if value.unit == StepDurationUnit.METERS:
-        return f"{value.value}m"
+        # Intervals uses "m" for minutes. "mtr" is the unambiguous metre token.
+        return f"{value.value}mtr"
     seconds = int(value.value or 0)
     if seconds % 60 == 0:
         return f"{seconds // 60}m"
@@ -44,7 +45,7 @@ def _target(value: WorkoutTarget) -> str:
     if value.unit == TargetUnit.PERCENT_LTHR:
         return f"{minimum:g}-{maximum:g}% LTHR"
     if value.unit == TargetUnit.PERCENT_MAX_HEART_RATE:
-        return f"{minimum:g}-{maximum:g}% max HR"
+        return f"{minimum:g}-{maximum:g}% HR"
     if value.unit == TargetUnit.WATTS:
         return f"{round(minimum)}-{round(maximum)}w"
     if value.unit == TargetUnit.PERCENT_FTP:

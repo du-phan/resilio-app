@@ -217,8 +217,35 @@ def test_recursive_native_text_render_is_deterministic() -> None:
 
     assert first == second
     assert "3x" in first
-    assert "1000m 4:10-4:20/km interval" in first
+    assert "1000mtr 4:10-4:20/km interval" in first
     assert first.endswith("\n")
+
+
+def test_metric_distance_and_max_hr_use_unambiguous_intervals_tokens() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "meters", "value": 5000},
+                    "target": {
+                        "mode": "heart_rate",
+                        "unit": "percent_max_heart_rate",
+                        "minimum": 65,
+                        "maximum": 75,
+                    },
+                    "intensity": "active",
+                }
+            ],
+        }
+    )
+
+    rendered = render_structured_workout(structure.steps)
+
+    assert rendered == "- 5000mtr 65-75% HR active\n"
+    assert "5000m " not in rendered
+    assert "% max HR" not in rendered
 
 
 def test_repeated_publication_is_remote_noop(repo) -> None:

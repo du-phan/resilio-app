@@ -161,7 +161,7 @@ the destination-type requirement.
 - [x] Current archive rendering probe confirms 433 strict payloads, 405 valid
   exact wall times, 28 noon adjustments, 396 athlete RPE values, 39 original
   public descriptions, one positive distance, and no positive elevation.
-- [x] Full offline suite passes: 949 tests, focused Ruff, architecture/link
+- [x] Full offline suite passes: 950 tests, focused Ruff, architecture/link
   guards, `git diff --check`, Poetry validation, and source/wheel builds.
 - [x] Confirm future activity downloads are disabled and execute the live dry
   run.
