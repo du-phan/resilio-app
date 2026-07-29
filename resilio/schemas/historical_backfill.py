@@ -102,7 +102,7 @@ class BackfillPlan(BaseModel):
     schema_version: Literal[1] = 1
     run_id: str
     timezone: Literal["Europe/Paris"] = "Europe/Paris"
-    destination_type: Literal["Bouldering"] = "Bouldering"
+    destination_type: Literal["Bouldering", "RockClimbing"] = "RockClimbing"
     inventory_oldest: date
     inventory_newest: date
     downloads_disabled_confirmed: bool
@@ -169,7 +169,7 @@ class HistoricalActivityPublication(BaseModel):
     status: PublicationStatus
     destination_activity_id: str
     ownership_external_id: str
-    destination_type: Literal["Bouldering"] = "Bouldering"
+    destination_type: Literal["Bouldering", "RockClimbing"] = "RockClimbing"
     local_date: date
     plan_digest_sha256: Sha256 = Field(pattern=r"^[0-9a-f]{64}$")
     source_fingerprint_sha256: Sha256 = Field(pattern=r"^[0-9a-f]{64}$")

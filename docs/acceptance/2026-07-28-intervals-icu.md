@@ -41,7 +41,7 @@ personal file contents.
 | Offline/architecture gates | Pass | 950 tests pass; focused Ruff, architecture/cleanup checks, `git diff --check`, and source/wheel builds pass |
 | Latest incremental refresh | Pass live | Five recent activities were unchanged; the run was complete with zero create/update/link, ambiguity, quarantine, deletion, or completion-candidate result |
 | Historical backfill implementation | Pass offline | Strict 433/29/404 fixtures, current 433-record rendering coverage, canary upsert/cleanup, lost-response adoption, shared archive/state rollback, feedback-sync provenance, exact rollback, and repeated-application no-op behavior pass without live network access |
-| Historical backfill canary | Blocked live | Dry-run accounting passed with zero conflicts, but the live manual endpoint returned HTTP 422 and a non-creating validation probe confirmed `Invalid type [Bouldering]`; ownership lookup and ledger both contain zero publications |
+| Historical backfill canary | Approval pending | The original exact-`Bouldering` canary failed closed with zero publications; the athlete approved a `RockClimbing` amendment and its fresh dry run reproduced exact 433/29/404 accounting with zero conflicts, so only the new digest-bound canary approval remains before POST |
 
 ## Exact completion-gate audit
 
@@ -58,7 +58,7 @@ personal file contents.
 | Active application cannot read the old schema | Pass | Schema validator and archive tests fail closed on legacy metadata/version |
 | Initial and repeat sync are idempotent | Pass live | Complete reconciliation followed by an immediate incremental run changed zero records and left no review/quarantine row |
 | Late edits, deletion handling, partial runs, and interrupted resume pass | Pass offline | Fingerprint updates, detail-confirmed tombstones, cursor safety, checkpoint recovery, and transactional rollback have regression coverage |
-| RockClimbing and Bouldering aggregate as `climb` | Blocked live | Both variants pass strict inbound mapper/sibling tests and RockClimbing is live-supported, but the live manual write endpoint rejects exact `Bouldering`; zero canaries were created |
+| RockClimbing and Bouldering aggregate as `climb` | Partial live | Both variants pass strict inbound mapper/sibling tests; the live manual validator accepts `RockClimbing` and rejects `Bouldering`, and the athlete approved explicit `RockClimbing` publication for the historical backfill |
 | Garmin, Wahoo, manual, and sensor sibling cases pass | Pass offline/live | Strict fixtures cover every provenance and HR/power/cadence case; live Garmin/Wahoo duplicate evidence exercised ownership-safe exclusion |
 | Run/cycle workouts reach Garmin/Wahoo | Deferred | API-side connections, forwarding toggles, unrestricted Garmin filters, run-HR prerequisites, ride FTP, and Europe/Paris timezone pass; the athlete is not currently in a training plan, so the acceptance fixtures were removed before physical device observation |
 | Update, reschedule, and delete affect only owned events | Partial live | Ownership-safe in-place update and exact deletion are live-proven; idempotency, remote drift, reschedule, `others=false`, and recovery remain covered offline |
@@ -72,7 +72,7 @@ personal file contents.
 | Journey | Required evidence |
 |---|---|
 | Bouldering | One sanitized live activity imports as `climb` |
-| Historical bouldering backfill | Provider acceptance of exact `Bouldering`, then a newly approved canary plus 404 verified owned manual activities; unchanged local facts/metrics and a 404-record repeat no-op |
+| Historical bouldering backfill | Fresh amended dry run, newly approved `RockClimbing` canary, then 404 verified owned manual activities; unchanged local facts/metrics and a 404-record repeat no-op |
 | Manual yoga | One sanitized live manual activity imports as `yoga` |
 | Run delivery | When the athlete starts a future plan, approve and publish a real structured run and observe it on Garmin |
 | Cycling delivery | When the athlete starts a future plan, approve and publish a real structured ride and observe it on Wahoo |

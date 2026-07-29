@@ -217,7 +217,7 @@ class ManualActivityWriteDTO(BaseModel):
     external_id: str = Field(
         pattern=r"^resilio:v1:historical-activity:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
     )
-    type: Literal["Bouldering"] = "Bouldering"
+    type: Literal["RockClimbing"] = "RockClimbing"
     name: str = Field(min_length=1, max_length=500)
     start_date: datetime
     start_date_local: datetime

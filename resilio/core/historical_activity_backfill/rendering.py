@@ -155,7 +155,7 @@ def render_manual_activity(activity: CanonicalActivity) -> RenderedHistoricalAct
     )
     payload = ManualActivityWriteDTO(
         external_id=external_id_for(activity.local_activity_id),
-        type="Bouldering",
+        type="RockClimbing",
         name=activity.name,
         start_date=local_start.astimezone(timezone.utc),
         start_date_local=local_start,
@@ -222,7 +222,7 @@ def assert_remote_matches(
     )
     if (
         remote.external_id != expected.external_id
-        or remote.type != "Bouldering"
+        or remote.type != "RockClimbing"
         or remote.name != expected.name
         or remote.start_date.astimezone(timezone.utc) != expected.start_date
         or local_start != expected_local

@@ -1,6 +1,6 @@
 # Historical bouldering backfill
 
-- Status: blocked by live Intervals.icu rejection of exact `Bouldering`
+- Status: amended dry run passed; canary approval pending
 - Plan:
   [historical bouldering backfill](../plans/2026-07-29-historical-bouldering-backfill.md)
 - Parent:
@@ -15,16 +15,19 @@
   confirmed `Invalid type [Bouldering]`.
 - An ownership lookup found zero remote canaries. The ledger contains zero
   pending or verified publications, and no local facts or metrics changed.
-- The application stage was not approved or started. The required
-  `RockClimbing` no-fallback rule remains in force.
+- The application stage was not approved or started, so the original
+  no-fallback rule was honored.
+- The athlete subsequently approved an explicit replacement plan using
+  `RockClimbing`, which matches the preserved original source label.
+  Earlier approvals are invalid and cannot authorize the amended canary.
+- The amended dry run passed with exact 433/29/404 accounting, 28
+  noon-adjusted records, zero conflicts, an empty ownership ledger, and a
+  verified restricted backup.
 
 ## Remaining work
 
-- Wait for exact `Bouldering` support in the live Intervals.icu manual
-  activity API, or create and separately approve a replacement plan that
-  changes the destination-type requirement.
-- Re-run the drift-sensitive dry run and obtain a new canary approval.
-- Publish and visually verify one exact canary.
+- Obtain a new canary approval bound to the amended plan digest.
+- Publish and visually verify one exact `RockClimbing` canary.
 - Record the athlete's separate application approval.
 - Apply/resume all remaining batches and execute the acceptance checklist.
 - Record the acceptance date and 90-day rollback deadline in repository and

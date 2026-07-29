@@ -282,7 +282,7 @@ def test_exact_event_delete_explicitly_disables_related_deletion() -> None:
 def _manual_write() -> ManualActivityWriteDTO:
     return ManualActivityWriteDTO(
         external_id="resilio:v1:historical-activity:act_h_test",
-        type="Bouldering",
+        type="RockClimbing",
         name="Bouldering",
         start_date="2026-07-28T17:00:00Z",
         start_date_local="2026-07-28T19:00:00+02:00",
@@ -298,7 +298,7 @@ def _manual_response(**updates):
     payload = {
         "id": "manual-1",
         "external_id": "resilio:v1:historical-activity:act_h_test",
-        "type": "Bouldering",
+        "type": "RockClimbing",
         "name": "Bouldering",
         "start_date": "2026-07-28T17:00:00Z",
         "start_date_local": "2026-07-28T19:00:00+02:00",
@@ -321,7 +321,7 @@ def test_bulk_manual_activity_uses_strict_payload_and_personal_key_auth() -> Non
         assert payload == [
             {
                 "external_id": "resilio:v1:historical-activity:act_h_test",
-                "type": "Bouldering",
+                "type": "RockClimbing",
                 "name": "Bouldering",
                 "start_date": "2026-07-28T17:00:00Z",
                 "start_date_local": "2026-07-28T19:00:00",
@@ -341,7 +341,7 @@ def test_bulk_manual_activity_uses_strict_payload_and_personal_key_auth() -> Non
     ) as client:
         created = client.create_manual_activities([_manual_write()])
 
-    assert created[0].type == "Bouldering"
+    assert created[0].type == "RockClimbing"
     assert created[0].external_id.endswith("act_h_test")
 
 
@@ -414,7 +414,7 @@ def test_bulk_manual_reports_only_matching_sanitized_type_rejections() -> None:
             422,
             json={
                 "status": 422,
-                "error": "Activity[0] create failed: Invalid type [Bouldering]",
+                "error": "Activity[0] create failed: Invalid type [RockClimbing]",
             },
         )
     )
@@ -424,7 +424,7 @@ def test_bulk_manual_reports_only_matching_sanitized_type_rejections() -> None:
             client.create_manual_activities([_manual_write()])
 
     assert captured.value.error_type == "unsupported_sport"
-    assert "Bouldering" in str(captured.value)
+    assert "RockClimbing" in str(captured.value)
 
 
 def test_bulk_manual_does_not_echo_untrusted_validation_details() -> None:

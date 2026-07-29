@@ -7,8 +7,8 @@ the same architecture and data-safety rules.
 
 - Owner: Resilio
 - Created: 2026-07-29
-- Status: live dry run complete; publication blocked because the live
-  Intervals.icu API rejects exact activity type `Bouldering`
+- Status: amended `RockClimbing` dry run passed; digest-bound canary approval
+  pending
 - Acceptance record:
   [Intervals.icu acceptance](../acceptance/2026-07-28-intervals-icu.md)
 - Repository issue:
@@ -29,7 +29,8 @@ the same architecture and data-safety rules.
   or deleting those remote rows.
 - Publish exactly 404 records: 376 exact-time records and 28 noon-adjusted
   records.
-- Require exact remote `Bouldering`; there is no `RockClimbing` fallback.
+- Publish explicitly as remote `RockClimbing`, the live-supported
+  Intervals.icu type and the preserved original source label.
 
 The deterministic ownership key is:
 
@@ -44,7 +45,7 @@ application, personal-key behavior remains an explicit live canary gate.
 
 ## Payload policy
 
-The outbound payload contains only the ownership key, `Bouldering` type,
+The outbound payload contains only the ownership key, `RockClimbing` type,
 existing title, corrected local and UTC occurrence, timezone, elapsed/moving
 duration, existing public description, athlete-sourced RPE, and strictly
 positive distance/elevation.
@@ -64,7 +65,7 @@ descriptions, one positive distance, and no positive elevation.
 3. A separate athlete approval binds the exact plan digest before the canary.
 4. The deterministic canary is the newest collision-free exact-time record
    with both public description and athlete RPE.
-5. The canary is submitted twice. Exact ownership, `Bouldering`, facts,
+5. The canary is submitted twice. Exact ownership, `RockClimbing`, facts,
    stable remote identity, and a single remaining activity are mandatory.
 6. A second athlete approval binds both the plan and canary-proof digests.
 7. Remaining records are processed by occurrence/local ID in batches of 25.
@@ -115,14 +116,28 @@ replacement plan digest
 The manual bulk endpoint rejected the canary with HTTP 422. A non-creating
 validation probe then returned `Invalid type [Bouldering]`, proving that the
 live write contract does not accept the destination type required by this
-plan. A date-and-ownership lookup verified that zero owned canaries exist,
-and the ownership ledger has zero pending or verified publications.
+plan's original frozen baseline. A date-and-ownership lookup verified that
+zero owned canaries exist, and the ownership ledger has zero pending or
+verified publications.
 
 The application stage was not approved or started. In accordance with the
 frozen no-fallback rule, no activity was submitted as `RockClimbing`, no local
-activity or metric was changed, and the historical backfill is blocked until
-Intervals.icu accepts exact `Bouldering` or a separately approved plan changes
-the destination-type requirement.
+activity or metric was changed.
+
+On 2026-07-29 the athlete explicitly approved a replacement destination-type
+plan using `RockClimbing`. This is a deliberate amendment, not a silent
+fallback: `RockClimbing` is accepted by the live validator and matches the
+historical records' preserved original source label. The amendment
+invalidates every earlier approval. A fresh dry run and a new exact
+digest-bound canary approval are mandatory before another live POST.
+
+The amended dry run then passed under run
+`backfill-415d95d8bbb84545` and plan digest
+`9748597443bbd12895c0e26368533007a694c137713568e42d984c0ffe9283e5`.
+It reproduced 433 selected, 29 hidden exclusions, 404 publishable, 405
+exact-time, 28 noon-adjusted, zero owned recoveries, and zero conflicts. The
+archive remains at 1,125 records with 110 initial external links. Its verified
+backup is restricted to `0700`; the ownership ledger remains empty.
 
 ## Acceptance
 
@@ -168,8 +183,12 @@ the destination-type requirement.
 - [x] Obtain athlete canary approval and execute the canary gate; the provider
   rejected exact `Bouldering`, zero owned canaries were created, and the run
   failed closed.
-- [ ] Visually accept an exact `Bouldering` canary if provider support becomes
-  available.
+- [x] Obtain explicit athlete approval to amend the destination type to
+  `RockClimbing`.
+- [x] Execute a fresh amended dry run with exact 433/29/404 accounting and zero
+  conflicts.
+- [ ] Obtain a new exact digest-bound canary approval.
+- [ ] Visually accept an exact `RockClimbing` canary.
 - [ ] Obtain athlete application approval and execute the remaining batches.
 - [ ] Complete live no-op, sync, calendar, count/hash, and rollback-retention
   acceptance.

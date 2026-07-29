@@ -422,10 +422,11 @@ and unowned deletion.
 - Hidden historical rows: migrated local archive remains authoritative.
 - Missing update/deletion markers: fingerprints, overlap, monthly full
   reconciliation, and detail confirmation.
-- `[BLOCKED LIVE]` Bouldering payload: the manual endpoint returned HTTP 422
-  and a non-creating validation probe confirmed `Invalid type [Bouldering]`.
-  Exact `Bouldering` remains required; do not fall back silently to
-  `RockClimbing`.
+- `[AMENDED]` Bouldering payload: the manual endpoint returned HTTP 422 and a
+  non-creating validation probe confirmed `Invalid type [Bouldering]`.
+  The athlete explicitly approved `RockClimbing`, which the live validator
+  accepts and which matches the preserved original Strava source label. This
+  requires a fresh plan digest and approvals; it is not a silent fallback.
 - `[UNKNOWN]` Garmin/manual live fields: strict spec-derived fixtures plus
   controlled acceptance samples.
 - `[UNKNOWN]` bulk personal-key event semantics: keep single-event upserts.
@@ -704,8 +705,8 @@ Implementation evidence on 2026-07-28:
 
 Remaining acceptance gates:
 
-- A live Bouldering sample is provider-blocked because the manual write API
-  rejects exact `Bouldering`; manual yoga remains pending. A live
+- The historical bouldering canary is being regenerated under the explicitly
+  approved `RockClimbing` amendment; manual yoga remains pending. A live
   Garmin/Wahoo sibling pair is now proven through the duplicate-recording
   review.
 - When the athlete starts a real plan, publish an approved run and ride and
