@@ -5,12 +5,15 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 from pydantic import ValidationError
 
 from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.repository import RepositoryIO
 from resilio.core.sync_state import read_sync_state
+from resilio.integrations.intervals_icu.errors import UnsupportedSportError
+from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.reconciliation import (
     ActivityQuarantineAcknowledgement,
     ActivityQuarantineAcknowledgementLedger,
@@ -28,9 +31,7 @@ from resilio.schemas.reconciliation import (
 from resilio.schemas.repository import RepoError
 
 OVERRIDE_LEDGER_PATH = "data/state/activity_reconciliation_overrides.json"
-QUARANTINE_ACKNOWLEDGEMENT_LEDGER_PATH = (
-    "data/state/activity_quarantine_acknowledgements.json"
-)
+QUARANTINE_ACKNOWLEDGEMENT_LEDGER_PATH = "data/state/activity_quarantine_acknowledgements.json"
 
 
 class ReconciliationReviewError(RuntimeError):
@@ -57,9 +58,7 @@ def save_override_ledger(
 ) -> None:
     error = repo.write_json(OVERRIDE_LEDGER_PATH, ledger)
     if error is not None:
-        raise ReconciliationReviewError(
-            f"Unable to save activity reconciliation approval: {error}"
-        )
+        raise ReconciliationReviewError(f"Unable to save activity reconciliation approval: {error}")
 
 
 def load_quarantine_acknowledgement_ledger(
@@ -92,11 +91,12 @@ def save_quarantine_acknowledgement_ledger(
         )
 
 
-def quarantine_failure_fingerprint(payload: dict) -> str:
+def quarantine_failure_fingerprint(payload: dict[str, Any]) -> str:
     material = {
         "rule": payload["rule"],
         "error_type": payload["error_type"],
         "validation_issues": payload.get("validation_issues", []),
+        "external_source_fingerprint_sha256": payload["external_source_fingerprint_sha256"],
     }
     encoded = json.dumps(
         material,
@@ -106,16 +106,63 @@ def quarantine_failure_fingerprint(payload: dict) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def reconciliation_review_fingerprint(payload: dict) -> str:
+def _candidate_review_projection(
+    activity: CanonicalActivity,
+) -> dict[str, Any]:
+    linked_external_id = activity.origin.intervals_icu_activity_id
+    return {
+        "local_activity_id": activity.local_activity_id,
+        "status": str(activity.status),
+        "local_date": activity.occurrence.local_date.isoformat(),
+        "start_time_local": (
+            activity.occurrence.start_time_local.isoformat()
+            if activity.occurrence.start_time_local is not None
+            else None
+        ),
+        "start_time_utc": (
+            activity.occurrence.start_time_utc.isoformat()
+            if activity.occurrence.start_time_utc is not None
+            else None
+        ),
+        "sport": str(activity.sport),
+        "source_sport_type": activity.source_sport_type,
+        "name": activity.name,
+        "elapsed_seconds": activity.duration.elapsed_seconds,
+        "moving_seconds": activity.duration.moving_seconds,
+        "distance_meters": activity.distance_meters,
+        "recording_provider": str(activity.origin.recording_provider),
+        "source_recording_provider": (activity.origin.source_recording_provider),
+        "linked_external_id_sha256": (
+            hashlib.sha256(linked_external_id.encode()).hexdigest()
+            if linked_external_id is not None
+            else None
+        ),
+        "original_file_sha256": activity.origin.original_file_sha256,
+        "external_fingerprint_sha256": (activity.audit.external_fingerprint_sha256),
+        "canonical_mapping_version": (activity.audit.canonical_mapping_version),
+    }
+
+
+def reconciliation_review_fingerprint(
+    payload: dict[str, Any],
+    candidates: list[CanonicalActivity],
+) -> str:
+    by_local_id = {activity.local_activity_id: activity for activity in candidates}
+    candidate_local_ids = sorted(str(item) for item in payload.get("candidate_local_ids") or [])
     material = {
         "action": payload.get("action"),
         "rule": payload.get("rule"),
-        "external_activity_id_sha256": payload.get(
-            "external_activity_id_sha256"
-        ),
-        "candidate_local_ids": sorted(
-            str(item) for item in payload.get("candidate_local_ids") or []
-        ),
+        "external_activity_id_sha256": payload.get("external_activity_id_sha256"),
+        "external_source_fingerprint_sha256": payload.get("external_source_fingerprint_sha256"),
+        "candidate_local_ids": candidate_local_ids,
+        "candidate_state": [
+            (
+                _candidate_review_projection(by_local_id[local_id])
+                if local_id in by_local_id
+                else {"local_activity_id": local_id, "missing": True}
+            )
+            for local_id in candidate_local_ids
+        ],
         "evidence": payload.get("evidence") or {},
     }
     encoded = json.dumps(
@@ -129,16 +176,15 @@ def reconciliation_review_fingerprint(payload: dict) -> str:
 def build_mapping_quarantine_decision(
     *,
     external_activity_id_sha256: str,
+    external_source_fingerprint_sha256: str,
     error: Exception,
-) -> dict:
+) -> dict[str, Any]:
     validation_issues = []
     if isinstance(error, ValidationError):
         validation_issues = sorted(
             (
                 {
-                    "location": ".".join(
-                        str(part) for part in issue["loc"]
-                    ),
+                    "location": ".".join(str(part) for part in issue["loc"]),
                     "issue_type": str(issue["type"]),
                 }
                 for issue in error.errors(include_url=False)
@@ -152,36 +198,34 @@ def build_mapping_quarantine_decision(
         "action": "quarantine",
         "rule": "canonical_mapping_failed",
         "external_activity_id_sha256": external_activity_id_sha256,
+        "external_source_fingerprint_sha256": (external_source_fingerprint_sha256),
         "error_type": type(error).__name__,
         "validation_issues": validation_issues,
-        "acknowledgeable": bool(validation_issues),
+        "acknowledgeable": isinstance(error, UnsupportedSportError),
     }
-    payload["failure_fingerprint_sha256"] = (
-        quarantine_failure_fingerprint(payload)
-    )
+    payload["failure_fingerprint_sha256"] = quarantine_failure_fingerprint(payload)
     return payload
 
 
-def _current_quarantine(repo: RepositoryIO) -> dict:
+def _current_quarantine(repo: RepositoryIO) -> dict[str, Any]:
     run_id = read_sync_state(repo).checkpoint_run_id
     if not run_id:
         return {"ambiguous_decisions": []}
-    path = repo.resolve_path(
-        f"data/state/sync-runs/{run_id}/quarantine.json"
-    )
+    path = repo.resolve_path(f"data/state/sync-runs/{run_id}/quarantine.json")
     if not path.exists():
         return {"ambiguous_decisions": []}
     try:
         payload = json.loads(path.read_text())
     except (OSError, ValueError) as exc:
-        raise ReconciliationReviewError(
-            "Current activity review report is invalid"
-        ) from exc
-    if not isinstance(payload.get("ambiguous_decisions"), list):
+        raise ReconciliationReviewError("Current activity review report is invalid") from exc
+    if not isinstance(payload, dict) or not isinstance(
+        payload.get("ambiguous_decisions"),
+        list,
+    ):
         raise ReconciliationReviewError(
             "Current activity review report has an invalid decision list"
         )
-    return payload
+    return {str(key): value for key, value in payload.items()}
 
 
 def list_activity_quarantines(
@@ -190,10 +234,7 @@ def list_activity_quarantines(
     ledger = load_quarantine_acknowledgement_ledger(repo)
     items = []
     for raw in _current_quarantine(repo)["ambiguous_decisions"]:
-        if (
-            raw.get("action") != "quarantine"
-            or "failure_fingerprint_sha256" not in raw
-        ):
+        if raw.get("action") != "quarantine" or "failure_fingerprint_sha256" not in raw:
             continue
         external_hash = str(raw["external_activity_id_sha256"])
         fingerprint = str(raw["failure_fingerprint_sha256"])
@@ -208,8 +249,7 @@ def list_activity_quarantines(
                 acknowledgeable=bool(raw.get("acknowledgeable", False)),
                 acknowledged=bool(
                     acknowledgement is not None
-                    and acknowledgement.failure_fingerprint_sha256
-                    == fingerprint
+                    and acknowledgement.failure_fingerprint_sha256 == fingerprint
                 ),
             )
         )
@@ -225,27 +265,21 @@ def list_external_deletion_reviews(
     payload = _current_quarantine(repo)
     local_ids = payload.get("external_deletion_candidates") or []
     if not isinstance(local_ids, list):
-        raise ReconciliationReviewError(
-            "Current external deletion review queue is invalid"
-        )
+        raise ReconciliationReviewError("Current external deletion review queue is invalid")
     records = {
         activity.local_activity_id: activity
-        for activity in ActivityArchive(
-            repo.resolve_path("data/activities")
-        ).load_all()
+        for activity in ActivityArchive(repo.resolve_path("data/activities")).load_all()
     }
     items = []
     for local_id in sorted(str(item) for item in local_ids):
         activity = records.get(local_id)
         if activity is None:
-            raise ReconciliationReviewError(
-                "An external deletion candidate is missing locally"
-            )
+            raise ReconciliationReviewError("An external deletion candidate is missing locally")
         items.append(
             ExternalDeletionReviewItem(
                 local_activity_id=local_id,
-                local_date=activity.date,
-                sport=activity.sport_type,
+                local_date=activity.occurrence.local_date,
+                sport=str(activity.sport),
                 name=activity.name,
             )
         )
@@ -262,8 +296,7 @@ def acknowledge_activity_quarantine(
         (
             item
             for item in list_activity_quarantines(repo)
-            if item.external_activity_id_sha256
-            == external_activity_id_sha256
+            if item.external_activity_id_sha256 == external_activity_id_sha256
         ),
         None,
     )
@@ -272,29 +305,19 @@ def acknowledge_activity_quarantine(
             "The external activity hash is not in the current quarantine queue"
         )
     if not review.acknowledgeable:
-        raise ReconciliationReviewError(
-            "This quarantine cannot be acknowledged safely"
-        )
+        raise ReconciliationReviewError("This quarantine cannot be acknowledged safely")
     if review.failure_fingerprint_sha256 != failure_fingerprint_sha256:
-        raise ReconciliationReviewError(
-            "The quarantine failure fingerprint is no longer current"
-        )
+        raise ReconciliationReviewError("The quarantine failure fingerprint is no longer current")
 
     ledger = load_quarantine_acknowledgement_ledger(repo)
     existing = ledger.acknowledgements.get(external_activity_id_sha256)
-    if (
-        existing is not None
-        and existing.failure_fingerprint_sha256
-        == failure_fingerprint_sha256
-    ):
+    if existing is not None and existing.failure_fingerprint_sha256 == failure_fingerprint_sha256:
         action = "unchanged"
     else:
-        ledger.acknowledgements[external_activity_id_sha256] = (
-            ActivityQuarantineAcknowledgement(
-                external_activity_id_sha256=external_activity_id_sha256,
-                failure_fingerprint_sha256=failure_fingerprint_sha256,
-                acknowledged_at_utc=datetime.now(timezone.utc),
-            )
+        ledger.acknowledgements[external_activity_id_sha256] = ActivityQuarantineAcknowledgement(
+            external_activity_id_sha256=external_activity_id_sha256,
+            failure_fingerprint_sha256=failure_fingerprint_sha256,
+            acknowledged_at_utc=datetime.now(timezone.utc),
         )
         save_quarantine_acknowledgement_ledger(repo, ledger)
         action = "acknowledged"
@@ -310,9 +333,7 @@ def list_reconciliation_reviews(
 ) -> list[ReconciliationReviewItem]:
     records = {
         activity.local_activity_id: activity
-        for activity in ActivityArchive(
-            repo.resolve_path("data/activities")
-        ).load_all()
+        for activity in ActivityArchive(repo.resolve_path("data/activities")).load_all()
     }
     items: list[ReconciliationReviewItem] = []
     for raw in _current_quarantine(repo)["ambiguous_decisions"]:
@@ -325,23 +346,18 @@ def list_reconciliation_reviews(
             activity = records.get(local_id)
             if activity is None:
                 continue
-            linked_external_id = (
-                activity.origin.intervals_icu_activity_id
-            )
+            linked_external_id = activity.origin.intervals_icu_activity_id
             candidates.append(
                 ReconciliationReviewCandidate(
                     local_activity_id=local_id,
-                    local_date=activity.date,
-                    sport=activity.sport_type,
+                    local_date=activity.occurrence.local_date,
+                    sport=str(activity.sport),
                     name=activity.name,
-                    duration_seconds=activity.duration_seconds,
+                    duration_seconds=activity.duration.elapsed_seconds,
                     distance_meters=activity.distance_meters,
                     already_linked_to_different_external_id=bool(
                         linked_external_id
-                        and hashlib.sha256(
-                            linked_external_id.encode()
-                        ).hexdigest()
-                        != external_hash
+                        and hashlib.sha256(linked_external_id.encode()).hexdigest() != external_hash
                     ),
                     evidence=evidence.get(local_id, evidence),
                 )
@@ -350,7 +366,10 @@ def list_reconciliation_reviews(
             ReconciliationReviewItem(
                 external_activity_id_sha256=external_hash,
                 review_fingerprint_sha256=(
-                    reconciliation_review_fingerprint(raw)
+                    reconciliation_review_fingerprint(
+                        raw,
+                        list(records.values()),
+                    )
                 ),
                 rule=str(raw.get("rule", "ambiguous")),
                 original_file_probe=evidence.get("original_file_probe"),
@@ -368,13 +387,13 @@ def approve_reconciliation_override(
     *,
     external_activity_id_sha256: str,
     local_activity_id: str,
+    review_fingerprint_sha256: str,
 ) -> ReconciliationOverrideResult:
     review = next(
         (
             item
             for item in list_reconciliation_reviews(repo)
-            if item.external_activity_id_sha256
-            == external_activity_id_sha256
+            if item.external_activity_id_sha256 == external_activity_id_sha256
         ),
         None,
     )
@@ -382,9 +401,9 @@ def approve_reconciliation_override(
         raise ReconciliationReviewError(
             "The external activity hash is not in the current review queue"
         )
-    if local_activity_id not in {
-        candidate.local_activity_id for candidate in review.candidates
-    }:
+    if review.review_fingerprint_sha256 != review_fingerprint_sha256:
+        raise ReconciliationReviewError("The activity review fingerprint is no longer current")
+    if local_activity_id not in {candidate.local_activity_id for candidate in review.candidates}:
         raise ReconciliationReviewError(
             "The local activity is not a current candidate for this review"
         )
@@ -409,18 +428,21 @@ def approve_reconciliation_override(
         return ReconciliationOverrideResult(
             external_activity_id_sha256=external_activity_id_sha256,
             local_activity_id=local_activity_id,
+            review_fingerprint_sha256=review_fingerprint_sha256,
             action="unchanged",
         )
 
     ledger.overrides[external_activity_id_sha256] = ReconciliationOverride(
         external_activity_id_sha256=external_activity_id_sha256,
         local_activity_id=local_activity_id,
+        review_fingerprint_sha256=review_fingerprint_sha256,
         approved_at_utc=datetime.now(timezone.utc),
     )
     save_override_ledger(repo, ledger)
     return ReconciliationOverrideResult(
         external_activity_id_sha256=external_activity_id_sha256,
         local_activity_id=local_activity_id,
+        review_fingerprint_sha256=review_fingerprint_sha256,
         action="approved",
     )
 
@@ -436,8 +458,7 @@ def exclude_duplicate_reconciliation(
         (
             item
             for item in list_reconciliation_reviews(repo)
-            if item.external_activity_id_sha256
-            == external_activity_id_sha256
+            if item.external_activity_id_sha256 == external_activity_id_sha256
         ),
         None,
     )
@@ -446,9 +467,7 @@ def exclude_duplicate_reconciliation(
             "The external activity hash is not in the current review queue"
         )
     if review.review_fingerprint_sha256 != review_fingerprint_sha256:
-        raise ReconciliationReviewError(
-            "The activity review fingerprint is no longer current"
-        )
+        raise ReconciliationReviewError("The activity review fingerprint is no longer current")
     if len(review.candidates) != 1:
         raise ReconciliationReviewError(
             "Only a unique duplicate-recording candidate can be excluded"
@@ -467,20 +486,17 @@ def exclude_duplicate_reconciliation(
     if (
         existing is not None
         and existing.local_activity_id == local_activity_id
-        and existing.review_fingerprint_sha256
-        == review_fingerprint_sha256
+        and existing.review_fingerprint_sha256 == review_fingerprint_sha256
     ):
         action = "unchanged"
     else:
         ledger.overrides.pop(external_activity_id_sha256, None)
-        ledger.exclusions[external_activity_id_sha256] = (
-            ReconciliationExclusion(
-                external_activity_id_sha256=external_activity_id_sha256,
-                local_activity_id=local_activity_id,
-                review_fingerprint_sha256=review_fingerprint_sha256,
-                reason="duplicate_external_recording",
-                excluded_at_utc=datetime.now(timezone.utc),
-            )
+        ledger.exclusions[external_activity_id_sha256] = ReconciliationExclusion(
+            external_activity_id_sha256=external_activity_id_sha256,
+            local_activity_id=local_activity_id,
+            review_fingerprint_sha256=review_fingerprint_sha256,
+            reason="duplicate_external_recording",
+            excluded_at_utc=datetime.now(timezone.utc),
         )
         save_override_ledger(repo, ledger)
         action = "excluded"

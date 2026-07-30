@@ -1,93 +1,189 @@
 # Intervals.icu integration
 
-Intervals.icu is Resilio's sole external activity and workout-calendar
-integration. External transport models stop at the integration boundary;
-coaching, load, metrics, profile analysis, and planning operate on
-provider-neutral local schemas.
+Intervals.icu is Resilio’s sole external source for completed activity
+analysis, wellness/training state, sport settings, and planned-workout
+calendar readback.
 
-## Runtime boundary
+## Credential and transport boundary
+
+The only production secret is `INTERVALS_ICU_API_KEY` in `.env.local`.
+Non-secret transport settings live under `intervals_icu` in
+`config/settings.yaml`. The client:
+
+- uses strict request and response DTOs;
+- distinguishes configuration, authentication, authorization, rate limit,
+  not-found, transport, unsupported-sport, and invalid-payload failures;
+- applies bounded retries only to safe reads;
+- redacts credentials and never persists raw provider payloads;
+- supports injected transports and sleepers for deterministic tests.
+
+## Completed-state sync
+
+`resilio sync` reads activity summaries and details, daily wellness, and sport
+settings into a staged coordinated transaction.
 
 ```text
-INTERVALS_ICU_API_KEY
-        |
-        v
-integrations/intervals_icu
-  client -> strict DTOs -> activity mapper
-        |
-        v
-canonical local activity archive
-        |
-        +-> local load, metrics, profile, and coaching
-        |
-        +-> ownership-safe workout publication
+activity DTO -> canonical activity v4
+wellness DTO -> WellnessDay
+sport settings DTO -> SportSettingsSnapshot
+                  |
+                  v
+validated staging -> atomic activity switch + coordinated state writes
+                  -> completion-manifest reconciliation -> checkpoint
 ```
 
-The only production credential is `INTERVALS_ICU_API_KEY` in `.env.local`.
-Non-secret settings live under `intervals_icu` in `config/settings.yaml`.
-Transport errors are typed and redacted. Automated tests inject fake
-credentials and transports; they must not read `.env.local` or contact the
-live service.
+The sync:
 
-## Completed activities
+- splits date ranges so provider result caps cannot silently truncate history;
+- validates strict DTOs before mapping;
+- quarantines unknown sports as explicitly acknowledgeable mapping gaps while
+  invalid DTO or canonical records remain blocking;
+- uses conservative overlap reconciliation;
+- never infers deletion from an absent list row;
+- records complete date windows, partial-attempt gaps, and explicit source
+  exclusions only after their applicable durable transition;
+- records bounded progress for diagnosis; an interrupted run discards
+  incomplete staging and restarts its requested range on the next invocation.
 
-`resilio sync` imports completed activities through strict DTO validation,
-maps them to canonical activity v2 records, quarantines invalid or ambiguous
-rows, and atomically commits the archive, metrics, and sync state. The local
-archive remains authoritative for coaching calculations.
+Sync state is strict schema v3. Coverage authority is only
+`complete_activity_windows`, `source_coverage_gaps`, and explicit exclusions;
+obsolete single-window compatibility fields are neither read nor written.
 
-Normal sync uses an overlap window so late external edits can be detected.
-`resilio sync --full` performs complete reconciliation. External deletion is
-never inferred from a missing list row: an exact detail request must confirm
-absence, and deletion candidates require explicit review before a local
-tombstone is committed.
+An exclusion is evidence, not an inferred deletion. Hidden provider records,
+athlete-acknowledged unsupported mappings, and reviewed duplicate
+representations have distinct reasons. A reviewed duplicate is bound to both
+the local canonical activity identity and the exact sanitized review
+fingerprint. A later provider or candidate change invalidates that decision.
 
-Both external `Bouldering` and `RockClimbing` map to canonical sport `climb`.
-Intervals.icu athlete RPE is read from `icu_rpe`, with
-`perceived_exertion` retained only as an inbound fallback when athlete RPE is
-absent.
+The external fingerprint hashes mapped provider facts only. Canonical mapping
+version 7 is stored separately, so a mapper release remaps unchanged provider
+records without pretending their source facts changed.
 
-## Workout publication
+Both provider `Bouldering` and `RockClimbing` map to canonical `climb`.
+Athlete RPE is read with explicit provenance. A provider RPE without confirmed
+duration-based session-RPE remains distinct from athlete-confirmed subjective
+effort.
 
-Resilio publishes structured run and cycling workouts under deterministic
-external IDs. The local publication manifest and exact remote read-back form
-the ownership proof. Update, reschedule, and delete operations refuse
-unowned, ambiguous, or remotely drifted events. Exact deletion disables
-related-event cascading.
+## Native analyzed values
 
-Garmin and Wahoo forwarding is configured in Intervals.icu. Resilio does not
-connect to those device services directly.
+Canonical activity v4 may preserve:
 
-## Historical climbing publication
+- aerobic load points and calculation method;
+- relative intensity, aerobic decoupling, polarization index, and TRIMP when
+  the provider supplies them;
+- native heart-rate recovery with sample indices, offsets in seconds, heart
+  rates in beats per minute, average power in watts, and recovery in beats per
+  minute;
+- native applicability flags that state whether time, power, heart rate,
+  velocity, or pace analysis was ignored;
+- heart rate, power, cadence, pace, elevation, device, and source fields with
+  explicit units;
+- provider intervals as typed activity segments;
+- native power-zone time as provider-ID/duration-second objects; provider IDs
+  are preserved and linked to captured names and bounds only by an exact,
+  unambiguous name match; fingerprinting is independent of provider response
+  order and canonical zones are ordered by resolved zone index followed by
+  provider ID;
+- native heart-rate, pace, or grade-adjusted-pace zone time as
+  duration-second arrays whose ordinal positions are bound to captured upper
+  bounds, optional native names, units, coverage percentage, and matching
+  analysis-settings SHA-256.
 
-The one-time historical climbing publication is complete:
+The list operation validates only its required summary identity and ordering
+fields; full analyzed facts are accepted only from the detail operation.
+Polarization is preserved as a signed, finite provider value. Provider sensor
+spikes such as extreme maximum speed remain source evidence rather than
+causing the entire activity to disappear.
 
-- 404 activities have exact verified ownership receipts;
-- 29 pre-existing external matches remain unowned and untouched;
-- 35 missing remote RPE values were separately approved and set to 5;
-- 369 existing RPE values were preserved;
-- repeat application and repeat RPE repair are verified no-ops.
+Wellness preserves provider fitness, fatigue, ramp, contribution values,
+recovery observations, provider readiness, VO2 max, and the upstream
+hydration-volume value without asserting an undocumented physical unit. Sport
+settings
+preserve sport-scoped FTP, LTHR, maximum heart rate, threshold speed in meters
+per second, the separate pace display preference, named zones,
+load/time-in-zone/workout priorities, and a source fingerprint.
 
-The provider accepts manual `RockClimbing` and displays it as `Climbing` in
-the calendar. The publication never changes local activity facts, historical
-provenance, calculated load, metrics, profile data, or private notes.
+Resilio does not recompute a missing native analyzed value. Missingness is a
+first-class state.
 
-The verified backup, ownership ledger, and rollback executable must remain
-available through 2026-10-27. Until then:
+Native applicability is retained alongside the analysis so absence and
+provider-declared inapplicability are not conflated. Polarization is not
+reinterpreted as zone-distribution evidence because the provider response does
+not prove the zone basis used for that scalar.
 
-- use `resilio activity-backfill status` for read-only inspection;
-- use `resume` only to recover a durable pending intent;
-- use `rollback` only with the exact approved plan and canary digests;
-- never delete an external activity without exact ledger and remote ownership
-  proof.
+Activity detail does not claim activity-time fitness, fatigue, form, or
+temperature when those facts are absent from the validated provider contract.
+Fitness and fatigue history come from dated wellness records. A provider
+session-RPE load retains its provider-defined duration basis; athlete-entered
+session-RPE uses an explicit elapsed-time basis.
 
-After 2026-10-27, removing the one-time executable and verified backup
-requires explicit athlete approval. The provider-neutral ownership receipts
-and canonical external links remain durable state.
+## Athlete-profile candidates
 
-## Operational references
+Sport-setting thresholds and the latest wellness resting heart rate or VO2 max
+are exposed through `resilio profile candidates`. Every candidate includes its
+unit, sport scope, settings identity or observation date, provider update time,
+and temporary flag. This surface is read-only; athlete confirmation is
+required before changing athlete-owned profile facts.
 
-- [Completed-activity sync](../coaching/cli/cli_sync.md)
-- [Historical activity backfill](../coaching/cli/cli_activity_backfill.md)
-- [Authentication](../coaching/cli/cli_auth.md)
-- [API boundary](../specs/api_layer.md)
-- [Architecture map](architecture-map.md)
+## VDOT evidence provenance
+
+A VDOT race proposal may reference synchronized evidence only through the
+canonical local activity ID and the exact Intervals.icu source fingerprint.
+Approval and every later use reverify that the activity remains active,
+running, and identical in local date, elapsed seconds, timezone, and source
+fingerprint. Personal-best proposals instead reverify exact distance, date,
+and elapsed seconds against the athlete-confirmed profile. Proposal and
+approval dates are evaluated in the declared performance or athlete training
+timezone, never the host machine’s date.
+
+## Planned-workout publication
+
+Resilio publishes typed run and cycling workouts with deterministic external
+identities. Before mutation it verifies the relevant sport settings and
+forwarding configuration. After create or update it reads the event back and
+persists provider-computed planned aerobic load, relative intensity, fitness,
+and fatigue when supplied.
+
+The publication manifest plus exact remote UID/external ID is the ownership
+proof. Update, reschedule, and delete refuse ambiguous, unowned, or drifted
+events. Completed-workout adherence accepts only the provider’s exact paired
+event identity; date/sport/duration resemblance remains a report-only
+candidate.
+
+Only a workout resolved from the current planning-state aggregate may be
+published. The aggregate must have a fresh planning-profile fingerprint, an
+approved macro skeleton, an active applied-week approval, and an unchanged
+applied-workout SHA-256.
+
+Historical adherence is revision-aware: retired plan revisions retain their
+macro approval and immutable applied-week snapshots. The resolver compares
+approval, invalidation, and retirement instants with each workout's scheduled
+UTC instant using the recorded IANA timezone. It refuses competing revisions,
+missing approvals, invalid or ambiguous local wall times, or changed
+approval-bound content.
+
+## Crash consistency
+
+Completed sync writes a durable journal before switching state. Its phases
+record preparation, previous-archive displacement, staged-archive activation,
+sidecar application, and commit. Startup rolls back any pre-commit phase and
+rolls forward a durable commit. File contents and directory entries are
+flushed before the next phase is recorded.
+
+Planning-relevant profile changes use a separate durable transaction journal
+for the athlete profile and dependent planning aggregate. Recovery rolls back
+incomplete phases and rolls forward the committed pair.
+
+## Operational commands
+
+- `poetry run resilio auth status`
+- `poetry run resilio sync`
+- `poetry run resilio sync --full`
+- `poetry run resilio sync --status`
+- `poetry run resilio activity-review ...`
+- `poetry run resilio profile candidates`
+- `poetry run resilio coach history --as-of <DATE> --weeks <COUNT>`
+- `poetry run resilio workout ...`
+
+See the [CLI index](../coaching/cli/index.md) and
+[architecture map](architecture-map.md).

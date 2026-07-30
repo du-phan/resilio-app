@@ -3,10 +3,9 @@
 Ensures all training plans follow Monday-Sunday week structure.
 """
 from datetime import date, timedelta
-from typing import Tuple
 
 
-def get_next_monday(from_date: date = None) -> date:
+def get_next_monday(from_date: date | None = None) -> date:
     """
     Get the next Monday from a given date.
 
@@ -38,7 +37,7 @@ def get_next_monday(from_date: date = None) -> date:
     return from_date + timedelta(days=days_until_monday)
 
 
-def get_week_boundaries(week_start: date) -> Tuple[date, date]:
+def get_week_boundaries(week_start: date) -> tuple[date, date]:
     """
     Get Monday-Sunday boundaries for a week.
 

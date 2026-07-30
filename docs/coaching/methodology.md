@@ -1,634 +1,191 @@
-# Training Methodology Reference
-
-Comprehensive guide to the training principles, metrics, and methodologies used in Resilio.
-
-## Table of Contents
-
-- [Key Training Metrics](#key-training-metrics)
-- [Sport Multipliers & Load Model](#sport-multipliers--load-model)
-- [Adaptation Triggers](#adaptation-triggers)
-- [Training Guardrails](#training-guardrails)
-- [Evidence-Based Methodologies](#evidence-based-methodologies)
-- [The Toolkit Paradigm](#the-toolkit-paradigm)
-
----
-
-## Key Training Metrics
-
-### CTL (Chronic Training Load)
-
-**Definition**: 42-day exponentially weighted average of daily training load
-
-**Represents**: "Fitness" - your aerobic base and training capacity
-
-| CTL Value | Zone         | Interpretation                   | When to Use             |
-| --------- | ------------ | -------------------------------- | ----------------------- |
-| < 20      | Beginner     | New to training                  | Setting initial volumes |
-| 20-35     | Recreational | Regular recreational athlete     | Moderate training loads |
-| 35-50     | Competitive  | Serious recreational/competitive | Higher training volumes |
-| 50-70     | Advanced     | Advanced competitive athlete     | Peak training periods   |
-| > 70      | Elite        | Elite/professional level         | Elite training volumes  |
-
-> **v0 note**: CLAUDE.md uses tighter zones (<30/30-45/45-60/60-75/>75) calibrated for the v0 athlete population. Use CLAUDE.md zones for coaching decisions; the zones above are the full theoretical scale.
-
-**Use for**:
-
-- Assess overall fitness level
-- Set volume baselines for training plans
-- Understand training capacity
-- Track long-term fitness trends
-
-**Calculation**:
-
-```
-CTL_today = CTL_yesterday + (today_load - CTL_yesterday) / 42
-```
-
----
-
-### ATL (Acute Training Load)
-
-**Definition**: 7-day exponentially weighted average of daily training load
-
-**Represents**: "Fatigue" - your recent training stress
-
-**Use for**:
-
-- Gauge current fatigue state
-- Understand recent training stress
-- Determine if you've been pushing hard lately
-
-**Calculation**:
-
-```
-ATL_today = ATL_yesterday + (today_load - ATL_yesterday) / 7
-```
-
-**Key insight**: ATL responds quickly to training changes, while CTL changes slowly. This creates the foundation for understanding form (TSB).
-
----
-
-### TSB (Training Stress Balance)
-
-**Definition**: CTL - ATL
-
-**Represents**: "Form" - the balance between fitness and fatigue
-
-| TSB Range   | State            | Interpretation                     | When to Use                         |
-| ---------- | ---------------- | ---------------------------------- | ----------------------------------- |
-| < -25      | Overreached      | High fatigue, need recovery        | Consider rest week                  |
-| -25 to -10 | Productive       | Optimal training zone              | Continue building                   |
-| -10 to +5  | Optimal          | Balanced for normal training       | Regular training                    |
-| +5 to +15  | Fresh            | Quality-ready                       | Schedule quality sessions           |
-| +15 to +25 | Race Ready       | Peak freshness for A-priority races | Race week / key event               |
-| > +25      | Detraining Risk  | Very fresh; risk of lost fitness   | Resume training if sustained        |
-
-**Use for**:
-
-- Determine readiness for quality work or racing
-- Plan training intensity
-- Decide when to rest vs push
-- Time your peak for race day
-
-**Key insight**: You can't be fit and fresh simultaneously. Training drives TSB negative (fatigue > fitness), rest brings it positive (fitness > fatigue).
-
----
-
-### ACWR (Acute:Chronic Workload Ratio)
-
-**Definition**: (7-day total load) / (28-day average daily load × 7)
-
-**Represents**: Load spike indicator from training load changes (relative signal)
-
-| ACWR Range | Zone    | Load Spike Signal     | When to Use               |
-| ---------- | ------- | --------------------- | ------------------------- |
-| 0.8-1.3    | Safe    | Stable load           | Continue current training |
-| 1.3-1.5    | Caution | Elevated recent load  | Consider modification     |
-| > 1.5      | Danger  | Significant load spike | Reduce load if needed     |
-
-**Use for**:
-
-- Evaluate load spikes from recent training
-- Guide adaptation decisions
-- Manage training progressions safely
-
-**Note**: ACWR is a useful *relative* signal but does not predict injury. Use it with readiness, context, and athlete feedback.
-
-**Calculation**:
-
-```
-acute_load = sum(last_7_days_load)
-chronic_load = average(last_28_days_load) × 7
-ACWR = acute_load / chronic_load
-```
-
----
-
-### Readiness Score (0-100)
-
-**Definition**: Weighted combination of objective factors
-
-**Current implementation (objective-only, v0)**:
-- Uses TSB (40%) + load trend (40%) only
-- Score cap: **max 65**
-- Confidence: **LOW** (no subjective inputs in v0)
-
-| Score | Level     | Interpretation              | When to Use          |
-| ----- | --------- | --------------------------- | -------------------- |
-| < 35  | Very Low  | Significant fatigue/illness | Force rest           |
-| 35-50 | Low       | Moderate fatigue            | Downgrade quality    |
-| 50-70 | Moderate  | Normal training state       | Proceed as planned   |
-| 70-85 | Good      | Fresh, ready for work       | Quality sessions OK  |
-| > 85  | Excellent | Peak readiness              | Hard sessions, races |
-
-> **v0 note**: In v0, readiness is objective-only (no subjective inputs) and capped at 65. CLAUDE.md uses v0-calibrated zones (≤25/25-40/40-55/55-65/>65). Use CLAUDE.md zones for coaching decisions; the zones above are the full theoretical scale for when subjective inputs are added.
-
-**Use for**:
-
-- Daily go/no-go decision for hard workouts
-- Overall training readiness assessment
-- Balancing metrics with subjective feel
-
-**Key insight**: Readiness synthesizes objective freshness signals (TSB + recent load trend) to guide day-to-day decisions in v0.
-
----
-
-## Sport Multipliers & Load Model
-
-### Two-Channel Load Model
-
-Resilio uses a **two-channel load model** to accurately account for multi-sport training:
-
-1. **Systemic load** (`systemic_load_au`): Cardio + whole-body fatigue → feeds CTL/ATL/TSB/ACWR
-2. **Lower-body load** (`lower_body_load_au`): Leg strain + impact → gates quality/long runs
-
-**Why two channels?**
-
-Traditional single-channel models treat all activities equally, causing problems like:
-
-- Hard climbing session → system thinks legs are trashed → blocks tomorrow's easy run
-- Reality: Upper-body fatigue doesn't prevent easy running
-
-The two-channel model prevents this by separating:
-
-- **Systemic fatigue** (affects everything)
-- **Lower-body fatigue** (only affects running quality/long runs)
-
-### Load Calculation
-
-Base effort uses a **TSS-equivalent** formula (Coggan/TrainingPeaks) so that loads are comparable across sports and align with common training-load standards. Intensity factor (IF) is derived from RPE (e.g. RPE 7–8 ≈ threshold = 0.95–1.0).
-
-```
-base_effort_au = hours × IF² × 100   (TSS-equivalent; IF from RPE mapping)
-systemic_load_au = base_effort_au × systemic_multiplier
-lower_body_load_au = base_effort_au × lower_body_multiplier
-```
-
-Example: 60 min at RPE 3 (easy) ≈ 42 AU; 60 min at RPE 8 (threshold) = 100 AU.
-
-### Sport Multipliers Table
-
-| Sport                | Systemic | Lower Body | Notes                         |
-| -------------------- | -------- | ---------- | ----------------------------- |
-| Running (road/track) | 1.00     | 1.00       | Baseline for all calculations |
-| Running (treadmill)  | 1.00     | 0.90       | Reduced impact                |
-| Trail running        | 1.05     | 1.10       | Increased effort + impact     |
-| Cycling              | 0.85     | 0.35       | Low leg impact, high cardio   |
-| Swimming             | 0.70     | 0.10       | Minimal leg strain            |
-| Climbing/bouldering  | 0.60     | 0.10       | Upper-body dominant           |
-| Strength (general)   | 0.55     | 0.40       | Whole-body fatigue            |
-| Hiking               | 0.60     | 0.50       | Moderate impact               |
-| CrossFit/metcon      | 0.75     | 0.55       | High intensity                |
-| Yoga (flow)          | 0.35     | 0.10       | Low intensity recovery        |
-| Yoga (restorative)   | 0.00     | 0.00       | Pure recovery                 |
-
-### Validated Examples (TSS-equivalent formula)
-
-| Activity | Details           | Systemic Load | Lower-Body Load |
-| -------- | ----------------- | ------------- | --------------- |
-| Running  | 7km, 43min, RPE 7 | ~65 AU        | ~65 AU          |
-| Climbing | 105min, RPE 5     | ~71 AU        | ~12 AU          |
-| Yoga     | 28min, RPE 2      | ~5 AU         | ~1 AU           |
-
-**Key insight**: Climbing generates similar systemic load to a moderate run but much less lower-body load. This allows easy running the next day without triggering lower-body fatigue warnings.
-
----
-
-## Adaptation Triggers
-
-M11 (Adaptation Engine) detects physiological triggers that warrant coaching attention. These are **data signals**, not decisions. Claude Code interprets triggers with athlete context and presents options.
-
-| Trigger              | Threshold           | Severity    | Typical Response                    | Use Case                    |
-| -------------------- | ------------------- | ----------- | ----------------------------------- | --------------------------- |
-| ACWR_HIGH_RISK       | > 1.5               | 🔴 HIGH     | Downgrade or skip workout           | Load spike caution          |
-| ACWR_ELEVATED        | > 1.3               | 🟡 MODERATE | Consider downgrade, discuss options | Cautionary signal           |
-| READINESS_VERY_LOW   | < 35                | 🔴 HIGH     | Force rest or easy recovery         | Severe fatigue/illness      |
-| READINESS_LOW        | < 50                | 🟡 LOW      | Downgrade quality workouts          | Moderate fatigue            |
-| TSB_OVERREACHED      | < -25               | 🔴 HIGH     | Reduce training load immediately    | Overtraining prevention     |
-| LOWER_BODY_LOAD_HIGH | Dynamic (CTL-based) | 🟡 MODERATE | Delay running quality/long runs     | Multi-sport load management |
-| SESSION_DENSITY_HIGH | 2+ hard/7 days      | 🟡 MODERATE | Space out quality sessions          | Hard/easy discipline        |
-
-### Toolkit Approach
-
-**NOT**: "ACWR > 1.5 → auto-downgrade workout" (algorithm)
-
-**YES**:
-
-1. M11 returns trigger data + risk assessment
-2. Claude Code interprets with athlete context (M13 memories, conversation history)
-3. Presents options with reasoning
-4. Athlete decides
-
-### Example Trigger Handling
-
-**Scenario**: ACWR 1.35 (elevated) + readiness 45 (low) + tempo run scheduled
-
-**Claude Code Response**:
-
-```
-Your ACWR is 1.35 (slightly elevated - caution zone) and readiness is 45 (low).
-Tempo run scheduled today. What would you prefer?
-
-A) Easy 30min run (safest)
-   - Lower risk, maintains aerobic base
-   - ACWR stays manageable
-
-B) Move tempo to Thursday
-   - Gives you 2 extra recovery days
-   - You climbed yesterday (elevated lower-body load)
-
-C) Proceed with tempo as planned
-   - Moderate risk (heuristic)
-   - Your form is good (TSB -8)
-
-I'm leaning toward A or B given your readiness.
-```
-
----
-
-## Training Guardrails
-
-Evidence-based training rules provided as **validation tools**. Claude Code decides enforcement based on athlete context.
-
-| Guardrail                    | Rule                                          | Rationale                                       | Enforcement                  |
-| ---------------------------- | --------------------------------------------- | ----------------------------------------------- | ---------------------------- |
-| 80/20 intensity distribution | ~80% low intensity, ≤20% moderate+high        | Maximizes aerobic development, minimizes injury | ≥3 run days/week             |
-| ACWR safety                  | ACWR > 1.5 = significant load spike           | Load spike indicator (not a prediction)         | M11 detects → Claude decides |
-| Long run caps                | ≤25-30% of weekly run volume, ≤2.5 hours      | Prevents overuse injuries                       | Weekly validation            |
-| Max session duration         | ≤ athlete's `max_time_per_session_minutes`    | Keeps training feasible + respects constraints  | Weekly validation            |
-| Hard/easy separation         | No back-to-back high-intensity (RPE ≥7)       | Recovery between quality sessions               | Across all sports            |
-| T/I/R volume limits          | Threshold ≤10%, Intervals ≤8%, Repetition ≤5% | Prevents excessive intensity                    | Of weekly mileage            |
-| Recovery weeks               | Every 4th week at ~70% volume                 | Consolidates adaptations                        | During base/build phases     |
-
-**Key Principle**: Guardrails are **validated** by modules, **enforced** by Claude Code. The system returns violations with context; Claude Code reasons about whether to enforce, override, or discuss with athlete.
-
-### Minimum Workout Duration Guardrails
-
-Minimum workout durations prevent unrealistic short workouts when weekly volume is low.
-
-**Defaults (unless profile-aware values are available):**
-
-- Easy runs: 30 minutes / 5 km (or 80% of athlete's typical easy run)
-- Long runs: 60 minutes / 8 km (or 80% of athlete's typical long run)
-- Tempo runs: 40 minutes total (including warmup/cooldown)
-- Intervals: 35 minutes total (including warmup/cooldown)
-
-**Profile-aware minimums**: Use `resilio profile analyze` to populate `typical_*` fields so minimums scale to the athlete's history. If weekly volume is too low to meet minimums at the current run frequency, reduce run count rather than prescribing unrealistic short runs.
-
-**Max session constraint**: Always cap workouts at the athlete's `max_time_per_session_minutes`. If the weekly volume target can't be achieved within that cap, lower weekly volume or adjust constraints (never schedule over-cap sessions).
-
-### 80/20 Intensity Distribution
-
-**Evidence**: Matt Fitzgerald's research shows elite endurance athletes spend ~80% of training at low intensity (Zones 1-2) and ≤20% at moderate/high intensity (Zones 3-5).
-
-**Application**:
-
-- Calculate weekly intensity distribution
-- Flag violations: "Your training is 65/35 this week - too much intensity"
-- Suggest adjustments: "Replace one tempo with easy run"
-
-**Enforcement**: Only applies when running ≥3 days/week (need volume for distribution to matter)
-
----
-
-## Evidence-Based Methodologies
-
-Resilio synthesizes principles from multiple proven training systems:
-
-### 1. Jack Daniels' VDOT System
-
-**Core Idea**: Pace zones calculated from recent race performances. VDOT represents current running fitness level.
-
-**Application**: All pace prescriptions use VDOT-based zones:
-
-- **E** (Easy): Aerobic base building, recovery runs
-- **M** (Marathon): Race pace for marathon distance
-- **T** (Threshold): Lactate threshold, "comfortably hard"
-- **I** (Intervals): VO2max development, hard intervals
-- **R** (Repetition): Speed/economy, very hard repeats
-
-**Example**: VDOT 48 (competitive recreational)
-
-- E: 6:00-6:30/km
-- M: 5:15-5:30/km
-- T: 4:50-5:10/km
-- I: 4:20-4:40/km
-- R: 3:50-4:10/km
-
-**Reference**: _Daniels' Running Formula_ (2014)
-
----
-
-### 2. Pfitzinger
-
-**Core Ideas**:
-
-- Periodization (base → build → peak → taper)
-- Progressive long run development
-- Recovery week cycles
-
-**Application**:
-
-**Periodization Structure**:
-
-- **Base**: Build aerobic foundation, all easy/moderate
-- **Build**: Add race-specific work (tempo, intervals)
-- **Peak**: Highest volume + intensity
-- **Taper**: Reduce volume, maintain intensity, peak for race
-
-**Long Run Progression**:
-
-- Start: 60-90 minutes
-- Build gradually: +10-15 minutes every 2-3 weeks
-- Cap: 25-30% of weekly volume, ≤2.5 hours
-- Low-frequency adjustment: With **≤2 run days/week**, long runs often reach **45-55% of weekly volume** to make total volume feasible (still respect time cap).
-
-**Recovery Weeks**:
-
-- Every 4th week during base/build
-- ~70% of previous week's volume
-- Maintains intensity but reduces volume
-- Consolidates adaptations
-
-**Reference**: _Advanced Marathoning_ (2009)
-
----
-
-### 3. 80/20 (Matt Fitzgerald)
-
-**Core Idea**: Intensity distribution - most training should be easy
-
-**Evidence**:
-
-- Study of elite endurance athletes across sports
-- ~80% of training at low intensity (Zones 1-2)
-- ≤20% at moderate/high intensity (Zones 3-5)
-
-**Application**:
-
-- Validate weekly intensity distribution
-- Flag violations: "You're running 65/35 - too much moderate intensity"
-- Enforce easy runs: "RPE 4-5, conversational pace"
-- Limit quality: Only 1-2 hard sessions per week
-
-**Common Mistake**: "Moderate-intensity rut" - everything at medium effort
-
-- Easy runs too hard (RPE 6 instead of 4-5)
-- Hard runs not hard enough (RPE 7 instead of 8-9)
-- Result: Poor aerobic development, high injury risk, suboptimal performance
-
-**Reference**: _80/20 Running_ (2014)
-
----
-
-### 4. FIRST (Run Less, Run Faster)
-
-**Core Idea**: Low-frequency, high-quality running (3 days/week)
-
-**Target Athlete**: Multi-sport athletes, time-constrained runners
-
-**Application**: When running ≤2-3 days/week:
-
-- Focus on quality: each run has purpose
-- Key workouts: long run, tempo, intervals
-- Cross-training fills aerobic volume (cycling, swimming, etc.)
-
-**Resilio Adaptation**:
-
-- Use FIRST structure for low-frequency running
-- Account for systemic load from other sports (climbing, cycling, etc.)
-- Account for lower-body load separately (gates quality/long runs)
-- **Example**: 2 run days/week + 2 climbing days
-  - Run 1: Long run (builds endurance)
-  - Run 2: Tempo or intervals (builds speed)
-  - Climbing: Adds systemic load without lower-body impact
-
-**Reference**: _Run Less, Run Faster_ (2007)
-
----
-
-## The Toolkit Paradigm
-
-### Core Innovation: AI Reasoning + Computational Tools
-
-**THE PARADIGM SHIFT**: Every other training app uses hardcoded algorithms to generate plans and suggestions. Resilio uses **AI reasoning + computational tools** to enable truly personalized, context-aware, explainable coaching.
-
-### Traditional Apps (Algorithm-Driven)
-
-```
-Algorithm: generate_plan(profile, goal, weeks) → TrainingPlan
-Result: Rigid, one-size-fits-all plan
-Problem: Can't handle "I climb Tuesdays, have knee history, prefer morning runs"
-```
-
-**Limitations**:
-
-- Can't reason about athlete-specific context
-- Can't explain "why" beyond pre-programmed messages
-- Can't handle edge cases or multi-sport complexity
-- Can't learn from conversation or memories
-
-### Resilio (Toolkit-Driven)
-
-```
-Toolkit: calculate_periodization(), validate_guardrails(), create_workout()
-Claude Code: Uses tools + expertise + athlete context → designs plan
-Result: Personalized, flexible, explainable
-```
-
-**Advantages**:
-
-- Reasons about athlete context (knee history, climbing Tuesdays, etc.)
-- Explains rationale: "ACWR 1.35 + yesterday's climbing → easy run safer"
-- Handles edge cases: "You mentioned tight knee - let's skip tempo"
-- Learns from memories: "You prefer morning runs - scheduling for 6 AM"
-
-### Decision Framework
-
-**Ask: "Is Claude Code better at this?"**
-
-| Task Type                           | Who Handles It  | Why                                                        |
-| ----------------------------------- | --------------- | ---------------------------------------------------------- |
-| **Quantitative** (pure math)        | Package modules | Formulas, lookup tables, deterministic logic               |
-| **Qualitative** (judgment, context) | Claude Code     | Natural language understanding, reasoning, personalization |
-
-**Quantitative Examples** (Module handles):
-
-- CTL/ATL/TSB calculation (formula)
-- HR zone mapping (HR → zone lookup)
-- ACWR computation (7-day / 28-day ratio)
-- Load calculation (RPE × duration × multiplier)
-- Pace conversions (VDOT tables)
-- Guardrail validation (check 80/20, long run caps)
-
-**Qualitative Examples** (Claude Code handles):
-
-- RPE conflict resolution ("HR says 7, pace says 5, text says 4 → use which?")
-- Injury assessment ("Is 'tight knee' pain or stiffness?")
-- Training plan design ("Where to place quality runs around climbing schedule?")
-- Adaptation decisions ("ACWR 1.5 → downgrade, move, or proceed?")
-- Rationale generation ("Why this workout today for YOU?")
-
-### Example: "What should I do today?" Flow
-
-```
-User: "what should I do today?"
-    │
-    ▼
-Claude Code: understands intent, uses toolkit to coach
-    │
-    ▼ calls toolkit functions
-1. get_current_metrics() → CTL/ATL/TSB/ACWR/readiness with interpretations
-2. get_todays_workout() → planned workout from athlete's plan
-3. detect_adaptation_triggers(workout, metrics) → trigger data
-4. assess_override_risk(triggers) → risk assessment
-5. load_memories() → athlete history, preferences, patterns
-    │
-    ▼
-Claude Code: reasons with full context
-    - Metrics show: CTL 44 (solid fitness), TSB -8 (productive zone), ACWR 1.3 (caution)
-    - Triggers: ACWR elevated, lower-body load high yesterday (climbing)
-    - Memories: "Athlete climbs Tuesdays", "Knee history: sensitive after 18km+"
-    - Risk: Moderate (heuristic index)
-    │
-    ▼
-Claude Code: presents coaching decision with reasoning
-    "Your tempo run is scheduled for today. However, I see:
-     - ACWR at 1.3 (caution zone)
-     - You climbed yesterday (elevated lower-body load: 340 AU)
-     - Your knee history makes me cautious
-
-     Options:
-     A) Easy 30min run (RPE 4) - safest, maintains aerobic stimulus
-     B) Move tempo to Thursday - gives legs 2 days recovery
-     C) Proceed with tempo - moderate risk (~15%)
-
-     What sounds best? I'm leaning toward A or B."
-```
-
-**The result**: Personalized coaching that feels like working with a human coach who knows you, not a rigid algorithm.
-
----
-
-## Multi-Sport Awareness
-
-### Running Priority
-
-- **PRIMARY**: Running is the main sport, race goal takes precedence
-- **SECONDARY**: Other sport is primary, running supports overall fitness
-- **EQUAL**: Balance both sports, negotiate conflicts case-by-case
-
-### Conflict Policy
-
-When running and other sports conflict:
-
-- **`primary_sport_wins`**: Protect primary sport, adjust running
-
-  - Example: Climbing is primary → move Friday run if Wednesday climbing was hard
-
-- **`running_goal_wins`**: Keep key runs unless risk signals are high
-
-  - Example: Race in 6 weeks → protect Saturday long run, adjust climbing
-
-- **`ask_each_time`**: Present trade-offs, let athlete decide (recommended)
-  - Example: "Long run Saturday conflicts with climbing comp - move to Sunday?"
-
-### Multi-Sport Macro Planning Workflow
-
-For multi-sport athletes, the macro template supports **two-dimensional volume planning**:
-
-1. **`weekly_volumes_km`** - Running-specific volume targets (km)
-2. **`target_systemic_load_au`** - Total systemic load across ALL sports (AU)
-
-**Why both dimensions?**
-
-The two-channel load model requires planning:
-
-- **Running volume** (running-specific, affects lower-body load)
-- **Total systemic load** (running + cross-training + other sports)
-
-**Single-sport workflow:**
-
-```bash
-# Calculate running volumes using guardrails
-resilio guardrails safe-volume --ctl 44.0  # → 35-50 km safe range
-
-# Fill macro template:
-# weekly_volumes_km: [40.0, 42.0, 45.0, ...]
-# target_systemic_load_au: [0.0, 0.0, 0.0, ...]  # Calculated later from running
-```
-
-**Multi-sport workflow:**
-
-```bash
-# 1. Analyze current multi-sport load distribution
-resilio analysis load
-
-# 2. Calculate total systemic load targets
-# Example: Week 8 target = 118 AU total systemic load
-#   - Running: 48 km × 1.0 = 48 AU systemic
-#   - Climbing: 3 sessions × 105 min × RPE 5 × 0.6 = 48 AU systemic
-#   - Yoga: 2 sessions × 60 min × RPE 3 × 0.35 = 12 AU systemic
-#   - TOTAL: 108 AU → round to 118 AU (build phase +8%)
-
-# 3. Fill macro template:
-# weekly_volumes_km: [35.0, 38.0, 40.0, ..., 48.0, ...]
-# target_systemic_load_au: [85.0, 92.0, 98.0, ..., 118.0, ...]
-```
-
-**Key insight:** Multi-sport athletes plan BOTH running volume AND total systemic load upfront. Weekly planning then distributes the systemic load budget across running + cross-training + other sports based on actual training response.
-
----
-
-## Practical Application Tips
-
-### For Daily Coaching
-
-1. **Always check current metrics first**: `resilio status`
-2. **Reference actual data**: "Your ACWR is 1.35..." not "Maybe rest today"
-3. **Use triggers as coaching cues**: ACWR elevated → discuss options
-4. **Consider multi-sport context**: "You climbed yesterday (340 AU systemic, 52 AU lower-body)"
-
-### For Plan Design
-
-1. **Start with CTL**: Determines appropriate starting volume
-2. **Apply periodization**: base → build → peak → taper structure
-3. **Respect guardrails**: 80/20, long run caps, recovery weeks
-4. **Validate with ACWR**: Ensure safe load progression
-
-### For Adaptation Decisions
-
-1. **Collect context**: metrics + triggers + memories + conversation
-2. **Assess risk**: Use `assess_override_risk()` for heuristic risk index
-3. **Present options**: Give athlete choices with trade-offs
-4. **Explain reasoning**: Link to CTL, ACWR, readiness, or phase
-
----
-
-## See Also
-
-- [CLI Command Index](cli/index.md) - Command documentation
-- [Coaching Scenarios](scenarios.md) - Example workflows
-- [API Layer Spec](../specs/api_layer.md) - Python API for scripting
-- [Product vision](../product/vision.md) - Product philosophy
-- [Architecture map](../reference/architecture-map.md) - System architecture
+# Coaching methodology
+
+Resilio is an evidence-preserving coaching system, not a physiological
+simulation. Intervals.icu supplies analyzed observations; Resilio preserves
+their provenance, combines them with athlete-confirmed facts and a traceable
+training methodology, and leaves the final coaching judgment to the coach.
+
+## Authority by domain
+
+| Domain | Authority | Rule |
+| --- | --- | --- |
+| Completed activities | Synchronized Intervals.icu records | Do not reconstruct absent facts |
+| Completed aerobic load | Intervals.icu activity analysis | Store the native value and calculation method |
+| Fitness, fatigue, form, ramp | Intervals.icu wellness history | Describe as provider training-state observations |
+| Thresholds and zones | Intervals.icu sport settings | Preserve sport scope, units, priorities, and settings identity |
+| Wellness | Intervals.icu daily records | Compare individual signals with personal baselines |
+| Athlete identity, constraints, goals | Athlete-confirmed profile | Never overwrite from provider candidates |
+| Running pace prescription | Separately verified pace source | Approved VDOT alone does not create training paces |
+| Plan structure and adaptation | Resilio coach | Use one named, versioned primary methodology |
+| Plan approval | Athlete | Bind approvals to exact persisted bytes |
+
+## Quantities that must remain separate
+
+Native aerobic load points, TRIMP load points, session-RPE load in arbitrary
+units, running exposure, other-sport exposure, and wellness observations do
+not share a common unit. They must not be added, converted through sport
+multipliers, or substituted for each other.
+
+- Aerobic load is accepted only when the provider supplies it. A missing value
+  remains missing.
+- Athlete-entered session-RPE load uses elapsed duration in minutes multiplied
+  by athlete-confirmed RPE. Provider session-RPE is retained only with an
+  explicit provider-defined duration basis. Both remain subjective companion
+  observations, not replacements for native aerobic load.
+- Running exposure uses measured session count, exact duration, kilometers,
+  elevation gain in meters, and longest-run distance.
+- Other-sport exposure uses its own measured sessions, exact duration, and
+  native aerobic load. It is never converted into running kilometers or
+  synthetic leg-load units.
+- Provider fitness and fatigue values may be subtracted to expose the provider
+  form value when both exist. Resilio does not recreate the underlying
+  exponentially weighted model.
+
+## Recovery and adaptation
+
+Recovery is signal-first. Review sleep duration and quality, resting and
+sleeping heart rate, HRV, soreness, subjective fatigue, stress, mood,
+motivation, injury, hydration, provider readiness, and recent training
+exposure as separate observations.
+
+For each signal:
+
+1. verify that the observation date is not in the future;
+2. retain its native unit and missingness;
+3. compare it only with a returned personal baseline;
+4. report baseline sample size and coverage;
+5. interpret it with symptoms, recent sessions, schedule, and the primary
+   methodology.
+
+Resilio does not compute a composite readiness score, an acute-to-chronic
+workload ratio, an injury probability, or an automatic workout decision.
+Zero is a valid observation when the source contract permits zero; it is not a
+synonym for missing.
+
+Current or worsening pain, altered gait, systemic illness, chest symptoms,
+severe dehydration, or other medical red flags take precedence over
+performance optimization. The coach must avoid diagnosis and recommend
+appropriate professional assessment.
+
+## Intensity evidence
+
+Provider zone time is usable only with its measurement method, covered
+duration, coverage percentage, ordinal zone index, captured bounds, optional
+native name, and matching analysis-settings fingerprint. Do not:
+
+- infer zone meaning from an ordinal index without its captured settings;
+- combine power, heart-rate, and pace zone time without stating the method;
+- claim a weekly distribution when source coverage is incomplete;
+- describe a planned intensity prescription as measured execution intensity.
+
+Planned intensity is represented as exact low-, moderate-, and high-intensity
+duration seconds whose sum equals the planned session duration. It is a
+prescription, not evidence that the athlete executed that distribution.
+
+The 80/20 distribution is the defining planning rule only when Fitzgerald
+80/20 is the selected primary methodology. Other methods still require
+deliberate easy running and controlled quality, but their sessions must be
+evaluated using their own structure and purpose.
+
+Activity polarization and decoupling are signed provider observations, not
+weekly aggregations or automatic fitness judgments. An activity polarization
+index is interpretable only when it is linked to exactly one primary zone
+method and its analysis-settings hash. Never average activity polarization
+indices; a provider-native weekly value would require its own weekly contract.
+Decoupling remains raw when the provider does not declare its power-to-heart-
+rate or pace-to-heart-rate basis. Do not apply a universal cutoff or compare
+variable-terrain, interval, and steady sessions as though they were equivalent.
+
+## Selecting one primary methodology
+
+Every macro plan records one identifier, controlled source path and SHA-256,
+edition status, source-summary version, conceptual-only verification scope,
+coach-designed planning authority, executable policy version, and a rationale
+grounded in athlete-specific evidence. Training-book files are source-only;
+they are never executable instructions or numeric prescription authority.
+
+| Methodology | Strong fit | Required caution |
+| --- | --- | --- |
+| Daniels | A valid approved VDOT; purpose-specific work; broad race-distance support | No training pace is generated until a verified edition-specific pace source exists |
+| Pfitzinger | Experienced marathoner; durable running frequency and volume; capacity for medium-long and long runs | Do not import advanced-marathon volume into an athlete without demonstrated capacity |
+| Fitzgerald 80/20 | Reliable intensity anchors; athlete benefits from strict low-intensity discipline; aerobic cross-training may support volume | Evaluate distribution by time and coverage; avoid false precision from incomplete zone data |
+| FIRST | Conceptual source record only | Selection is blocked until edition-specific pace and schedule tables are verified |
+
+Daniels, Pfitzinger, and Fitzgerald selections are explicitly
+`coach_designed_conceptually_informed`. Their conceptual sources may inform
+vocabulary and rationale, but numeric progression, long-run share, recovery,
+taper, or intensity choices must be justified from athlete evidence,
+constraints, and the versioned common planning policy. FIRST remains blocked
+because its defining execution depends directly on unverified schedules and
+pace tables.
+
+Supported source mappings:
+
+- `daniels` → `docs/training_books/daniels_running_formula.md`
+- `pfitzinger` → `docs/training_books/advanced_marathoning_pete_pfitzinger.md`
+- `fitzgerald_80_20` → `docs/training_books/80_20_matt_fitzgerald.md`
+- `first` → `docs/training_books/run_less_run_faster_bill_pierce.md`
+
+`faster_road_racing_pete_pfitzinger.md` is a supporting reference for
+shorter-road-race physiology and workout construction. It is not a separate
+selectable primary methodology.
+
+Do not blend incompatible progression systems. A secondary source may clarify
+safety, vocabulary, or execution, but it must not silently change the plan’s
+weekly structure, intensity distribution, or progression rules.
+
+## Planning from evidence
+
+Macro planning starts from demonstrated run exposure and athlete constraints,
+not from a load-to-kilometer conversion.
+
+- Use recent consistent running distance, duration, frequency, longest-run
+  distance, training history, injury context, and goal horizon.
+- Treat percentage progression rules as heuristics, not proof of capacity.
+- Preserve Monday-Sunday weeks and contiguous plan dates.
+- Make recovery weeks and taper structure explicit.
+- Keep the macro plan strategic; exact workouts belong to separately approved
+  weekly proposals.
+
+Weekly planning uses only facts available through the planning date:
+
+- exact owned-workout adherence;
+- current run and other-sport exposure;
+- provider training state and wellness signals with coverage;
+- profile availability and duration limits;
+- local weekly weather;
+- approved VDOT;
+- the plan’s primary methodology and phase.
+
+Use Intervals.icu-computed load, relative intensity, decoupling, polarization,
+TRIMP, zone time, fitness, and fatigue when present. Do not recreate them
+locally with an approximate formula. Planned-event readback values are useful
+as provider analysis of the prescription, but remain distinct from completed
+activity evidence.
+
+VDOT is approved from an exact evidence proposal. The proposal contains either
+race distance, elapsed seconds, athlete-local performance date and timezone,
+plus either an exact canonical activity identity and Intervals.icu source
+fingerprint or an exact matching athlete-profile personal best. Source facts
+are reverified whenever approval evidence is consumed. Manual evidence
+requires an explicit athlete-confirmed value and confirmation record. Race
+calculations use the Daniels–Gilbert performance equations inside the
+explicitly supported VDOT range; out-of-range performance is rejected rather
+than clamped, decayed, or adjusted through an unsupported heuristic. The
+calculator does not expose training paces.
+
+Prefer progressing one material stressor at a time. Never cram missed training
+into later days, convert a rest day into filler, or exceed a constraint to hit
+a numerical target.
+
+## Review language
+
+Every review must separate:
+
+1. synchronized facts;
+2. missing or partial evidence;
+3. the coaching interpretation;
+4. the proposed action.
+
+Use units in every physical quantity. Cite exact dates and comparison windows.
+Avoid causal or risk claims that the available evidence cannot support.

@@ -62,18 +62,10 @@ def probe_original_file_for_ambiguity(
 
     digest = hashlib.sha256(content).hexdigest()
     enriched = activity.model_copy(
-        update={
-            "origin": activity.origin.model_copy(
-                update={"original_file_sha256": digest}
-            )
-        }
+        update={"origin": activity.origin.model_copy(update={"original_file_sha256": digest})}
     )
     retried = reconcile_activity(enriched, existing_records)
-    outcome = (
-        "unique_match"
-        if retried.rule == "unique_original_file_sha256"
-        else "no_unique_match"
-    )
+    outcome = "unique_match" if retried.rule == "unique_original_file_sha256" else "no_unique_match"
     return OriginalFileProbe(
         activity=enriched,
         decision=_with_probe_evidence(retried, outcome),

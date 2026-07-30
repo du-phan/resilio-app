@@ -31,15 +31,10 @@ def test_explicit_fake_environment_loads_without_local_file(
     _settings(tmp_path)
     monkeypatch.chdir(tmp_path)
 
-    result = load_config(
-        environment={"INTERVALS_ICU_API_KEY": "fake-injected-test-key"}
-    )
+    result = load_config(environment={"INTERVALS_ICU_API_KEY": "fake-injected-test-key"})
 
     assert isinstance(result, Config)
-    assert (
-        result.intervals_icu_api_key.get_secret_value()
-        == "fake-injected-test-key"
-    )
+    assert result.intervals_icu_api_key.get_secret_value() == "fake-injected-test-key"
     assert "fake-injected-test-key" not in repr(result)
     assert result.settings.intervals_icu.initial_window_days == 90
 
@@ -49,9 +44,7 @@ def test_omitted_environment_reads_env_local_without_mutating_process(
     monkeypatch,
 ) -> None:
     _settings(tmp_path)
-    (tmp_path / ".env.local").write_text(
-        "INTERVALS_ICU_API_KEY=local-test-value\n"
-    )
+    (tmp_path / ".env.local").write_text("INTERVALS_ICU_API_KEY=local-test-value\n")
     monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("INTERVALS_ICU_API_KEY", raising=False)
 
@@ -107,9 +100,7 @@ def test_missing_settings_and_invalid_yaml_are_distinct(
     assert isinstance(missing, ConfigError)
     assert missing.error_type == ConfigErrorType.FILE_NOT_FOUND
 
-    (tmp_path / "config" / "settings.yaml").write_text(
-        "not: [valid\n"
-    )
+    (tmp_path / "config" / "settings.yaml").write_text("not: [valid\n")
     malformed = load_config(environment={"INTERVALS_ICU_API_KEY": "fake"})
     assert isinstance(malformed, ConfigError)
     assert malformed.error_type == ConfigErrorType.PARSE_ERROR

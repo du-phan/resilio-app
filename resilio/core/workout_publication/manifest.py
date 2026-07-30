@@ -17,9 +17,7 @@ def load_manifest(repo: RepositoryIO) -> PublicationManifest:
 
 
 def save_manifest(repo: RepositoryIO, manifest: PublicationManifest) -> None:
-    validated = PublicationManifest.model_validate(
-        manifest.model_dump(mode="python")
-    )
+    validated = PublicationManifest.model_validate(manifest.model_dump(mode="python"))
     error = repo.write_json(PUBLICATION_MANIFEST_PATH, validated)
     if error is not None:
         raise OSError(f"Failed to save publication manifest: {error}")

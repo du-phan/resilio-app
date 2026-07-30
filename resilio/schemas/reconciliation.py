@@ -54,6 +54,7 @@ class ReconciliationReviewItem(BaseModel):
 class ReconciliationOverride(BaseModel):
     external_activity_id_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     local_activity_id: str
+    review_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     approved_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -80,6 +81,7 @@ class ReconciliationOverrideLedger(BaseModel):
 class ReconciliationOverrideResult(BaseModel):
     external_activity_id_sha256: str
     local_activity_id: str
+    review_fingerprint_sha256: str
     action: str
 
     model_config = ConfigDict(extra="forbid")
@@ -105,9 +107,7 @@ class ActivityQuarantineReviewItem(BaseModel):
     external_activity_id_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     rule: str
     error_type: str
-    validation_issues: list[ActivityValidationIssue] = Field(
-        default_factory=list
-    )
+    validation_issues: list[ActivityValidationIssue] = Field(default_factory=list)
     failure_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     acknowledgeable: bool = False
     acknowledged: bool = False

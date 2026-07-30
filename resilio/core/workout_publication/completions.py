@@ -25,9 +25,7 @@ def save_completion_manifest(
     repo: RepositoryIO,
     manifest: WorkoutCompletionManifest,
 ) -> None:
-    validated = WorkoutCompletionManifest.model_validate(
-        manifest.model_dump(mode="python")
-    )
+    validated = WorkoutCompletionManifest.model_validate(manifest.model_dump(mode="python"))
     error = repo.write_json(WORKOUT_COMPLETIONS_PATH, validated)
     if error is not None:
         raise OSError(f"Failed to save workout completion manifest: {error}")

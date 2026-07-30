@@ -9,7 +9,6 @@ from typing import Optional
 
 from pydantic import BaseModel
 
-
 # ============================================================
 # ERROR TYPES
 # ============================================================
@@ -22,16 +21,14 @@ class RepoErrorType(str, Enum):
     PARSE_ERROR = "parse_error"
     VALIDATION_ERROR = "validation_error"
     SCHEMA_VERSION_ERROR = "schema_version_error"
+    READ_ERROR = "read_error"
     WRITE_ERROR = "write_error"
-    LOCK_TIMEOUT = "lock_timeout"
 
 
 class RepoError:
     """Repository operation error with details."""
 
-    def __init__(
-        self, error_type: RepoErrorType, message: str, path: Optional[str] = None
-    ):
+    def __init__(self, error_type: RepoErrorType, message: str, path: Optional[str] = None):
         self.error_type = error_type
         self.message = message
         self.path = path
@@ -54,18 +51,3 @@ class ReadOptions(BaseModel):
     should_validate: bool = True
     allow_missing: bool = False
     migrate_schema: bool = True
-
-
-# ============================================================
-# LOCK TYPES (FOR PHASE 1D)
-# ============================================================
-
-
-class FileLock(BaseModel):
-    """File lock for concurrent access protection."""
-
-    id: str
-    pid: int
-    operation: str
-    acquired_at: str  # ISO datetime
-    locked_paths: list[str] = []

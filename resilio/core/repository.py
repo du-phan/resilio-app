@@ -5,14 +5,18 @@ Centralized file system operations for all data persistence.
 Handles YAML/JSON read/write, atomic writes, file locking, schema validation.
 """
 
-import yaml
 from pathlib import Path
-from typing import Optional, Type, TypeVar, Union
+from typing import Any, Optional, Type, TypeVar, Union, cast, overload
 
+import yaml
 from pydantic import BaseModel
 
 from resilio.core.config import get_repo_root
-from resilio.schemas.repository import RepoError, RepoErrorType, ReadOptions
+from resilio.core.state_permissions import (
+    ensure_private_directory_tree,
+    harden_sensitive_file,
+)
+from resilio.schemas.repository import ReadOptions, RepoError, RepoErrorType
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -20,14 +24,13 @@ T = TypeVar("T", bound=BaseModel)
 class RepositoryIO:
     """Centralized repository for file I/O operations."""
 
-    def __init__(self, config=None):
+    def __init__(self) -> None:
         """
         Initialize repository.
 
         Args:
             config: Configuration object (optional, for future use)
         """
-        self.config = config
         self.repo_root = get_repo_root()
 
     def resolve_path(self, relative_path: str | Path) -> Path:
@@ -44,6 +47,17 @@ class RepositoryIO:
         if path.is_absolute():
             return path
         return self.repo_root / path
+
+    def _prepare_parent(self, resolved_path: Path) -> bool:
+        """Create a parent and return whether the target is private state."""
+        data_root = self.repo_root / "data"
+        try:
+            resolved_path.relative_to(data_root)
+        except ValueError:
+            resolved_path.parent.mkdir(parents=True, exist_ok=True)
+            return False
+        ensure_private_directory_tree(data_root, resolved_path.parent)
+        return True
 
     def read_yaml(
         self,
@@ -71,7 +85,7 @@ class RepositoryIO:
                 return None
             return RepoError(
                 error_type=RepoErrorType.FILE_NOT_FOUND,
-                message=f"File not found",
+                message="File not found",
                 path=str(resolved_path),
             )
 
@@ -130,7 +144,7 @@ class RepositoryIO:
     def write_yaml(
         self,
         path: str | Path,
-        data: Union[BaseModel, dict, list],
+        data: BaseModel | dict[str, Any] | list[Any],
         atomic: bool = True,
     ) -> Optional["RepoError"]:
         """
@@ -147,14 +161,12 @@ class RepositoryIO:
         resolved_path = self.resolve_path(path)
 
         # Ensure parent directory exists
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        is_private_state = self._prepare_parent(resolved_path)
 
         # Serialize to YAML
         try:
             payload = (
-                data.model_dump(mode="json", by_alias=True)
-                if isinstance(data, BaseModel)
-                else data
+                data.model_dump(mode="json", by_alias=True) if isinstance(data, BaseModel) else data
             )
             yaml_content = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
         except Exception as e:
@@ -164,10 +176,18 @@ class RepositoryIO:
             )
 
         if atomic:
-            return self._atomic_write(resolved_path, yaml_content)
+            return self._atomic_write(
+                resolved_path,
+                yaml_content,
+                private_state=is_private_state,
+            )
         else:
             try:
+                if is_private_state and resolved_path.exists():
+                    harden_sensitive_file(resolved_path)
                 resolved_path.write_text(yaml_content)
+                if is_private_state:
+                    harden_sensitive_file(resolved_path)
                 return None
             except Exception as e:
                 return RepoError(
@@ -176,7 +196,13 @@ class RepositoryIO:
                     path=str(resolved_path),
                 )
 
-    def _atomic_write(self, path: Path, content: str) -> Optional["RepoError"]:
+    def _atomic_write(
+        self,
+        path: Path,
+        content: str,
+        *,
+        private_state: bool,
+    ) -> Optional["RepoError"]:
         """
         Write content atomically using temp file + rename.
 
@@ -202,9 +228,18 @@ class RepositoryIO:
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as f:
                     f.write(content)
+                    f.flush()
+                    os.fsync(f.fileno())
 
                 # Atomic rename
                 os.replace(temp_path, path)
+                if private_state:
+                    harden_sensitive_file(path)
+                directory_descriptor = os.open(directory, os.O_RDONLY)
+                try:
+                    os.fsync(directory_descriptor)
+                finally:
+                    os.close(directory_descriptor)
                 return None
             except Exception:
                 # Clean up temp file on error
@@ -221,99 +256,30 @@ class RepositoryIO:
             )
 
     # ============================================================
-    # FILE LOCKING
-    # ============================================================
-
-    def acquire_lock(
-        self,
-        operation: str,
-        paths: Optional[list[str]] = None,
-        timeout_ms: int = 300000,
-    ) -> Union["FileLock", "RepoError"]:
-        """
-        Acquire an exclusive lock for an operation.
-
-        Args:
-            operation: Description of the operation
-            paths: List of paths being locked (optional)
-            timeout_ms: Timeout in milliseconds (default: 5 minutes)
-
-        Returns:
-            FileLock object on success, RepoError on timeout
-        """
-        import os
-        import time
-        from datetime import datetime
-
-        from resilio.schemas.repository import FileLock
-
-        lock_path = self.resolve_path("config/.sync_lock")
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        start_time = time.time()
-
-        while (time.time() - start_time) * 1000 < timeout_ms:
-            # Check existing lock
-            if lock_path.exists():
-                existing = self.read_yaml(lock_path, FileLock)
-                if not isinstance(existing, RepoError):
-                    # Check if stale (>5 min) or dead process
-                    try:
-                        lock_time = datetime.fromisoformat(existing.acquired_at)
-                        lock_age = datetime.now() - lock_time
-                        if lock_age.total_seconds() > 300 or not self._process_running(
-                            existing.pid
-                        ):
-                            # Break stale lock
-                            lock_path.unlink()
-                        else:
-                            # Active lock, wait
-                            time.sleep(0.1)
-                            continue
-                    except Exception:
-                        # Invalid lock file, remove it
-                        lock_path.unlink()
-
-            # Create new lock
-            new_lock = FileLock(
-                id=f"lock_{int(time.time())}_{os.getpid()}",
-                pid=os.getpid(),
-                operation=operation,
-                acquired_at=datetime.now().isoformat(),
-                locked_paths=paths or [],
-            )
-
-            self.write_yaml(lock_path, new_lock)
-
-            # Verify we got the lock
-            time.sleep(0.01)
-            verify = self.read_yaml(lock_path, FileLock)
-            if not isinstance(verify, RepoError) and verify.pid == os.getpid():
-                return new_lock
-
-        return RepoError(
-            error_type=RepoErrorType.LOCK_TIMEOUT, message="Timed out waiting for lock"
-        )
-
-    def release_lock(self, lock: "FileLock") -> None:
-        """
-        Release a previously acquired lock.
-
-        Args:
-            lock: Lock object to release
-        """
-        lock_path = self.resolve_path("config/.sync_lock")
-        if lock_path.exists():
-            lock_path.unlink()
-
-    # ============================================================
     # JSON OPERATIONS
     # ============================================================
+
+    @overload
+    def read_json(
+        self,
+        path: str | Path,
+        schema: Type[T],
+    ) -> T | None | RepoError:
+        ...
+
+    @overload
+    def read_json(
+        self,
+        path: str | Path,
+        schema: None = None,
+    ) -> dict[str, Any] | None | RepoError:
+        ...
 
     def read_json(
         self,
         path: str | Path,
         schema: Optional[Type[T]] = None,
-    ) -> Union[T, dict, None, RepoError]:
+    ) -> T | dict[str, Any] | None | RepoError:
         """
         Read and parse a JSON file.
 
@@ -354,12 +320,18 @@ class RepositoryIO:
                     path=str(resolved_path),
                 )
 
-        return data
+        if not isinstance(data, dict):
+            return RepoError(
+                error_type=RepoErrorType.VALIDATION_ERROR,
+                message="JSON document must be an object",
+                path=str(resolved_path),
+            )
+        return cast(dict[str, Any], data)
 
     def write_json(
         self,
         path: str | Path,
-        data: Union[BaseModel, dict, list],
+        data: BaseModel | dict[str, Any] | list[Any],
         atomic: bool = True,
     ) -> Optional[RepoError]:
         """
@@ -378,7 +350,7 @@ class RepositoryIO:
         resolved_path = self.resolve_path(path)
 
         # Ensure parent directory exists
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        is_private_state = self._prepare_parent(resolved_path)
 
         # Serialize to JSON
         try:
@@ -396,10 +368,18 @@ class RepositoryIO:
             )
 
         if atomic:
-            return self._atomic_write(resolved_path, json_content)
+            return self._atomic_write(
+                resolved_path,
+                json_content,
+                private_state=is_private_state,
+            )
         else:
             try:
+                if is_private_state and resolved_path.exists():
+                    harden_sensitive_file(resolved_path)
                 resolved_path.write_text(json_content)
+                if is_private_state:
+                    harden_sensitive_file(resolved_path)
                 return None
             except Exception as e:
                 return RepoError(
@@ -411,65 +391,6 @@ class RepositoryIO:
     # ============================================================
     # FILE OPERATIONS
     # ============================================================
-
-    def read_file(self, path: str | Path) -> Union[str, RepoError]:
-        """
-        Read a text file.
-
-        Args:
-            path: Path to file (relative to repo root)
-
-        Returns:
-            File contents as string, or RepoError
-        """
-        resolved_path = self.resolve_path(path)
-
-        if not resolved_path.exists():
-            return RepoError(
-                error_type=RepoErrorType.FILE_NOT_FOUND,
-                message=f"File not found",
-                path=str(resolved_path),
-            )
-
-        try:
-            return resolved_path.read_text()
-        except Exception as e:
-            return RepoError(
-                error_type=RepoErrorType.READ_ERROR,
-                message=str(e),
-                path=str(resolved_path),
-            )
-
-    def append_to_file(
-        self,
-        path: str | Path,
-        content: str,
-    ) -> Optional[RepoError]:
-        """
-        Append content to a file.
-
-        Args:
-            path: Path to file (relative to repo root)
-            content: Content to append
-
-        Returns:
-            None on success, RepoError on failure
-        """
-        resolved_path = self.resolve_path(path)
-
-        # Ensure parent directory exists
-        resolved_path.parent.mkdir(parents=True, exist_ok=True)
-
-        try:
-            with open(resolved_path, 'a') as f:
-                f.write(content)
-            return None
-        except Exception as e:
-            return RepoError(
-                error_type=RepoErrorType.WRITE_ERROR,
-                message=str(e),
-                path=str(resolved_path),
-            )
 
     def delete_file(self, path: str | Path) -> Optional[RepoError]:
         """
@@ -495,49 +416,3 @@ class RepositoryIO:
                 message=str(e),
                 path=str(resolved_path),
             )
-
-    # ============================================================
-    # DIRECTORY OPERATIONS
-    # ============================================================
-
-    def directory_exists(self, path: str | Path) -> bool:
-        """
-        Check if a directory exists.
-
-        Args:
-            path: Path to directory (relative to repo root)
-
-        Returns:
-            True if directory exists, False otherwise
-        """
-        resolved_path = self.resolve_path(path)
-        return resolved_path.exists() and resolved_path.is_dir()
-
-    def ensure_directory(self, path: str | Path) -> None:
-        """
-        Ensure a directory exists, creating it if necessary.
-
-        Args:
-            path: Path to directory (relative to repo root)
-        """
-        resolved_path = self.resolve_path(path)
-        resolved_path.mkdir(parents=True, exist_ok=True)
-
-    @staticmethod
-    def _process_running(pid: int) -> bool:
-        """
-        Check if a process is running.
-
-        Args:
-            pid: Process ID to check
-
-        Returns:
-            True if process is running, False otherwise
-        """
-        import os
-
-        try:
-            os.kill(pid, 0)
-            return True
-        except OSError:
-            return False

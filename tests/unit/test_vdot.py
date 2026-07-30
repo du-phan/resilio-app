@@ -1,30 +1,21 @@
 """
-Unit tests for VDOT module - Training pace calculations.
+Unit tests for Daniels–Gilbert race-performance equivalence.
 
-Tests VDOT calculations, training pace generation, race predictions,
-six-second rule, and environmental pace adjustments based on Daniels' methodology.
+Tests strict VDOT calculations and equivalent-race predictions.
 """
 
-import pytest
-from resilio.core.vdot import (
-    calculate_vdot,
-    calculate_training_paces,
-    calculate_race_equivalents,
-    apply_six_second_rule,
-    adjust_pace_for_altitude,
-    adjust_pace_for_heat,
-    adjust_pace_for_hills,
-    parse_time_string,
-    format_time_seconds,
-)
-from resilio.schemas.vdot import (
-    RaceDistance,
-    PaceUnit,
-    ConditionType,
-    ConfidenceLevel,
-)
-from tests.factories import make_activity
+from datetime import date
 
+import pytest
+
+from resilio.core.vdot import (
+    calculate_race_equivalents,
+    calculate_raw_vdot,
+    calculate_vdot,
+    format_time_seconds,
+    parse_time_string,
+)
+from resilio.schemas.vdot import RaceDistance
 
 # ============================================================
 # TIME PARSING & FORMATTING TESTS
@@ -70,36 +61,27 @@ class TestTimeFormatting:
 class TestVDOTCalculation:
     """Tests for VDOT calculation from race performance."""
 
-    def test_10k_42_30_vdot_calculation(self):
-        """10K @ 42:30 should calculate to VDOT around 44-48 range."""
+    def test_10k_42_30_matches_daniels_gilbert_equation(self):
         result = calculate_vdot(RaceDistance.TEN_K, 2550)  # 42:30 = 2550s
 
-        # Table is simplified, should be in reasonable range
-        assert 43 <= result.vdot <= 48
+        assert result.vdot == 48
+        assert result.vdot_raw == pytest.approx(48.3904559, abs=1e-7)
         assert result.source_race == RaceDistance.TEN_K
         assert result.source_time_seconds == 2550
-        assert result.confidence == ConfidenceLevel.HIGH
+        assert result.performance_date is None
+        assert result.performance_age_days is None
 
-    def test_half_marathon_90_min_vdot_calculation(self):
-        """Half marathon @ 1:30:00 should calculate to valid VDOT."""
+    def test_half_marathon_90_minute_golden_vector(self):
         result = calculate_vdot(RaceDistance.HALF_MARATHON, 5400)  # 1:30:00
 
-        # Should be in competitive range
-        assert 40 <= result.vdot <= 55
+        assert result.vdot == 51
+        assert result.vdot_raw == pytest.approx(50.9769063, abs=1e-7)
 
-    def test_5k_20_15_vdot_calculation(self):
-        """5K @ 20:15 should calculate to valid VDOT."""
-        result = calculate_vdot(RaceDistance.FIVE_K, 1215)  # 20:15 = 1215s
+    def test_official_vdot_50_five_k_reference(self):
+        result = calculate_vdot(RaceDistance.FIVE_K, 1200)
 
-        # Should be in recreational to competitive range
-        assert 42 <= result.vdot <= 50
-
-    def test_marathon_153_min_vdot_calculation(self):
-        """Marathon @ 2:33:00 should calculate to valid VDOT."""
-        result = calculate_vdot(RaceDistance.MARATHON, 9180)  # 2:33:00
-
-        # Should be in competitive to advanced range
-        assert 50 <= result.vdot <= 65
+        assert result.vdot == 50
+        assert result.vdot_raw == pytest.approx(49.8062334, abs=1e-7)
 
     def test_invalid_race_time_raises(self):
         """Zero or negative race time should raise ValueError."""
@@ -109,83 +91,9 @@ class TestVDOTCalculation:
         with pytest.raises(ValueError, match="must be positive"):
             calculate_vdot(RaceDistance.TEN_K, -100)
 
-
-# ============================================================
-# TRAINING PACES TESTS
-# ============================================================
-
-
-class TestTrainingPaces:
-    """Tests for training pace generation from VDOT."""
-
-    def test_vdot_48_paces(self):
-        """VDOT 48 should generate correct pace ranges."""
-        paces = calculate_training_paces(48, PaceUnit.MIN_PER_KM)
-
-        # E-pace: 5:06-5:30/km (306-330 sec/km)
-        assert paces.easy_pace_range == (306, 330)
-
-        # M-pace: 4:18-4:30/km (258-270 sec/km)
-        assert paces.marathon_pace_range == (258, 270)
-
-        # T-pace: 4:00-4:12/km (240-252 sec/km)
-        assert paces.threshold_pace_range == (240, 252)
-
-        # I-pace: 3:36-3:48/km (216-228 sec/km)
-        assert paces.interval_pace_range == (216, 228)
-
-        # R-pace: 3:12-3:24/km (192-204 sec/km)
-        assert paces.repetition_pace_range == (192, 204)
-
-    def test_vdot_55_paces(self):
-        """VDOT 55 should generate faster paces than VDOT 48."""
-        paces_55 = calculate_training_paces(55)
-        paces_48 = calculate_training_paces(48)
-
-        # All paces should be faster (lower seconds) for higher VDOT
-        assert paces_55.easy_pace_range[0] < paces_48.easy_pace_range[0]
-        assert paces_55.threshold_pace_range[0] < paces_48.threshold_pace_range[0]
-        assert paces_55.interval_pace_range[0] < paces_48.interval_pace_range[0]
-
-    def test_vdot_out_of_range_raises(self):
-        """VDOT outside 30-85 range should raise ValueError."""
-        with pytest.raises(ValueError, match="between 30 and 85"):
-            calculate_training_paces(25)
-
-        with pytest.raises(ValueError, match="between 30 and 85"):
-            calculate_training_paces(90)
-
-    def test_interpolation_for_non_table_vdot(self):
-        """VDOT not in table (e.g., 47) should be interpolated."""
-        paces = calculate_training_paces(47)
-
-        # Should have valid pace ranges
-        assert paces.vdot == 47
-        assert paces.easy_pace_range[0] > 0
-        assert paces.threshold_pace_range[0] > 0
-
-        # Should be between VDOT 45 and 48 values
-        paces_45 = calculate_training_paces(45)
-        paces_48 = calculate_training_paces(48)
-
-        assert paces_45.easy_pace_range[0] > paces.easy_pace_range[0] > paces_48.easy_pace_range[0]
-
-    def test_format_pace_method(self):
-        """TrainingPaces.format_pace should format correctly."""
-        paces = calculate_training_paces(48)
-
-        # 306 seconds = 5:06
-        assert paces.format_pace(306) == "5:06"
-
-        # 240 seconds = 4:00
-        assert paces.format_pace(240) == "4:00"
-
-    def test_format_range_method(self):
-        """TrainingPaces.format_range should format range correctly."""
-        paces = calculate_training_paces(48)
-
-        # E-pace: 306-330 = 5:06-5:30
-        assert paces.format_range(paces.easy_pace_range) == "5:06-5:30"
+    def test_raw_vdot_range_is_enforced_before_rounding(self):
+        with pytest.raises(ValueError, match="outside the supported range"):
+            calculate_raw_vdot(RaceDistance.TEN_K, 9 * 60 * 60)
 
 
 # ============================================================
@@ -200,8 +108,7 @@ class TestRaceEquivalents:
         """10K @ 42:30 should predict times for all distances."""
         equiv = calculate_race_equivalents(RaceDistance.TEN_K, 2550)
 
-        # VDOT should be in reasonable range
-        assert 40 <= equiv.vdot <= 50
+        assert equiv.vdot == 48
         assert equiv.source_race == RaceDistance.TEN_K
 
         # Should have predictions for all distances
@@ -225,155 +132,13 @@ class TestRaceEquivalents:
         """Predictions should match VDOT table for that race distance."""
         # Use 10K @ 42:30
         equiv = calculate_race_equivalents(RaceDistance.TEN_K, 2550)
-        original_vdot = equiv.vdot
-
         # Cross-check: Calculate VDOT from predicted half marathon time
         half_time_str = equiv.predictions[RaceDistance.HALF_MARATHON]
         half_time_seconds = parse_time_string(half_time_str)
 
-        # Should calculate back to similar VDOT (allow 2 point tolerance for v0 table)
+        # Rounded predicted seconds stay within one hundredth of a VDOT point.
         vdot_check = calculate_vdot(RaceDistance.HALF_MARATHON, half_time_seconds)
-        assert abs(vdot_check.vdot - original_vdot) <= 2
-
-
-# ============================================================
-# SIX-SECOND RULE TESTS
-# ============================================================
-
-
-class TestSixSecondRule:
-    """Tests for six-second rule for novice runners."""
-
-    def test_mile_6_00_generates_paces(self):
-        """Mile @ 6:00 should generate R/I/T paces."""
-        result = apply_six_second_rule(360)  # 6:00 = 360s
-
-        # Mile = ~4 × 400m, so R-pace = 360 / 4 = 90s per 400m
-        assert result.r_pace_400m == 90
-
-        # I-pace = R + 6-8 seconds (depending on estimated VDOT)
-        assert result.i_pace_400m >= 96
-        assert result.i_pace_400m <= 98
-
-        # T-pace = I + 6-8 seconds
-        assert result.t_pace_400m >= 102
-        assert result.t_pace_400m <= 106
-
-    def test_slower_mile_uses_larger_adjustment(self):
-        """Slower mile times (lower VDOT) should use 7-8 sec adjustment."""
-        result_slow = apply_six_second_rule(540)  # 9:00 mile (slower)
-        result_fast = apply_six_second_rule(300)  # 5:00 mile (faster)
-
-        # Slower runner should have larger adjustment
-        assert result_slow.adjustment_seconds >= result_fast.adjustment_seconds
-
-    def test_estimated_vdot_range_provided(self):
-        """Should provide estimated VDOT range."""
-        result = apply_six_second_rule(360)
-
-        assert len(result.estimated_vdot_range) == 2
-        vdot_min, vdot_max = result.estimated_vdot_range
-        assert 30 <= vdot_min <= 85
-        assert 30 <= vdot_max <= 85
-        assert vdot_min <= vdot_max
-
-
-# ============================================================
-# PACE ADJUSTMENT TESTS
-# ============================================================
-
-
-class TestAltitudeAdjustment:
-    """Tests for altitude pace adjustments."""
-
-    def test_low_altitude_no_adjustment(self):
-        """Altitude < 3000ft should have no adjustment."""
-        adj = adjust_pace_for_altitude(300, 2000.0)  # 5:00/km at 2000ft
-
-        assert adj.adjustment_seconds == 0
-        assert adj.adjusted_pace_sec_per_km == 300
-
-    def test_moderate_altitude_adjustment(self):
-        """Altitude 5000-7000ft should have moderate adjustment."""
-        adj = adjust_pace_for_altitude(300, 6000.0)  # 5:00/km at 6000ft
-
-        # Should have some slowdown
-        assert adj.adjustment_seconds > 0
-        assert adj.adjusted_pace_sec_per_km > 300
-        assert "moderate" in adj.recommendation.lower() or "minor" in adj.recommendation.lower()
-
-    def test_high_altitude_significant_adjustment(self):
-        """Altitude >7000ft should have significant adjustment."""
-        adj = adjust_pace_for_altitude(300, 8000.0)  # 5:00/km at 8000ft
-
-        # Should have larger slowdown
-        assert adj.adjustment_seconds > 10
-        assert adj.adjusted_pace_sec_per_km > 310
-        assert "significant" in adj.recommendation.lower()
-
-
-class TestHeatAdjustment:
-    """Tests for heat/humidity pace adjustments."""
-
-    def test_optimal_temp_no_adjustment(self):
-        """Temperature ≤20°C should have no adjustment."""
-        adj = adjust_pace_for_heat(300, 18.0)  # 5:00/km at 18°C
-
-        assert adj.adjustment_seconds == 0
-        assert adj.adjusted_pace_sec_per_km == 300
-
-    def test_moderate_heat_adjustment(self):
-        """Temperature 25-30°C should have moderate adjustment."""
-        adj = adjust_pace_for_heat(300, 28.0)  # 5:00/km at 28°C
-
-        # Should have ~5-8% slowdown
-        assert adj.adjustment_seconds > 10
-        assert adj.adjusted_pace_sec_per_km >= 315
-        assert "moderate" in adj.recommendation.lower()
-
-    def test_extreme_heat_significant_adjustment(self):
-        """Temperature >30°C should have significant adjustment."""
-        adj = adjust_pace_for_heat(300, 35.0)  # 5:00/km at 35°C
-
-        # Should have ~10-15% slowdown
-        assert adj.adjustment_seconds > 30
-        assert adj.adjusted_pace_sec_per_km >= 330
-        assert "significant" in adj.recommendation.lower() or "heat stress" in adj.recommendation.lower()
-
-    def test_humidity_amplifies_heat(self):
-        """High humidity should increase heat adjustment."""
-        adj_low_humidity = adjust_pace_for_heat(300, 28.0, 50.0)
-        adj_high_humidity = adjust_pace_for_heat(300, 28.0, 80.0)
-
-        # High humidity should have larger adjustment
-        assert adj_high_humidity.adjustment_seconds > adj_low_humidity.adjustment_seconds
-
-
-class TestHillAdjustment:
-    """Tests for hill grade pace adjustments."""
-
-    def test_flat_no_adjustment(self):
-        """Grade <1% should have no adjustment."""
-        adj = adjust_pace_for_hills(300, 0.5)  # 5:00/km at 0.5% grade
-
-        assert adj.adjustment_seconds == 0
-        assert adj.adjusted_pace_sec_per_km == 300
-
-    def test_moderate_hill_adjustment(self):
-        """Grade 3-5% should have moderate adjustment."""
-        adj = adjust_pace_for_hills(300, 4.0)  # 5:00/km at 4% grade
-
-        # Should have ~10-15 seconds/km adjustment
-        assert adj.adjustment_seconds >= 10
-        assert adj.adjusted_pace_sec_per_km >= 310
-        assert "effort" in adj.recommendation.lower()
-
-    def test_steep_hill_recommend_effort_based(self):
-        """Grade >5% should strongly recommend effort-based pacing."""
-        adj = adjust_pace_for_hills(300, 7.0)  # 5:00/km at 7% grade
-
-        assert adj.adjustment_seconds > 20
-        assert "steep" in adj.recommendation.lower() or "effort" in adj.recommendation.lower()
+        assert abs(vdot_check.vdot_raw - equiv.vdot_raw) < 0.01
 
 
 # ============================================================
@@ -392,16 +157,7 @@ class TestVDOTAPIFunctions:
 
         # Should return VDOTResult, not error
         assert hasattr(result, "vdot")
-        assert 40 <= result.vdot <= 50  # Reasonable range for 42:30 10K
-
-    def test_api_get_training_paces(self):
-        """API function should return training paces."""
-        from resilio.api.vdot import get_training_paces
-
-        result = get_training_paces(48)
-
-        assert hasattr(result, "easy_pace_range")
-        assert result.easy_pace_range == (306, 330)
+        assert result.vdot == 48
 
     def test_api_predict_race_times(self):
         """API function should predict race times."""
@@ -431,6 +187,132 @@ class TestVDOTAPIFunctions:
         assert hasattr(result, "error_type")
         assert result.error_type == "invalid_input"
 
+    @pytest.mark.parametrize("race_time", ["1:60", "1:99", "00:99:99"])
+    def test_api_rejects_out_of_range_clock_components(self, race_time):
+        from resilio.api.vdot import VDOTError, calculate_vdot_from_race
+
+        result = calculate_vdot_from_race("10k", race_time)
+
+        assert isinstance(result, VDOTError)
+        assert result.error_type == "invalid_input"
+
+    @pytest.mark.parametrize("race_time", ["0:01", "9:00:00"])
+    def test_api_rejects_performances_outside_supported_vdot_table(
+        self,
+        race_time,
+    ):
+        from resilio.api.vdot import VDOTError, calculate_vdot_from_race
+
+        result = calculate_vdot_from_race("10k", race_time)
+
+        assert isinstance(result, VDOTError)
+        assert result.error_type == "out_of_range"
+
+
+def test_estimate_current_vdot_rejects_unverifiable_approval(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+
+    from resilio.api.vdot import VDOTError, estimate_current_vdot
+    from resilio.schemas.approvals import PlanningState, VDOTApproval
+
+    state = PlanningState(
+        vdot_approval=VDOTApproval(
+            approval_id="vdot_approval_0123456789abcdef",
+            approved_vdot=45,
+            proposal_file=str(tmp_path / "missing-proposal.json"),
+            proposal_file_sha256="0" * 64,
+            evidence_type="race_performance",
+            approved_at_utc=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        )
+    )
+    profile = Mock()
+    profile.personal_bests_by_distance = {}
+    profile.training_timezone = "UTC"
+    monkeypatch.setattr(
+        "resilio.api.vdot._load_profile_unlocked",
+        lambda _repo: profile,
+    )
+    monkeypatch.setattr(
+        "resilio.api.vdot._load_planning_state_unlocked",
+        lambda _repo: state,
+    )
+
+    result = estimate_current_vdot(as_of_date=date(2026, 7, 30))
+
+    assert isinstance(result, VDOTError)
+    assert result.error_type == "stale_approval_evidence"
+
+
+def test_estimate_current_vdot_rejects_future_approved_evidence(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    import hashlib
+    import json
+    from datetime import date, datetime, time, timedelta, timezone
+    from unittest.mock import Mock
+
+    from resilio.api.vdot import VDOTError, estimate_current_vdot
+    from resilio.schemas.approvals import PlanningState, VDOTApproval
+
+    as_of_date = date(2026, 7, 30)
+    future_date = as_of_date + timedelta(days=1)
+    generated_at_utc = datetime.combine(
+        future_date,
+        time(hour=9),
+        tzinfo=timezone.utc,
+    )
+    proposal_path = tmp_path / "future-vdot.json"
+    proposal_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "proposed_vdot": 45,
+                "evidence": {
+                    "evidence_type": "manual_athlete_value",
+                    "athlete_confirmed_vdot": 45,
+                    "confirmation_reference": "future-dated test confirmation",
+                },
+                "evidence_summary": (
+                    "Future-dated approved evidence must fail explicitly."
+                ),
+                "generated_at_utc": generated_at_utc.isoformat(),
+            }
+        )
+    )
+    state = PlanningState(
+        vdot_approval=VDOTApproval(
+            approval_id="vdot_approval_0123456789abcdef",
+            approved_vdot=45,
+            proposal_file=str(proposal_path),
+            proposal_file_sha256=hashlib.sha256(
+                proposal_path.read_bytes()
+            ).hexdigest(),
+            evidence_type="manual_athlete_value",
+            approved_at_utc=generated_at_utc,
+        )
+    )
+    profile = Mock()
+    profile.personal_bests_by_distance = {}
+    profile.training_timezone = "UTC"
+    monkeypatch.setattr(
+        "resilio.api.vdot._load_profile_unlocked",
+        lambda _repo: profile,
+    )
+    monkeypatch.setattr(
+        "resilio.api.vdot._load_planning_state_unlocked",
+        lambda _repo: state,
+    )
+
+    result = estimate_current_vdot(as_of_date=as_of_date)
+
+    assert isinstance(result, VDOTError)
+    assert result.error_type == "invalid_input"
+
 
 # ============================================================
 # VDOT ESTIMATION TESTS (RACE HISTORY FALLBACK)
@@ -440,54 +322,23 @@ class TestVDOTAPIFunctions:
 class TestVDOTEstimationRaceHistoryFallback:
     """Tests for estimate_current_vdot() race history fallback."""
 
-    def _create_dummy_activity_file(self, activities_dir, days_ago=0):
-        """Create a dummy activity file (empty, just for glob detection)."""
-        from datetime import date, timedelta
-        activity_date = date.today() - timedelta(days=days_ago)
-        activity_file = activities_dir / f"activity_{activity_date.isoformat()}.yaml"
-        activity_file.touch()  # Create empty file
+    as_of_date = date(2026, 7, 30)
 
-    def _mock_repository_with_easy_run(self, monkeypatch, days_ago=5):
-        """Mock RepositoryIO to return a dummy easy run (not a quality workout)."""
-        from unittest.mock import Mock
-        from datetime import date, datetime, timedelta
-        from resilio.schemas.activity import DataQuality, CanonicalActivity, SportType, SurfaceType
-
-        activity_date = date.today() - timedelta(days=days_ago)
-        dummy_activity = make_activity(
-            id=f"test_{activity_date.isoformat()}",
-            source="manual",
-            date=activity_date,
-            sport_type=SportType.RUN,
-            name="Morning Easy Run",
-            duration_minutes=30,
-            duration_seconds=1800,
-            distance_km=5.0,
-            elevation_gain_m=0.0,
-            average_hr=140,
-            has_gps_data=True,
-            surface_type=SurfaceType.ROAD,
-            data_quality=DataQuality.MEDIUM,
-            description=None,
-            created_at=datetime.now(),
-            updated_at=datetime.now(),
+    @pytest.fixture(autouse=True)
+    def no_approved_vdot(self, monkeypatch):
+        """Exercise race fallback independently of the live planning aggregate."""
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_planning_state_unlocked",
+            lambda _repo: None,
         )
-
-        # Mock RepositoryIO.read_yaml to return our dummy activity
-        mock_repo = Mock()
-        mock_repo.read_yaml.return_value = dummy_activity
-
-        def mock_repo_init(*args, **kwargs):
-            return mock_repo
-
-        monkeypatch.setattr("resilio.core.repository.RepositoryIO", mock_repo_init)
 
     def test_fallback_recent_race_no_decay(self, tmp_path, monkeypatch):
         """Test VDOT estimation fallback with recent race (<3 months) - no decay."""
+        from datetime import timedelta
+        from unittest.mock import Mock
+
         from resilio.api.vdot import estimate_current_vdot
         from resilio.schemas.vdot import VDOTEstimate
-        from datetime import date, timedelta
-        from unittest.mock import Mock
 
         # Setup paths
         activities_dir = tmp_path / "activities"
@@ -495,17 +346,13 @@ class TestVDOTEstimationRaceHistoryFallback:
         monkeypatch.setenv("RESILIO_DATA_DIR", str(tmp_path))
         monkeypatch.setattr("resilio.core.paths.get_activities_dir", lambda: str(activities_dir))
 
-        # Create dummy activity file and mock repository
-        self._create_dummy_activity_file(activities_dir, days_ago=5)
-        self._mock_repository_with_easy_run(monkeypatch, days_ago=5)
-
         # Create mock profile with recent PB (2 months ago)
         mock_profile = Mock()
-        recent_pb_date = (date.today() - timedelta(days=60)).isoformat()  # 2 months ago
-        mock_profile.personal_bests = {
+        recent_pb_date = (self.as_of_date - timedelta(days=60)).isoformat()
+        mock_profile.personal_bests_by_distance = {
             "10k": Mock(
                 time="42:30",
-                date=recent_pb_date,
+                performance_date=date.fromisoformat(recent_pb_date),
                 vdot=45.0,
             )
         }
@@ -514,25 +361,33 @@ class TestVDOTEstimationRaceHistoryFallback:
         def mock_get_profile():
             return mock_profile
 
-        monkeypatch.setattr("resilio.api.profile.get_profile", mock_get_profile)
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_profile_unlocked",
+            lambda _repo: mock_get_profile(),
+        )
 
         # Execute
-        result = estimate_current_vdot(lookback_days=28)
+        result = estimate_current_vdot(
+            lookback_days=90,
+            as_of_date=self.as_of_date,
+        )
 
         # Verify
         assert isinstance(result, VDOTEstimate)
         assert result.estimated_vdot == 45  # No decay for recent PB
-        assert result.confidence == ConfidenceLevel.HIGH
-        assert "recent_pb" in result.source
+        assert result.evidence_type == "personal_best"
+        assert result.evidence_age_days == 60
+        assert result.applicability_window_days == 90
+        assert "recent_personal_best" in result.source
         assert "10k" in result.source
-        assert "days ago" in result.source
+        assert recent_pb_date in result.source
 
-    def test_fallback_moderate_age_race_3pct_decay(self, tmp_path, monkeypatch):
-        """Test VDOT estimation fallback with 3-6 month old race - 3% decay."""
-        from resilio.api.vdot import estimate_current_vdot
-        from resilio.schemas.vdot import VDOTEstimate
+    def test_stale_race_is_not_silently_decayed(self, tmp_path, monkeypatch):
+        """Old race evidence must remain old rather than becoming inferred fitness."""
         from datetime import date, timedelta
         from unittest.mock import Mock
+
+        from resilio.api.vdot import VDOTError, estimate_current_vdot
 
         # Setup paths
         activities_dir = tmp_path / "activities"
@@ -540,17 +395,13 @@ class TestVDOTEstimationRaceHistoryFallback:
         monkeypatch.setenv("RESILIO_DATA_DIR", str(tmp_path))
         monkeypatch.setattr("resilio.core.paths.get_activities_dir", lambda: str(activities_dir))
 
-        # Create dummy activity file and mock repository
-        self._create_dummy_activity_file(activities_dir, days_ago=5)
-        self._mock_repository_with_easy_run(monkeypatch, days_ago=5)
-
         # Create mock profile with 4-month old PB
         mock_profile = Mock()
-        old_pb_date = (date.today() - timedelta(days=120)).isoformat()  # 4 months ago
-        mock_profile.personal_bests = {
+        old_pb_date = (self.as_of_date - timedelta(days=120)).isoformat()
+        mock_profile.personal_bests_by_distance = {
             "10k": Mock(
                 time="42:30",
-                date=old_pb_date,
+                performance_date=date.fromisoformat(old_pb_date),
                 vdot=45.0,
             )
         }
@@ -558,26 +409,28 @@ class TestVDOTEstimationRaceHistoryFallback:
         def mock_get_profile():
             return mock_profile
 
-        monkeypatch.setattr("resilio.api.profile.get_profile", mock_get_profile)
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_profile_unlocked",
+            lambda _repo: mock_get_profile(),
+        )
 
         # Execute
-        result = estimate_current_vdot(lookback_days=28)
+        result = estimate_current_vdot(
+            lookback_days=28,
+            as_of_date=self.as_of_date,
+        )
 
         # Verify
-        assert isinstance(result, VDOTEstimate)
-        # Should decay from PB-based VDOT while staying in valid range.
-        assert result.estimated_vdot < 45
-        assert result.estimated_vdot >= 30
-        assert result.confidence in [ConfidenceLevel.MEDIUM, ConfidenceLevel.LOW]
-        assert "race_decay" in result.source
-        assert "months old" in result.source  # 120 days ≈ 3-4 months
+        assert isinstance(result, VDOTError)
+        assert result.error_type == "not_found"
+        assert "120 days old" in result.message
 
-    def test_fallback_old_race_progressive_decay(self, tmp_path, monkeypatch):
-        """Test VDOT estimation fallback with 12-month old race - progressive decay."""
-        from resilio.api.vdot import estimate_current_vdot
-        from resilio.schemas.vdot import VDOTEstimate
+    def test_year_old_race_is_not_presented_as_current(self, tmp_path, monkeypatch):
+        """A year-old performance cannot become a current VDOT through a heuristic."""
         from datetime import date, timedelta
         from unittest.mock import Mock
+
+        from resilio.api.vdot import VDOTError, estimate_current_vdot
 
         # Setup paths
         activities_dir = tmp_path / "activities"
@@ -585,17 +438,13 @@ class TestVDOTEstimationRaceHistoryFallback:
         monkeypatch.setenv("RESILIO_DATA_DIR", str(tmp_path))
         monkeypatch.setattr("resilio.core.paths.get_activities_dir", lambda: str(activities_dir))
 
-        # Create dummy activity file and mock repository
-        self._create_dummy_activity_file(activities_dir, days_ago=5)
-        self._mock_repository_with_easy_run(monkeypatch, days_ago=5)
-
         # Create mock profile with 12-month old PB
         mock_profile = Mock()
-        old_pb_date = (date.today() - timedelta(days=365)).isoformat()  # 12 months ago
-        mock_profile.personal_bests = {
+        old_pb_date = (self.as_of_date - timedelta(days=365)).isoformat()
+        mock_profile.personal_bests_by_distance = {
             "10k": Mock(
                 time="49:33",
-                date=old_pb_date,
+                performance_date=date.fromisoformat(old_pb_date),
                 vdot=38.0,
             )
         }
@@ -603,26 +452,29 @@ class TestVDOTEstimationRaceHistoryFallback:
         def mock_get_profile():
             return mock_profile
 
-        monkeypatch.setattr("resilio.api.profile.get_profile", mock_get_profile)
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_profile_unlocked",
+            lambda _repo: mock_get_profile(),
+        )
 
         # Execute
-        result = estimate_current_vdot(lookback_days=28)
+        result = estimate_current_vdot(
+            lookback_days=28,
+            as_of_date=self.as_of_date,
+        )
 
         # Verify
-        assert isinstance(result, VDOTEstimate)
-        # Older race data should produce a conservative decayed estimate.
-        assert result.estimated_vdot < 38
-        assert result.estimated_vdot >= 30
-        assert result.confidence == ConfidenceLevel.LOW
-        assert "race_decay" in result.source
-        assert "months old" in result.source  # 365 days ≈ 11-12 months
+        assert isinstance(result, VDOTError)
+        assert result.error_type == "not_found"
+        assert "365 days old" in result.message
 
     def test_fallback_uses_most_recent_race(self, tmp_path, monkeypatch):
         """Test that fallback uses the most recent race when multiple exist."""
+        from datetime import timedelta
+        from unittest.mock import Mock
+
         from resilio.api.vdot import estimate_current_vdot
         from resilio.schemas.vdot import VDOTEstimate
-        from datetime import date, timedelta
-        from unittest.mock import Mock
 
         # Setup paths
         activities_dir = tmp_path / "activities"
@@ -630,21 +482,17 @@ class TestVDOTEstimationRaceHistoryFallback:
         monkeypatch.setenv("RESILIO_DATA_DIR", str(tmp_path))
         monkeypatch.setattr("resilio.core.paths.get_activities_dir", lambda: str(activities_dir))
 
-        # Create dummy activity file and mock repository
-        self._create_dummy_activity_file(activities_dir, days_ago=5)
-        self._mock_repository_with_easy_run(monkeypatch, days_ago=5)
-
         # Create mock profile with multiple PBs
         mock_profile = Mock()
-        mock_profile.personal_bests = {
+        mock_profile.personal_bests_by_distance = {
             "10k": Mock(  # Older PB
                 time="50:00",
-                date=(date.today() - timedelta(days=365)).isoformat(),
+                performance_date=self.as_of_date - timedelta(days=365),
                 vdot=35.0,
             ),
             "5k": Mock(  # More recent PB - should be used
                 time="22:30",
-                date=(date.today() - timedelta(days=60)).isoformat(),
+                performance_date=self.as_of_date - timedelta(days=60),
                 vdot=42.0,
             ),
         }
@@ -652,21 +500,27 @@ class TestVDOTEstimationRaceHistoryFallback:
         def mock_get_profile():
             return mock_profile
 
-        monkeypatch.setattr("resilio.api.profile.get_profile", mock_get_profile)
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_profile_unlocked",
+            lambda _repo: mock_get_profile(),
+        )
 
         # Execute
-        result = estimate_current_vdot(lookback_days=28)
+        result = estimate_current_vdot(
+            lookback_days=90,
+            as_of_date=self.as_of_date,
+        )
 
         # Verify - should use the 5K PB (more recent, VDOT 42)
         assert isinstance(result, VDOTEstimate)
         assert result.estimated_vdot == 42
         assert "5k" in result.source
-        assert "days ago" in result.source
 
     def test_no_workouts_no_pbs_returns_error(self, tmp_path, monkeypatch):
         """Test that error is returned when no workouts and no PBs."""
-        from resilio.api.vdot import estimate_current_vdot, VDOTError
         from unittest.mock import Mock
+
+        from resilio.api.vdot import VDOTError, estimate_current_vdot
 
         # Setup paths
         activities_dir = tmp_path / "activities"
@@ -674,33 +528,35 @@ class TestVDOTEstimationRaceHistoryFallback:
         monkeypatch.setenv("RESILIO_DATA_DIR", str(tmp_path))
         monkeypatch.setattr("resilio.core.paths.get_activities_dir", lambda: str(activities_dir))
 
-        # Create dummy activity file and mock repository
-        self._create_dummy_activity_file(activities_dir, days_ago=5)
-        self._mock_repository_with_easy_run(monkeypatch, days_ago=5)
-
         # Create mock profile with no PBs
         mock_profile = Mock()
-        mock_profile.personal_bests = {}
+        mock_profile.personal_bests_by_distance = {}
 
         def mock_get_profile():
             return mock_profile
 
-        monkeypatch.setattr("resilio.api.profile.get_profile", mock_get_profile)
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_profile_unlocked",
+            lambda _repo: mock_get_profile(),
+        )
 
         # Execute
-        result = estimate_current_vdot(lookback_days=28)
+        result = estimate_current_vdot(
+            lookback_days=28,
+            as_of_date=self.as_of_date,
+        )
 
         # Verify
         assert isinstance(result, VDOTError)
         assert result.error_type == "not_found"
-        assert "Insufficient data" in result.message
+        assert "No approved VDOT" in result.message
 
-    def test_fallback_clamps_vdot_to_valid_range(self, tmp_path, monkeypatch):
-        """Test that fallback clamps decayed VDOT to valid 30-85 range."""
-        from resilio.api.vdot import estimate_current_vdot
-        from resilio.schemas.vdot import VDOTEstimate
+    def test_very_old_race_is_rejected_instead_of_clamped(self, tmp_path, monkeypatch):
+        """No arbitrary decay or floor may manufacture a current VDOT."""
         from datetime import date, timedelta
         from unittest.mock import Mock
+
+        from resilio.api.vdot import VDOTError, estimate_current_vdot
 
         # Setup paths
         activities_dir = tmp_path / "activities"
@@ -708,17 +564,13 @@ class TestVDOTEstimationRaceHistoryFallback:
         monkeypatch.setenv("RESILIO_DATA_DIR", str(tmp_path))
         monkeypatch.setattr("resilio.core.paths.get_activities_dir", lambda: str(activities_dir))
 
-        # Create dummy activity file and mock repository
-        self._create_dummy_activity_file(activities_dir, days_ago=5)
-        self._mock_repository_with_easy_run(monkeypatch, days_ago=5)
-
         # Create mock profile with very old, low VDOT PB
         mock_profile = Mock()
-        old_pb_date = (date.today() - timedelta(days=730)).isoformat()  # 2 years ago
-        mock_profile.personal_bests = {
+        old_pb_date = (self.as_of_date - timedelta(days=730)).isoformat()
+        mock_profile.personal_bests_by_distance = {
             "10k": Mock(
                 time="55:00",
-                date=old_pb_date,
+                performance_date=date.fromisoformat(old_pb_date),
                 vdot=32.0,
             )
         }
@@ -726,13 +578,18 @@ class TestVDOTEstimationRaceHistoryFallback:
         def mock_get_profile():
             return mock_profile
 
-        monkeypatch.setattr("resilio.api.profile.get_profile", mock_get_profile)
+        monkeypatch.setattr(
+            "resilio.api.vdot._load_profile_unlocked",
+            lambda _repo: mock_get_profile(),
+        )
 
         # Execute
-        result = estimate_current_vdot(lookback_days=28)
+        result = estimate_current_vdot(
+            lookback_days=28,
+            as_of_date=self.as_of_date,
+        )
 
         # Verify - should clamp to minimum of 30
-        assert isinstance(result, VDOTEstimate)
-        # 32 * 0.85 (15% decay) = 27.2, but should be clamped to 30
-        assert result.estimated_vdot >= 30
-        assert result.estimated_vdot <= 85
+        assert isinstance(result, VDOTError)
+        assert result.error_type == "not_found"
+        assert "730 days old" in result.message

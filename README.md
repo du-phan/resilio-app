@@ -1,9 +1,10 @@
 # Resilio
 
 Resilio is a local AI-assisted running coach for multi-sport athletes. It
-imports completed activities through Intervals.icu, computes load/readiness
-locally, adapts plans using the athlete’s complete training context, and can
-publish owned run and cycling workouts back to the external calendar.
+imports completed activities through Intervals.icu, preserves
+provider-computed training state locally, builds signal-first coaching
+context, and can publish owned run and cycling workouts back to the external
+calendar.
 
 Open this repository in Claude Code or Codex and ask to get started. The
 assistant guides environment setup, account validation, sync, profile
@@ -28,13 +29,15 @@ Then validate and import:
 ```bash
 poetry run resilio auth status
 poetry run resilio sync
-poetry run resilio profile analyze
+poetry run resilio profile candidates
 poetry run resilio status
 ```
 
 Garmin, Wahoo, climbing, bouldering, yoga, strength, and other recorded or
 manual activities should flow into Intervals.icu first. Resilio retains its
-canonical local history and remains authoritative for coaching calculations.
+canonical local history and remains authoritative for athlete-confirmed facts,
+methodology-guided coaching, plans, and approvals. Missing provider analysis
+is never silently reconstructed.
 
 Free Intervals.icu accounts should be opened at least once every 90 days so
 the account does not become dormant and stop processing new files.

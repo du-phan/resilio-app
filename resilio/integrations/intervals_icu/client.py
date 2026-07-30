@@ -7,21 +7,22 @@ import re
 import time
 from datetime import date
 from email.utils import parsedate_to_datetime
-from typing import Callable, Optional, TypeVar
+from typing import Any, Callable, Optional, TypeVar
 
 import httpx
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from resilio import __version__
 from resilio.integrations.intervals_icu.dto import (
     ActivityDTO,
+    ActivitySummaryDTO,
     AthleteDTO,
     ConnectionsDTO,
     EventDTO,
     EventWriteDTO,
     HiddenActivityDTO,
-    ManualActivityWriteDTO,
     SportSettingsDTO,
+    WellnessDTO,
 )
 from resilio.integrations.intervals_icu.errors import (
     IntervalsAuthenticationError,
@@ -73,7 +74,12 @@ class IntervalsIcuClient:
     def __enter__(self) -> "IntervalsIcuClient":
         return self
 
-    def __exit__(self, *_args) -> None:
+    def __exit__(
+        self,
+        exception_type: type[BaseException] | None,
+        exception: BaseException | None,
+        traceback: object | None,
+    ) -> None:
         self.close()
 
     def _retry_after(self, response: httpx.Response) -> Optional[int]:
@@ -123,7 +129,7 @@ class IntervalsIcuClient:
         *,
         operation: str,
         retry_reads: bool = True,
-        **kwargs,
+        **kwargs: Any,
     ) -> httpx.Response:
         attempts = self.max_attempts if retry_reads and method.upper() == "GET" else 1
         last_transport_error: Optional[Exception] = None
@@ -138,10 +144,7 @@ class IntervalsIcuClient:
                 self._sleeper(min(8.0, 0.5 * (2 ** (attempt - 1))) + self._jitter(0, 0.25))
                 continue
 
-            request_id = (
-                response.headers.get("X-Request-ID")
-                or response.headers.get("CF-Ray")
-            )
+            request_id = response.headers.get("X-Request-ID") or response.headers.get("CF-Ray")
             status = response.status_code
             if 200 <= status < 300:
                 return response
@@ -187,7 +190,7 @@ class IntervalsIcuClient:
             if status == 429:
                 retry_after = self._retry_after(response)
                 if attempt < attempts and retry_reads:
-                    delay = retry_after if retry_after is not None else min(8.0, 2 ** attempt)
+                    delay = retry_after if retry_after is not None else min(8.0, 2**attempt)
                     self._sleeper(float(delay) + self._jitter(0, 0.25))
                     continue
                 raise IntervalsRateLimitError(
@@ -229,7 +232,10 @@ class IntervalsIcuClient:
         operation: str,
     ) -> list[T]:
         try:
-            return TypeAdapter(list[model]).validate_python(response.json())
+            payload = response.json()
+            if not isinstance(payload, list):
+                raise ValueError("expected a list")
+            return [model.model_validate(item) for item in payload]
         except (ValueError, ValidationError) as exc:
             raise IntervalsInvalidPayloadError(
                 "Intervals.icu returned an invalid collection payload",
@@ -264,6 +270,28 @@ class IntervalsIcuClient:
         )
         return self._validated_list(response, SportSettingsDTO, operation)
 
+    def get_wellness(
+        self,
+        oldest: date,
+        newest: date,
+        *,
+        athlete_id: Optional[str] = None,
+    ) -> list[WellnessDTO]:
+        """Read inclusive daily wellness/training-state rows."""
+        if newest < oldest:
+            raise ValueError("newest wellness date cannot precede oldest")
+        operation = "get_wellness"
+        response = self._request(
+            "GET",
+            f"/athlete/{athlete_id or self.athlete_id}/wellness",
+            operation=operation,
+            params={
+                "oldest": oldest.isoformat(),
+                "newest": newest.isoformat(),
+            },
+        )
+        return self._validated_list(response, WellnessDTO, operation)
+
     def list_activities(
         self,
         oldest: date,
@@ -271,7 +299,7 @@ class IntervalsIcuClient:
         *,
         athlete_id: Optional[str] = None,
         limit: int = 1000,
-    ) -> list[ActivityDTO | HiddenActivityDTO]:
+    ) -> list[ActivitySummaryDTO | HiddenActivityDTO]:
         operation = "list_activities"
         response = self._request(
             "GET",
@@ -287,14 +315,14 @@ class IntervalsIcuClient:
             payload = response.json()
             if not isinstance(payload, list):
                 raise ValueError("expected list")
-            result: list[ActivityDTO | HiddenActivityDTO] = []
+            result: list[ActivitySummaryDTO | HiddenActivityDTO] = []
             for item in payload:
                 if not isinstance(item, dict):
                     raise ValueError("activity row is not an object")
                 if "_note" in item and "type" not in item:
                     result.append(HiddenActivityDTO.model_validate(item))
                 else:
-                    result.append(ActivityDTO.model_validate(item))
+                    result.append(ActivitySummaryDTO.model_validate(item))
             return result
         except (ValueError, ValidationError) as exc:
             raise IntervalsInvalidPayloadError(
@@ -344,39 +372,6 @@ class IntervalsIcuClient:
                 status_code=response.status_code,
             )
         return response.content
-
-    def create_manual_activities(
-        self,
-        activities: list[ManualActivityWriteDTO],
-        *,
-        athlete_id: Optional[str] = None,
-    ) -> list[ActivityDTO]:
-        """Submit one bulk mutation exactly once; callers recover by ownership."""
-        operation = "create_manual_activities"
-        if not activities:
-            raise ValueError("at least one manual activity is required")
-        response = self._request(
-            "POST",
-            f"/athlete/{athlete_id or self.athlete_id}/activities/manual/bulk",
-            operation=operation,
-            retry_reads=False,
-            json=[
-                activity.model_dump(mode="json", exclude_none=True)
-                for activity in activities
-            ],
-        )
-        result = self._validated_list(response, ActivityDTO, operation)
-        returned_ids = [activity.id for activity in result]
-        returned_external_ids = [activity.external_id for activity in result]
-        if len(returned_ids) != len(set(returned_ids)) or len(
-            returned_external_ids
-        ) != len(set(returned_external_ids)):
-            raise IntervalsInvalidPayloadError(
-                "Intervals.icu returned duplicate manual activity identities",
-                operation=operation,
-                status_code=response.status_code,
-            )
-        return result
 
     def delete_activity(self, activity_id: str) -> None:
         """Delete one exact activity without a blind retry."""

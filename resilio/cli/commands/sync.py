@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 from datetime import datetime, timezone
@@ -21,19 +22,22 @@ LOCK_PATH = ACTIVITY_MUTATION_LOCK_PATH
 LOCK_STALE_SECONDS = 300
 
 
-def _pid_running(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-        return True
-    except (OSError, ProcessLookupError):
-        return False
-
-
 def _lock_status(repo: RepositoryIO) -> Optional[SyncLockStatus]:
     path = repo.resolve_path(LOCK_PATH)
     if not path.exists():
         return None
+    descriptor = os.open(path, os.O_RDWR)
     try:
+        try:
+            fcntl.flock(
+                descriptor,
+                fcntl.LOCK_EX | fcntl.LOCK_NB,
+            )
+        except BlockingIOError:
+            pass
+        else:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+            return None
         raw = json.loads(path.read_text())
         acquired = datetime.fromisoformat(raw["acquired_at"])
         if acquired.tzinfo is None:
@@ -45,16 +49,18 @@ def _lock_status(repo: RepositoryIO) -> Optional[SyncLockStatus]:
             operation=str(raw.get("operation", "activity_sync")),
             acquired_at=acquired,
             age_seconds=age,
-            stale=age > LOCK_STALE_SECONDS or not _pid_running(pid),
+            long_running=age > LOCK_STALE_SECONDS,
         )
     except Exception:
         return None
+    finally:
+        os.close(descriptor)
 
 
 def _status(repo: RepositoryIO) -> SyncStatusSnapshot:
     lock = _lock_status(repo)
     return SyncStatusSnapshot(
-        running=bool(lock and not lock.stale),
+        running=lock is not None,
         lock=lock,
         progress=read_sync_progress(repo),
         state=read_sync_state(repo),
@@ -99,24 +105,22 @@ def sync_command(
     repo = RepositoryIO()
     if status:
         if full or confirm_deletions:
-            raise typer.BadParameter(
-                "--status cannot be combined with mutation options"
-            )
-        result = _status(repo)
+            raise typer.BadParameter("--status cannot be combined with mutation options")
+        status_result = _status(repo)
         envelope = api_result_to_envelope(
-            result,
+            status_result,
             success_message="Sync status fetched.",
         )
     else:
-        result = sync_activities(
+        sync_result = sync_activities(
             full=full,
             confirm_deletions=confirm_deletions,
         )
         envelope = api_result_to_envelope(
-            result,
+            sync_result,
             success_message=(
-                _success_message(result)
-                if isinstance(result, SyncReport)
+                _success_message(sync_result)
+                if isinstance(sync_result, SyncReport)
                 else "Activity sync failed"
             ),
         )

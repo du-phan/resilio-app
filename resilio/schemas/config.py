@@ -20,7 +20,6 @@ class ConfigErrorType(str, Enum):
 class PathSettings(BaseModel):
     athlete_dir: str = "data/athlete"
     activities_dir: str = "data/activities"
-    metrics_dir: str = "data/metrics"
     plans_dir: str = "data/plans"
     state_dir: str = "data/state"
 
@@ -42,31 +41,9 @@ class IntervalsIcuSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class TrainingDefaults(BaseModel):
-    ctl_time_constant: int = 42
-    atl_time_constant: int = 7
-    acwr_acute_window: int = 7
-    acwr_chronic_window: int = 28
-    baseline_days_threshold: int = 14
-    acwr_minimum_days: int = 28
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class SystemSettings(BaseModel):
-    lock_timeout_ms: int = 300_000
-    lock_retry_count: int = 3
-    lock_retry_delay_ms: int = 2_000
-    metrics_stale_hours: int = 24
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class Settings(BaseModel):
     paths: PathSettings = Field(default_factory=PathSettings)
     intervals_icu: IntervalsIcuSettings = Field(default_factory=IntervalsIcuSettings)
-    training_defaults: TrainingDefaults = Field(default_factory=TrainingDefaults)
-    system: SystemSettings = Field(default_factory=SystemSettings)
 
     model_config = ConfigDict(extra="forbid")
 

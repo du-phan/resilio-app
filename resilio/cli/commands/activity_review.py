@@ -42,10 +42,16 @@ def approve_command(
         "--local-id",
         help="Exact candidate local activity ID",
     ),
+    review_fingerprint: str = typer.Option(
+        ...,
+        "--review-fingerprint",
+        help="Exact current review fingerprint from the review queue",
+    ),
 ) -> None:
     result = approve_activity_review(
         external_activity_id_sha256=external_hash,
         local_activity_id=local_activity_id,
+        review_fingerprint_sha256=review_fingerprint,
     )
     envelope = api_result_to_envelope(
         result,

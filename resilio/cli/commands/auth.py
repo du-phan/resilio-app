@@ -10,7 +10,6 @@ from resilio.core.config import ConfigError, load_config
 from resilio.integrations.intervals_icu import IntervalsIcuClient
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError
 
-
 app = typer.Typer(help="Validate external account access")
 
 
@@ -25,9 +24,7 @@ def auth_status_command(ctx: typer.Context) -> None:
             message=config.message,
             data={
                 "authenticated": False,
-                "next_steps": (
-                    "Set INTERVALS_ICU_API_KEY in .env.local"
-                ),
+                "next_steps": ("Set INTERVALS_ICU_API_KEY in .env.local"),
             },
         )
         output_json(envelope)

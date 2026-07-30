@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.publication import (
@@ -16,8 +16,8 @@ from resilio.schemas.publication import (
 @dataclass(frozen=True)
 class CompletionReconciliation:
     match: Optional[WorkoutCompletionMatch] = None
-    candidate: Optional[dict] = None
-    conflict: Optional[dict] = None
+    candidate: Optional[dict[str, Any]] = None
+    conflict: Optional[dict[str, Any]] = None
 
 
 def _start_delta_seconds(
@@ -32,10 +32,7 @@ def _start_delta_seconds(
     except ValueError:
         return None
     return abs(
-        (
-            activity_start.replace(tzinfo=None)
-            - planned_start.replace(tzinfo=None)
-        ).total_seconds()
+        (activity_start.replace(tzinfo=None) - planned_start.replace(tzinfo=None)).total_seconds()
     )
 
 
@@ -50,12 +47,10 @@ def reconcile_workout_completion(
 ) -> CompletionReconciliation:
     """Prefer exact owned event pairing; keep heuristic candidates report-only."""
     publication = (
-        publications_by_event_id.get(paired_event_id)
-        if paired_event_id is not None
-        else None
+        publications_by_event_id.get(paired_event_id) if paired_event_id is not None else None
     )
     if publication is not None:
-        if publication.sport != activity.sport_type:
+        if publication.sport != str(activity.sport):
             return CompletionReconciliation(
                 conflict={
                     "rule": "paired_event_sport_mismatch",
@@ -65,8 +60,7 @@ def reconcile_workout_completion(
             )
         if (
             existing_match is not None
-            and existing_match.local_workout_id
-            == publication.local_workout_id
+            and existing_match.local_workout_id == publication.local_workout_id
         ):
             return CompletionReconciliation()
         return CompletionReconciliation(
@@ -83,9 +77,8 @@ def reconcile_workout_completion(
 
     candidates = []
     for item in publications:
-        if (
-            item.occurrence_date != activity.date
-            or item.sport != activity.sport_type
+        if item.occurrence_date != activity.occurrence.local_date or item.sport != str(
+            activity.sport
         ):
             continue
         start_delta = _start_delta_seconds(activity, item.start_date_local)

@@ -70,7 +70,8 @@ Visitor starts a coaching session by using the starter prompt.
 1. Supported setup workflow: macOS, Linux.
 2. Unsupported setup workflow: Windows, WSL.
 3. An Intervals.icu account and personal API key are required.
-4. First sync may pause on Intervals.icu API limits and resume later.
+4. If Intervals.icu limits interrupt the first sync, no partial archive is
+   published and the requested range can be restarted safely later.
 5. Project data is local-first with Intervals.icu used for auth and sync.
 
 ## Source-of-Truth References

@@ -1,101 +1,108 @@
 ---
 name: vdot-baseline-proposal
-description: Proposes a baseline VDOT and returns evidence plus a single approval prompt for the coach. Use when a macro plan needs an approved baseline VDOT.
-compatibility: Codex CLI/IDE; requires local resilio CLI and repo context
+description: Propose an evidence-backed baseline VDOT without mutating approval state. Use when a macro plan needs a baseline VDOT proposal or when the athlete asks to reassess race-performance equivalence.
 ---
 
-# VDOT Baseline Proposal (Executor)
+# Baseline VDOT proposal
 
-Use CLI only. Present the review directly in chat for the coach to use.
+This is a proposal-only procedure. Write a new reviewable proposal file, but
+do not approve it or mutate the profile or planning state.
 
-## Preconditions (block if missing)
+## Evidence rules
 
-- Goal exists (race type/date) and profile exists
-- Metrics available (`resilio status`)
-
-If missing, return a blocking checklist and stop.
-
-## Interactivity & Feedback
-
-- Non-interactive: do not ask the athlete questions or call approval commands.
-- Return an `athlete_prompt` for the coach to ask and capture approval.
-- If the athlete declines or requests changes, the coach will re-run this skill with notes; treat notes as hard constraints and generate a new proposal.
-- If new constraints are provided (injury, schedule limits), assume the coach updated profile/memory before re-run.
-- If any CLI command fails (exit code ≠ 0), include the error output in your response and return a blocking checklist.
-
-## Metric explainer rule (athlete-facing)
-
-If the athlete_prompt mentions any metrics, add a first-mention explainer. If multiple metrics appear together, use a single "Quick defs" line. Do not repeat unless the athlete asks or seems confused. For multi-sport athletes, add a brief clause tying the metric to total work across running + other sports (e.g., climbing/cycling).
-
-Use this exact VDOT explainer on first mention:
-"VDOT is a running fitness score based on your recent race or hard-effort times. I use it to set your training paces so your running stays matched to your current fitness alongside your other sports."
-
-One-line definitions for other metrics:
-- CTL: "CTL is your long-term training load—think of it as your 6-week fitness trend."
-- ATL: "ATL is your short-term load—basically how much you've trained in the past week."
-- TSB: "TSB is freshness (long-term fitness minus short-term fatigue)."
-- ACWR: "ACWR compares this week to your recent average; high values mean a sudden spike."
-- Readiness: "Readiness is a recovery score—higher usually means you can handle harder work."
-- RPE: "RPE is your perceived effort from 1–10."
+- Prefer an athlete-confirmed, recent race or personal best with an exact
+  distance, elapsed time, and date.
+- An active exact-file VDOT approval in planning state is valid evidence and
+  must be labeled as such.
+- Do not infer VDOT from easy pace, average activity pace, provider VO2 max,
+  heart rate, native aerobic load, fitness/fatigue, or an arbitrary decay
+  formula.
+- Do not use future performances or evidence outside the requested lookback.
+- If no qualifying evidence exists, return `not_found` and request an explicit
+  benchmark or manual athlete-approved value.
 
 ## Workflow
 
-1. Gather evidence:
+1. Read the confirmed profile and approval state:
 
-```bash
-resilio profile get          # Includes personal_bests section
-resilio status
-resilio vdot estimate-current --lookback-days 90  # Longer lookback for continuity analysis
-resilio activity list --since 30d --sport run
-```
+   ```bash
+   poetry run resilio dates today
+   poetry run resilio profile get
+   poetry run resilio approvals status
+   ```
 
-**NEW: Understanding estimate-current output:**
-- `source` field explains estimation method (e.g., "race_decay_adjusted (75% continuity)")
-- `confidence`: HIGH (recent race/3+ workouts), MEDIUM (decay + validation), LOW (single workout/easy pace)
-- May include HR-detected easy runs if max_hr is in profile
-- Training continuity score shown when using race decay
-- Clear error message if insufficient data (no CTL-based fallback)
+2. Evaluate current evidence:
 
-2. Choose a baseline VDOT:
+   ```bash
+   poetry run resilio vdot estimate-current --lookback-days <DAYS>
+   ```
 
-Strategy (automatic via `vdot estimate-current`):
-- **Recent race (<90 days)**: Use race VDOT directly (HIGH confidence)
-- **Older race (≥90 days)**: Apply continuity-aware decay
-  - Analyzes actual training breaks (not just elapsed time)
-  - Validates with recent pace data (quality + HR-based easy runs)
-  - Uses Daniels' Table 9.2 decay methodology
-- **No race**: Use pace analysis (quality workouts → HR-detected easy runs)
-- **Insufficient data**: Return error asking athlete to establish baseline via:
-  - Adding a PB (`resilio profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD`)
-  - Running quality workouts (tempo, threshold, interval)
-  - Running easy runs consistently (requires max_hr in profile)
+3. For a newly confirmed race, calculate its value independently:
 
-The system will NOT provide a CTL-based guess - we need actual pace data.
+   ```bash
+   poetry run resilio vdot calculate \
+     --race-type <DISTANCE> \
+     --time <ELAPSED_TIME> \
+     --race-date <YYYY-MM-DD> \
+     --as-of-date <ATHLETE_LOCAL_TODAY>
+   ```
 
-3. Get pace ranges:
+4. For synchronized race evidence, retrieve the exact canonical source:
 
-```bash
-resilio vdot paces --vdot <VDOT>
-```
+   ```bash
+   poetry run resilio activity list \
+     --since <PERFORMANCE_DATE> \
+     --sport run
+   ```
 
-4. Present directly in chat:
+   Use only the matching record’s `local_activity_id`,
+   `elapsed_duration_seconds`, `activity_timezone`, and
+   `source_external_fingerprint_sha256`. If those facts do not identify the
+   confirmed race exactly, use an athlete-confirmed profile personal best or
+   request clarification; do not invent a source binding.
 
-- Proposed VDOT + confidence + source
-- Recent evidence (race or key workouts)
-- Pace table (easy/tempo/interval/long)
-- Single approval prompt text for the athlete
-- Handoff note: coach must record approval via
-  `resilio approvals approve-vdot --value <VDOT>`
-
-## References (load only if needed)
-
-- VDOT methodology: `docs/coaching/methodology.md`
-- Pace zones reference: `references/pace_zones.md`
+5. If two valid performances materially disagree, explain the dates, race
+   distances, and computed values. Prefer the more recent representative
+   performance only when its context supports using it; otherwise present the
+   uncertainty and ask the athlete.
 
 ## Output
 
-Return:
+Write a new JSON file with exactly:
 
-- `proposed_vdot`
-- `athlete_prompt` (single yes/no + adjustment question)
-- If blocked: `blocking_checklist`
+- `schema_version: 1`;
+- integer `proposed_vdot`;
+- discriminated `evidence`:
+  - race evidence requires its `evidence_type`, exact `race_distance`,
+    `elapsed_time_seconds`, `performance_date`, `performance_timezone`,
+    `source_local_activity_id`, and
+    `source_external_fingerprint_sha256`;
+  - personal-best evidence requires its `evidence_type`, exact
+    `race_distance`, `elapsed_time_seconds`, `performance_date`, and
+    `performance_timezone`; those facts must exactly match the confirmed
+    profile record;
+  - manual evidence requires `evidence_type: manual_athlete_value`, the
+    `athlete_confirmed_vdot`, and an exact `confirmation_reference`;
+- an evidence-specific `evidence_summary` of at least 20 characters;
+- timezone-aware `generated_at_utc`.
+
+Do not clamp an out-of-range performance, decay an old result, or add a
+temperature, altitude, or arbitrary time adjustment. Then return:
+
+- `proposed_vdot`;
+- evidence type, distance, elapsed time, and date, or the existing approval;
+- evidence date, age in days, and the explicit applicability window;
+- excluded evidence and the factual reason for exclusion;
+- the new proposal file path and exact contents;
+- one athlete-facing approval prompt.
+
+VDOT approval does not authorize Resilio to manufacture training paces.
+
+After explicit athlete approval, the main coach records:
+
+```bash
+poetry run resilio approvals approve-vdot --file <PROPOSAL_JSON>
+```
+
+Approval binds the exact absolute path and file SHA-256. Any revision requires
+a new file and a new approval.

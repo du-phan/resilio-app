@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date
 from typing import Mapping, Optional, Union
 
 from resilio.core.config import ConfigError, load_config
-from resilio.core.paths import current_plan_path
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.service import (
     PublicationSafetyError,
@@ -15,12 +14,10 @@ from resilio.core.workout_publication.service import (
 )
 from resilio.integrations.intervals_icu import IntervalsIcuClient
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError
-from resilio.schemas.plan import MasterPlan, WorkoutPrescription
 from resilio.schemas.publication import (
     PlanPublicationReport,
     PublicationResult,
 )
-from resilio.schemas.repository import RepoError
 
 
 @dataclass
@@ -29,28 +26,9 @@ class PublicationError:
     message: str
 
 
-def _load_current_plan(repo: RepositoryIO) -> MasterPlan:
-    plan = repo.read_yaml(current_plan_path(), MasterPlan)
-    if plan is None:
-        raise ValueError("No current training plan is available")
-    if isinstance(plan, RepoError):
-        raise ValueError(f"Unable to load current plan: {plan}")
-    return plan
-
-
-def _find_workout(repo: RepositoryIO, workout_id: str) -> WorkoutPrescription:
-    plan = _load_current_plan(repo)
-    for week in plan.weeks:
-        for workout in week.workouts:
-            if workout.id == workout_id:
-                return workout
-    raise ValueError(f"Workout not found in current plan: {workout_id}")
-
-
 def publish_workout(
     workout_id: str,
     *,
-    start_time_local: Optional[time] = None,
     environment: Optional[Mapping[str, str]] = None,
     client: Optional[IntervalsIcuClient] = None,
 ) -> Union[PublicationResult, PublicationError]:
@@ -61,11 +39,7 @@ def publish_workout(
     owned_client = client is None
     integration = client or IntervalsIcuClient(config)
     try:
-        workout = _find_workout(repo, workout_id)
-        return WorkoutPublicationService(repo, integration).publish(
-            workout,
-            start_time_local=start_time_local,
-        )
+        return WorkoutPublicationService(repo, integration).publish(workout_id)
     except PublicationSafetyError as exc:
         return PublicationError("publication_safety", str(exc))
     except IntervalsIcuError as exc:
@@ -90,14 +64,7 @@ def publish_plan_workouts(
     owned_client = client is None
     integration = client or IntervalsIcuClient(config)
     try:
-        plan = _load_current_plan(repo)
-        workouts = [
-            workout
-            for week in plan.weeks
-            for workout in week.workouts
-        ]
         return WorkoutPublicationService(repo, integration).publish_plan(
-            workouts,
             from_date=from_date or date.today(),
         )
     except PublicationSafetyError as exc:

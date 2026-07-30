@@ -5,12 +5,11 @@ Tests the CLI interface, JSON output formatting, and error handling.
 """
 
 import json
-import pytest
 from datetime import date, timedelta
+
 from typer.testing import CliRunner
 
 from resilio.cli.commands.dates import app
-
 
 runner = CliRunner()
 

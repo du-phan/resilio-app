@@ -4,7 +4,6 @@ from resilio.core.repository import RepositoryIO
 from resilio.schemas.repository import RepoError
 from resilio.schemas.sync import ActivitySyncState, SyncProgress
 
-
 SYNC_STATE_PATH = "data/state/activity_sync.json"
 SYNC_PROGRESS_PATH = "data/state/activity_sync_progress.json"
 

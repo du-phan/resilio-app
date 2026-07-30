@@ -129,7 +129,7 @@ def test_weather_week_missing_location_includes_next_steps(mock_api):
     mock_api.return_value = WeatherError(
         error_type="invalid_input",
         message="No weather location configured in profile.",
-        next_steps="Run: resilio profile set --weather-location \"City, Country\"",
+        next_steps='Run: resilio profile set --weather-location "City, Country"',
     )
 
     result = runner.invoke(app, ["week", "--start", "2026-02-16"])

@@ -8,8 +8,7 @@ Documentation authority, highest first:
 2. Root [AGENTS.md](../AGENTS.md)
 3. This index
 4. [Agent workflow](guides/development/agent-workflow.md)
-5. [Architecture map](reference/architecture-map.md), current references, and
-   specifications
+5. [Architecture map](reference/architecture-map.md) and current references
 6. Task-specific skills
 7. Tool-specific [CLAUDE.md](../CLAUDE.md)
 
@@ -23,18 +22,10 @@ Git history is the archive.
 - [Agent workflow](guides/development/agent-workflow.md)
 - [Coaching CLI index](coaching/cli/index.md)
 
-## Engineering
-
-- [API layer](specs/api_layer.md)
-- [Module specifications](specs/modules/)
-- [Split oversized plan modules](issues/split-oversized-plan-modules.md)
-- [Establish repository-wide Ruff](issues/establish-repository-ruff-gate.md)
-
 ## Coaching
 
 - [CLI command index](coaching/cli/index.md)
 - [Methodology](coaching/methodology.md)
-- [Scenarios](coaching/scenarios.md)
 - [Training-book summaries](training_books/)
 
 ## Product

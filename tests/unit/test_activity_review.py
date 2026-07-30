@@ -18,6 +18,7 @@ from resilio.core.activity_sync.review import (
 )
 from resilio.core.activity_sync.service import ActivitySyncService
 from resilio.core.repository import RepositoryIO
+from resilio.core.sync_state import read_sync_state
 from resilio.integrations.intervals_icu.dto import (
     ActivityDTO,
     AthleteDTO,
@@ -69,6 +70,9 @@ class ReviewClient:
         return ConnectionsDTO(id="athlete-1")
 
     def get_sport_settings(self, _athlete_id):
+        return []
+
+    def get_wellness(self, _oldest, _newest, *, athlete_id=None):
         return []
 
     def list_activities(self, *_args, **_kwargs):
@@ -156,7 +160,6 @@ def test_review_approval_is_current_candidate_bound_and_idempotent(
         review_repo,
         _config(),
         ReviewClient(),
-        metrics_recompute=lambda *_args: {},
     )
     first = service.run(today=date(2026, 7, 28), full=True)
 
@@ -164,34 +167,29 @@ def test_review_approval_is_current_candidate_bound_and_idempotent(
     assert first.ambiguous_rows == 1
     reviews = list_reconciliation_reviews(review_repo)
     assert len(reviews) == 1
-    assert reviews[0].candidates[0].local_activity_id == (
-        "historical-candidate"
-    )
+    assert reviews[0].candidates[0].local_activity_id == ("historical-candidate")
     assert reviews[0].candidates[0].name == "Historical run"
     assert reviews[0].original_file_probe == "no_unique_match"
 
     with pytest.raises(ReconciliationReviewError, match="not a current"):
         approve_reconciliation_override(
             review_repo,
-            external_activity_id_sha256=(
-                reviews[0].external_activity_id_sha256
-            ),
+            external_activity_id_sha256=(reviews[0].external_activity_id_sha256),
             local_activity_id="not-a-candidate",
+            review_fingerprint_sha256=(reviews[0].review_fingerprint_sha256),
         )
 
     approved = approve_reconciliation_override(
         review_repo,
-        external_activity_id_sha256=(
-            reviews[0].external_activity_id_sha256
-        ),
+        external_activity_id_sha256=(reviews[0].external_activity_id_sha256),
         local_activity_id="historical-candidate",
+        review_fingerprint_sha256=reviews[0].review_fingerprint_sha256,
     )
     unchanged = approve_reconciliation_override(
         review_repo,
-        external_activity_id_sha256=(
-            reviews[0].external_activity_id_sha256
-        ),
+        external_activity_id_sha256=(reviews[0].external_activity_id_sha256),
         local_activity_id="historical-candidate",
+        review_fingerprint_sha256=reviews[0].review_fingerprint_sha256,
     )
 
     assert approved.action == "approved"
@@ -199,9 +197,7 @@ def test_review_approval_is_current_candidate_bound_and_idempotent(
     assert len(load_override_ledger(review_repo).overrides) == 1
 
     second = service.run(today=date(2026, 7, 28), full=True)
-    records = ActivityArchive(
-        review_repo.resolve_path("data/activities")
-    ).load_all()
+    records = ActivityArchive(review_repo.resolve_path("data/activities")).load_all()
 
     assert second.phase == SyncPhase.DONE
     assert second.activities_linked == 1
@@ -209,6 +205,66 @@ def test_review_approval_is_current_candidate_bound_and_idempotent(
     assert len(records) == 1
     assert records[0].local_activity_id == "historical-candidate"
     assert records[0].origin.intervals_icu_activity_id == "review-external"
+
+
+def test_review_override_is_rejected_when_review_evidence_drifts(
+    review_repo,
+) -> None:
+    client = ReviewClient()
+    service = ActivitySyncService(review_repo, _config(), client)
+    service.run(today=date(2026, 7, 28), full=True)
+    review = list_reconciliation_reviews(review_repo)[0]
+    approve_reconciliation_override(
+        review_repo,
+        external_activity_id_sha256=review.external_activity_id_sha256,
+        local_activity_id="historical-candidate",
+        review_fingerprint_sha256=review.review_fingerprint_sha256,
+    )
+    client.activity = client.activity.model_copy(update={"elapsed_time": 2800, "moving_time": 2800})
+
+    report = service.run(today=date(2026, 7, 28), full=True)
+
+    assert report.phase == SyncPhase.PARTIAL
+    assert report.quarantined_rows == 1
+    checkpoint_run_id = read_sync_state(review_repo).checkpoint_run_id
+    assert checkpoint_run_id is not None
+    quarantine_payload = review_repo.resolve_path(
+        f"data/state/sync-runs/{checkpoint_run_id}/quarantine.json"
+    ).read_text()
+    assert "stale_review_override" in quarantine_payload
+
+
+def test_review_override_is_rejected_when_candidate_ownership_drifts(
+    review_repo,
+) -> None:
+    client = ReviewClient()
+    client.get_activity = lambda _external_id: client.activity
+    service = ActivitySyncService(review_repo, _config(), client)
+    service.run(today=date(2026, 7, 28), full=True)
+    review = list_reconciliation_reviews(review_repo)[0]
+    approve_reconciliation_override(
+        review_repo,
+        external_activity_id_sha256=review.external_activity_id_sha256,
+        local_activity_id="historical-candidate",
+        review_fingerprint_sha256=review.review_fingerprint_sha256,
+    )
+    archive = ActivityArchive(review_repo.resolve_path("data/activities"))
+    candidate = archive.load_all()[0]
+    archive.write(
+        candidate.model_copy(
+            update={
+                "origin": candidate.origin.model_copy(
+                    update={"intervals_icu_activity_id": "new-external-owner"}
+                )
+            }
+        )
+    )
+
+    report = service.run(today=date(2026, 7, 28), full=True)
+
+    assert report.phase == SyncPhase.PARTIAL
+    assert report.quarantined_rows == 1
+    assert archive.load_all()[0].origin.intervals_icu_activity_id == "new-external-owner"
 
 
 def test_already_linked_cross_device_duplicate_requires_exact_exclusion(
@@ -230,9 +286,7 @@ def test_already_linked_cross_device_duplicate_requires_exact_exclusion(
             "origin": existing.origin.model_copy(
                 update={
                     "recording_provider": RecordingProvider.WAHOO,
-                    "intervals_icu_activity_id": (
-                        "already-linked-external"
-                    ),
+                    "intervals_icu_activity_id": ("already-linked-external"),
                 }
             ),
         }
@@ -242,7 +296,6 @@ def test_already_linked_cross_device_duplicate_requires_exact_exclusion(
         review_repo,
         _config(),
         DuplicateReviewClient(),
-        metrics_recompute=lambda *_args: {},
     )
 
     first = service.run(today=date(2026, 7, 28), full=True)
@@ -252,21 +305,16 @@ def test_already_linked_cross_device_duplicate_requires_exact_exclusion(
     assert first.ambiguous_rows == 1
     assert len(reviews) == 1
     assert len(reviews[0].candidates) == 1
-    assert (
-        reviews[0]
-        .candidates[0]
-        .already_linked_to_different_external_id
-    )
+    assert reviews[0].candidates[0].already_linked_to_different_external_id
     with pytest.raises(
         ReconciliationReviewError,
         match="exclude the duplicate",
     ):
         approve_reconciliation_override(
             review_repo,
-            external_activity_id_sha256=(
-                reviews[0].external_activity_id_sha256
-            ),
+            external_activity_id_sha256=(reviews[0].external_activity_id_sha256),
             local_activity_id=existing.local_activity_id,
+            review_fingerprint_sha256=(reviews[0].review_fingerprint_sha256),
         )
     with pytest.raises(
         ReconciliationReviewError,
@@ -274,22 +322,16 @@ def test_already_linked_cross_device_duplicate_requires_exact_exclusion(
     ):
         exclude_duplicate_reconciliation(
             review_repo,
-            external_activity_id_sha256=(
-                reviews[0].external_activity_id_sha256
-            ),
+            external_activity_id_sha256=(reviews[0].external_activity_id_sha256),
             local_activity_id=existing.local_activity_id,
             review_fingerprint_sha256="0" * 64,
         )
 
     excluded = exclude_duplicate_reconciliation(
         review_repo,
-        external_activity_id_sha256=(
-            reviews[0].external_activity_id_sha256
-        ),
+        external_activity_id_sha256=(reviews[0].external_activity_id_sha256),
         local_activity_id=existing.local_activity_id,
-        review_fingerprint_sha256=(
-            reviews[0].review_fingerprint_sha256
-        ),
+        review_fingerprint_sha256=(reviews[0].review_fingerprint_sha256),
     )
     second = service.run(today=date(2026, 7, 28), full=True)
     records = archive.load_all()
@@ -299,10 +341,7 @@ def test_already_linked_cross_device_duplicate_requires_exact_exclusion(
     assert second.excluded_duplicate_rows == 1
     assert second.ambiguous_rows == 0
     assert len(records) == 1
-    assert (
-        records[0].origin.intervals_icu_activity_id
-        == "already-linked-external"
-    )
+    assert records[0].origin.intervals_icu_activity_id == "already-linked-external"
     ledger = load_override_ledger(review_repo)
     assert not ledger.overrides
     assert len(ledger.exclusions) == 1
@@ -316,11 +355,7 @@ def test_original_file_hash_resolves_unique_ambiguous_candidate(
     digest = hashlib.sha256(ReviewClient.original_file).hexdigest()
     archive.write(
         candidate.model_copy(
-            update={
-                "origin": candidate.origin.model_copy(
-                    update={"original_file_sha256": digest}
-                )
-            }
+            update={"origin": candidate.origin.model_copy(update={"original_file_sha256": digest})}
         )
     )
 
@@ -328,7 +363,6 @@ def test_original_file_hash_resolves_unique_ambiguous_candidate(
         review_repo,
         _config(),
         ReviewClient(),
-        metrics_recompute=lambda *_args: {},
     ).run(today=date(2026, 7, 28), full=True)
     linked = archive.load_all()[0]
 
@@ -339,20 +373,17 @@ def test_original_file_hash_resolves_unique_ambiguous_candidate(
     assert linked.origin.original_file_sha256 == digest
 
 
-def test_validation_quarantine_acknowledgement_is_exact_and_idempotent(
+def test_inconsistent_local_timestamp_quarantine_is_blocking(
     review_repo,
 ) -> None:
     client = ReviewClient()
-    payload = client.activity.model_dump(mode="json")
-    payload["icu_intervals"] = [
-        {
-            "id": 1,
-            "start_time": 0,
-            "elapsed_time": 60,
-            "max_speed": 999,
+    client.activity = client.activity.model_copy(
+        update={
+            "start_date_local": client.activity.start_date_local.replace(
+                hour=client.activity.start_date_local.hour + 1
+            )
         }
-    ]
-    client.activity = ActivityDTO.model_validate(payload)
+    )
     service = ActivitySyncService(review_repo, _config(), client)
 
     first = service.run(today=date(2026, 7, 28), full=True)
@@ -362,75 +393,30 @@ def test_validation_quarantine_acknowledgement_is_exact_and_idempotent(
     assert first.quarantined_rows == 1
     assert first.acknowledged_quarantined_rows == 0
     assert len(quarantines) == 1
-    assert quarantines[0].acknowledgeable
+    assert not quarantines[0].acknowledgeable
     assert not quarantines[0].acknowledged
-    assert any(
-        "maximum_speed" in issue.location
-        for issue in quarantines[0].validation_issues
-    )
+    assert quarantines[0].error_type == "ValueError"
+    assert not quarantines[0].validation_issues
     artifact = next(
-        review_repo.resolve_path("data/state/sync-runs").rglob(
-            "quarantine.json"
-        )
+        review_repo.resolve_path("data/state/sync-runs").rglob("quarantine.json")
     ).read_text()
-    assert "999" not in artifact
     assert "External run" not in artifact
     assert "review-external" not in artifact
 
-    with pytest.raises(ReconciliationReviewError, match="no longer current"):
+    with pytest.raises(ReconciliationReviewError, match="cannot be acknowledged"):
         acknowledge_activity_quarantine(
             review_repo,
-            external_activity_id_sha256=(
-                quarantines[0].external_activity_id_sha256
-            ),
-            failure_fingerprint_sha256="0" * 64,
+            external_activity_id_sha256=(quarantines[0].external_activity_id_sha256),
+            failure_fingerprint_sha256=quarantines[0].failure_fingerprint_sha256,
         )
-
-    acknowledged = acknowledge_activity_quarantine(
-        review_repo,
-        external_activity_id_sha256=(
-            quarantines[0].external_activity_id_sha256
-        ),
-        failure_fingerprint_sha256=(
-            quarantines[0].failure_fingerprint_sha256
-        ),
-    )
-    unchanged = acknowledge_activity_quarantine(
-        review_repo,
-        external_activity_id_sha256=(
-            quarantines[0].external_activity_id_sha256
-        ),
-        failure_fingerprint_sha256=(
-            quarantines[0].failure_fingerprint_sha256
-        ),
-    )
-    second = service.run(today=date(2026, 7, 28), full=True)
-    current = list_activity_quarantines(review_repo)
-
-    assert acknowledged.action == "acknowledged"
-    assert unchanged.action == "unchanged"
-    assert second.phase == SyncPhase.DONE
-    assert not second.partial
-    assert second.quarantined_rows == 1
-    assert second.acknowledged_quarantined_rows == 1
-    assert current[0].acknowledged
-    assert (
-        len(
-            load_quarantine_acknowledgement_ledger(
-                review_repo
-            ).acknowledgements
-        )
-        == 1
-    )
+    assert not load_quarantine_acknowledgement_ledger(review_repo).acknowledgements
 
 
-def test_unsupported_sport_quarantine_cannot_be_acknowledged(
+def test_unsupported_sport_quarantine_can_be_acknowledged(
     review_repo,
 ) -> None:
     client = ReviewClient()
-    client.activity = client.activity.model_copy(
-        update={"type": "UnknownFutureSport"}
-    )
+    client.activity = client.activity.model_copy(update={"type": "UnknownFutureSport"})
 
     ActivitySyncService(review_repo, _config(), client).run(
         today=date(2026, 7, 28),
@@ -438,14 +424,45 @@ def test_unsupported_sport_quarantine_cannot_be_acknowledged(
     )
     quarantine = list_activity_quarantines(review_repo)[0]
 
-    assert not quarantine.acknowledgeable
-    with pytest.raises(ReconciliationReviewError, match="cannot be acknowledged"):
-        acknowledge_activity_quarantine(
-            review_repo,
-            external_activity_id_sha256=(
-                quarantine.external_activity_id_sha256
-            ),
-            failure_fingerprint_sha256=(
-                quarantine.failure_fingerprint_sha256
-            ),
-        )
+    assert quarantine.acknowledgeable
+    acknowledged = acknowledge_activity_quarantine(
+        review_repo,
+        external_activity_id_sha256=(quarantine.external_activity_id_sha256),
+        failure_fingerprint_sha256=(quarantine.failure_fingerprint_sha256),
+    )
+    assert acknowledged.action == "acknowledged"
+
+    report = ActivitySyncService(review_repo, _config(), client).run(
+        today=date(2026, 7, 28),
+        full=True,
+    )
+    exclusions = read_sync_state(review_repo).source_coverage_exclusions
+
+    assert report.phase == SyncPhase.DONE
+    assert len(exclusions) == 1
+    assert exclusions[0].reason == "acknowledged_unsupported_sport"
+    assert exclusions[0].local_date == date(2026, 7, 28)
+    assert exclusions[0].source_sport_type == "UnknownFutureSport"
+
+
+def test_changed_unsupported_source_facts_invalidate_acknowledgement(
+    review_repo,
+) -> None:
+    client = ReviewClient()
+    client.activity = client.activity.model_copy(update={"type": "UnknownFutureSport"})
+    service = ActivitySyncService(review_repo, _config(), client)
+    service.run(today=date(2026, 7, 28), full=True)
+    quarantine = list_activity_quarantines(review_repo)[0]
+    acknowledge_activity_quarantine(
+        review_repo,
+        external_activity_id_sha256=(quarantine.external_activity_id_sha256),
+        failure_fingerprint_sha256=(quarantine.failure_fingerprint_sha256),
+    )
+    client.activity = client.activity.model_copy(update={"type": "AnotherFutureSport"})
+
+    report = service.run(today=date(2026, 7, 28), full=True)
+    changed = list_activity_quarantines(review_repo)[0]
+
+    assert report.phase == SyncPhase.PARTIAL
+    assert not changed.acknowledged
+    assert changed.failure_fingerprint_sha256 != quarantine.failure_fingerprint_sha256

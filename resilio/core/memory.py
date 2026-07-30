@@ -17,82 +17,32 @@ Key Features:
 """
 
 import re
-import yaml
-from datetime import datetime, timedelta
-from pathlib import Path
+from datetime import datetime
 from typing import Optional
 
-from resilio.core.paths import athlete_memories_path
+from resilio.core.memory_analysis import (
+    analyze_memory_patterns as analyze_memory_patterns,
+)
+from resilio.core.memory_storage import (
+    archive_memory as archive_memory,
+)
+from resilio.core.memory_storage import (
+    cleanup_archived as cleanup_archived,
+)
+from resilio.core.memory_storage import (
+    load_archived_memories as load_archived_memories,
+)
+from resilio.core.memory_storage import (
+    load_memories as load_memories,
+)
+from resilio.core.memory_storage import write_memories
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.memory import (
     ArchivedMemory,
     Memory,
     MemoryConfidence,
-    MemorySource,
     MemoryType,
-    PatternInsight,
 )
-
-
-# ============================================================
-# YAML I/O HELPERS
-# ============================================================
-
-
-def _read_memories_yaml(repo: RepositoryIO) -> dict:
-    """
-    Read memories.yaml as raw dictionary.
-
-    Returns empty structure if file doesn't exist.
-    """
-    path = repo.resolve_path(athlete_memories_path())
-
-    if not path.exists():
-        return {
-            "_schema": {
-                "format_version": "1.0.0",
-                "schema_type": "memories",
-            },
-            "memories": [],
-            "archived": [],
-        }
-
-    with open(path) as f:
-        return yaml.safe_load(f) or {}
-
-
-def _write_memories_yaml(repo: RepositoryIO, data: dict) -> None:
-    """
-    Write memories.yaml from raw dictionary.
-
-    Uses atomic write (temp file + rename).
-    """
-    path = repo.resolve_path(athlete_memories_path())
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Atomic write
-    temp_path = path.with_suffix(".tmp")
-    try:
-        with open(temp_path, "w") as f:
-            yaml.safe_dump(data, f, default_flow_style=False, sort_keys=False)
-        temp_path.replace(path)
-    except Exception:
-        if temp_path.exists():
-            temp_path.unlink()
-        raise
-
-
-def _parse_datetime(value: str | datetime) -> datetime:
-    """
-    Parse datetime from string or datetime object.
-
-    YAML auto-parses ISO format strings to datetime objects,
-    so we need to handle both formats.
-    """
-    if isinstance(value, datetime):
-        return value
-    return datetime.fromisoformat(value)
-
 
 # ============================================================
 # STORAGE FUNCTIONS
@@ -151,94 +101,13 @@ def save_memory(
     else:
         # Existing memory was updated (occurrences incremented)
         existing_memories = [
-            final_memory if m.id == final_memory.id else m
-            for m in existing_memories
+            final_memory if m.id == final_memory.id else m for m in existing_memories
         ]
 
     # Write back to file
-    _write_memories(existing_memories, archived_memory, repo)
+    write_memories(existing_memories, archived_memory, repo)
 
     return final_memory, archived_memory
-
-
-def load_memories(repo: RepositoryIO) -> list[Memory]:
-    """
-    Load all active memories from athlete/memories.yaml.
-
-    Returns:
-        List of all active (non-archived) memories. Returns empty list if
-        file doesn't exist or has no memories.
-
-    Example:
-        >>> memories = load_memories(repo)
-        >>> injury_memories = [m for m in memories if m.type == MemoryType.INJURY_HISTORY]
-        >>> len(injury_memories)
-        3
-    """
-    data = _read_memories_yaml(repo)
-    memories_data = data.get("memories", [])
-
-    memories = []
-    for mem_dict in memories_data:
-        try:
-            memory = Memory(**mem_dict)
-            memories.append(memory)
-        except Exception:
-            # Skip invalid memory entries
-            continue
-
-    return memories
-
-
-def load_archived_memories(repo: RepositoryIO) -> list[ArchivedMemory]:
-    """
-    Load all archived memories from athlete/memories.yaml.
-
-    Returns:
-        List of archived memories. Returns empty list if file doesn't exist
-        or has no archived memories.
-
-    Example:
-        >>> archived = load_archived_memories(repo)
-        >>> recent_archived = [a for a in archived if a.archived_at > cutoff_date]
-    """
-    data = _read_memories_yaml(repo)
-    archived_data = data.get("archived", [])
-
-    archived_memories = []
-    for arch_dict in archived_data:
-        try:
-            archived = ArchivedMemory(**arch_dict)
-            archived_memories.append(archived)
-        except Exception:
-            continue
-
-    return archived_memories
-
-
-def _write_memories(
-    memories: list[Memory],
-    new_archived: Optional[ArchivedMemory],
-    repo: RepositoryIO,
-) -> None:
-    """
-    Write memories to athlete/memories.yaml.
-
-    Creates file with schema if it doesn't exist.
-    """
-    # Load existing data
-    data = _read_memories_yaml(repo)
-
-    # Update memories (mode='json' ensures enums/datetimes serialize correctly)
-    data["memories"] = [m.model_dump(mode='json') for m in memories]
-
-    # Add new archived memory if provided
-    if new_archived:
-        archived_list = data.get("archived", [])
-        archived_list.append(new_archived.model_dump(mode='json'))
-        data["archived"] = archived_list
-
-    _write_memories_yaml(repo, data)
 
 
 # ============================================================
@@ -295,7 +164,10 @@ def deduplicate_memory(
             updated_memory.updated_at = datetime.now()
 
             # Upgrade confidence if 3+ occurrences
-            if updated_memory.occurrences >= 3 and updated_memory.confidence != MemoryConfidence.HIGH:
+            if (
+                updated_memory.occurrences >= 3
+                and updated_memory.confidence != MemoryConfidence.HIGH
+            ):
                 updated_memory.confidence = MemoryConfidence.HIGH
 
             return updated_memory, None
@@ -314,7 +186,10 @@ def deduplicate_memory(
                     original_content=existing.content,
                     superseded_by=new_memory.id,
                     archived_at=datetime.now(),
-                    reason=f"Updated by newer observation about {', '.join(sorted(existing_tags_set & new_tags_set))}",
+                    reason=(
+                        "Updated by newer observation about "
+                        f"{', '.join(sorted(existing_tags_set & new_tags_set))}"
+                    ),
                 )
 
                 # Transfer occurrences to new memory
@@ -353,10 +228,10 @@ def _normalize_for_comparison(content: str) -> str:
     normalized = content.lower()
 
     # Collapse whitespace
-    normalized = re.sub(r'\s+', ' ', normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
 
     # Strip punctuation
-    normalized = re.sub(r'[^\w\s]', '', normalized)
+    normalized = re.sub(r"[^\w\s]", "", normalized)
 
     return normalized.strip()
 
@@ -443,7 +318,7 @@ def get_relevant_memories(
 
     # Tokenize context
     context_lower = context.lower()
-    context_words = set(re.findall(r'\w+', context_lower))
+    context_words = set(re.findall(r"\w+", context_lower))
 
     # Score each memory
     scored = []
@@ -453,7 +328,7 @@ def get_relevant_memories(
         score = 0.0
 
         # Content overlap
-        memory_words = set(re.findall(r'\w+', memory.content.lower()))
+        memory_words = set(re.findall(r"\w+", memory.content.lower()))
         matching_words = context_words & memory_words
         score += len(matching_words)
 
@@ -514,238 +389,3 @@ def get_memories_with_tag(
     filtered.sort(key=lambda m: m.updated_at, reverse=True)
 
     return filtered
-
-
-# ============================================================
-# PATTERN ANALYSIS
-# ============================================================
-
-
-def analyze_memory_patterns(
-    repo: RepositoryIO,
-) -> list[PatternInsight]:
-    """
-    Detect patterns from stored memories.
-
-    Patterns detected:
-        - Recurring injury locations (3+ mentions)
-        - Training response patterns (consistent reactions)
-        - Preference consistency
-
-    Args:
-        repo: RepositoryIO instance
-
-    Returns:
-        List of pattern insights with evidence
-
-    Example:
-        >>> patterns = analyze_memory_patterns(repo)
-        >>> # PatternInsight(
-        >>> #     pattern_type="recurring_injury",
-        >>> #     description="Recurring knee issues detected (4 occurrences)",
-        >>> #     evidence=["mem_123", "mem_456", "mem_789", "mem_abc"],
-        >>> #     confidence=MemoryConfidence.HIGH
-        >>> # )
-    """
-    memories = load_memories(repo)
-    insights = []
-
-    # Pattern 1: Recurring injury location (3+ mentions)
-    injury_memories = [m for m in memories if m.type == MemoryType.INJURY_HISTORY]
-
-    body_part_counts: dict[str, list[Memory]] = {}
-    for mem in injury_memories:
-        for tag in mem.tags:
-            if tag.startswith("body:"):
-                part = tag.split(":")[1]
-                if part not in body_part_counts:
-                    body_part_counts[part] = []
-                body_part_counts[part].append(mem)
-
-    for part, mems in body_part_counts.items():
-        # Calculate total mentions (sum of all occurrences)
-        total_mentions = sum(m.occurrences for m in mems)
-
-        # Pattern detected if 3+ total mentions OR 3+ separate memories
-        if total_mentions >= 3 or len(mems) >= 3:
-            insights.append(
-                PatternInsight(
-                    pattern_type="recurring_injury",
-                    description=f"Recurring {part} issues detected ({total_mentions} occurrences)",
-                    evidence=[m.id for m in mems],
-                    confidence=MemoryConfidence.HIGH,
-                )
-            )
-
-    # Pattern 2: Override tendency (from training responses)
-    override_memories = [
-        m
-        for m in memories
-        if m.type == MemoryType.TRAINING_RESPONSE
-        and "override" in m.content.lower()
-    ]
-
-    if len(override_memories) >= 3:
-        insights.append(
-            PatternInsight(
-                pattern_type="override_tendency",
-                description="Athlete frequently overrides rest suggestions",
-                evidence=[m.id for m in override_memories[:5]],
-                confidence=MemoryConfidence.MEDIUM,
-            )
-        )
-
-    # Pattern 3: Consistent preferences (3+ mentions of same preference)
-    preference_memories = [m for m in memories if m.type == MemoryType.PREFERENCE]
-
-    # Group by tag
-    pref_by_tag: dict[str, list[Memory]] = {}
-    for mem in preference_memories:
-        for tag in mem.tags:
-            if tag not in pref_by_tag:
-                pref_by_tag[tag] = []
-            pref_by_tag[tag].append(mem)
-
-    for tag, mems in pref_by_tag.items():
-        if len(mems) >= 3:
-            insights.append(
-                PatternInsight(
-                    pattern_type="consistent_preference",
-                    description=f"Consistent preference for {tag} ({len(mems)} mentions)",
-                    evidence=[m.id for m in mems],
-                    confidence=MemoryConfidence.HIGH,
-                )
-            )
-
-    return insights
-
-
-# ============================================================
-# ARCHIVAL
-# ============================================================
-
-
-def archive_memory(
-    memory_id: str,
-    superseded_by: str,
-    reason: str,
-    repo: RepositoryIO,
-) -> ArchivedMemory:
-    """
-    Archive a memory that has been superseded.
-
-    Process:
-        1. Load memories.yaml
-        2. Find memory by ID
-        3. Create ArchivedMemory record
-        4. Move to archived list
-        5. Remove from active list
-        6. Write updated memories.yaml
-        7. Return ArchivedMemory
-
-    Args:
-        memory_id: ID of memory to archive
-        superseded_by: ID of memory that replaces it
-        reason: Human-readable reason for archiving
-        repo: RepositoryIO instance
-
-    Returns:
-        ArchivedMemory record
-
-    Raises:
-        ValueError: If memory_id not found
-
-    Example:
-        >>> archived = archive_memory(
-        ...     "mem_old123",
-        ...     "mem_new456",
-        ...     "Updated by newer observation",
-        ...     repo
-        ... )
-        >>> archived.id  # "mem_old123"
-        >>> archived.superseded_by  # "mem_new456"
-    """
-    # Load memories
-    data = _read_memories_yaml(repo)
-    active_memories = data.get("memories", [])
-    archived_memories = data.get("archived", [])
-
-    # Find the memory to archive
-    memory_to_archive = next(
-        (m for m in active_memories if m["id"] == memory_id),
-        None,
-    )
-
-    if not memory_to_archive:
-        raise ValueError(f"Memory not found: {memory_id}")
-
-    # Create archived record
-    archived = ArchivedMemory(
-        id=memory_id,
-        original_content=memory_to_archive["content"],
-        superseded_by=superseded_by,
-        archived_at=datetime.now(),
-        reason=reason,
-    )
-
-    # Add to archived list
-    archived_memories.append(archived.model_dump())
-
-    # Remove from active list
-    active_memories = [m for m in active_memories if m["id"] != memory_id]
-
-    # Update file
-    data["memories"] = active_memories
-    data["archived"] = archived_memories
-    _write_memories_yaml(repo, data)
-
-    return archived
-
-
-def cleanup_archived(
-    repo: RepositoryIO,
-    retention_days: int = 90,
-) -> int:
-    """
-    Remove archived memories older than retention period.
-
-    Process:
-        1. Load memories.yaml
-        2. Filter archived memories older than retention_days
-        3. Remove old archived memories
-        4. Write updated memories.yaml
-        5. Return count deleted
-
-    Args:
-        repo: RepositoryIO instance
-        retention_days: Days to retain archived memories (default 90)
-
-    Returns:
-        Number of archived memories deleted
-
-    Example:
-        >>> deleted_count = cleanup_archived(repo, retention_days=90)
-        >>> deleted_count  # 3 (removed 3 old archived memories)
-    """
-    data = _read_memories_yaml(repo)
-    archived_memories = data.get("archived", [])
-
-    # Calculate cutoff date
-    cutoff_date = datetime.now() - timedelta(days=retention_days)
-
-    # Filter out old archived memories
-    initial_count = len(archived_memories)
-    archived_memories = [
-        m
-        for m in archived_memories
-        if _parse_datetime(m["archived_at"]) > cutoff_date
-    ]
-
-    deleted_count = initial_count - len(archived_memories)
-
-    if deleted_count > 0:
-        # Update file
-        data["archived"] = archived_memories
-        _write_memories_yaml(repo, data)
-
-    return deleted_count

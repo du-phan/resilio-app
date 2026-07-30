@@ -1,94 +1,59 @@
-"""
-resilio today - Get today's recommended workout.
+"""Day-specific facts without automatic workout recommendations."""
 
-Returns the workout recommendation for today (or specified date) with full coaching
-context including metrics, triggers, and rationale.
-"""
-
-from datetime import datetime, date
+from datetime import date, timedelta
 from typing import Optional
 
 import typer
 
-from resilio.api import get_todays_workout
+from resilio.api.coaching_context import CoachingContextError, get_weekly_coach_context
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from resilio.cli.output import create_error_envelope, output_json
+from resilio.cli.output import output_json
 
 
 def today_command(
-    ctx: typer.Context,
-    date: Optional[str] = typer.Option(
+    target_date_text: Optional[str] = typer.Option(
         None,
         "--date",
-        help="Date to get workout for (YYYY-MM-DD), defaults to today",
+        help="Local date in YYYY-MM-DD format; defaults to today",
     ),
 ) -> None:
-    """Get today's workout recommendation with coaching context.
-
-    Returns:
-    - Workout details: type, duration, target RPE, pace zones, HR zones
-    - Current metrics: CTL, TSB, ACWR, readiness
-    - Adaptation triggers: Warnings about elevated load, low readiness, etc.
-    - Rationale: Why this workout for today
-
-    This gives Claude Code everything needed to provide personalized coaching.
-
-    Examples:
-        resilio today                    # Today's workout
-        resilio today --date 2026-01-20  # Workout for specific date
-    """
-    # Parse date if provided
-    target_date: Optional[date] = None
-    if date:
-        try:
-            # Convert to date object (not datetime) to match workout schema
-            target_date = datetime.fromisoformat(date).date()
-        except ValueError:
-            # Build error envelope
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid date format: {date}. Use YYYY-MM-DD.",
-            )
-
-            output_json(envelope)
-            raise typer.Exit(code=5)  # Validation error
-
-    # Call API
-    result = get_todays_workout(target_date=target_date)
-
-    # Convert to envelope
+    result: object
+    try:
+        target_date = (
+            date.fromisoformat(target_date_text) if target_date_text is not None else date.today()
+        )
+    except ValueError as exc:
+        result = CoachingContextError(
+            "validation",
+            f"Date must use YYYY-MM-DD format: {exc}",
+        )
+    else:
+        week_start = target_date - timedelta(days=target_date.weekday())
+        context = get_weekly_coach_context(
+            week_start=week_start,
+            as_of_date=target_date,
+        )
+        if isinstance(context, CoachingContextError):
+            result = context
+        else:
+            result = {
+                "local_date": target_date,
+                "training_state": context.training_state,
+                "recovery": context.recovery,
+                "completed_activities": [
+                    activity
+                    for activity in context.activities
+                    if activity.local_date == target_date
+                ],
+                "planned_workouts": [
+                    workout
+                    for workout in context.adherence.workouts
+                    if workout.occurrence_date == target_date
+                ],
+            }
     envelope = api_result_to_envelope(
         result,
-        success_message=_build_success_message(result, date),
+        success_message=f"Training facts for {target_date_text or 'today'}",
     )
-
-    # Output JSON
     output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-def _build_success_message(result: any, date: Optional[str]) -> str:
-    """Build human-readable success message.
-
-    Args:
-        result: Workout result from API
-        date: Date string if specified
-
-    Returns:
-        Human-readable message
-    """
-    date_str = f" for {date}" if date else " for today"
-
-    # Try to extract workout type
-    if hasattr(result, 'workout_type'):
-        workout_type = result.workout_type
-        return f"Workout{date_str}: {workout_type}"
-    elif hasattr(result, 'workout') and hasattr(result.workout, 'type'):
-        workout_type = result.workout.type
-        return f"Workout{date_str}: {workout_type}"
-
-    # Fallback
-    return f"Retrieved workout{date_str}"
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))

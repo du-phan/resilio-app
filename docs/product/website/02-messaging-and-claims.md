@@ -43,7 +43,8 @@ running plus sports such as bouldering, pilates, HIIT, surfing, cycling, and str
 ## Promise Boundaries (Must Preserve)
 
 1. Adaptation is context-aware, not magic replacement logic.
-2. Non-running sessions influence fatigue/readiness and scheduling decisions.
+2. Non-running sessions remain visible as separate exposure and provider
+   training-state context for scheduling decisions.
 3. Running-specific progression still requires protected run-specific stimulus.
 4. The product helps manage tradeoffs explicitly rather than pretending tradeoffs do not exist.
 

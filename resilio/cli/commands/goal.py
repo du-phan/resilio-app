@@ -1,24 +1,63 @@
-"""
-resilio goal - Manage race goals.
+"""Race-goal commands with explicit performance evidence."""
 
-Set a race goal and automatically validate feasibility.
-"""
+from __future__ import annotations
 
-from datetime import datetime, timedelta, date
-from typing import Optional, Dict, Any, List
+from datetime import date, timedelta
 
 import typer
 
-from resilio.api import set_goal
-from resilio.api.metrics import get_current_metrics, MetricsError
-from resilio.api.vdot import estimate_current_vdot, calculate_vdot_from_race, VDOTError
-from resilio.api.validation import api_assess_goal_feasibility, ValidationError
+from resilio.api.profile import ProfileError, get_profile, set_goal
+from resilio.api.vdot import VDOTError, calculate_vdot_from_race
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
+from resilio.core.vdot import format_time_seconds
+from resilio.schemas.profile import GoalType
 from resilio.utils.dates import get_next_monday
 
-# Create subcommand app
-app = typer.Typer(help="Manage race goals")
+app = typer.Typer(help="Manage athlete-confirmed race goals")
+
+
+def _resolve_target_date(
+    *,
+    race_type: GoalType,
+    target_date: str | None,
+    horizon_weeks: int | None,
+    today: date,
+) -> date:
+    if target_date is not None and horizon_weeks is not None:
+        raise ValueError("Provide either --date or --horizon-weeks, not both.")
+    if horizon_weeks is not None and horizon_weeks <= 0:
+        raise ValueError("--horizon-weeks must be a positive integer.")
+    if target_date is not None:
+        try:
+            resolved = date.fromisoformat(target_date)
+        except ValueError as exc:
+            raise ValueError("--date must use YYYY-MM-DD.") from exc
+        if resolved < today:
+            raise ValueError("--date cannot be in the past.")
+        return resolved
+
+    default_horizon_weeks = {
+        GoalType.GENERAL_FITNESS: 4,
+        GoalType.FIVE_K: 8,
+        GoalType.TEN_K: 12,
+        GoalType.HALF_MARATHON: 16,
+        GoalType.MARATHON: 20,
+    }
+    weeks = horizon_weeks or default_horizon_weeks[race_type]
+    return get_next_monday(today) + timedelta(weeks=weeks, days=-1)
+
+
+def _target_vdot(race_type: GoalType, target_time: str | None) -> int | None:
+    if target_time is None:
+        return None
+    if race_type is GoalType.GENERAL_FITNESS:
+        raise ValueError("general_fitness goals cannot include --time.")
+
+    result = calculate_vdot_from_race(race_type.value, target_time)
+    if isinstance(result, VDOTError):
+        raise ValueError(result.message)
+    return result.vdot
 
 
 @app.command(name="set")
@@ -29,436 +68,86 @@ def goal_set_command(
         "--type",
         help="Goal type: 5k, 10k, half_marathon, marathon, or general_fitness",
     ),
-    target_date: Optional[str] = typer.Option(
-        None,
-        "--date",
-        help="Target date (YYYY-MM-DD). Use for race or time trial.",
-    ),
-    target_time: Optional[str] = typer.Option(
+    target_date: str | None = typer.Option(None, "--date", help="Target date (YYYY-MM-DD)"),
+    target_time: str | None = typer.Option(
         None,
         "--time",
-        help="Target finish time (HH:MM:SS), optional",
+        help="Athlete-confirmed target finish time (HH:MM:SS)",
     ),
-    horizon_weeks: Optional[int] = typer.Option(
+    horizon_weeks: int | None = typer.Option(
         None,
         "--horizon-weeks",
-        help="Training horizon in weeks (alternative to --date)",
+        help="Positive training horizon in weeks, as an alternative to --date",
     ),
 ) -> None:
-    """Set a new race goal with automatic feasibility validation.
-
-    Sets a race goal and validates feasibility based on current fitness (VDOT, CTL)
-    and time available for training.
-
-    Valid goal types:
-    - 5k
-    - 10k
-    - half_marathon
-    - marathon
-    - general_fitness
-
-    Examples:
-        resilio goal set --type 10k --date 2026-06-01
-        resilio goal set --type half_marathon --date 2026-04-15 --time 01:45:00
-        resilio goal set --type marathon --date 2026-10-20 --time 03:30:00
-        resilio goal set --type general_fitness
-        resilio goal set --type 10k --horizon-weeks 12
-    """
-    # Validate race_type
-    valid_race_types = ["5k", "10k", "half_marathon", "marathon", "general_fitness"]
-    if race_type not in valid_race_types:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Invalid race type: {race_type}. Valid types: {', '.join(valid_race_types)}",
+    """Persist a goal and report its exact target VDOT when a time is supplied."""
+    del ctx
+    try:
+        goal_type = GoalType(race_type)
+        resolved_date = _resolve_target_date(
+            race_type=goal_type,
+            target_date=target_date,
+            horizon_weeks=horizon_weeks,
+            today=date.today(),
         )
-        output_json(envelope)
-        raise typer.Exit(code=5)  # Validation error
+        target_vdot = _target_vdot(goal_type, target_time)
+    except ValueError as exc:
+        output_json(create_error_envelope(error_type="validation", message=str(exc)))
+        raise typer.Exit(code=5) from exc
 
-    if horizon_weeks is not None and horizon_weeks <= 0:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="--horizon-weeks must be a positive integer",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    if target_date and horizon_weeks:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="Provide either --date or --horizon-weeks, not both.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    if race_type == "general_fitness" and target_time:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="general_fitness goals cannot include a target time.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    warnings: List[str] = []
-    date_obj: Optional[date] = None
-
-    # Parse or derive target_date
-    if target_date:
-        try:
-            date_obj = datetime.fromisoformat(target_date).date()
-        except ValueError:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid date format: {target_date}. Use YYYY-MM-DD.",
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)  # Validation error
-    else:
-        default_horizons = {
-            "general_fitness": 4,
-            "5k": 8,
-            "10k": 12,
-            "half_marathon": 16,
-            "marathon": 20,
-        }
-        weeks = horizon_weeks if horizon_weeks is not None else default_horizons[race_type]
-        if horizon_weeks is None:
-            warnings.append(f"No target date provided; using default horizon of {weeks} weeks.")
-        start_date = get_next_monday(date.today())
-        date_obj = start_date + timedelta(weeks=weeks, days=-1)
-
-    # Validate target_time format if provided and convert to seconds
-    goal_time_seconds: Optional[int] = None
-    if target_time:
-        # Expected format: HH:MM:SS
-        parts = target_time.split(":")
-        if len(parts) != 3:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid time format: {target_time}. Use HH:MM:SS (e.g., 01:45:00)",
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)  # Validation error
-
-        try:
-            hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
-            if not (0 <= hours <= 23 and 0 <= minutes <= 59 and 0 <= seconds <= 59):
-                raise ValueError
-            goal_time_seconds = hours * 3600 + minutes * 60 + seconds
-        except ValueError:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=f"Invalid time values: {target_time}. Use valid HH:MM:SS.",
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)  # Validation error
-
-    # 1. Get current metrics (CTL)
-    metrics_result = get_current_metrics()
-    current_ctl = 0.0
-    if not isinstance(metrics_result, MetricsError):
-        current_ctl = metrics_result.ctl.value
-
-    # 2. Estimate current VDOT (if available)
-    vdot_result = estimate_current_vdot(lookback_days=28)
-    current_vdot: Optional[int] = None
-    if not isinstance(vdot_result, VDOTError):
-        current_vdot = vdot_result.estimated_vdot
-
-    # 3. Calculate required VDOT (if target_time provided)
-    vdot_for_goal: Optional[int] = None
-    if target_time and goal_time_seconds:
-        # Map race_type to race distance for VDOT calculation
-        race_distance_map = {
-            "5k": "5k",
-            "10k": "10k",
-            "half_marathon": "half_marathon",
-            "marathon": "marathon",
-        }
-        race_distance = race_distance_map[race_type]
-
-        vdot_calc_result = calculate_vdot_from_race(
-            race_distance=race_distance,
-            race_time=target_time,
-        )
-
-        if not isinstance(vdot_calc_result, VDOTError):
-            vdot_for_goal = vdot_calc_result.vdot
-
-    # 4. Assess goal feasibility (if target_time provided)
-    validation_data: Optional[Dict[str, Any]] = None
-    if target_time and goal_time_seconds and vdot_for_goal and date_obj is not None:
-        feasibility_result = api_assess_goal_feasibility(
-            goal_type=race_type,
-            goal_time_seconds=goal_time_seconds,
-            goal_date=date_obj,
-            current_vdot=current_vdot,
-            current_ctl=current_ctl,
-            vdot_for_goal=vdot_for_goal,
-        )
-
-        if not isinstance(feasibility_result, ValidationError):
-            # Extract key fields from feasibility assessment
-            vdot_gap = feasibility_result.goal_fitness_needed.vdot_gap
-            vdot_gap_pct = None
-            if vdot_gap and current_vdot and current_vdot > 0:
-                vdot_gap_pct = (vdot_gap / current_vdot) * 100
-
-            validation_data = {
-                "feasibility_verdict": feasibility_result.feasibility_verdict,
-                "confidence_level": feasibility_result.confidence_level,
-                "vdot_gap": vdot_gap,
-                "vdot_gap_percentage": vdot_gap_pct,
-                "weeks_available": feasibility_result.time_available.weeks_until_race,
-                "current_vdot": current_vdot,
-                "required_vdot": vdot_for_goal,
-                "current_ctl": current_ctl,
-                "recommendations": feasibility_result.recommendations,
-                "warnings": feasibility_result.warnings,
-            }
-
-    # 5. Set goal (save to profile)
     result = set_goal(
-        race_type=race_type,
-        target_date=date_obj,
+        race_type=goal_type.value,
+        target_date=resolved_date,
         target_time=target_time,
     )
-
-    # 6. Build combined response
-    if hasattr(result, 'type'):  # Goal object successfully created
-        date_str = date_obj.isoformat() if date_obj else "unspecified date"
-        base_msg = f"Goal set: {race_type} on {date_str}"
-        if target_time:
-            base_msg += f" (target: {target_time})"
-
-        # Add feasibility verdict to message if available
-        if validation_data:
-            verdict = validation_data['feasibility_verdict']
-            base_msg += f" - {verdict}"
-
-        # Create success envelope with combined data
-        envelope = create_success_envelope(
-            message=base_msg,
-            data={
-                "goal": {
-                    "race_type": race_type,
-                    "target_date": date_obj.isoformat() if date_obj else None,
-                    "target_time": target_time,
-                },
-                "validation": validation_data,
-                "warnings": warnings or None,
-            },
-        )
+    if isinstance(result, ProfileError):
+        envelope = api_result_to_envelope(result, success_message="Goal saved")
     else:
-        # Goal creation failed
-        envelope = api_result_to_envelope(
-            result,
-            success_message=f"Set goal: {race_type} on {target_date}",
-        )
-
-    # Output JSON
-    output_json(envelope)
-
-    # Exit with appropriate code
-    exit_code = get_exit_code_from_envelope(envelope)
-    raise typer.Exit(code=exit_code)
-
-
-@app.command(name="validate")
-def goal_validate_command(
-    ctx: typer.Context,
-) -> None:
-    """Validate existing goal feasibility without setting a new goal.
-
-    Re-validates the current goal from profile against current fitness.
-    Useful for periodic checks during training:
-    - Weekly planning: "Are we still on track?"
-    - Race prep: "Is the goal still realistic given taper?"
-    - After illness/injury: "Is goal still achievable?"
-
-    Examples:
-        resilio goal validate
-    """
-    from resilio.api.profile import get_profile, ProfileError
-
-    # 1. Get goal from profile
-    profile_result = get_profile()
-
-    if isinstance(profile_result, ProfileError):
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message="Profile not found. Create a profile first using 'resilio profile create'.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    if not profile_result.goal:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="No goal set in profile. Use 'resilio goal set' to set a goal first.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    goal = profile_result.goal
-    race_type = goal.type.value
-    target_date_str = goal.target_date
-    target_time = goal.target_time
-
-    if race_type == "general_fitness" and not target_date_str:
         envelope = create_success_envelope(
-            message="Goal: general_fitness (no target date - validation not applicable)",
+            message=f"Goal saved: {goal_type.value} on {resolved_date.isoformat()}",
             data={
-                "goal": {
-                    "race_type": race_type,
-                    "target_date": None,
-                    "target_time": None,
-                },
-                "validation": None,
+                "goal": result.model_dump(mode="json"),
+                "target_vdot": target_vdot,
+                "assessment": (
+                    "Target VDOT is a performance requirement, not an automatic "
+                    "feasibility verdict. The coach must compare it with approved "
+                    "baseline evidence, constraints, and available training time."
+                    if target_vdot is not None
+                    else None
+                ),
             },
         )
-        output_json(envelope)
-        raise typer.Exit(code=0)
-
-    if not target_date_str:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message="Goal is missing a target date. Use 'resilio goal set' to set a date or horizon.",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # Parse target_date
-    try:
-        date_obj = datetime.fromisoformat(target_date_str).date()
-    except ValueError:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Invalid goal date in profile: {target_date_str}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # If no target_time, can't validate pace goal
-    if not target_time:
-        envelope = create_success_envelope(
-            message=f"Goal: {race_type} on {target_date_str} (no target time set - cannot validate pace goal)",
-            data={
-                "goal": {
-                    "race_type": race_type,
-                    "target_date": target_date_str,
-                    "target_time": None,
-                },
-                "validation": None,
-            },
-        )
-        output_json(envelope)
-        raise typer.Exit(code=0)
-
-    # Parse target_time to seconds
-    try:
-        parts = target_time.split(":")
-        hours, minutes, seconds = int(parts[0]), int(parts[1]), int(parts[2])
-        goal_time_seconds = hours * 3600 + minutes * 60 + seconds
-    except (ValueError, IndexError):
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Invalid goal time in profile: {target_time}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # 2. Get current metrics (CTL)
-    metrics_result = get_current_metrics()
-    current_ctl = 0.0
-    if not isinstance(metrics_result, MetricsError):
-        current_ctl = metrics_result.ctl.value
-
-    # 3. Estimate current VDOT
-    vdot_result = estimate_current_vdot(lookback_days=28)
-    current_vdot: Optional[int] = None
-    if not isinstance(vdot_result, VDOTError):
-        current_vdot = vdot_result.estimated_vdot
-
-    # 4. Calculate required VDOT
-    race_distance_map = {
-        "5k": "5k",
-        "10k": "10k",
-        "half_marathon": "half_marathon",
-        "marathon": "marathon",
-    }
-    race_distance = race_distance_map.get(race_type, race_type)
-
-    vdot_calc_result = calculate_vdot_from_race(
-        race_distance=race_distance,
-        race_time=target_time,
-    )
-
-    vdot_for_goal: Optional[int] = None
-    if not isinstance(vdot_calc_result, VDOTError):
-        vdot_for_goal = vdot_calc_result.vdot
-
-    if not vdot_for_goal:
-        envelope = create_error_envelope(
-            error_type="calculation_failed",
-            message=f"Unable to calculate required VDOT for goal: {target_time}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # 5. Assess goal feasibility
-    feasibility_result = api_assess_goal_feasibility(
-        goal_type=race_type,
-        goal_time_seconds=goal_time_seconds,
-        goal_date=date_obj,
-        current_vdot=current_vdot,
-        current_ctl=current_ctl,
-        vdot_for_goal=vdot_for_goal,
-    )
-
-    if isinstance(feasibility_result, ValidationError):
-        envelope = create_error_envelope(
-            error_type="calculation_failed",
-            message=f"Feasibility assessment failed: {feasibility_result.message}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=5)
-
-    # 6. Build response
-    vdot_gap = feasibility_result.goal_fitness_needed.vdot_gap
-    vdot_gap_pct = None
-    if vdot_gap and current_vdot and current_vdot > 0:
-        vdot_gap_pct = (vdot_gap / current_vdot) * 100
-
-    validation_data = {
-        "feasibility_verdict": feasibility_result.feasibility_verdict,
-        "confidence_level": feasibility_result.confidence_level,
-        "vdot_gap": vdot_gap,
-        "vdot_gap_percentage": vdot_gap_pct,
-        "weeks_available": feasibility_result.time_available.weeks_until_race,
-        "current_vdot": current_vdot,
-        "required_vdot": vdot_for_goal,
-        "current_ctl": current_ctl,
-        "recommendations": feasibility_result.recommendations,
-        "warnings": feasibility_result.warnings,
-    }
-
-    verdict = validation_data['feasibility_verdict']
-    base_msg = f"Goal validation: {race_type} {target_time} on {target_date_str} - {verdict}"
-
-    envelope = create_success_envelope(
-        message=base_msg,
-        data={
-            "goal": {
-                "race_type": race_type,
-                "target_date": target_date_str,
-                "target_time": target_time,
-            },
-            "validation": validation_data,
-        },
-    )
-
-    # Output JSON
     output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
-    # Exit with appropriate code
-    raise typer.Exit(code=0)
+
+@app.command(name="show")
+def goal_show_command(ctx: typer.Context) -> None:
+    """Show the saved goal and exact target VDOT evidence."""
+    del ctx
+    profile = get_profile()
+    if isinstance(profile, ProfileError):
+        envelope = api_result_to_envelope(profile, success_message="Goal loaded")
+        output_json(envelope)
+        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+    try:
+        target_time = (
+            format_time_seconds(profile.goal.target_finish_time_seconds)
+            if profile.goal.target_finish_time_seconds is not None
+            else None
+        )
+        target_vdot = _target_vdot(profile.goal.type, target_time)
+    except ValueError as exc:
+        output_json(create_error_envelope(error_type="validation", message=str(exc)))
+        raise typer.Exit(code=5) from exc
+
+    output_json(
+        create_success_envelope(
+            message="Goal loaded",
+            data={
+                "goal": profile.goal.model_dump(mode="json"),
+                "target_vdot": target_vdot,
+            },
+        )
+    )

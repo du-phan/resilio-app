@@ -9,7 +9,6 @@ from typing import Mapping, Optional, Union
 from resilio.core.activity_sync.service import ActivitySyncService
 from resilio.core.config import ConfigError, load_config
 from resilio.core.locking import OperationLockError
-from resilio.core.metrics_workflow import recompute_all_metrics
 from resilio.core.repository import RepositoryIO
 from resilio.integrations.intervals_icu import IntervalsIcuClient
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError
@@ -46,7 +45,6 @@ def sync_activities(
             repo,
             config,
             integration,
-            metrics_recompute=recompute_all_metrics,
         )
         return service.run(
             today=as_of_date or date.today(),

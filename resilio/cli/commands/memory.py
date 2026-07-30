@@ -5,23 +5,25 @@ Memories are durable facts about the athlete that persist across coaching sessio
 Types: INJURY_HISTORY, PREFERENCE, CONTEXT, INSIGHT, TRAINING_RESPONSE.
 """
 
-from typing import Optional
-from datetime import datetime
 import uuid
+from datetime import datetime
+from typing import Optional
 
 import typer
 
-from resilio.core.repository import RepositoryIO
+from resilio.cli.output import (
+    create_error_envelope,
+    create_success_envelope,
+    output_json,
+)
 from resilio.core.memory import (
-    save_memory,
-    load_memories,
     get_memories_by_type,
     get_relevant_memories,
+    load_memories,
+    save_memory,
 )
-from resilio.schemas.memory import Memory, MemoryType, MemorySource, MemoryConfidence
-from resilio.cli.errors import create_error_envelope, create_success_envelope
-from resilio.cli.output import output_json
-
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.memory import Memory, MemoryConfidence, MemorySource, MemoryType
 
 # Create memory subcommand app
 app = typer.Typer(
@@ -132,8 +134,8 @@ def memory_add_command(
         envelope = create_success_envelope(
             message=result_message,
             data={
-                "memory": final_memory.model_dump(mode='json'),
-                "archived": archived_memory.model_dump(mode='json') if archived_memory else None,
+                "memory": final_memory.model_dump(mode="json"),
+                "archived": archived_memory.model_dump(mode="json") if archived_memory else None,
             },
         )
 
@@ -182,7 +184,10 @@ def memory_list_command(
                 valid_types = [t.name for t in MemoryType]
                 envelope = create_error_envelope(
                     error_type="validation",
-                    message=f"Invalid memory type: {memory_type}. Valid types: {', '.join(valid_types)}",
+                    message=(
+                        f"Invalid memory type: {memory_type}. "
+                        f"Valid types: {', '.join(valid_types)}"
+                    ),
                 )
                 output_json(envelope)
                 raise typer.Exit(code=5)
@@ -194,7 +199,7 @@ def memory_list_command(
         envelope = create_success_envelope(
             message=f"Found {len(memories)} memories",
             data={
-                "memories": [m.model_dump(mode='json') for m in memories],
+                "memories": [m.model_dump(mode="json") for m in memories],
                 "count": len(memories),
             },
         )
@@ -245,7 +250,7 @@ def memory_search_command(
         envelope = create_success_envelope(
             message=f"Found {len(relevant_memories)} memories matching '{query}'",
             data={
-                "memories": [m.model_dump(mode='json') for m in relevant_memories],
+                "memories": [m.model_dump(mode="json") for m in relevant_memories],
                 "count": len(relevant_memories),
                 "query": query,
             },

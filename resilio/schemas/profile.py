@@ -1,25 +1,23 @@
-"""
-Profile schemas - Athlete profile data models.
+"""Athlete-confirmed profile contracts.
+
+Provider observations do not live in this document. They remain in the
+wellness and sport-settings archives and are exposed as read-only candidates.
 """
 
-from pydantic import BaseModel, Field, model_validator
-from typing import Optional, List
+from __future__ import annotations
+
 from datetime import date
 from enum import Enum
-import warnings
+from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from resilio.schemas.adaptation import AdaptationThresholds
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from resilio.schemas.activity import SportType, is_running_sport
 from resilio.schemas.weather import WeatherLocation
 
 
-# ============================================================
-# ENUMS
-# ============================================================
-
-
 class Weekday(str, Enum):
-    """Days of the week."""
-
     MONDAY = "monday"
     TUESDAY = "tuesday"
     WEDNESDAY = "wednesday"
@@ -30,24 +28,18 @@ class Weekday(str, Enum):
 
 
 class RunningPriority(str, Enum):
-    """Priority level for running relative to other sports."""
-
     PRIMARY = "primary"
     SECONDARY = "secondary"
     EQUAL = "equal"
 
 
 class ConflictPolicy(str, Enum):
-    """Policy for resolving conflicts between running and other sports."""
-
     PRIMARY_SPORT_WINS = "primary_sport_wins"
     RUNNING_GOAL_WINS = "running_goal_wins"
     ASK_EACH_TIME = "ask_each_time"
 
 
 class GoalType(str, Enum):
-    """Type of running goal."""
-
     FIVE_K = "5k"
     TEN_K = "10k"
     HALF_MARATHON = "half_marathon"
@@ -55,33 +47,23 @@ class GoalType(str, Enum):
     GENERAL_FITNESS = "general_fitness"
 
 
-
-
 class DetailLevel(str, Enum):
-    """Level of detail in coaching responses."""
-
     BRIEF = "brief"
     MODERATE = "moderate"
     DETAILED = "detailed"
 
 
 class CoachingStyle(str, Enum):
-    """Coaching communication style."""
-
     ANALYTICAL = "analytical"
 
 
 class IntensityMetric(str, Enum):
-    """Primary intensity metric for prescribing workouts."""
-
     PACE = "pace"
-    HR = "hr"
+    HEART_RATE = "heart_rate"
     RPE = "rpe"
 
 
 class PauseReason(str, Enum):
-    """Reason a sport commitment is temporarily paused."""
-
     FOCUS_RUNNING = "focus_running"
     INJURY = "injury"
     ILLNESS = "illness"
@@ -89,203 +71,152 @@ class PauseReason(str, Enum):
     OTHER = "other"
 
 
-# ============================================================
-# CORE MODELS
-# ============================================================
-
-
-class VitalSigns(BaseModel):
-    """Athlete vital signs and HR zones."""
-
-    resting_hr: Optional[int] = Field(default=None, ge=30, le=100)
-    max_hr: Optional[int] = Field(default=None, ge=120, le=220)
+class TypicalIntensity(str, Enum):
+    EASY = "easy"
+    MODERATE = "moderate"
+    HARD = "hard"
+    MODERATE_TO_HARD = "moderate_to_hard"
 
 
 class Goal(BaseModel):
-    """Training goal."""
-
     type: GoalType
-    target_date: Optional[str] = None  # ISO date string
-    target_time: Optional[str] = None  # HH:MM:SS format
+    target_date: date | None = None
+    target_finish_time_seconds: int | None = Field(default=None, gt=0)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_goal(self) -> "Goal":
+        if self.type == GoalType.GENERAL_FITNESS and self.target_finish_time_seconds:
+            raise ValueError("general_fitness goals cannot have a target finish time")
+        return self
 
 
 class TrainingConstraints(BaseModel):
-    """Training constraints and availability.
+    unavailable_run_days: list[Weekday] = Field(default_factory=list)
+    minimum_run_days_per_week: int = Field(ge=0, le=7)
+    maximum_run_days_per_week: int = Field(ge=0, le=7)
+    maximum_session_duration_minutes: int | None = Field(default=90, gt=0)
 
-    Uses subtractive scheduling model: specify days you CAN'T run,
-    rather than listing all days you CAN run.
-    """
+    model_config = ConfigDict(extra="forbid")
 
-    unavailable_run_days: List[Weekday] = Field(
-        default_factory=list,
-        description="Days you absolutely cannot run (e.g., fixed climbing/yoga commitments)"
-    )
-    min_run_days_per_week: int = Field(ge=0, le=7)
-    max_run_days_per_week: int = Field(ge=0, le=7)
-    max_time_per_session_minutes: Optional[int] = Field(default=90, ge=0)
+    @model_validator(mode="after")
+    def validate_availability(self) -> "TrainingConstraints":
+        if self.minimum_run_days_per_week > self.maximum_run_days_per_week:
+            raise ValueError("minimum_run_days_per_week cannot exceed maximum_run_days_per_week")
+        if len(set(self.unavailable_run_days)) != len(self.unavailable_run_days):
+            raise ValueError("unavailable_run_days cannot contain duplicates")
+        available_days = 7 - len(self.unavailable_run_days)
+        if self.minimum_run_days_per_week > available_days:
+            raise ValueError("minimum_run_days_per_week exceeds the number of available days")
+        return self
 
 
 class OtherSport(BaseModel):
-    """Other sport commitment."""
-
-    sport: str
-    frequency_per_week: int = Field(
-        ge=1,
-        le=7,
-        description="How many times per week"
-    )
-    unavailable_days: Optional[List[Weekday]] = None  # Days the athlete cannot do this sport
-    typical_duration_minutes: int = Field(default=60, ge=0)
-    typical_intensity: str = "moderate"  # easy, moderate, hard, moderate_to_hard
+    sport_name: str = Field(min_length=1)
+    sessions_per_week: int = Field(ge=1, le=7)
+    unavailable_days: list[Weekday] = Field(default_factory=list)
+    typical_session_duration_minutes: int = Field(default=60, gt=0)
+    typical_intensity: TypicalIntensity = TypicalIntensity.MODERATE
     active: bool = True
-    pause_reason: Optional[PauseReason] = None
-    paused_at: Optional[str] = None  # ISO date string
-    notes: Optional[str] = None
+    pause_reason: PauseReason | None = None
+    paused_on: date | None = None
+    notes: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def validate_other_sport(self) -> "OtherSport":
-        """Validate other sport fields."""
-        if self.unavailable_days is not None and len(self.unavailable_days) == 0:
-            self.unavailable_days = None
-
+    def validate_pause_state(self) -> "OtherSport":
+        cleaned_name = self.sport_name.strip()
+        if not cleaned_name:
+            raise ValueError("sport_name cannot be blank")
+        try:
+            canonical_sport = SportType(cleaned_name.casefold())
+        except ValueError as exc:
+            raise ValueError("sport_name must be a canonical Resilio sport type") from exc
+        if is_running_sport(canonical_sport):
+            raise ValueError("running variants are not an other-sport commitment")
+        self.sport_name = canonical_sport.value
+        if len(set(self.unavailable_days)) != len(self.unavailable_days):
+            raise ValueError("unavailable_days cannot contain duplicates")
         if self.active:
             self.pause_reason = None
-            self.paused_at = None
+            self.paused_on = None
         elif self.pause_reason is None:
-            raise ValueError(
-                "Paused sport commitments must include a pause_reason."
-            )
-
+            raise ValueError("inactive sport commitments require a pause_reason")
         return self
 
 
 class CommunicationPreferences(BaseModel):
-    """Communication and coaching preferences."""
-
     detail_level: DetailLevel = DetailLevel.MODERATE
     coaching_style: CoachingStyle = CoachingStyle.ANALYTICAL
     intensity_metric: IntensityMetric = IntensityMetric.PACE
 
+    model_config = ConfigDict(extra="forbid")
 
-# WeatherPreferences is an alias for WeatherLocation — one canonical schema for weather
-# location data used both in forecast responses and the athlete profile.
+
 WeatherPreferences = WeatherLocation
 
 
 class PBEntry(BaseModel):
-    """Personal best for a single distance."""
+    elapsed_time_seconds: int = Field(gt=0)
+    performance_date: date
+    vdot: float = Field(ge=30.0, le=85.0)
 
-    time: str  # HH:MM:SS or MM:SS format
-    date: str  # ISO date string (YYYY-MM-DD)
-    vdot: float = Field(ge=30.0, le=85.0, description="Pre-calculated VDOT for this PB")
+    model_config = ConfigDict(extra="forbid")
 
 
 class AthleteProfile(BaseModel):
-    """Complete athlete profile."""
-
-    # Basic Info
-    name: str
-    created_at: str  # ISO date string
-    age: Optional[int] = Field(default=None, ge=0, le=120)
-
-    # Vital Signs
-    vital_signs: Optional[VitalSigns] = None
-
-    # Running Background
-    running_experience_years: Optional[float] = Field(default=None, ge=0)
-
-    # Recent Fitness Snapshot
-    current_weekly_run_km: Optional[float] = Field(default=None, ge=0)
-    vdot: Optional[float] = Field(
-        default=None,
-        ge=30.0,
-        le=85.0,
-        description="Jack Daniels VDOT (calculated from recent_race or estimated)"
-    )
-
-    # Personal Bests & Peak Performance Tracking
-    personal_bests: dict[str, PBEntry] = Field(
-        default_factory=dict,
-        description="Personal bests by distance (e.g., '10k' -> PBEntry)"
-    )
-    peak_vdot: Optional[float] = Field(
-        default=None,
-        ge=30.0,
-        le=85.0,
-        description="Highest VDOT achieved (from personal_bests)"
-    )
-    peak_vdot_date: Optional[str] = Field(
-        default=None,
-        description="ISO date when peak VDOT was achieved"
-    )
-
-    # Workout Pattern Fields (computed from activity history)
-    typical_easy_distance_km: Optional[float] = Field(
-        default=None,
-        ge=0,
-        description="Athlete's typical easy run distance (last 60 days avg)"
-    )
-    typical_easy_duration_min: Optional[float] = Field(
-        default=None,
-        ge=0,
-        description="Athlete's typical easy run duration (last 60 days avg)"
-    )
-    typical_long_run_distance_km: Optional[float] = Field(
-        default=None,
-        ge=0,
-        description="Athlete's typical long run distance (last 60 days avg)"
-    )
-    typical_long_run_duration_min: Optional[float] = Field(
-        default=None,
-        ge=0,
-        description="Athlete's typical long run duration (last 60 days avg)"
-    )
-
-    # Training Constraints
+    schema_version: Literal[2] = 2
+    athlete_name: str = Field(min_length=1)
+    created_on: date
+    training_timezone: str = Field(min_length=1)
+    age_years: int | None = Field(default=None, ge=0, le=120)
+    running_experience_years: float | None = Field(default=None, ge=0)
+    personal_bests_by_distance: dict[str, PBEntry] = Field(default_factory=dict)
     constraints: TrainingConstraints
-
-    # Other Sports
-    other_sports: Optional[List[OtherSport]] = Field(default_factory=list)
-
-    # Priority Setting
+    other_sport_commitments: list[OtherSport] = Field(default_factory=list)
     running_priority: RunningPriority
-    primary_sport: Optional[str] = None
-
-    # Conflict Resolution
+    primary_sport_name: str | None = None
     conflict_policy: ConflictPolicy
+    goal: Goal = Field(default_factory=lambda: Goal(type=GoalType.GENERAL_FITNESS))
+    preferences: CommunicationPreferences = Field(default_factory=CommunicationPreferences)
+    weather_preferences: WeatherPreferences | None = None
 
-    # Current Goal
-    goal: Goal
+    model_config = ConfigDict(extra="forbid")
 
-    # Communication Preferences
-    preferences: CommunicationPreferences = Field(
-        default_factory=CommunicationPreferences
-    )
-
-    # Weather Preferences
-    weather_preferences: Optional[WeatherPreferences] = None
-
-    # Adaptation Thresholds (Phase 5: Toolkit Paradigm)
-    adaptation_thresholds: AdaptationThresholds = Field(
-        default_factory=AdaptationThresholds,
-        description="Athlete-specific thresholds for adaptation triggers"
-    )
+    @field_validator("training_timezone")
+    @classmethod
+    def training_timezone_is_iana(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("training_timezone must be a recognized IANA timezone") from exc
+        return value
 
     @model_validator(mode="after")
-    def validate_multi_sport_awareness(self) -> "AthleteProfile":
-        """
-        Remind about other_sports completeness.
-
-        Note: This is a simple reminder. Full validation happens in API layer
-        with access to actual activity data via analyze_profile_from_activities().
-        """
-        if not self.other_sports or len(self.other_sports) == 0:
-            warnings.warn(
-                "Profile has empty other_sports. If you have any regular non-running "
-                "activities (climbing, cycling, yoga, etc.), add them for accurate load "
-                "calculations. Run 'resilio profile analyze' to see your sport distribution, "
-                "then: resilio profile add-sport --sport <name> --frequency <times_per_week> "
-                "--unavailable-days <days> --duration <mins>",
-                UserWarning
-            )
+    def validate_profile(self) -> "AthleteProfile":
+        cleaned_name = self.athlete_name.strip()
+        if not cleaned_name:
+            raise ValueError("athlete_name cannot be blank")
+        self.athlete_name = cleaned_name
+        if self.primary_sport_name is not None:
+            try:
+                self.primary_sport_name = SportType(
+                    self.primary_sport_name.strip().casefold()
+                ).value
+            except ValueError as exc:
+                raise ValueError(
+                    "primary_sport_name must be a canonical Resilio sport type"
+                ) from exc
+        normalized_sports = [
+            commitment.sport_name.casefold() for commitment in self.other_sport_commitments
+        ]
+        if len(set(normalized_sports)) != len(normalized_sports):
+            raise ValueError("other sport commitments must have unique sport names")
         return self
+
+    @property
+    def peak_vdot(self) -> float | None:
+        values = [entry.vdot for entry in self.personal_bests_by_distance.values()]
+        return max(values, default=None)

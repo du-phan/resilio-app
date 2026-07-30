@@ -1,6 +1,6 @@
 """Source-aware completed-activity presentation tests."""
 
-from datetime import date
+from datetime import date, datetime, timezone
 
 from resilio.cli.commands.activity import (
     GARMIN_DATA_ATTRIBUTION,
@@ -9,6 +9,7 @@ from resilio.cli.commands.activity import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.activity import (
+    ActivityAudit,
     ActivityOrigin,
     ActivityOriginKind,
     RecordingProvider,
@@ -86,7 +87,6 @@ def test_deleted_activity_is_excluded_from_active_list(
                 recording_provider=RecordingProvider.GARMIN,
                 intervals_icu_activity_id="deleted-external",
             ),
-            "calculated_load": None,
         }
     )
     repo.write_yaml("data/activities/2026-07/deleted-run.yaml", deleted)
@@ -98,3 +98,46 @@ def test_deleted_activity_is_excluded_from_active_list(
     )
 
     assert listed == []
+
+
+def test_activity_list_exposes_exact_vdot_source_identity(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    source_fingerprint = "a" * 64
+    activity = make_activity(
+        id="act_i_race_source",
+        date=date(2026, 7, 20),
+        sport="run",
+        duration_seconds=2_550,
+        moving_seconds=2_540,
+        distance_meters=10_000,
+    ).model_copy(
+        update={
+            "audit": ActivityAudit(
+                imported_at_utc=datetime(2026, 7, 20, 9, tzinfo=timezone.utc),
+                external_fingerprint_sha256=source_fingerprint,
+                canonical_mapping_version=7,
+            )
+        }
+    )
+    repo.write_yaml(
+        "data/activities/2026-07/act_i_race_source.yaml",
+        activity,
+    )
+
+    listed = _load_activities_in_range(
+        repo,
+        date(2026, 7, 20),
+        date(2026, 7, 20),
+    )
+
+    assert listed[0]["elapsed_duration_seconds"] == 2_550
+    assert listed[0]["activity_timezone"] == "UTC"
+    assert (
+        listed[0]["source_external_fingerprint_sha256"]
+        == source_fingerprint
+    )

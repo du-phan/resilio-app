@@ -1,22 +1,31 @@
-"""
-Approval state persistence helpers.
-"""
+"""Atomic persistence for the planning aggregate."""
 
-from typing import Optional, Union
+from __future__ import annotations
 
-from resilio.core.paths import approvals_state_path
 from resilio.core.repository import RepositoryIO
-from resilio.schemas.approvals import ApprovalState
-from resilio.schemas.repository import RepoError
+from resilio.schemas.approvals import PlanningState
+from resilio.schemas.repository import ReadOptions, RepoError
+
+PLANNING_STATE_PATH = "data/plans/planning_state.yaml"
 
 
-def load_approval_state() -> Union[ApprovalState, None, RepoError]:
-    """Load approval state from disk."""
-    repo = RepositoryIO()
-    return repo.read_json(approvals_state_path(), schema=ApprovalState)
+def load_planning_state(
+    repo: RepositoryIO,
+    *,
+    allow_missing: bool = False,
+) -> PlanningState | None | RepoError:
+    """Load the only persisted plan and approval aggregate."""
+    return repo.read_yaml(
+        PLANNING_STATE_PATH,
+        PlanningState,
+        ReadOptions(allow_missing=allow_missing),
+    )
 
 
-def save_approval_state(state: ApprovalState) -> Optional[RepoError]:
-    """Persist approval state to disk."""
-    repo = RepositoryIO()
-    return repo.write_json(approvals_state_path(), state)
+def save_planning_state(
+    state: PlanningState,
+    repo: RepositoryIO,
+) -> RepoError | None:
+    """Validate and atomically persist one complete planning transition."""
+    validated = PlanningState.model_validate(state.model_dump(mode="python"))
+    return repo.write_yaml(PLANNING_STATE_PATH, validated)

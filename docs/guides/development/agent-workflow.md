@@ -1,150 +1,144 @@
 # Agent workflow
 
-This is the shared engineering and coaching policy for Resilio. Root
-instructions stay short and link here; tool-specific files add only tool
-mechanics.
+This is the shared engineering and coaching policy for Resilio.
 
 ## Session startup
 
-Inspect the worktree before editing and preserve unrelated changes. Use exactly
-one Python environment:
+1. Read [the documentation index](../../index.md) and any linked active plan.
+2. Inspect `git status --short --branch`; preserve unrelated and user-owned
+   changes.
+3. Use one environment for the entire session. Prefer `poetry run`.
+4. Before declaring the CLI unavailable, try `poetry run resilio`, then
+   `resilio`, then `.venv/bin/resilio`.
+5. Do not access a live network or `.env.local` from automated tests.
 
-```bash
-poetry run resilio auth status
-poetry run resilio sync
-poetry run resilio profile analyze
-poetry run resilio status
-```
+## Evidence and coaching
 
-If the active migration or credential state makes sync unsafe, report that
-fact and do not run the obsolete path before backup. Before saying the command
-is unavailable, actually try `poetry run resilio`, `resilio`, and
-`.venv/bin/resilio` in that order.
+Synchronized completed activity data is authoritative for factual training
+questions. Intervals.icu native analysis remains authoritative for completed
+aerobic load, fitness/fatigue history, thresholds, and zones. Athlete profile,
+goals, VDOT approval, methodology, coaching decisions, and plan approvals
+remain locally owned.
 
-After a completed sync, profile analysis must report the actual
-`data_window_days`, `synced_data_start`, and `synced_data_end`. Never describe
-the data as a full year unless coverage proves it and no rate-limit failure
-occurred.
+Never replace missing values with estimates. Keep aerobic load points,
+session-RPE arbitrary units, run exposure, other-sport exposure, and wellness
+separate. Interpret recovery signal by signal; do not compute a composite
+readiness score or injury probability.
+
+Use the matching skill for onboarding, weekly analysis, multi-week review,
+VDOT proposal, macro planning, weekly generation, and weekly application. The
+main coach owns athlete questions and approvals. Executor skills do not approve
+or apply their own proposals.
 
 ## Dates and weather
 
-Training weeks are Monday through Sunday. Python weekday numbers are
-Monday=0 through Sunday=6. Dates must be computed:
+Training weeks are Monday-Sunday. Never calculate dates mentally:
 
 ```bash
-resilio dates today
-resilio dates next-monday
-resilio dates week-boundaries --start YYYY-MM-DD
-resilio dates validate --date YYYY-MM-DD --must-be monday
+poetry run resilio dates today
+poetry run resilio dates next-monday
+poetry run resilio dates week-boundaries --start YYYY-MM-DD
+poetry run resilio dates validate --date YYYY-MM-DD --must-be monday
 ```
 
-Before recommending a workout swap, day change, or other day-specific schedule
-choice:
+Before day-specific advice, a workout swap, or a schedule mutation:
 
 ```bash
-resilio weather week --start <current-week-monday>
+poetry run resilio weather week --start <WEEK_MONDAY>
 ```
 
-Never ask the athlete for the forecast and never use web search for weather.
-If the command cannot obtain a forecast, make the training-logic decision and
-say that conditions may require adjustment.
-
-## Coaching roles
-
-Computational tools supply quantitative facts; the coach makes qualitative
-decisions grounded in the methodology and athlete context. Priorities are
-consistency over intensity, load-spike prevention, multi-sport awareness,
-approximately 80/20 intensity discipline, and reality-based goals.
-
-Use `.agents/skills` for multi-step procedures:
-
-- Interactive: setup, onboarding, weekly analysis, multi-week progress review
-- Non-interactive executors: VDOT proposal, macro plan creation, weekly plan
-  generation, weekly plan application
-
-The main coach owns all athlete questions, feedback, and approvals. Executors
-return proposals/blocking checklists and never approve or apply their own
-proposal. A revision is a new proposal, not an in-place edit.
-
-Use activity data before factual questions. Ask context questions only for
-facts data cannot provide, and wait for the answer before changing topic.
-Factual demographic/physiology/logistics inputs may be batched.
-
-## Athlete communication
-
-Be warm, direct, and data-driven. Explain the “why” and flag concerning
-patterns early. Do not expose command names, tools, skills, subagents, or local
-file paths in athlete-facing messages. Explain metrics on first mention:
-
-- CTL: longer-term fitness from recent total training load
-- ATL: short-term fatigue
-- TSB: fitness minus fatigue, a freshness/form signal
-- ACWR: recent load relative to the longer-term baseline
-- Readiness: combined current capacity signal
-- VDOT: running performance estimate used for pace guidance
-- RPE: perceived effort on a 1–10 scale
-
-For multi-sport athletes, clarify that load covers running plus other sports.
+Do not use web weather. If the forecast is unavailable, state the uncertainty.
 
 ## Planning and approvals
 
+Use one named, versioned primary methodology for the entire macro plan. Follow
+the [methodology reference](../../coaching/methodology.md) and the selected
+source in `docs/training_books/`.
+
 The required sequence is:
 
-1. Propose baseline VDOT.
-2. Athlete approves VDOT.
-3. Create macro plan.
-4. Athlete approves macro plan.
-5. Generate weekly plan.
-6. Athlete approves the exact weekly file.
-7. Apply the approved weekly plan.
+1. propose baseline VDOT;
+2. record athlete VDOT approval;
+3. create and present the methodology-explicit macro plan;
+4. record macro approval;
+5. generate a new exact weekly file;
+6. bind athlete approval to that path and SHA-256;
+7. apply those unchanged bytes and verify approval consumption.
 
-Do not skip approval gates. Before weekly scheduling, fetch the forecast and
-respect profile constraints. `other_sports` reflects actual activity
-distribution; `running_priority` is only conflict strategy.
-
-## Data and migration safety
-
-- Athlete activity, metric, profile, state, plan, and publication files form a
-  coordinated state set.
-- Validate all sources before backup.
-- Backups are hash-manifested, permission-restricted, outside switched paths,
-  and verified after copying.
-- Build candidates in staging; never transform the active archive in place.
-- Dry-run reconciliation must be deterministic.
-- Apply with same-filesystem atomic renames.
-- Demonstrate rollback on a disposable copy before real cutover.
-- Resume only immutable stages whose recorded input hashes match.
-- Never persist raw external JSON or plaintext obsolete identifiers in final
-  reports.
+Every transition timestamp must follow that sequence; persisted state rejects
+pre-approval plans, pre-macro weekly approvals, pre-approval applications,
+and later approval or retirement records that contradict their source
+revision. Any revision is a new proposal and a new approval.
 
 ## Engineering workflow
 
-Use red-green-refactor for each phase. Phase reviews are findings-first:
-severity-ordered, file/line cited, and explicit about missing tests. Confirmed
-high-severity findings block the next phase.
+Use red-green-refactor for behavior changes:
 
-Prefer deterministic, inspectable, restartable artifacts. Keep domain schemas
-provider-neutral and dependency direction mechanical:
+1. write the smallest test that fails for the right reason;
+2. implement the general contract, not an example-specific branch;
+3. refactor only under green tests;
+4. probe important pure functions with `poetry run python -c`, including
+   missing, zero, invalid, future-date, boundary, and sibling cases.
+
+Base root-cause claims on source code, tests, state shape, or privacy-safe logs.
+If confidence is below 95 percent, add targeted redacted diagnostics and keep
+investigating. Do not add speculative fallbacks, dual-read compatibility,
+aliases, or hot fixes.
+
+Keep dependency direction mechanical:
 
 ```text
-configuration -> integration DTO/client -> mappers -> schemas/repositories
--> core services -> API -> CLI
+schemas <- integration DTOs/mappers <- repositories/core <- API <- CLI
 ```
 
-Schemas import no transport/repository/presentation layer. External DTOs do
-not reach metrics, load, profile, coaching, or planning. Core imports no API or
-CLI. Keep modules below 800 lines where practical; modules above 1,500 lines
-require a shrinking explicit debt allowlist and may not grow.
+Prefer focused packages and responsibility-specific modules. Production
+modules are limited to 600 lines and functions to 120 lines, with no debt
+allowlist; split cohesive responsibilities before adding behavior. Names for
+physical quantities include units. Comments and docstrings explain contracts
+or non-obvious reasons, not line-by-line mechanics.
 
-Automated tests must not access live network or the real `.env.local`. Fixtures,
-errors, logs, and reports must not contain credentials. `.agents/skills` is
-authoritative and `.claude/skills` must match it byte-for-byte until the mirror
-is intentionally retired.
+For a non-trivial implementation phase, run two independent findings-first
+reviews after the implementation pass. Give both reviewers the same evidence
+scope, resolve all high-severity findings, and repeat the review if a material
+fix changes the architecture or contract.
 
-## Common references
+## Migration safety
 
-- [Architecture map](../../reference/architecture-map.md)
-- [CLI concepts](../../coaching/cli/core_concepts.md)
-- [CLI data structure](../../coaching/cli/cli_data_structure.md)
-- [Coaching methodology](../../coaching/methodology.md)
-- [Coaching scenarios](../../coaching/scenarios.md)
+Treat activities, wellness, sport settings, sync state, profile, plans,
+approvals, and publication/completion manifests as coordinated state.
+
+- Validate sources before backup.
+- Create a permission-restricted, hash-verifiable backup outside switched
+  paths.
+- Transform only in staging.
+- Reconcile identities, path sets, counts, and digests deterministically.
+- Demonstrate rollback on a disposable copy.
+- Switch same-filesystem paths atomically where possible.
+- Never persist raw external payloads, credentials, or obsolete identifiers in
+  reports and fixtures.
+- Maintain mode `0700` on athlete-state directories and `0600` on
+  athlete-state files at every write boundary, not only during initialization
+  or migration.
+
+Temporary legacy readers exist only inside a one-shot offline migration and are
+deleted after the verified cutover.
+
+## Completion gate
+
+Completion requires:
+
+```bash
+poetry run pytest -q
+poetry run ruff check resilio tests
+poetry run mypy resilio
+poetry run pytest -q tests/architecture
+```
+
+Also require targeted edge probes, documentation-link validation,
+byte-identical `.agents/skills` and `.claude/skills`, deterministic migration
+reconciliation, and demonstrated rollback. A focused green test is not
+completion while a broader relevant gate is red.
+
+See the [architecture map](../../reference/architecture-map.md),
+[Intervals.icu reference](../../reference/intervals-icu-integration.md), and
+[CLI index](../../coaching/cli/index.md).

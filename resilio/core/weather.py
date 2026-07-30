@@ -30,14 +30,14 @@ OPEN_METEO_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 # Advisory thresholds — represent moderate-climate defaults.
 # A runner in Phoenix may tolerate heat at thresholds that are extreme for an Alaskan runner.
 # Longer-term: consider configuring heat_tolerance per athlete profile.
-_HEAT_HIGH_C = 30.0       # Above this max temp: serious heat stress in most climates
-_HEAT_MODERATE_C = 26.0   # Above this max temp: warmer conditions requiring pacing adjustment
-_COLD_HIGH_C = -5.0       # Below this min temp: risk of hypothermia / unsafe surfaces
-_COLD_MODERATE_C = 0.0    # Below this min temp: freezing conditions requiring extended warm-up
-_WIND_HIGH_KPH = 35.0     # Above this max wind: significant impact on pacing and safety
-_WIND_MODERATE_KPH = 25.0 # Above this max wind: noticeable headwind impact
-_PRECIP_HIGH_MM = 10.0    # Heavy precipitation threshold (mm/day)
-_PRECIP_HIGH_PROB = 80    # High precipitation probability threshold (%)
+_HEAT_HIGH_C = 30.0  # Above this max temp: serious heat stress in most climates
+_HEAT_MODERATE_C = 26.0  # Above this max temp: warmer conditions requiring pacing adjustment
+_COLD_HIGH_C = -5.0  # Below this min temp: risk of hypothermia / unsafe surfaces
+_COLD_MODERATE_C = 0.0  # Below this min temp: freezing conditions requiring extended warm-up
+_WIND_HIGH_KPH = 35.0  # Above this max wind: significant impact on pacing and safety
+_WIND_MODERATE_KPH = 25.0  # Above this max wind: noticeable headwind impact
+_PRECIP_HIGH_MM = 10.0  # Heavy precipitation threshold (mm/day)
+_PRECIP_HIGH_PROB = 80  # High precipitation probability threshold (%)
 _PRECIP_MODERATE_MM = 5.0
 _PRECIP_MODERATE_PROB = 60
 
@@ -124,9 +124,13 @@ def geocode_location(location_query: str) -> WeatherLocation:
         longitude=best.get("longitude"),
         timezone=best.get("timezone"),
     )
-    logger.debug("Geocoded %r → %s (%.4f, %.4f)", query, location.resolved_name,
-                 location.latitude if location.latitude is not None else 0,
-                 location.longitude if location.longitude is not None else 0)
+    logger.debug(
+        "Geocoded %r → %s (%.4f, %.4f)",
+        query,
+        location.resolved_name,
+        location.latitude if location.latitude is not None else 0,
+        location.longitude if location.longitude is not None else 0,
+    )
     return location
 
 
@@ -146,7 +150,11 @@ def fetch_weekly_forecast(
     """Fetch 7-day daily forecast fields from Open-Meteo."""
     logger.debug(
         "Fetching forecast for (%.4f, %.4f) %s to %s (tz=%s)",
-        latitude, longitude, week_start, week_end, timezone,
+        latitude,
+        longitude,
+        week_start,
+        week_end,
+        timezone,
     )
     try:
         with httpx.Client() as client:
@@ -177,18 +185,17 @@ def fetch_weekly_forecast(
     if response.status_code == 429:
         retry_after = response.headers.get("Retry-After", "unknown")
         logger.warning("Open-Meteo forecast rate limit hit; Retry-After: %s", retry_after)
-        raise WeatherRateLimitError(
-            f"Open-Meteo rate limit exceeded (Retry-After: {retry_after})"
-        )
+        raise WeatherRateLimitError(f"Open-Meteo rate limit exceeded (Retry-After: {retry_after})")
 
     if response.status_code != 200:
         raise WeatherAPIError(
             f"Forecast failed with status {response.status_code}: {response.text}"
         )
 
-    payload = response.json()
-    if "daily" not in payload:
+    raw_payload = response.json()
+    if not isinstance(raw_payload, dict) or "daily" not in raw_payload:
         raise WeatherAPIError("Forecast response missing 'daily' field")
+    payload: dict[str, Any] = raw_payload
 
     logger.debug("Forecast received with %d daily entries", len(payload["daily"].get("time", [])))
     return payload
@@ -201,9 +208,7 @@ def get_weekly_forecast_for_query(
 ) -> WeeklyWeatherForecast:
     """Resolve location query and return weekly weather forecast with advisories."""
     if week_end < week_start:
-        raise WeatherValidationError(
-            f"week_end ({week_end}) must be >= week_start ({week_start})"
-        )
+        raise WeatherValidationError(f"week_end ({week_end}) must be >= week_start ({week_start})")
     location = geocode_location(location_query)
     return get_weekly_forecast_for_location(location, week_start=week_start, week_end=week_end)
 
@@ -215,20 +220,20 @@ def get_weekly_forecast_for_location(
 ) -> WeeklyWeatherForecast:
     """Return weekly weather forecast from coordinates or location query."""
     if week_end < week_start:
-        raise WeatherValidationError(
-            f"week_end ({week_end}) must be >= week_start ({week_start})"
-        )
+        raise WeatherValidationError(f"week_end ({week_end}) must be >= week_start ({week_start})")
     active_location = location
     if active_location.latitude is None or active_location.longitude is None:
         if not active_location.location_query:
-            raise WeatherValidationError(
-                "Location requires latitude/longitude or a location query"
-            )
+            raise WeatherValidationError("Location requires latitude/longitude or a location query")
         active_location = geocode_location(active_location.location_query)
+    latitude = active_location.latitude
+    longitude = active_location.longitude
+    if latitude is None or longitude is None:
+        raise WeatherValidationError("Resolved weather location is missing latitude or longitude")
 
     payload = fetch_weekly_forecast(
-        latitude=active_location.latitude,
-        longitude=active_location.longitude,
+        latitude=latitude,
+        longitude=longitude,
         week_start=week_start,
         week_end=week_end,
         timezone=active_location.timezone or "auto",
@@ -256,10 +261,8 @@ def _build_daily_forecasts(payload: dict[str, Any]) -> list[DailyWeatherForecast
     temperature_min = daily.get("temperature_2m_min") or []
     precipitation_sum = daily.get("precipitation_sum") or []
     precipitation_probability = daily.get("precipitation_probability_max") or []
-    # Open-Meteo renamed `windspeed_10m_max` → `wind_speed_10m_max` in API v1.
-    # Both field names are checked for backward compatibility with older API responses.
-    wind_speed_max = daily.get("wind_speed_10m_max") or daily.get("windspeed_10m_max") or []
-    weather_code = daily.get("weather_code") or daily.get("weathercode") or []
+    wind_speed_max = daily.get("wind_speed_10m_max") or []
+    weather_code = daily.get("weather_code") or []
 
     rows: list[DailyWeatherForecast] = []
     for idx, day_str in enumerate(dates):
@@ -368,7 +371,11 @@ def _precipitation_level(day: DailyWeatherForecast) -> Optional[AdvisoryLevel]:
         return None
 
     precip_mm = day.precipitation_mm if day.precipitation_mm is not None else 0.0
-    precip_prob = day.precipitation_probability_max_pct if day.precipitation_probability_max_pct is not None else 0
+    precip_prob = (
+        day.precipitation_probability_max_pct
+        if day.precipitation_probability_max_pct is not None
+        else 0
+    )
 
     if precip_mm >= _PRECIP_HIGH_MM or precip_prob >= _PRECIP_HIGH_PROB:
         return AdvisoryLevel.HIGH

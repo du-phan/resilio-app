@@ -1,218 +1,88 @@
-"""
-resilio approvals - Approval state management for progressive disclosure workflows.
-"""
+"""Commands for exact-file, revision-bound athlete approvals."""
 
-from datetime import datetime, timezone
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Optional
+from typing import Callable, NoReturn
 
 import typer
 
 from resilio.cli.errors import get_exit_code_from_envelope
-from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
-from resilio.core.state import load_approval_state, save_approval_state
-from resilio.schemas.approvals import ApprovalState, WeeklyApproval
-from resilio.schemas.repository import RepoError
+from resilio.cli.output import (
+    create_error_envelope,
+    create_success_envelope,
+    output_json,
+)
+from resilio.core.planning.service import (
+    PlanOperationError,
+    approve_current_macro_plan,
+    approve_vdot_proposal,
+    approve_week_application,
+    load_planning_aggregate,
+)
+from resilio.core.repository import RepositoryIO
+from resilio.schemas.approvals import PlanningState
 
-app = typer.Typer(help="Manage approval state for planning workflows")
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _load_or_default() -> tuple[Optional[ApprovalState], Optional[RepoError]]:
-    result = load_approval_state()
-    if isinstance(result, RepoError):
-        return None, result
-    if result is None:
-        return ApprovalState(), None
-    return result, None
+app = typer.Typer(help="Record approvals bound to exact planning payloads")
 
 
-@app.command(name="status")
-def approvals_status_command(ctx: typer.Context) -> None:
-    """Show current approval state (if any)."""
-    result = load_approval_state()
-    if isinstance(result, RepoError):
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to load approvals state: {result}",
-            data={"path": getattr(result, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    if result is None:
-        envelope = create_success_envelope(
-            message="Approval state not found",
-            data={"exists": False, "state": None},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=0)
-
-    envelope = create_success_envelope(
-        message="Approval state loaded",
-        data={"exists": True, "state": result},
-    )
+def _emit_error(error_type: str, message: str) -> NoReturn:
+    envelope = create_error_envelope(error_type=error_type, message=message)
     output_json(envelope)
-    raise typer.Exit(code=0)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
-@app.command(name="approve-vdot")
-def approvals_approve_vdot_command(
-    ctx: typer.Context,
-    value: float = typer.Option(..., "--value", help="Approved baseline VDOT value"),
-    timestamp: Optional[str] = typer.Option(
-        None,
-        "--timestamp",
-        help="Override approval timestamp (ISO format). Defaults to now (UTC).",
-    ),
+def _run_transition(
+    operation: Callable[[], PlanningState],
+    success_message: str,
 ) -> None:
-    """Record baseline VDOT approval."""
-    state, error = _load_or_default()
-    if error:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to load approvals state: {error}",
-            data={"path": getattr(error, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    state.approved_baseline_vdot = value
-    state.vdot_approval_ts = timestamp or _now_iso()
-
-    save_error = save_approval_state(state)
-    if save_error:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to save approvals state: {save_error}",
-            data={"path": getattr(save_error, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    # Sync approved VDOT to athlete profile
     try:
-        from resilio.api.profile import update_profile
-        from rich.console import Console
+        state = operation()
+    except (OSError, PlanOperationError, ValueError) as exc:
+        _emit_error("validation", str(exc))
+    output_json(create_success_envelope(message=success_message, data=state))
 
-        console = Console()
-        update_profile(vdot=float(value))
-    except Exception as e:
-        # Log warning but don't fail the approval
-        console.print(f"[yellow]Warning: Failed to sync VDOT to profile: {e}[/yellow]")
 
-    envelope = create_success_envelope(
-        message="Baseline VDOT approved",
-        data={"approved_baseline_vdot": value, "vdot_approval_ts": state.vdot_approval_ts},
+@app.command("status")
+def status_command() -> None:
+    try:
+        state = load_planning_aggregate(RepositoryIO(), allow_missing=True)
+    except PlanOperationError as exc:
+        _emit_error("validation", str(exc))
+    output_json(
+        create_success_envelope(
+            message="Planning approval state",
+            data=state or PlanningState(),
+        )
     )
-    output_json(envelope)
-    raise typer.Exit(code=0)
 
 
-@app.command(name="approve-macro")
-def approvals_approve_macro_command(
-    ctx: typer.Context,
-    timestamp: Optional[str] = typer.Option(
-        None,
-        "--timestamp",
-        help="Override approval timestamp (ISO format). Defaults to now (UTC).",
-    ),
+@app.command("approve-vdot")
+def approve_vdot_command(
+    proposal_file: Path = typer.Option(..., "--file"),
 ) -> None:
-    """Record macro plan approval."""
-    state, error = _load_or_default()
-    if error:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to load approvals state: {error}",
-            data={"path": getattr(error, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    state.macro_approved = True
-    state.macro_approval_ts = timestamp or _now_iso()
-
-    save_error = save_approval_state(state)
-    if save_error:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to save approvals state: {save_error}",
-            data={"path": getattr(save_error, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    envelope = create_success_envelope(
-        message="Macro plan approved",
-        data={"macro_approved": True, "macro_approval_ts": state.macro_approval_ts},
+    repo = RepositoryIO()
+    _run_transition(
+        lambda: approve_vdot_proposal(repo, proposal_file),
+        "Baseline VDOT proposal approved",
     )
-    output_json(envelope)
-    raise typer.Exit(code=0)
 
 
-@app.command(name="approve-week")
-def approvals_approve_week_command(
-    ctx: typer.Context,
-    week: int = typer.Option(..., "--week", help="Approved week number"),
-    file: str = typer.Option(
-        ...,
-        "--file",
-        help="Path to approved weekly JSON payload",
-    ),
-    timestamp: Optional[str] = typer.Option(
-        None,
-        "--timestamp",
-        help="Override approval timestamp (ISO format). Defaults to now (UTC).",
-    ),
+@app.command("approve-macro")
+def approve_macro_command() -> None:
+    repo = RepositoryIO()
+    _run_transition(
+        lambda: approve_current_macro_plan(repo),
+        "Current macro revision approved",
+    )
+
+
+@app.command("approve-week")
+def approve_week_command(
+    approved_file: Path = typer.Option(..., "--file"),
 ) -> None:
-    """Record weekly plan approval with the exact JSON file path."""
-    file_path = Path(file)
-    if not file_path.exists():
-        envelope = create_error_envelope(
-            error_type="not_found",
-            message=f"Approved JSON file not found: {file}",
-            data={"path": str(file_path.absolute())},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=2)
-
-    state, error = _load_or_default()
-    if error:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to load approvals state: {error}",
-            data={"path": getattr(error, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    resolved = file_path.expanduser().resolve()
-    state.weekly_approval = WeeklyApproval(
-        week_number=week,
-        approved_at=timestamp or _now_iso(),
-        approved_file=str(resolved),
+    repo = RepositoryIO()
+    _run_transition(
+        lambda: approve_week_application(repo, approved_file),
+        "Exact weekly plan approved",
     )
-
-    save_error = save_approval_state(state)
-    if save_error:
-        envelope = create_error_envelope(
-            error_type="validation",
-            message=f"Failed to save approvals state: {save_error}",
-            data={"path": getattr(save_error, "path", None)},
-        )
-        output_json(envelope)
-        raise typer.Exit(code=get_exit_code_from_envelope(envelope))
-
-    envelope = create_success_envelope(
-        message=f"Week {week} approved",
-        data={
-            "week_number": week,
-            "approved_file": str(resolved),
-            "approved_at": state.weekly_approval.approved_at,
-        },
-    )
-    output_json(envelope)
-    raise typer.Exit(code=0)

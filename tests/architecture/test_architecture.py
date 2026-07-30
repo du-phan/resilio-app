@@ -5,28 +5,13 @@ from __future__ import annotations
 import ast
 import filecmp
 import re
-import warnings
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "resilio"
 
-HARD_LINE_LIMIT = 1_500
-WARNING_LINE_LIMIT = 800
-OVERSIZED_ALLOWLIST = {
-    "resilio/api/plan.py": (
-        2_948,
-        "docs/issues/split-oversized-plan-modules.md",
-    ),
-    "resilio/core/plan.py": (
-        2_630,
-        "docs/issues/split-oversized-plan-modules.md",
-    ),
-    "resilio/cli/commands/plan.py": (
-        2_036,
-        "docs/issues/split-oversized-plan-modules.md",
-    ),
-}
+MODULE_LINE_LIMIT = 600
+FUNCTION_LINE_LIMIT = 120
 
 DEPENDENCY_DEBT: dict[tuple[str, str], str] = {}
 
@@ -51,42 +36,35 @@ def _imports(path: Path) -> set[str]:
     return imports
 
 
-def test_module_size_budget_has_shrinking_explicit_allowlist():
+def test_module_size_budget():
     failures: list[str] = []
-    warned: list[str] = []
 
     for path in _python_modules():
         relative = path.relative_to(REPO_ROOT).as_posix()
         line_count = len(path.read_text().splitlines())
-
-        if line_count > HARD_LINE_LIMIT:
-            debt = OVERSIZED_ALLOWLIST.get(relative)
-            if debt is None:
-                failures.append(
-                    f"{relative} has {line_count} lines (> {HARD_LINE_LIMIT}); "
-                    "split responsibilities or add a reviewed debt issue"
-                )
-                continue
-            baseline, issue = debt
-            if not (REPO_ROOT / issue).is_file():
-                failures.append(f"{relative}: declared debt issue is missing: {issue}")
-            if line_count > baseline:
-                failures.append(
-                    f"{relative} grew from allowlisted {baseline} to {line_count} lines; "
-                    "move new behavior to a focused module"
-                )
-        elif relative in OVERSIZED_ALLOWLIST:
+        if line_count > MODULE_LINE_LIMIT:
             failures.append(
-                f"{relative} is now {line_count} lines; remove its stale hard-limit allowlist entry"
+                f"{relative} has {line_count} lines (> {MODULE_LINE_LIMIT}); "
+                "split it into responsibility-specific modules"
             )
-        elif line_count > WARNING_LINE_LIMIT:
-            warned.append(f"{relative} has {line_count} lines")
+    assert not failures, "\n".join(failures)
 
-    if warned:
-        warnings.warn(
-            "Module-size warning (>800 lines): " + "; ".join(warned),
-            stacklevel=1,
-        )
+
+def test_function_size_budget():
+    failures: list[str] = []
+    for path in _python_modules():
+        relative = path.relative_to(REPO_ROOT).as_posix()
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            assert node.end_lineno is not None
+            line_count = node.end_lineno - node.lineno + 1
+            if line_count > FUNCTION_LINE_LIMIT:
+                failures.append(
+                    f"{relative}:{node.lineno} {node.name} has {line_count} lines "
+                    f"(> {FUNCTION_LINE_LIMIT}); extract cohesive phases"
+                )
     assert not failures, "\n".join(failures)
 
 
@@ -127,12 +105,11 @@ def test_dependency_direction():
 
 def test_transport_dtos_do_not_leak_into_domain_consumers():
     consumers = {
-        PACKAGE_ROOT / "core" / "load.py",
-        PACKAGE_ROOT / "core" / "metrics.py",
-        PACKAGE_ROOT / "core" / "profile.py",
+        PACKAGE_ROOT / "core" / "coaching_context" / "service.py",
+        PACKAGE_ROOT / "core" / "profile" / "candidates.py",
+        PACKAGE_ROOT / "core" / "planning" / "service.py",
         PACKAGE_ROOT / "api" / "profile.py",
-        PACKAGE_ROOT / "api" / "coach.py",
-        PACKAGE_ROOT / "core" / "plan.py",
+        PACKAGE_ROOT / "api" / "coaching_context.py",
         PACKAGE_ROOT / "api" / "plan.py",
     }
     failures = [
@@ -174,9 +151,9 @@ def test_weekly_plan_skill_uses_typed_structured_workouts():
     files = [skill_root / "SKILL.md", *sorted((skill_root / "references").glob("*.md"))]
     content = "\n".join(path.read_text() for path in files)
 
-    assert '"structured_workout"' in content, (
-        "weekly-plan-generate must teach the typed structured_workout contract"
-    )
+    assert (
+        '"structured_workout"' in content
+    ), "weekly-plan-generate must teach the typed structured_workout contract"
     assert '"intervals": [' not in content, (
         "weekly-plan-generate still teaches the removed untyped intervals key; "
         "express quality work as recursive structured_workout steps"
@@ -203,19 +180,35 @@ def test_documentation_authority_and_current_reference_links_exist():
         assert (REPO_ROOT / relative).is_file(), f"Required documentation missing: {relative}"
 
 
+def test_training_book_records_are_source_only_not_agent_procedures():
+    failures: list[str] = []
+    forbidden_procedure_markers = (
+        "## hard constraints",
+        "if/then",
+        "data the ai coach",
+        "you must collect",
+        "workout generation template",
+    )
+    for path in sorted((REPO_ROOT / "docs/training_books").glob("*.md")):
+        content = path.read_text()
+        normalized = content.casefold()
+        if "operational_authority: false" not in normalized:
+            failures.append(f"{path.name}: missing operational_authority: false")
+        if "verification_scope: conceptual_summary_only" not in normalized:
+            failures.append(f"{path.name}: missing conceptual-only verification scope")
+        for marker in forbidden_procedure_markers:
+            if marker in normalized:
+                failures.append(f"{path.name}: executable procedure marker {marker!r}")
+    assert not failures, "\n".join(failures)
+
+
 def test_activity_mutation_services_remain_focused_and_share_lock_boundary():
     sync_service = PACKAGE_ROOT / "core/activity_sync/service.py"
-    backfill_service = (
-        PACKAGE_ROOT / "core/historical_activity_backfill/service.py"
-    )
     transaction = PACKAGE_ROOT / "core/activity_transaction.py"
     sync_source = sync_service.read_text()
-    backfill_source = backfill_service.read_text()
 
-    assert len(sync_source.splitlines()) < WARNING_LINE_LIMIT
-    assert len(backfill_source.splitlines()) < WARNING_LINE_LIMIT
+    assert len(sync_source.splitlines()) <= MODULE_LINE_LIMIT
     assert "ACTIVITY_MUTATION_LOCK_PATH" in sync_source
-    assert "ACTIVITY_MUTATION_LOCK_PATH" in backfill_source
     assert "commit_activity_mutation" in transaction.read_text()
 
 
@@ -232,87 +225,40 @@ def test_active_markdown_links_resolve():
     for document in documents:
         relative = document.relative_to(REPO_ROOT).as_posix()
         for raw_target in link_pattern.findall(document.read_text()):
-            target = (
-                raw_target.strip()
-                .split()[0]
-                .strip("<>")
-                .split("#", 1)[0]
-            )
-            if (
-                not target
-                or "://" in target
-                or target.startswith(("mailto:", "/"))
-            ):
+            target = raw_target.strip().split()[0].strip("<>").split("#", 1)[0]
+            if not target or "://" in target or target.startswith(("mailto:", "/")):
                 continue
             if not (document.parent / target).resolve().exists():
                 failures.append(f"{relative}: broken relative link {raw_target!r}")
     assert not failures, "\n".join(failures)
 
 
-def test_obsolete_provider_term_is_absent_from_active_repository_files():
-    forbidden = ("stra" + "va").casefold()
-    text_suffixes = {
-        "",
-        ".csv",
-        ".json",
-        ".md",
-        ".py",
-        ".toml",
-        ".txt",
-        ".yaml",
-        ".yml",
-    }
-    failures: list[str] = []
-    for path in sorted(REPO_ROOT.rglob("*")):
-        if not path.is_file():
-            continue
-        relative = path.relative_to(REPO_ROOT).as_posix()
-        if (
-            relative.startswith((".git/", "data/"))
-            or "/__pycache__/" in relative
-            or relative == ".env.local"
-            or path.suffix.casefold() not in text_suffixes
-        ):
-            continue
-        if forbidden in relative.casefold():
-            failures.append(f"{relative}: obsolete provider term in path")
-            continue
-        try:
-            content = path.read_text()
-        except UnicodeDecodeError:
-            continue
-        if forbidden in content.casefold():
-            failures.append(f"{relative}: obsolete provider term in content")
-    assert not failures, (
-        "Remove obsolete provider vocabulary or add only an explicitly "
-        "classified migration/spec exception:\n" + "\n".join(failures)
-    )
-
-
-def test_obsolete_provider_term_is_absent_from_active_local_state():
-    """Audit ignored active state without reading credentials or backups."""
-    forbidden = ("stra" + "va").casefold()
-    roots = [
-        REPO_ROOT / "data/activities",
-        REPO_ROOT / "data/athlete",
-        REPO_ROOT / "data/state",
-        REPO_ROOT / "data/plans",
+def test_retired_local_derivation_surfaces_are_absent():
+    retired_paths = [
+        "resilio/core/load.py",
+        "resilio/core/metrics.py",
+        "resilio/core/readiness.py",
+        "resilio/core/risk.py",
+        "resilio/core/adaptation.py",
+        "resilio/core/guardrails.py",
+        "resilio/core/enrichment.py",
+        "resilio/schemas/common.py",
+        "resilio/init.py",
     ]
-    failures: list[str] = []
-    for root in roots:
-        if not root.exists():
-            continue
-        for path in sorted(root.rglob("*")):
-            if not path.is_file():
-                continue
-            try:
-                content = path.read_text()
-            except UnicodeDecodeError:
-                continue
-            if forbidden in content.casefold():
-                failures.append(path.relative_to(REPO_ROOT).as_posix())
-    assert not failures, (
-        "Remove obsolete provider vocabulary from active ignored state; "
-        "recovery copies belong only under data/backups:\n"
-        + "\n".join(failures)
-    )
+    present = [relative for relative in retired_paths if (REPO_ROOT / relative).exists()]
+    assert not present, f"Retired local derivation surfaces remain: {present}"
+
+    settings_text = (REPO_ROOT / "templates/settings.yaml").read_text()
+    retired_settings = [
+        key
+        for key in (
+            "metrics_dir",
+            "training_defaults",
+            "ctl_time_constant",
+            "atl_time_constant",
+            "acwr_acute_window",
+            "metrics_stale_hours",
+        )
+        if key in settings_text
+    ]
+    assert not retired_settings, f"Retired local derivation settings remain: {retired_settings}"

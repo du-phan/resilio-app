@@ -1,49 +1,70 @@
-# Coaching CLI index
+# Coaching CLI
 
-All athlete-facing commands return JSON envelopes unless a command explicitly
-offers a table format.
+`poetry run resilio --help` and each command’s `--help` output are the option
+authority. Commands return JSON envelopes.
 
-## Session and data
+## Setup and synchronized state
 
-- `resilio init` — initialize local directories, settings, and `.env.local`
-- `resilio auth status` — validate external account access
-- `resilio sync [--full] [--confirm-deletions]` — import completed activities
-- `resilio sync --status` — inspect lock/progress/checkpoint state
-- `resilio activity-review list|approve|exclude-duplicate` — inspect,
-  approve conservative historical matches, or exclude a proven second
-  recording of an already-linked activity
-- `resilio activity-review quarantines|acknowledge-quarantine` — inspect
-  validation exclusions and acknowledge one exact failure fingerprint
-- `resilio activity-review deletions` — inspect locally retained activities
-  whose external IDs returned `404` before confirming tombstones
-- `resilio activity ...` — list, search, export, or inspect segments
-- `resilio metrics recompute` — regenerate local daily/weekly metrics
-- `resilio profile ...` — inspect, analyze, update, and validate the profile
+- `resilio init` — initialize configuration and local state directories.
+- `resilio auth status` — validate Intervals.icu account access.
+- `resilio sync [--full] [--confirm-deletions]` — coordinated completed-state
+  import and reconciliation.
+- `resilio sync --status` — inspect lock, progress, and checkpoint state.
+- `resilio status` — current synchronized coaching context.
+- `resilio activity list|search` — inspect canonical completed activities;
+  list output includes exact elapsed seconds, activity timezone, canonical
+  identity, and source fingerprint for evidence binding.
+- `resilio activity-review ...` — review conservative match, quarantine, and
+  deletion candidates.
 
-## Coaching and planning
+## Typed coaching context
 
-- `resilio status`, `today`, `week`
-- `resilio dates ...`
-- `resilio weather week --start YYYY-MM-DD`
-- `resilio memory ...`
-- `resilio performance ...`, `vdot ...`, `goal ...`
-- `resilio plan ...`, `approvals ...`
-- `resilio analysis ...`, `guardrails ...`
+- `resilio coach context --week-start <MONDAY> --as-of <DATE>` — activities,
+  separate run/other-sport exposure, exact adherence, source-zone evidence,
+  training state, signal-first recovery, and coverage.
+- `resilio coach history --as-of <DATE> --weeks <COUNT>` — typed multi-week
+  evidence with explicit target-week and evidence-window boundaries.
+- `resilio coach planning-context --week <NUMBER> --evidence-as-of <DATE>
+  --history-weeks <COUNT>` — approved future macro skeleton plus history that
+  ends on a separate, non-future evidence date.
+- `resilio today [--date <DATE>]` — date-scoped planned and completed facts.
+- `resilio week` — current weekly facts.
+- `resilio dates ...` — authoritative date calculations.
+- `resilio weather week --start <MONDAY>` — Monday-Sunday planning weather.
 
-## Calendar publication and migration
+## Athlete-owned facts
 
-- `resilio workout publish|publish-plan|delete`
-- `resilio activity-migration status|dry-run|apply|rollback`
+- `resilio profile create|get|set` — strict athlete profile v2; create requires
+  the IANA training timezone used to resolve scheduled local times.
+- `resilio profile candidates [--as-of-date <DATE>]` — read-only provider
+  threshold heart-rate, threshold-speed, power, and VO2-max candidates with
+  provenance and explicit units.
+- `resilio profile set-personal-best` — exact distance, elapsed time, and date.
+- `resilio profile add-sport|remove-sport|pause-sport|resume-sport` —
+  other-sport commitments.
+- `resilio goal ...` — athlete goal.
+- `resilio memory ...` — athlete-confirmed durable context.
+- `resilio vdot calculate|predict|estimate-current` — athlete-local
+  race-performance equivalence; dated calculations require an explicit
+  `--as-of-date`, with no training-pace, easy-pace, or provider-VO2 inference.
 
-References:
+## Planning and approvals
 
-- [Account validation](cli_auth.md)
-- [Completed-activity sync](cli_sync.md)
-- [Activity commands](cli_activity.md)
-- [Historical activity backfill](cli_activity_backfill.md)
-- [Data authority](cli_data.md)
-- [Local data structure](cli_data_structure.md)
-- [Planning and publication](cli_planning.md)
-- [Dates](cli_dates.md)
-- [Weather](cli_weather.md)
-- [Core concepts](core_concepts.md)
+- `resilio plan show|status|week|next-unpopulated` — current plan reads.
+- `resilio plan template-macro|create-macro` — methodology-explicit macro
+  skeleton creation.
+- `resilio plan validate-week|apply-week` — exact weekly proposal boundary.
+- `resilio approvals status|approve-vdot --file|approve-macro|approve-week
+  --file` — one atomic planning aggregate; VDOT and weekly approvals bind exact
+  file paths and byte SHA-256 values.
+
+## Calendar publication
+
+- `resilio workout publish|publish-plan|delete` — ownership-proven structured
+  workout mutation and provider readback; publication accepts only locally
+  applied, still-approved workout identities.
+
+Do not use removed local metrics, analysis, risk, recommendation, enrichment,
+guardrail, performance-baseline, or historical-publication command families.
+Their responsibilities are now native provider evidence, typed coaching
+context, methodology-guided judgment, and focused plan validation.

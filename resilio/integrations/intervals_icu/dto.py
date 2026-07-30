@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Literal, Optional
+from datetime import date, datetime
+from typing import Annotated, Any, Literal, Optional
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
-    field_serializer,
     field_validator,
     model_validator,
 )
@@ -45,7 +44,7 @@ class AthleteDTO(ExternalDTO):
 
     @field_validator("garmin_upload_filters", mode="before")
     @classmethod
-    def null_upload_filters_are_empty(cls, value):
+    def null_upload_filters_are_empty(cls, value: Any) -> Any:
         return [] if value is None else value
 
 
@@ -59,28 +58,80 @@ class SportSettingsDTO(ExternalDTO):
     id: int
     types: list[str] = Field(default_factory=list)
     ftp: Optional[int] = Field(default=None, gt=0)
+    indoor_ftp: Optional[int] = Field(default=None, gt=0)
+    power_zones: list[int] = Field(default_factory=list)
+    power_zone_names: list[str] = Field(default_factory=list)
     lthr: Optional[int] = Field(default=None, gt=0, le=260)
     max_hr: Optional[int] = Field(default=None, gt=0, le=260)
-    threshold_pace: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    hr_zones: list[int] = Field(default_factory=list)
+    hr_zone_names: list[str] = Field(default_factory=list)
+    hr_load_type: Optional[str] = None
+    threshold_speed_meters_per_second: Optional[float] = Field(
+        default=None,
+        validation_alias="threshold_pace",
+        gt=0,
+        allow_inf_nan=False,
+    )
+    pace_display_unit: Optional[str] = Field(
+        default=None,
+        validation_alias="pace_units",
+    )
     pace_zones: list[float] = Field(default_factory=list)
+    pace_zone_names: list[str] = Field(default_factory=list)
+    pace_load_type: Optional[str] = None
+    load_order: Optional[str] = None
+    tiz_order: Optional[str] = None
+    workout_order: Optional[str] = None
     default_workout_time: Optional[str] = None
     updated: Optional[datetime] = None
 
-    @field_validator("types", "pace_zones", mode="before")
+    @field_validator(
+        "types",
+        "power_zones",
+        "power_zone_names",
+        "hr_zones",
+        "hr_zone_names",
+        "pace_zones",
+        "pace_zone_names",
+        mode="before",
+    )
     @classmethod
-    def null_lists_are_empty(cls, value):
+    def null_lists_are_empty(cls, value: Any) -> Any:
         return [] if value is None else value
 
 
 class HiddenActivityDTO(ExternalDTO):
     id: str
-    start_date_local: str
+    start_date_local: datetime
     source: Optional[str] = None
     note: str = Field(validation_alias="_note")
 
 
+class ActivitySummaryDTO(ExternalDTO):
+    """Identity and ordering fields required from the activity-list operation."""
+
+    id: str
+    type: str
+    start_date_local: str
+
+
+ZoneDurationSeconds = Annotated[int, Field(ge=0, le=2_678_400)]
+
+
+class ZoneTimeDTO(ExternalDTO):
+    """One Intervals.icu power-zone duration keyed by provider zone ID."""
+
+    id: str = Field(min_length=1)
+    duration_seconds: int = Field(
+        validation_alias="secs",
+        ge=0,
+        le=2_147_483_647,
+    )
+
+
 class IntervalDTO(ExternalDTO):
     id: int
+    type: Optional[str] = None
     start_time: int = Field(ge=0)
     elapsed_time: int = Field(gt=0)
     moving_time: Optional[int] = Field(default=None, ge=0)
@@ -88,28 +139,50 @@ class IntervalDTO(ExternalDTO):
     label: Optional[str] = None
     average_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    average_heartrate: Optional[float] = Field(
-        default=None, ge=20, le=260, allow_inf_nan=False
-    )
-    max_heartrate: Optional[float] = Field(
-        default=None, ge=20, le=260, allow_inf_nan=False
-    )
-    total_elevation_gain: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
+    average_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
+    max_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
+    total_elevation_gain: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     average_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    weighted_average_watts: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
+    weighted_average_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     average_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    intensity: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=1_000,
+        allow_inf_nan=False,
+    )
+    training_load: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    decoupling: Optional[float] = Field(
+        default=None,
+        ge=-100,
+        le=1_000,
+        allow_inf_nan=False,
+    )
 
     @model_validator(mode="after")
     def moving_not_longer_than_elapsed(self) -> "IntervalDTO":
         if self.moving_time is not None and self.moving_time > self.elapsed_time:
             raise ValueError("interval moving_time cannot exceed elapsed_time")
         return self
+
+
+class HeartRateRecoveryDTO(ExternalDTO):
+    """Intervals.icu HRRecovery payload; absent properties remain unknown."""
+
+    start_index: Optional[int] = Field(default=None, ge=0)
+    end_index: Optional[int] = Field(default=None, ge=0)
+    start_time: Optional[int] = Field(default=None, ge=0)
+    end_time: Optional[int] = Field(default=None, ge=0)
+    start_bpm: Optional[int] = None
+    end_bpm: Optional[int] = None
+    average_watts: Optional[int] = None
+    hrr: Optional[int] = None
 
 
 class ActivityDTO(ExternalDTO):
@@ -124,31 +197,83 @@ class ActivityDTO(ExternalDTO):
     sub_type: Optional[str] = None
     description: Optional[str] = None
     distance: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    total_elevation_gain: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
-    average_heartrate: Optional[float] = Field(
-        default=None, ge=20, le=260, allow_inf_nan=False
-    )
-    max_heartrate: Optional[float] = Field(
-        default=None, ge=20, le=260, allow_inf_nan=False
-    )
+    total_elevation_gain: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    average_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
+    max_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
     has_heartrate: Optional[bool] = None
     average_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    icu_average_watts: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
+    icu_average_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     p_max: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    icu_weighted_avg_watts: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
+    icu_weighted_avg_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    icu_training_load: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    icu_training_load_edited: bool = False
+    power_load: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    hr_load: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    pace_load: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    hr_load_type: Optional[str] = None
+    pace_load_type: Optional[str] = None
+    load_order: Optional[str] = None
+    tiz_order: Optional[str] = None
+    icu_intensity: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=1_000,
+        allow_inf_nan=False,
     )
-    icu_training_load: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
+    session_rpe: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    ftp: Optional[int] = Field(
+        default=None,
+        validation_alias="icu_ftp",
+        gt=0,
     )
-    perceived_exertion: Optional[float] = Field(
-        default=None, ge=0, le=10, allow_inf_nan=False
+    lthr: Optional[int] = Field(default=None, gt=0, le=260)
+    max_hr: Optional[int] = Field(
+        default=None,
+        validation_alias="athlete_max_hr",
+        gt=0,
+        le=260,
     )
+    threshold_speed_meters_per_second: Optional[float] = Field(
+        default=None,
+        validation_alias="threshold_pace",
+        gt=0,
+        allow_inf_nan=False,
+    )
+    pace_display_unit: Optional[str] = Field(
+        default=None,
+        validation_alias="pace_units",
+    )
+    icu_power_zones: list[int] = Field(default_factory=list)
+    power_zone_names: list[str] = Field(default_factory=list)
+    hr_zones: list[int] = Field(
+        default_factory=list,
+        validation_alias="icu_hr_zones",
+    )
+    hr_zone_names: list[str] = Field(default_factory=list)
+    pace_zones: list[float] = Field(default_factory=list)
+    pace_zone_names: list[str] = Field(default_factory=list)
+    icu_zone_times: list[ZoneTimeDTO] = Field(default_factory=list)
+    icu_hr_zone_times: list[ZoneDurationSeconds] = Field(default_factory=list)
+    pace_zone_times: list[ZoneDurationSeconds] = Field(default_factory=list)
+    gap_zone_times: list[ZoneDurationSeconds] = Field(default_factory=list)
+    use_gap_zone_times: Optional[bool] = None
+    stream_types: list[str] = Field(default_factory=list)
+    decoupling: Optional[float] = Field(
+        default=None,
+        ge=-100,
+        le=1_000,
+        allow_inf_nan=False,
+    )
+    polarization_index: Optional[float] = Field(default=None, allow_inf_nan=False)
+    trimp: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    icu_hrr: Optional[HeartRateRecoveryDTO] = None
+    icu_ignore_time: Optional[bool] = None
+    icu_ignore_power: Optional[bool] = None
+    icu_ignore_hr: Optional[bool] = None
+    ignore_velocity: Optional[bool] = None
+    ignore_pace: Optional[bool] = None
+    perceived_exertion: Optional[float] = Field(default=None, ge=0, le=10, allow_inf_nan=False)
     icu_rpe: Optional[int] = Field(default=None, ge=1, le=10)
     device_name: Optional[str] = None
     external_id: Optional[str] = None
@@ -173,15 +298,36 @@ class ActivityDTO(ExternalDTO):
         # attaches the athlete/activity timezone before this enters the domain.
         return value
 
-    @field_validator("icu_intervals", mode="before")
+    @field_validator(
+        "icu_intervals",
+        "icu_power_zones",
+        "power_zone_names",
+        "hr_zones",
+        "hr_zone_names",
+        "pace_zones",
+        "pace_zone_names",
+        "icu_zone_times",
+        "icu_hr_zone_times",
+        "pace_zone_times",
+        "gap_zone_times",
+        "stream_types",
+        mode="before",
+    )
     @classmethod
-    def null_intervals_are_empty(cls, value):
+    def null_collections_are_empty(cls, value: Any) -> Any:
         return [] if value is None else value
 
     @model_validator(mode="after")
     def moving_not_longer_than_elapsed(self) -> "ActivityDTO":
         if self.moving_time > self.elapsed_time:
             raise ValueError("moving_time cannot exceed elapsed_time")
+        return self
+
+    @model_validator(mode="after")
+    def power_zone_ids_are_unique(self) -> "ActivityDTO":
+        provider_zone_ids = [zone.id for zone in self.icu_zone_times]
+        if len(provider_zone_ids) != len(set(provider_zone_ids)):
+            raise ValueError("icu_zone_times contains duplicate provider zone IDs")
         return self
 
 
@@ -196,7 +342,105 @@ class EventDTO(ExternalDTO):
     start_date_local: Optional[str] = None
     target: Optional[str] = None
     workout_doc: Optional[dict[str, Any]] = None
+    icu_training_load: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    icu_intensity: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=1_000,
+        allow_inf_nan=False,
+    )
+    icu_ctl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    icu_atl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     updated: Optional[datetime] = None
+
+
+class WellnessDTO(ExternalDTO):
+    id: date
+    ctl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    atl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    ramp_rate: Optional[float] = Field(
+        default=None,
+        validation_alias="rampRate",
+        allow_inf_nan=False,
+    )
+    ctl_load: Optional[float] = Field(
+        default=None,
+        validation_alias="ctlLoad",
+        ge=0,
+        allow_inf_nan=False,
+    )
+    atl_load: Optional[float] = Field(
+        default=None,
+        validation_alias="atlLoad",
+        ge=0,
+        allow_inf_nan=False,
+    )
+    resting_hr: Optional[int] = Field(
+        default=None,
+        validation_alias="restingHR",
+        ge=20,
+        le=260,
+    )
+    hrv: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    hrv_sdnn: Optional[float] = Field(
+        default=None,
+        validation_alias="hrvSDNN",
+        ge=0,
+        allow_inf_nan=False,
+    )
+    sleep_seconds: Optional[int] = Field(
+        default=None,
+        validation_alias="sleepSecs",
+        ge=0,
+        le=172_800,
+    )
+    sleep_score: Optional[float] = Field(
+        default=None,
+        validation_alias="sleepScore",
+        ge=0,
+        allow_inf_nan=False,
+    )
+    sleep_quality: Optional[int] = Field(
+        default=None,
+        validation_alias="sleepQuality",
+        ge=1,
+        le=4,
+    )
+    average_sleeping_hr: Optional[float] = Field(
+        default=None,
+        validation_alias="avgSleepingHR",
+        ge=20,
+        le=260,
+        allow_inf_nan=False,
+    )
+    soreness: Optional[int] = Field(default=None, ge=0, le=4)
+    fatigue: Optional[int] = Field(default=None, ge=0, le=4)
+    stress: Optional[int] = Field(default=None, ge=0, le=4)
+    mood: Optional[int] = Field(default=None, ge=1, le=4)
+    motivation: Optional[int] = Field(default=None, ge=1, le=4)
+    injury: Optional[int] = Field(default=None, ge=1, le=4)
+    hydration: Optional[int] = Field(default=None, ge=1, le=4)
+    hydration_volume: Optional[float] = Field(
+        default=None,
+        validation_alias="hydrationVolume",
+        ge=0,
+        allow_inf_nan=False,
+    )
+    readiness: Optional[float] = Field(default=None, allow_inf_nan=False)
+    vo2max: Optional[float] = Field(
+        default=None,
+        gt=0,
+        le=100,
+        allow_inf_nan=False,
+    )
+    temporary_resting_hr: bool = Field(
+        default=False,
+        validation_alias="tempRestingHR",
+    )
 
 
 class EventWriteDTO(BaseModel):
@@ -210,61 +454,3 @@ class EventWriteDTO(BaseModel):
     target: Literal["AUTO", "POWER", "HR", "PACE"] = "AUTO"
 
     model_config = ConfigDict(extra="forbid")
-
-
-class ManualActivityWriteDTO(BaseModel):
-    """Strict write contract for Resilio-owned historical bouldering."""
-
-    external_id: str = Field(
-        pattern=r"^resilio:v1:historical-activity:[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-    )
-    type: Literal["RockClimbing"] = "RockClimbing"
-    name: str = Field(min_length=1, max_length=500)
-    start_date: datetime
-    start_date_local: datetime
-    timezone: str = Field(min_length=1, max_length=120)
-    elapsed_time: int = Field(gt=0, le=2_678_400)
-    moving_time: int = Field(ge=0, le=2_678_400)
-    description: Optional[str] = None
-    icu_rpe: Optional[int] = Field(default=None, ge=1, le=10)
-    distance: Optional[float] = Field(
-        default=None,
-        gt=0,
-        le=10_000_000,
-        allow_inf_nan=False,
-    )
-    total_elevation_gain: Optional[float] = Field(
-        default=None,
-        gt=0,
-        le=100_000,
-        allow_inf_nan=False,
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("start_date")
-    @classmethod
-    def start_date_is_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("start_date must be timezone-aware")
-        return value.astimezone(timezone.utc)
-
-    @field_validator("start_date_local")
-    @classmethod
-    def local_start_is_aware(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("start_date_local must be timezone-aware")
-        return value
-
-    @field_serializer("start_date_local", when_used="json")
-    def serialize_local_wall_time(self, value: datetime) -> str:
-        """Intervals accepts local wall time without an embedded UTC offset."""
-        return value.replace(tzinfo=None).isoformat()
-
-    @model_validator(mode="after")
-    def moving_not_longer_than_elapsed(self) -> "ManualActivityWriteDTO":
-        if self.moving_time > self.elapsed_time:
-            raise ValueError("moving_time cannot exceed elapsed_time")
-        if self.start_date_local.astimezone(timezone.utc) != self.start_date:
-            raise ValueError("local and UTC start times must describe one instant")
-        return self

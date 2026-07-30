@@ -11,31 +11,29 @@ Design:
 - Falls back to defaults if config load fails
 """
 
-from datetime import date
-from typing import Optional
+from pathlib import Path
 
-from resilio.core.config import load_settings
+from resilio.core.config import ConfigError, load_settings
 from resilio.core.repository import RepositoryIO
+from resilio.schemas.config import PathSettings
 
 # Cache config to avoid repeated file reads
-_config_cache: Optional[object] = None
-_config_cache_root: Optional[object] = None
+_config_cache: PathSettings | None = None
+_config_cache_root: Path | None = None
 
 
-def _get_paths():
+def _get_paths() -> PathSettings:
     """Get path settings from config (cached)."""
     global _config_cache, _config_cache_root
     repo = RepositoryIO()
     if _config_cache is None or _config_cache_root != repo.repo_root:
         config_result = load_settings(repo.repo_root)
-        if hasattr(config_result, "error_type"):
-            # Config load failed, use defaults
-            from resilio.schemas.config import PathSettings
-
+        if isinstance(config_result, ConfigError):
             _config_cache = PathSettings()
         else:
             _config_cache = config_result.paths
         _config_cache_root = repo.repo_root
+    assert _config_cache is not None
     return _config_cache
 
 
@@ -52,21 +50,6 @@ def get_athlete_dir() -> str:
 def get_activities_dir() -> str:
     """Get activities data directory path."""
     return _get_paths().activities_dir
-
-
-def get_metrics_dir() -> str:
-    """Get metrics data directory path."""
-    return _get_paths().metrics_dir
-
-
-def get_plans_dir() -> str:
-    """Get plans data directory path."""
-    return _get_paths().plans_dir
-
-
-def get_state_dir() -> str:
-    """Get state data directory path."""
-    return _get_paths().state_dir
 
 
 # ==========================================================================
@@ -120,68 +103,3 @@ def activity_path(year_month: str, filename: str) -> str:
         Full path to activity file
     """
     return f"{get_activities_dir()}/{year_month}/{filename}"
-
-
-# ==========================================================================
-# METRICS PATHS
-# ==========================================================================
-
-
-def daily_metrics_path(target_date: date) -> str:
-    """Get path to daily metrics for a date.
-
-    Args:
-        target_date: Date object
-
-    Returns:
-        Path to daily metrics file (e.g., "data/metrics/daily/2026-01-14.yaml")
-    """
-    return f"{get_metrics_dir()}/daily/{target_date.isoformat()}.yaml"
-
-
-def weekly_metrics_summary_path() -> str:
-    """Get path to weekly metrics summary.
-
-    Returns:
-        Path to weekly_summary.yaml
-    """
-    return f"{get_metrics_dir()}/weekly_summary.yaml"
-
-
-# ==========================================================================
-# PLANS PATHS
-# ==========================================================================
-
-
-def current_plan_path() -> str:
-    """Get path to current training plan.
-
-    Returns:
-        Path to current_plan.yaml
-    """
-    return f"{get_plans_dir()}/current_plan.yaml"
-
-
-
-
-def approvals_state_path() -> str:
-    """Get path to approvals state JSON."""
-    return f"{get_state_dir()}/approvals.json"
-
-
-def current_plan_review_path() -> str:
-    """Get path to current plan review markdown.
-
-    Returns:
-        Path to current_plan_review.md (e.g., "data/plans/current_plan_review.md")
-    """
-    return f"{get_plans_dir()}/current_plan_review.md"
-
-
-def current_training_log_path() -> str:
-    """Get path to current training log markdown.
-
-    Returns:
-        Path to current_training_log.md (e.g., "data/plans/current_training_log.md")
-    """
-    return f"{get_plans_dir()}/current_training_log.md"

@@ -5,8 +5,6 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Optional, Union
 
-logger = logging.getLogger(__name__)
-
 from resilio.api.profile import ProfileError, get_profile, update_profile
 from resilio.core.weather import (
     WeatherAPIError,
@@ -19,6 +17,8 @@ from resilio.core.weather import (
 )
 from resilio.schemas.weather import WeatherLocation, WeeklyWeatherForecast
 from resilio.utils.dates import get_week_boundaries, validate_week_start
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -74,7 +74,7 @@ def get_weekly_weather_forecast(
                 error_type="invalid_input",
                 message="No weather location configured in profile.",
                 next_steps=(
-                    "Run: resilio profile set --weather-location \"City, Country\" "
+                    'Run: resilio profile set --weather-location "City, Country" '
                     "or pass --location to resilio weather week."
                 ),
             )
@@ -126,7 +126,7 @@ def _map_profile_error_to_weather_error(profile_error: object) -> WeatherError:
         return WeatherError(
             error_type="not_found",
             message=f"Cannot load profile for weather lookup: {message}",
-            next_steps="Run: resilio profile create --name \"Your Name\" before weather lookup.",
+            next_steps='Run: resilio profile create --name "Your Name" before weather lookup.',
         )
 
     if error_type == "validation":
@@ -173,7 +173,10 @@ def _maybe_persist_weather_cache(profile: object, resolved_location: WeatherLoca
         )
 
 
-def _weather_cache_changed(current: object, payload: dict) -> bool:
+def _weather_cache_changed(
+    current: object,
+    payload: dict[str, object],
+) -> bool:
     """Check if cache payload differs from current profile weather preferences.
 
     resolved_name is intentionally excluded: it can vary cosmetically between API calls

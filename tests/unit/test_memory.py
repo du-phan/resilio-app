@@ -29,7 +29,6 @@ from resilio.schemas.memory import (
     MemoryType,
 )
 
-
 # ============================================================
 # FIXTURES
 # ============================================================
@@ -240,6 +239,7 @@ class TestStorage:
     def test_save_updates_file(self, repo, sample_memory):
         """File is written correctly on save."""
         import yaml
+
         save_memory(sample_memory, repo)
 
         # Read file directly
@@ -680,6 +680,7 @@ class TestArchival:
 
         # Manually archive with old/recent dates
         import yaml
+
         path = repo.resolve_path("data/athlete/memories.yaml")
         with open(path) as f:
             data = yaml.safe_load(f)

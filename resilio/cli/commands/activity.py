@@ -6,10 +6,11 @@ These tools compute/gather data - the AI coach interprets and decides.
 """
 
 from datetime import date, datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 
+from resilio.cli.activity_laps import activity_laps_command
 from resilio.cli.output import (
     create_error_envelope,
     create_success_envelope,
@@ -45,7 +46,7 @@ def _parse_since(since: str) -> date:
         ValueError: If format is invalid
     """
     # Relative format: '14d'
-    if since.endswith('d'):
+    if since.endswith("d"):
         try:
             days = int(since[:-1])
             return (datetime.now() - timedelta(days=days)).date()
@@ -65,7 +66,7 @@ def _load_activities_in_range(
     end_date: date,
     sport: Optional[str] = None,
     has_notes: bool = False,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Load activities from YAML files in date range.
 
     Args:
@@ -78,7 +79,7 @@ def _load_activities_in_range(
     Returns:
         List of activity dicts with relevant fields
     """
-    activities = []
+    activities: list[dict[str, Any]] = []
 
     # Find all activity YAML files
     activity_files = repo.list_files("data/activities/**/*.yaml")
@@ -92,16 +93,16 @@ def _load_activities_in_range(
                 continue
 
             # Filter by date range
-            if not (start_date <= activity.date <= end_date):
+            if not (start_date <= activity.occurrence.local_date <= end_date):
                 continue
 
             # Filter by sport
-            if sport and activity.sport_type != sport:
+            if sport and str(activity.sport) != sport:
                 continue
 
             # Get notes
-            description = activity.description or ""
-            private_note = activity.private_note or ""
+            description = activity.notes.description or ""
+            private_note = activity.notes.private_note or ""
 
             # Filter by has_notes
             if has_notes and not (description.strip() or private_note.strip()):
@@ -109,33 +110,53 @@ def _load_activities_in_range(
 
             # Build activity dict with relevant fields
             attribution = (
-                GARMIN_DATA_ATTRIBUTION
-                if activity.origin.recording_provider == "garmin"
-                else None
+                GARMIN_DATA_ATTRIBUTION if activity.origin.recording_provider == "garmin" else None
             )
-            activities.append({
-                "id": activity.id,
-                "date": activity.date.isoformat(),
-                "sport": activity.sport_type,
-                "name": activity.name,
-                "duration_minutes": activity.duration_minutes,
-                "distance_km": activity.distance_km,
-                "average_hr": activity.average_hr,
-                "description": description,
-                "private_note": private_note,
-                "attribution": attribution,
-            })
+            activities.append(
+                {
+                    "local_activity_id": activity.local_activity_id,
+                    "local_date": activity.occurrence.local_date.isoformat(),
+                    "activity_timezone": activity.occurrence.timezone,
+                    "sport": str(activity.sport),
+                    "name": activity.name,
+                    "elapsed_duration_seconds": (
+                        activity.duration.elapsed_seconds
+                    ),
+                    "moving_duration_seconds": (
+                        activity.duration.moving_seconds
+                    ),
+                    "distance_kilometers": (
+                        activity.distance_meters / 1_000
+                        if activity.distance_meters is not None
+                        else None
+                    ),
+                    "average_heart_rate_beats_per_minute": (
+                        activity.heart_rate.average_beats_per_minute
+                        if activity.heart_rate is not None
+                        else None
+                    ),
+                    "source_external_fingerprint_sha256": (
+                        activity.audit.external_fingerprint_sha256
+                    ),
+                    "canonical_mapping_version": (
+                        activity.audit.canonical_mapping_version
+                    ),
+                    "description": description,
+                    "private_note": private_note,
+                    "attribution": attribution,
+                }
+            )
 
     # Sort by date descending (most recent first)
-    activities.sort(key=lambda x: x["date"], reverse=True)
+    activities.sort(key=lambda item: str(item["local_date"]), reverse=True)
 
     return activities
 
 
 def _search_activities(
-    activities: list[dict],
+    activities: list[dict[str, Any]],
     query: str,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Search activities by keyword in notes.
 
     Args:
@@ -148,7 +169,7 @@ def _search_activities(
     # Split query into keywords
     keywords = query.lower().split()
 
-    matches = []
+    matches: list[dict[str, Any]] = []
     for activity in activities:
         description = activity["description"].lower()
         private_note = activity["private_note"].lower()
@@ -193,18 +214,26 @@ def _search_activities(
             else:
                 snippet = full_note[:100] + ("..." if len(full_note) > 100 else "")
 
-            matches.append({
-                "id": activity["id"],
-                "date": activity["date"],
-                "sport": activity["sport"],
-                "name": activity["name"],
-                "duration_minutes": activity["duration_minutes"],
-                "matched_field": matched_field,
-                "matched_keywords": list(set(matched_keywords)),
-                "matched_text": snippet,
-                "full_note": full_note,
-                "attribution": activity["attribution"],
-            })
+            matches.append(
+                {
+                    "local_activity_id": activity["local_activity_id"],
+                    "local_date": activity["local_date"],
+                    "activity_timezone": activity["activity_timezone"],
+                    "sport": activity["sport"],
+                    "name": activity["name"],
+                    "elapsed_duration_seconds": (
+                        activity["elapsed_duration_seconds"]
+                    ),
+                    "source_external_fingerprint_sha256": (
+                        activity["source_external_fingerprint_sha256"]
+                    ),
+                    "matched_field": matched_field,
+                    "matched_keywords": list(set(matched_keywords)),
+                    "matched_text": snippet,
+                    "full_note": full_note,
+                    "attribution": activity["attribution"],
+                }
+            )
 
     return matches
 
@@ -379,271 +408,7 @@ def activity_search_command(
     raise typer.Exit(code=0)
 
 
-def activity_export_command(
-    ctx: typer.Context,
-    since: str = typer.Option(
-        "28d",
-        "--since",
-        help="Time period (e.g., '28d' for 28 days, or 'YYYY-MM-DD')",
-    ),
-    out: str = typer.Option(
-        "/tmp/activities_export.json",
-        "--out",
-        help="Output JSON file path",
-    ),
-    sport: Optional[str] = typer.Option(
-        None,
-        "--sport",
-        help="Filter by sport type (e.g., 'run', 'climb', 'cycle')",
-    ),
-) -> None:
-    """Export activities as JSON for use with analysis commands.
-
-    Creates a JSON file that can be passed to resilio analysis commands
-    (intensity, load, gaps, capacity, risk-assess).
-
-    Examples:
-        resilio activity export --since 28d --out /tmp/activities.json
-        resilio activity export --since 7d --out /tmp/week_activities.json --sport run
-        resilio analysis intensity --activities /tmp/activities.json --days 28
-    """
-    import json as json_module
-
-    try:
-        # Parse since parameter
-        try:
-            start_date = _parse_since(since)
-        except ValueError as e:
-            envelope = create_error_envelope(
-                error_type="validation",
-                message=str(e),
-            )
-            output_json(envelope)
-            raise typer.Exit(code=5)
-
-        end_date = date.today()
-
-        # Load activities from YAML files
-        repo = RepositoryIO()
-        activity_files = repo.list_files("data/activities/**/*.yaml")
-
-        exported = []
-        for file_path in activity_files:
-            result = repo.read_yaml(file_path, CanonicalActivity)
-            if isinstance(result, CanonicalActivity):
-                activity = result
-                if activity.status != "active":
-                    continue
-
-                # Filter by date range
-                if not (start_date <= activity.date <= end_date):
-                    continue
-
-                # Filter by sport
-                if sport and activity.sport_type != sport:
-                    continue
-
-                # Serialize to dict using Pydantic
-                exported.append(activity.model_dump(mode="json"))
-
-        # Sort by date
-        exported.sort(key=lambda x: x.get("date", ""), reverse=True)
-
-        # Write JSON file
-        with open(out, "w") as f:
-            json_module.dump(exported, f, indent=2, default=str)
-
-        # Build response
-        envelope = create_success_envelope(
-            message=f"Exported {len(exported)} activities to {out}",
-            data={
-                "count": len(exported),
-                "output_file": out,
-                "date_range": {
-                    "start": start_date.isoformat(),
-                    "end": end_date.isoformat(),
-                },
-                "filters": {
-                    "sport": sport,
-                },
-            },
-        )
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        envelope = create_error_envelope(
-            error_type="unknown",
-            message=f"Failed to export activities: {str(e)}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=1)
-
-    output_json(envelope)
-    raise typer.Exit(code=0)
-
-
-def activity_laps_command(
-    ctx: typer.Context,
-    activity_id: str = typer.Argument(
-        ...,
-        help="Canonical local activity ID",
-    ),
-    format: str = typer.Option("table", help="Output format: table|json"),
-) -> None:
-    """
-    Display lap-by-lap breakdown for a workout.
-
-    Useful for verifying workout execution:
-    - Did warmup stay easy? (HR < 140)
-    - Were intervals at target pace? (e.g., 5:02-5:14)
-    - How much elevation per lap?
-
-    Examples:
-        resilio activity laps act_i_0123456789abcdef01234567
-        resilio activity laps act_i_0123456789abcdef01234567 --format json
-    """
-    try:
-        repo = RepositoryIO()
-
-        # Load activity by searching through all activities
-        # NOTE: This is O(N) linear scan - acceptable for testing phase (<100 activities)
-        # but will become slow as data grows:
-        # - 100 activities: <1s
-        # - 1000 activities: ~5-10s
-        # - 5000+ activities: 30+ seconds
-        # TODO: Build activity index (id -> file_path) for O(1) lookup when scaling
-        activity_files = repo.list_files("data/activities/**/*.yaml")
-
-        activity = None
-        for file_path in activity_files:
-            result = repo.read_yaml(file_path, CanonicalActivity)
-            if isinstance(result, CanonicalActivity) and result.id == activity_id:
-                activity = result
-                break
-
-        if not activity:
-            envelope = create_error_envelope(
-                error_type="not_found",
-                message=f"Activity {activity_id} not found",
-            )
-            output_json(envelope)
-            raise typer.Exit(code=4)
-
-        if not activity.has_laps or not activity.laps:
-            envelope = create_error_envelope(
-                error_type="not_available",
-                message=(
-                    f"No segment data available for {activity.name}. "
-                    "This activity has no imported lap or interval markers."
-                ),
-            )
-            output_json(envelope)
-            raise typer.Exit(code=4)
-
-        # Format output
-        if format == "json":
-            laps_data = [lap.model_dump(mode="json") for lap in activity.laps]
-            envelope = create_success_envelope(
-                message=f"Lap data for {activity.name}",
-                data={
-                    "activity_id": activity.id,
-                    "activity_name": activity.name,
-                    "activity_date": activity.date.isoformat(),
-                    "laps": laps_data,
-                    "lap_count": len(activity.laps),
-                },
-            )
-            output_json(envelope)
-        else:
-            # Human-readable table format
-            _display_laps_table(activity)
-
-    except typer.Exit:
-        raise
-    except Exception as e:
-        envelope = create_error_envelope(
-            error_type="unknown",
-            message=f"Failed to display laps: {str(e)}",
-        )
-        output_json(envelope)
-        raise typer.Exit(code=1)
-
-    if format == "json":
-        raise typer.Exit(code=0)
-
-
-def _display_laps_table(activity: CanonicalActivity) -> None:
-    """Display laps in human-readable table format using Rich."""
-    from rich.console import Console
-    from rich.table import Table
-
-    console = Console()
-    table = Table(title=f"Laps: {activity.name} ({activity.date})")
-
-    table.add_column("Lap", justify="right", style="cyan")
-    table.add_column("Distance", justify="right")
-    table.add_column("Time", justify="right")
-    table.add_column("Pace", justify="right", style="yellow")
-    table.add_column("Avg HR", justify="right")
-    table.add_column("Max HR", justify="right")
-    table.add_column("Elev+", justify="right")
-
-    for lap in activity.laps:
-        # Format values
-        dist_km = f"{lap.distance_meters / 1000:.2f} km"
-        time_str = _format_duration(lap.moving_time_seconds)
-        pace = lap.pace_per_km or "—"
-        avg_hr = f"{int(lap.average_hr)}" if lap.average_hr else "—"
-        max_hr = f"{int(lap.max_hr)}" if lap.max_hr else "—"
-        elev = (
-            f"{int(lap.total_elevation_gain_meters)}m"
-            if lap.total_elevation_gain_meters
-            else "—"
-        )
-
-        table.add_row(
-            str(lap.lap_index),
-            dist_km,
-            time_str,
-            pace,
-            avg_hr,
-            max_hr,
-            elev,
-        )
-
-    console.print(table)
-
-    # Summary
-    total_dist = sum(lap.distance_meters for lap in activity.laps) / 1000
-    total_time = sum(lap.moving_time_seconds for lap in activity.laps)
-    avg_pace_s = (total_time / total_dist / 60) if total_dist > 0 else 0
-
-    console.print(
-        f"\n[bold]Total:[/bold] {total_dist:.2f} km in "
-        f"{_format_duration(total_time)}"
-    )
-    console.print(
-        f"[bold]Avg Pace:[/bold] {int(avg_pace_s)}:"
-        f"{int((avg_pace_s % 1) * 60):02d} /km"
-    )
-
-
-def _format_duration(seconds: int) -> str:
-    """Format seconds as HH:MM:SS or MM:SS."""
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    secs = seconds % 60
-
-    if hours > 0:
-        return f"{hours}:{minutes:02d}:{secs:02d}"
-    return f"{minutes}:{secs:02d}"
-
-
 # Register commands
 app.command(name="list", help="List activities in a date range")(activity_list_command)
 app.command(name="search", help="Search activities by text content")(activity_search_command)
-app.command(name="export", help="Export activities as JSON for analysis commands")(
-    activity_export_command
-)
 app.command(name="laps", help="Display lap-by-lap breakdown for a workout")(activity_laps_command)

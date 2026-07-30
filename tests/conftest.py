@@ -3,7 +3,6 @@ Pytest configuration and shared fixtures.
 """
 
 import socket
-from pathlib import Path
 
 import pytest
 

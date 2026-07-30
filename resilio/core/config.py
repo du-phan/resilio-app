@@ -8,6 +8,7 @@ from typing import Mapping, Optional, Union
 
 import yaml
 from dotenv import dotenv_values
+from pydantic import SecretStr
 
 from resilio.schemas.config import Config, ConfigErrorType, Settings
 
@@ -44,9 +45,7 @@ def get_repo_root() -> Path:
             return current
         parent = current.parent
         if parent == current:
-            raise FileNotFoundError(
-                "Could not find repository root (.git or AGENTS.md not found)"
-            )
+            raise FileNotFoundError("Could not find repository root (.git or AGENTS.md not found)")
         current = parent
 
 
@@ -102,9 +101,7 @@ def load_config(
             )
         loaded = dotenv_values(env_path)
         local_environment = {
-            str(key): str(value)
-            for key, value in loaded.items()
-            if value is not None
+            str(key): str(value) for key, value in loaded.items() if value is not None
         }
     else:
         local_environment = dict(environment)
@@ -118,6 +115,6 @@ def load_config(
 
     return Config(
         settings=settings,
-        intervals_icu_api_key=key,
+        intervals_icu_api_key=SecretStr(key),
         loaded_at=datetime.now(timezone.utc),
     )

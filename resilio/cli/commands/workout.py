@@ -1,6 +1,6 @@
 """Publish or delete ownership-proven planned workouts."""
 
-from datetime import date, time
+from datetime import date
 
 import typer
 
@@ -15,15 +15,6 @@ from resilio.cli.output import output_json
 app = typer.Typer(help="Publish structured planned workouts")
 
 
-def _parse_time(value: str | None) -> time | None:
-    if value is None:
-        return None
-    try:
-        return time.fromisoformat(value)
-    except ValueError as exc:
-        raise typer.BadParameter("Use HH:MM or HH:MM:SS local time") from exc
-
-
 def _parse_date(value: str | None) -> date | None:
     if value is None:
         return None
@@ -36,16 +27,8 @@ def _parse_date(value: str | None) -> date | None:
 @app.command(name="publish")
 def publish_command(
     workout_id: str = typer.Option(..., "--id", help="Local workout ID"),
-    start_time: str | None = typer.Option(
-        None,
-        "--time",
-        help="Local start time; otherwise use sport settings",
-    ),
 ) -> None:
-    result = publish_workout(
-        workout_id,
-        start_time_local=_parse_time(start_time),
-    )
+    result = publish_workout(workout_id)
     envelope = api_result_to_envelope(
         result,
         success_message="Workout publication completed.",

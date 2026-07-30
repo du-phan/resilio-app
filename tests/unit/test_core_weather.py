@@ -90,8 +90,14 @@ def test_get_weekly_forecast_generates_advisories(mock_fetch):
     )
 
     assert len(forecast.daily) == 2
-    assert any(a.type == AdvisoryType.HEAT and a.level == AdvisoryLevel.HIGH for a in forecast.advisories)
-    assert any(a.type == AdvisoryType.WIND and a.level == AdvisoryLevel.HIGH for a in forecast.advisories)
+    assert any(
+        advisory.type == AdvisoryType.HEAT and advisory.level == AdvisoryLevel.HIGH
+        for advisory in forecast.advisories
+    )
+    assert any(
+        advisory.type == AdvisoryType.WIND and advisory.level == AdvisoryLevel.HIGH
+        for advisory in forecast.advisories
+    )
     assert any(
         a.type == AdvisoryType.PRECIPITATION and a.level == AdvisoryLevel.HIGH
         for a in forecast.advisories
@@ -131,7 +137,7 @@ def test_inverted_dates_raise_validation_error():
         get_weekly_forecast_for_location(
             location=location,
             week_start=date(2026, 2, 22),
-            week_end=date(2026, 2, 16),   # inverted
+            week_end=date(2026, 2, 16),  # inverted
         )
 
 
@@ -151,7 +157,7 @@ def test_cold_advisory_generated_below_zero(mock_fetch):
         "daily": {
             "time": ["2026-02-16"],
             "temperature_2m_max": [5.0],
-            "temperature_2m_min": [-2.0],   # -5 < -2 <= 0 → COLD_MODERATE
+            "temperature_2m_min": [-2.0],  # -5 < -2 <= 0 → COLD_MODERATE
             "precipitation_sum": [0.0],
             "precipitation_probability_max": [10],
             "wind_speed_10m_max": [8.0],
@@ -205,9 +211,9 @@ def test_advisory_signals_are_labels_not_recommendations(mock_fetch):
     for advisory in forecast.advisories:
         # signal must be an uppercase label (e.g. HEAT_HIGH), not a prose sentence
         assert advisory.signal.isupper(), f"Signal should be uppercase label: {advisory.signal!r}"
-        assert len(advisory.signal.split()) == 1, (
-            f"Signal should be a single label token, not prose: {advisory.signal!r}"
-        )
+        assert (
+            len(advisory.signal.split()) == 1
+        ), f"Signal should be a single label token, not prose: {advisory.signal!r}"
 
 
 @patch("resilio.core.weather.httpx.Client")

@@ -5,9 +5,12 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Protocol
 
-from resilio.integrations.intervals_icu.dto import ActivityDTO, HiddenActivityDTO
+from resilio.integrations.intervals_icu.dto import (
+    ActivitySummaryDTO,
+    HiddenActivityDTO,
+)
 
-ActivityRow = ActivityDTO | HiddenActivityDTO
+ActivityRow = ActivitySummaryDTO | HiddenActivityDTO
 
 
 class ActivityLister(Protocol):
@@ -18,7 +21,8 @@ class ActivityLister(Protocol):
         *,
         athlete_id: str | None = None,
         limit: int = 1000,
-    ) -> list[ActivityRow]: ...
+    ) -> list[ActivityRow]:
+        ...
 
 
 class SaturatedActivityWindowError(RuntimeError):

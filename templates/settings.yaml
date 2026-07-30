@@ -5,7 +5,6 @@
 paths:
   athlete_dir: "data/athlete"
   activities_dir: "data/activities"
-  metrics_dir: "data/metrics"
   plans_dir: "data/plans"
   state_dir: "data/state"
 
@@ -21,19 +20,3 @@ intervals_icu:
   detail_batch_size: 100
   max_read_attempts: 4
   request_timeout_seconds: 30
-
-# Training calculation defaults
-training_defaults:
-  ctl_time_constant: 42      # days (Chronic Training Load)
-  atl_time_constant: 7       # days (Acute Training Load)
-  acwr_acute_window: 7       # days
-  acwr_chronic_window: 28    # days
-  baseline_days_threshold: 14  # days before baseline_established = true
-  acwr_minimum_days: 28      # minimum days before ACWR is calculated
-
-# System settings
-system:
-  lock_timeout_ms: 300000    # 5 minutes
-  lock_retry_count: 3
-  lock_retry_delay_ms: 2000
-  metrics_stale_hours: 24

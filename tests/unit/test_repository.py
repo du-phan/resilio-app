@@ -4,17 +4,21 @@ Unit tests for M3 - Repository I/O module.
 Tests file I/O operations, path resolution, and error handling.
 """
 
-import pytest
-import yaml
 from pathlib import Path
+
+import pytest
 from pydantic import BaseModel
 
 from resilio.core.repository import RepositoryIO
-from resilio.schemas.repository import RepoError, RepoErrorType, ReadOptions
+from resilio.core.state_permissions import (
+    StatePermissionError,
+    harden_sensitive_state_permissions,
+)
+from resilio.schemas.repository import ReadOptions, RepoError, RepoErrorType
 
 
 # Test schema
-class TestSchema(BaseModel):
+class ExampleSchema(BaseModel):
     name: str
     value: int
 
@@ -75,7 +79,7 @@ class TestReadYaml:
         repo = RepositoryIO()
 
         # Test
-        result = repo.read_yaml("test.yaml", TestSchema)
+        result = repo.read_yaml("test.yaml", ExampleSchema)
 
         assert not isinstance(result, RepoError)
         assert result.name == "test"
@@ -87,7 +91,11 @@ class TestReadYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        result = repo.read_yaml("missing.yaml", TestSchema, ReadOptions(allow_missing=True))
+        result = repo.read_yaml(
+            "missing.yaml",
+            ExampleSchema,
+            ReadOptions(allow_missing=True),
+        )
 
         assert result is None
 
@@ -97,7 +105,7 @@ class TestReadYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        result = repo.read_yaml("missing.yaml", TestSchema)
+        result = repo.read_yaml("missing.yaml", ExampleSchema)
 
         assert isinstance(result, RepoError)
         assert result.error_type == RepoErrorType.FILE_NOT_FOUND
@@ -111,7 +119,7 @@ class TestReadYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        result = repo.read_yaml("invalid.yaml", TestSchema)
+        result = repo.read_yaml("invalid.yaml", ExampleSchema)
 
         assert isinstance(result, RepoError)
         assert result.error_type == RepoErrorType.PARSE_ERROR
@@ -126,7 +134,7 @@ class TestReadYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        result = repo.read_yaml("bad_data.yaml", TestSchema)
+        result = repo.read_yaml("bad_data.yaml", ExampleSchema)
 
         assert isinstance(result, RepoError)
         assert result.error_type == RepoErrorType.VALIDATION_ERROR
@@ -171,14 +179,14 @@ class TestWriteYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        data = TestSchema(name="test", value=42)
+        data = ExampleSchema(name="test", value=42)
         error = repo.write_yaml("output.yaml", data)
 
         assert error is None
         assert (tmp_path / "output.yaml").exists()
 
         # Verify content
-        result = repo.read_yaml("output.yaml", TestSchema)
+        result = repo.read_yaml("output.yaml", ExampleSchema)
         assert not isinstance(result, RepoError)
         assert result.name == "test"
         assert result.value == 42
@@ -189,7 +197,7 @@ class TestWriteYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        data = TestSchema(name="test", value=42)
+        data = ExampleSchema(name="test", value=42)
         error = repo.write_yaml("nested/dir/output.yaml", data)
 
         assert error is None
@@ -204,79 +212,73 @@ class TestWriteYaml:
         monkeypatch.chdir(tmp_path)
         repo = RepositoryIO()
 
-        data = TestSchema(name="new", value=99)
+        data = ExampleSchema(name="new", value=99)
         error = repo.write_yaml("output.yaml", data)
 
         assert error is None
 
         # Verify new content
-        result = repo.read_yaml("output.yaml", TestSchema)
+        result = repo.read_yaml("output.yaml", ExampleSchema)
         assert not isinstance(result, RepoError)
         assert result.name == "new"
         assert result.value == 99
 
 
-class TestFileLocking:
-    """Tests for file locking methods."""
+def test_sensitive_state_permission_migration_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    profile_directory = tmp_path / "data/athlete"
+    profile_directory.mkdir(parents=True, mode=0o755)
+    profile_path = profile_directory / "profile.yaml"
+    profile_path.write_text("athlete_name: private\n")
+    profile_path.chmod(0o644)
 
-    def test_acquire_lock_succeeds_when_no_lock(self, tmp_path, monkeypatch):
-        """Should acquire lock when none exists."""
-        (tmp_path / ".git").mkdir()
-        monkeypatch.chdir(tmp_path)
-        repo = RepositoryIO()
+    first = harden_sensitive_state_permissions(tmp_path)
+    second = harden_sensitive_state_permissions(tmp_path)
 
-        lock = repo.acquire_lock("test_operation")
+    assert first.directories_hardened == 2
+    assert first.files_hardened == 1
+    assert second == first
+    assert profile_directory.stat().st_mode & 0o777 == 0o700
+    assert profile_path.stat().st_mode & 0o777 == 0o600
 
-        assert not isinstance(lock, RepoError)
-        assert lock.operation == "test_operation"
 
-        repo.release_lock(lock)
+def test_sensitive_state_permission_migration_rejects_symlinks(
+    tmp_path: Path,
+) -> None:
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    outside_file = tmp_path / "outside.txt"
+    outside_file.write_text("outside\n")
+    outside_file.chmod(0o644)
+    (data_root / "unsafe-link").symlink_to(outside_file)
 
-    def test_acquire_lock_waits_for_active_lock(self, tmp_path, monkeypatch):
-        """Should wait when another process holds lock."""
-        (tmp_path / ".git").mkdir()
-        monkeypatch.chdir(tmp_path)
-        repo = RepositoryIO()
+    with pytest.raises(StatePermissionError, match="cannot be a symlink"):
+        harden_sensitive_state_permissions(tmp_path)
 
-        lock1 = repo.acquire_lock("operation1")
-        assert not isinstance(lock1, RepoError)
+    assert outside_file.stat().st_mode & 0o777 == 0o644
 
-        # Try to acquire with short timeout
-        lock2 = repo.acquire_lock("operation2", timeout_ms=100)
-        assert isinstance(lock2, RepoError)
-        assert lock2.error_type == RepoErrorType.LOCK_TIMEOUT
 
-        repo.release_lock(lock1)
+def test_repository_preserves_private_modes_for_new_state_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
 
-    def test_acquire_lock_succeeds_after_release(self, tmp_path, monkeypatch):
-        """Should acquire lock after previous lock is released."""
-        (tmp_path / ".git").mkdir()
-        monkeypatch.chdir(tmp_path)
-        repo = RepositoryIO()
+    error = repo.write_yaml(
+        "data/athlete/history/profile.yaml",
+        ExampleSchema(name="private", value=42),
+    )
 
-        lock1 = repo.acquire_lock("operation1")
-        assert not isinstance(lock1, RepoError)
-
-        repo.release_lock(lock1)
-
-        # Should succeed now
-        lock2 = repo.acquire_lock("operation2")
-        assert not isinstance(lock2, RepoError)
-
-        repo.release_lock(lock2)
-
-    def test_release_lock_removes_lock_file(self, tmp_path, monkeypatch):
-        """Should remove lock file when released."""
-        (tmp_path / ".git").mkdir()
-        monkeypatch.chdir(tmp_path)
-        repo = RepositoryIO()
-
-        lock = repo.acquire_lock("test_operation")
-        assert not isinstance(lock, RepoError)
-
-        lock_path = tmp_path / "config" / ".sync_lock"
-        assert lock_path.exists()
-
-        repo.release_lock(lock)
-
-        assert not lock_path.exists()
+    assert error is None
+    for directory in (
+        tmp_path / "data",
+        tmp_path / "data/athlete",
+        tmp_path / "data/athlete/history",
+    ):
+        assert directory.stat().st_mode & 0o777 == 0o700
+    assert (
+        tmp_path / "data/athlete/history/profile.yaml"
+    ).stat().st_mode & 0o777 == 0o600

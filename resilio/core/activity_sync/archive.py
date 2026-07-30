@@ -9,6 +9,10 @@ from typing import Optional
 
 import yaml
 
+from resilio.core.state_permissions import (
+    ensure_private_directory_tree,
+    harden_sensitive_file,
+)
 from resilio.schemas.activity import CanonicalActivity
 
 
@@ -30,7 +34,7 @@ class ActivityArchive:
                 activity = CanonicalActivity.model_validate(raw)
             except Exception as exc:
                 raise ActivityArchiveError(
-                    f"Active archive contains a non-v2 or invalid record: {path}"
+                    f"Active archive contains a non-v4 or invalid record: {path}"
                 ) from exc
             if activity.local_activity_id in seen_local:
                 raise ActivityArchiveError(
@@ -52,10 +56,29 @@ class ActivityArchive:
             records.append(activity)
         return records
 
+    def load(self, local_activity_id: str) -> CanonicalActivity | None:
+        """Load one canonical record by its stable local identity."""
+        path = self.find_path(local_activity_id)
+        if path is None:
+            return None
+        try:
+            raw = yaml.safe_load(path.read_text())
+            activity = CanonicalActivity.model_validate(raw)
+        except Exception as exc:
+            raise ActivityArchiveError(
+                f"Active archive contains a non-v4 or invalid record: {path}"
+            ) from exc
+        expected = self.path_for(activity)
+        if activity.local_activity_id != local_activity_id or path != expected:
+            raise ActivityArchiveError(
+                "Activity path does not match its stable ID and local date"
+            )
+        return activity
+
     def path_for(self, activity: CanonicalActivity) -> Path:
         return (
             self.root
-            / activity.date.strftime("%Y-%m")
+            / activity.occurrence.local_date.strftime("%Y-%m")
             / f"{activity.local_activity_id}.yaml"
         )
 
@@ -70,7 +93,7 @@ class ActivityArchive:
     def write(self, activity: CanonicalActivity) -> Path:
         target = self.path_for(activity)
         old_path = self.find_path(activity.local_activity_id)
-        target.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_directory_tree(self.root, target.parent)
         payload = activity.model_dump(mode="json", by_alias=True)
         content = yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
         fd, temporary = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.")
@@ -78,6 +101,7 @@ class ActivityArchive:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 handle.write(content)
             os.replace(temporary, target)
+            harden_sensitive_file(target)
         except Exception:
             Path(temporary).unlink(missing_ok=True)
             raise

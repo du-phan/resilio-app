@@ -16,7 +16,6 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ============================================================
 # ENUMS
 # ============================================================
@@ -25,30 +24,30 @@ from pydantic import BaseModel, ConfigDict, Field
 class MemoryType(str, Enum):
     """Categories of memories about the athlete."""
 
-    INJURY_HISTORY = "injury_history"        # Past or ongoing injuries
-    PREFERENCE = "preference"                # Training preferences
-    CONTEXT = "context"                      # Life context, background
-    INSIGHT = "insight"                      # Observed patterns
+    INJURY_HISTORY = "injury_history"  # Past or ongoing injuries
+    PREFERENCE = "preference"  # Training preferences
+    CONTEXT = "context"  # Life context, background
+    INSIGHT = "insight"  # Observed patterns
     TRAINING_RESPONSE = "training_response"  # How athlete responds to stimuli
-    PERSONAL_BEST = "personal_best"          # Personal bests and race context
+    PERSONAL_BEST = "personal_best"  # Personal bests and race context
 
 
 class MemoryConfidence(str, Enum):
     """Confidence level in the memory."""
 
-    HIGH = "high"       # Explicit statement or 3+ occurrences
-    MEDIUM = "medium"   # Single clear instance
-    LOW = "low"         # Inferred from ambiguous text
+    HIGH = "high"  # Explicit statement or 3+ occurrences
+    MEDIUM = "medium"  # Single clear instance
+    LOW = "low"  # Inferred from ambiguous text
 
 
 class MemorySource(str, Enum):
     """Where the memory was extracted from."""
 
-    ACTIVITY_NOTE = "activity_note"          # From activity description/notes
-    USER_MESSAGE = "user_message"            # From conversational message
-    CLAUDE_CODE = "claude_code"              # AI-extracted by Claude Code
-    PATTERN_ANALYSIS = "pattern_analysis"    # Derived from pattern detection
-    MANUAL = "manual"                        # Manually added
+    ACTIVITY_NOTE = "activity_note"  # From activity description/notes
+    USER_MESSAGE = "user_message"  # From conversational message
+    CLAUDE_CODE = "claude_code"  # AI-extracted by Claude Code
+    PATTERN_ANALYSIS = "pattern_analysis"  # Derived from pattern detection
+    MANUAL = "manual"  # Manually added
 
 
 # ============================================================
@@ -63,15 +62,15 @@ class Memory(BaseModel):
     deduplication. They provide long-term context for personalized coaching.
     """
 
-    id: str                             # Unique identifier (e.g., "mem_a1b2c3d4")
-    type: MemoryType                    # Category of memory
-    content: str                        # The fact itself (e.g., "Left knee pain after long runs over 18km")
-    source: MemorySource                # Where it was extracted from
+    id: str  # Unique identifier (e.g., "mem_a1b2c3d4")
+    type: MemoryType  # Category of memory
+    content: str  # The durable athlete fact
+    source: MemorySource  # Where it was extracted from
     source_reference: Optional[str] = None  # Activity ID or message timestamp
-    created_at: datetime                # When first observed
-    updated_at: datetime                # When last updated
-    confidence: MemoryConfidence        # Confidence level (upgrades at 3+ occurrences)
-    occurrences: int = 1                # How many times observed (for deduplication)
+    created_at: datetime  # When first observed
+    updated_at: datetime  # When last updated
+    confidence: MemoryConfidence  # Upgrades after repeated observations
+    occurrences: int = 1  # How many times observed (for deduplication)
     tags: list[str] = Field(default_factory=list)  # Entity tags (e.g., ["body:knee"])
 
     model_config = ConfigDict(
@@ -87,11 +86,11 @@ class ArchivedMemory(BaseModel):
     the old memory is archived with reference to what replaced it.
     """
 
-    id: str                             # Original memory ID
-    original_content: str               # Original memory content
-    superseded_by: str                  # ID of memory that replaced it
-    archived_at: datetime               # When archived
-    reason: str                         # Why it was archived (e.g., "Updated by newer observation about body:knee")
+    id: str  # Original memory ID
+    original_content: str  # Original memory content
+    superseded_by: str  # ID of memory that replaced it
+    archived_at: datetime  # When archived
+    reason: str  # Why the memory was archived
 
     model_config = ConfigDict(
         use_enum_values=True,
@@ -106,10 +105,10 @@ class PatternInsight(BaseModel):
     locations mentioned 3+ times, consistent training responses).
     """
 
-    pattern_type: str                   # e.g., "recurring_injury", "override_tendency"
-    description: str                    # Human-readable description (e.g., "Recurring knee issues detected (4 occurrences)")
-    evidence: list[str]                 # Memory IDs that support this pattern
-    confidence: MemoryConfidence        # Confidence in the pattern
+    pattern_type: str  # e.g., "recurring_injury", "override_tendency"
+    description: str  # Human-readable pattern description
+    evidence: list[str]  # Memory IDs that support this pattern
+    confidence: MemoryConfidence  # Confidence in the pattern
 
     model_config = ConfigDict(
         use_enum_values=True,

@@ -9,7 +9,6 @@ These tests verify:
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -44,9 +43,9 @@ def test_weekly_plan_skill_weather_is_non_blocking():
         ".claude/skills/weekly-plan-generate/SKILL.md",
     ]:
         content = _read(path)
-        assert "weather lookup fails" in content or "weather data unavailable" in content, (
-            f"{path}: must document graceful weather failure handling"
-        )
+        assert (
+            "weather lookup fails" in content or "weather data unavailable" in content
+        ), f"{path}: must document graceful weather failure handling"
 
 
 def test_weekly_plan_skill_does_not_enumerate_adaptation_categories():
@@ -106,9 +105,9 @@ def test_weekly_plan_skill_mentions_multi_sport_weather():
         ".claude/skills/weekly-plan-generate/SKILL.md",
     ]:
         content = _read(path)
-        assert "Multi-sport" in content or "multi-sport" in content, (
-            f"{path}: must address multi-sport weather impact"
-        )
+        assert (
+            "Multi-sport" in content or "multi-sport" in content
+        ), f"{path}: must address multi-sport weather impact"
 
 
 def test_first_session_skill_explains_why_location_matters_to_athlete():
@@ -119,6 +118,6 @@ def test_first_session_skill_explains_why_location_matters_to_athlete():
     ]:
         content = _read(path)
         # Should mention weather context to the athlete, not just "for geocoding"
-        assert "weather context" in content or "heat" in content or "wind" in content, (
-            f"{path}: must explain to athlete why location is collected (weather context)"
-        )
+        assert (
+            "weather context" in content or "heat" in content or "wind" in content
+        ), f"{path}: must explain to athlete why location is collected (weather context)"

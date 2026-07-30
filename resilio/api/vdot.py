@@ -1,547 +1,271 @@
-"""
-VDOT API - Training pace calculations and race predictions.
+"""Presentation-neutral VDOT calculations owned by Resilio."""
 
-Provides high-level functions for Claude Code to:
-- Calculate VDOT from race performances
-- Generate training pace zones
-- Predict equivalent race times
-- Apply environmental pace adjustments
-- Use six-second rule for novices
+from __future__ import annotations
 
-This API wraps the core VDOT module with error handling and convenient interfaces.
-"""
-
-from typing import Union, Optional
 from dataclasses import dataclass
+from datetime import date
+from zoneinfo import ZoneInfo
 
-from resilio.schemas.vdot import (
-    RaceDistance,
-    VDOTResult,
-    TrainingPaces,
-    RaceEquivalents,
-    SixSecondRulePaces,
-    PaceAdjustment,
-    ConditionType,
-    PaceUnit,
-    ConfidenceLevel,
-    VDOTEstimate,
-    WorkoutPaceData,
-    EasyPaceData,
-    BreakAnalysis,
-    VDOTDecayResult,
-    PaceAnalysisResult,
+from resilio.core.local_dates import athlete_local_date
+from resilio.core.locking import OperationLockError
+from resilio.core.planning.approval_evidence import (
+    ApprovalEvidenceError,
+    load_vdot_approval_evidence_unlocked,
 )
+from resilio.core.planning.errors import PlanOperationError
+from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
+from resilio.core.planning.state_repository import (
+    load_planning_aggregate_unlocked,
+)
+from resilio.core.profile.repository import ProfileRepository
+from resilio.core.repository import RepositoryIO
 from resilio.core.vdot import (
-    calculate_vdot as core_calculate_vdot,
-    calculate_training_paces as core_calculate_paces,
-    calculate_race_equivalents as core_calculate_equivalents,
-    apply_six_second_rule as core_six_second_rule,
-    adjust_pace_for_conditions as core_adjust_pace,
+    VDOTCalculationRangeError,
+    calculate_race_equivalents,
+    calculate_vdot,
     parse_time_string,
 )
+from resilio.schemas.approvals import (
+    PerformanceVDOTEvidence,
+    PlanningState,
+    VDOTApproval,
+    VDOTProposal,
+)
+from resilio.schemas.profile import AthleteProfile
+from resilio.schemas.vdot import (
+    RaceDistance,
+    RaceEquivalents,
+    VDOTEstimate,
+    VDOTResult,
+)
 
 
-# ============================================================
-# ERROR TYPES
-# ============================================================
-
-
-@dataclass
+@dataclass(frozen=True)
 class VDOTError:
-    """Error result from VDOT operations."""
+    """A typed VDOT operation failure."""
 
-    error_type: str  # "invalid_input", "out_of_range", "calculation_failed"
+    error_type: str
     message: str
 
 
-# ============================================================
-# PUBLIC API FUNCTIONS
-# ============================================================
+def _race_distance(value: str) -> RaceDistance | VDOTError:
+    try:
+        return RaceDistance(value.casefold())
+    except ValueError:
+        valid = ", ".join(item.value for item in RaceDistance)
+        return VDOTError("invalid_input", f"Invalid race distance {value!r}. Valid: {valid}")
+
+
+def _time_seconds(value: str, *, label: str) -> int | VDOTError:
+    try:
+        return parse_time_string(value)
+    except ValueError as exc:
+        return VDOTError("invalid_input", f"Invalid {label} {value!r}: {exc}")
 
 
 def calculate_vdot_from_race(
     race_distance: str,
     race_time: str,
-    race_date: Optional[str] = None,
-) -> Union[VDOTResult, VDOTError]:
-    """
-    Calculate VDOT from race performance.
+    race_date: str | None = None,
+    *,
+    as_of_date: date | None = None,
+) -> VDOTResult | VDOTError:
+    """Calculate VDOT from a measured race performance."""
+    distance = _race_distance(race_distance)
+    if isinstance(distance, VDOTError):
+        return distance
+    time_seconds = _time_seconds(race_time, label="race time")
+    if isinstance(time_seconds, VDOTError):
+        return time_seconds
 
-    Args:
-        race_distance: Race distance ("mile", "5k", "10k", "15k", "half_marathon", "marathon")
-        race_time: Race time as string ("MM:SS" or "HH:MM:SS")
-        race_date: Optional race date to determine confidence level (ISO format "YYYY-MM-DD")
-
-    Returns:
-        VDOTResult on success, VDOTError on failure
-
-    Examples:
-        >>> calculate_vdot_from_race("10k", "42:30")
-        VDOTResult(vdot=48, source_race='10k', ...)
-
-        >>> calculate_vdot_from_race("half_marathon", "1:30:00", "2026-01-01")
-        VDOTResult(vdot=52, source_race='half_marathon', confidence='high', ...)
-    """
     try:
-        # Validate and convert race distance
+        result = calculate_vdot(distance, time_seconds)
+    except VDOTCalculationRangeError as exc:
+        return VDOTError("out_of_range", str(exc))
+    except ValueError as exc:
+        return VDOTError("calculation_failed", f"VDOT calculation failed: {exc}")
+
+    if race_date is not None:
+        if as_of_date is None:
+            return VDOTError(
+                "invalid_input",
+                "as_of_date is required when race_date is supplied",
+            )
         try:
-            race_dist = RaceDistance(race_distance.lower())
+            performance_date = date.fromisoformat(race_date)
+            days_old = (as_of_date - performance_date).days
         except ValueError:
-            return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid race distance '{race_distance}'. Valid: mile, 5k, 10k, 15k, half_marathon, marathon",
-            )
-
-        # Parse race time
-        try:
-            race_time_seconds = parse_time_string(race_time)
-        except ValueError as e:
-            return VDOTError(
-                error_type="invalid_input", message=f"Invalid race time '{race_time}': {e}"
-            )
-
-        # Calculate VDOT
-        vdot_result = core_calculate_vdot(race_dist, race_time_seconds)
-
-        # Adjust confidence based on race date if provided
-        if race_date:
-            from datetime import date as dt_date
-
-            try:
-                race_dt = dt_date.fromisoformat(race_date)
-                today = dt_date.today()
-                days_ago = (today - race_dt).days
-
-                if days_ago <= 14:
-                    vdot_result.confidence = ConfidenceLevel.HIGH
-                elif days_ago <= 42:  # 6 weeks
-                    vdot_result.confidence = ConfidenceLevel.MEDIUM
-                else:
-                    vdot_result.confidence = ConfidenceLevel.LOW
-            except ValueError:
-                # Invalid date format - keep default confidence
-                pass
-
-        return vdot_result
-
-    except ValueError as e:
-        return VDOTError(error_type="calculation_failed", message=f"VDOT calculation failed: {e}")
-    except Exception as e:
-        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
-
-
-def get_training_paces(
-    vdot: int,
-    unit: str = "min_per_km",
-) -> Union[TrainingPaces, VDOTError]:
-    """
-    Get training pace zones from VDOT.
-
-    Args:
-        vdot: VDOT value (30-85)
-        unit: Pace unit ("min_per_km" or "min_per_mile")
-
-    Returns:
-        TrainingPaces on success, VDOTError on failure
-
-    Examples:
-        >>> get_training_paces(48)
-        TrainingPaces(vdot=48, easy_pace_range=(306, 330), ...)
-
-        >>> get_training_paces(55, unit="min_per_mile")
-        TrainingPaces(vdot=55, unit="min_per_mile", ...)
-    """
-    try:
-        # Validate VDOT range
-        if vdot < 30 or vdot > 85:
-            return VDOTError(
-                error_type="out_of_range", message=f"VDOT must be between 30 and 85, got {vdot}"
-            )
-
-        # Validate unit
-        try:
-            pace_unit = PaceUnit(unit.lower())
-        except ValueError:
-            return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid unit '{unit}'. Valid: min_per_km, min_per_mile",
-            )
-
-        # Calculate paces
-        paces = core_calculate_paces(vdot, pace_unit)
-        return paces
-
-    except ValueError as e:
-        return VDOTError(error_type="calculation_failed", message=f"Pace calculation failed: {e}")
-    except Exception as e:
-        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+            return VDOTError("invalid_input", "race_date must use YYYY-MM-DD")
+        if days_old < 0:
+            return VDOTError("invalid_input", "race_date cannot be in the future")
+        result = result.model_copy(
+            update={
+                "performance_date": performance_date,
+                "performance_age_days": days_old,
+            }
+        )
+    return result
 
 
 def predict_race_times(
     race_distance: str,
     race_time: str,
-) -> Union[RaceEquivalents, VDOTError]:
-    """
-    Predict equivalent race times for other distances.
-
-    Args:
-        race_distance: Source race distance ("mile", "5k", "10k", "15k", "half_marathon", "marathon")
-        race_time: Source race time ("MM:SS" or "HH:MM:SS")
-
-    Returns:
-        RaceEquivalents with predictions for all distances on success, VDOTError on failure
-
-    Examples:
-        >>> predict_race_times("10k", "42:30")
-        RaceEquivalents(vdot=48, predictions={"5k": "20:15", "half_marathon": "1:32:45", ...})
-    """
+) -> RaceEquivalents | VDOTError:
+    """Calculate equivalent race performances from one measured result."""
+    distance = _race_distance(race_distance)
+    if isinstance(distance, VDOTError):
+        return distance
+    time_seconds = _time_seconds(race_time, label="race time")
+    if isinstance(time_seconds, VDOTError):
+        return time_seconds
     try:
-        # Validate and convert race distance
-        try:
-            race_dist = RaceDistance(race_distance.lower())
-        except ValueError:
-            return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid race distance '{race_distance}'. Valid: mile, 5k, 10k, 15k, half_marathon, marathon",
-            )
-
-        # Parse race time
-        try:
-            race_time_seconds = parse_time_string(race_time)
-        except ValueError as e:
-            return VDOTError(
-                error_type="invalid_input", message=f"Invalid race time '{race_time}': {e}"
-            )
-
-        # Calculate equivalents
-        equivalents = core_calculate_equivalents(race_dist, race_time_seconds)
-        return equivalents
-
-    except ValueError as e:
-        return VDOTError(error_type="calculation_failed", message=f"Race prediction failed: {e}")
-    except Exception as e:
-        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+        return calculate_race_equivalents(distance, time_seconds)
+    except ValueError as exc:
+        return VDOTError("calculation_failed", f"Race prediction failed: {exc}")
 
 
-def apply_six_second_rule_paces(mile_time: str) -> Union[SixSecondRulePaces, VDOTError]:
-    """
-    Apply six-second rule for novice runners.
+def _load_profile_unlocked(repo: RepositoryIO) -> AthleteProfile | None:
+    return ProfileRepository(repo)._load_unlocked(allow_missing=True)
 
-    Use when runner has no recent race but has a mile time.
-    Rule: R-pace = mile pace, I-pace = R + 6s/400m, T-pace = I + 6s/400m
-    (Adjustment: 7-8 seconds for VDOT 40-50 range)
 
-    Args:
-        mile_time: Mile time as string ("M:SS")
+def _load_planning_state_unlocked(
+    repo: RepositoryIO,
+) -> PlanningState | None:
+    return load_planning_aggregate_unlocked(repo, allow_missing=True)
 
-    Returns:
-        SixSecondRulePaces on success, VDOTError on failure
 
-    Examples:
-        >>> apply_six_second_rule_paces("6:00")
-        SixSecondRulePaces(r_pace_400m=90, i_pace_400m=96, t_pace_400m=102, ...)
-    """
-    try:
-        # Parse mile time
-        try:
-            mile_time_seconds = parse_time_string(mile_time)
-        except ValueError as e:
-            return VDOTError(
-                error_type="invalid_input", message=f"Invalid mile time '{mile_time}': {e}"
-            )
-
-        # Apply six-second rule
-        result = core_six_second_rule(mile_time_seconds)
-        return result
-
-    except ValueError as e:
+def _estimate_from_approval(
+    *,
+    approval: VDOTApproval,
+    proposal: VDOTProposal,
+    profile: AthleteProfile,
+    as_of_date: date,
+) -> VDOTEstimate | VDOTError:
+    evidence_date = (
+        proposal.evidence.performance_date
+        if isinstance(proposal.evidence, PerformanceVDOTEvidence)
+        else approval.approved_at_utc.astimezone(
+            ZoneInfo(profile.training_timezone)
+        ).date()
+    )
+    evidence_age_days = (as_of_date - evidence_date).days
+    if evidence_age_days < 0:
         return VDOTError(
-            error_type="calculation_failed", message=f"Six-second rule calculation failed: {e}"
+            "invalid_input",
+            "Approved VDOT evidence cannot be dated in the future.",
         )
-    except Exception as e:
-        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+    return VDOTEstimate(
+        estimated_vdot=approval.approved_vdot,
+        evidence_type=proposal.evidence_type,
+        evidence_date=evidence_date,
+        evidence_age_days=evidence_age_days,
+        athlete_approved=True,
+        applicability_window_days=None,
+        source=f"athlete_approved_vdot_proposal:{approval.approval_id}",
+    )
 
 
-def adjust_pace_for_environment(
-    base_pace: str,
-    condition_type: str,
-    severity: float,
-) -> Union[PaceAdjustment, VDOTError]:
-    """
-    Adjust pace for environmental conditions.
-
-    Args:
-        base_pace: Base pace as string ("M:SS" per km)
-        condition_type: Condition type ("altitude", "heat", "humidity", "hills")
-        severity: Severity value (altitude in ft, temp in °C, humidity %, grade %)
-
-    Returns:
-        PaceAdjustment on success, VDOTError on failure
-
-    Examples:
-        >>> adjust_pace_for_environment("5:00", "altitude", 7000.0)
-        PaceAdjustment(adjusted_pace_sec_per_km=330, reason="Altitude effect...", ...)
-
-        >>> adjust_pace_for_environment("4:30", "heat", 30.0)
-        PaceAdjustment(adjusted_pace_sec_per_km=288, reason="Heat stress...", ...)
-    """
-    try:
-        # Parse base pace
-        try:
-            base_pace_seconds = parse_time_string(base_pace)
-        except ValueError as e:
-            return VDOTError(error_type="invalid_input", message=f"Invalid pace '{base_pace}': {e}")
-
-        # Validate condition type
-        try:
-            cond_type = ConditionType(condition_type.lower())
-        except ValueError:
-            return VDOTError(
-                error_type="invalid_input",
-                message=f"Invalid condition '{condition_type}'. Valid: altitude, heat, humidity, hills",
-            )
-
-        # Apply adjustment
-        adjustment = core_adjust_pace(base_pace_seconds, cond_type, severity)
-        return adjustment
-
-    except ValueError as e:
-        return VDOTError(error_type="calculation_failed", message=f"Pace adjustment failed: {e}")
-    except Exception as e:
-        return VDOTError(error_type="calculation_failed", message=f"Unexpected error: {e}")
+def _estimate_from_personal_best(
+    *,
+    profile: AthleteProfile,
+    lookback_days: int,
+    as_of_date: date,
+) -> VDOTEstimate | VDOTError:
+    dated_personal_bests = list(
+        profile.personal_bests_by_distance.items()
+    )
+    if not dated_personal_bests:
+        return VDOTError(
+            "not_found",
+            "No approved VDOT or dated race performance is available.",
+        )
+    distance_name, personal_best = max(
+        dated_personal_bests,
+        key=lambda item: item[1].performance_date,
+    )
+    performance_date = personal_best.performance_date
+    days_old = (as_of_date - performance_date).days
+    if days_old < 0:
+        return VDOTError(
+            "invalid_input",
+            "Personal-best dates cannot be in the future",
+        )
+    if days_old > lookback_days:
+        return VDOTError(
+            "not_found",
+            f"Most recent race evidence is {days_old} days old; "
+            f"the requested lookback is {lookback_days} days.",
+        )
+    return VDOTEstimate(
+        estimated_vdot=round(personal_best.vdot),
+        evidence_type="personal_best",
+        evidence_date=performance_date,
+        evidence_age_days=days_old,
+        athlete_approved=False,
+        applicability_window_days=lookback_days,
+        source=(
+            f"recent_personal_best:{distance_name}:"
+            f"{performance_date.isoformat()}"
+        ),
+    )
 
 
 def estimate_current_vdot(
     lookback_days: int = 28,
-) -> Union[VDOTEstimate, VDOTError]:
+    *,
+    as_of_date: date | None = None,
+) -> VDOTEstimate | VDOTError:
+    """Return approved or race-derived VDOT evidence without inferred decay.
+
+    The lookback argument defines how recent a personal best must be to count as
+    current evidence. Older performances are deliberately not decayed or
+    converted into a current-fitness claim.
     """
-    Estimate current VDOT with training continuity awareness.
-
-    Algorithm:
-    1. Check for recent race (<90 days) → HIGH confidence
-    2. If race >90 days:
-       a. Detect training breaks
-       b. Apply continuity-aware decay
-       c. Validate with recent pace data
-       d. Adjust upward if pace data suggests higher fitness
-    3. No race: Use pace analysis only (quality workouts → easy runs → error)
-
-    Args:
-        lookback_days: Number of days to look back for pace analysis (default: 28)
-
-    Returns:
-        VDOTEstimate with current VDOT estimate and supporting data
-        VDOTError on failure
-
-    Example:
-        >>> estimate = estimate_current_vdot(lookback_days=90)
-        >>> if isinstance(estimate, VDOTError):
-        ...     print(f"Error: {estimate.message}")
-        ... else:
-        ...     print(f"Current VDOT: {estimate.estimated_vdot} ({estimate.confidence})")
-        ...     print(f"Source: {estimate.source}")
-    """
-    from datetime import date as dt_date, timedelta
-    from pathlib import Path
-    from statistics import median
-
-    from resilio.core.paths import get_activities_dir
-    from resilio.core.repository import RepositoryIO, ReadOptions
-    from resilio.schemas.activity import CanonicalActivity
-    from resilio.core.vdot.continuity import detect_training_breaks, calculate_vdot_decay
-    from resilio.core.vdot.pace_analysis import analyze_recent_paces
-    from resilio.api.profile import get_profile, ProfileError
-    from resilio.api.metrics import get_current_metrics, MetricsError
-
+    if lookback_days <= 0:
+        return VDOTError("invalid_input", "lookback_days must be positive")
+    repository = RepositoryIO()
     try:
-        # Load activities
-        repo = RepositoryIO()
-        activities_dir = get_activities_dir()
-        activity_files = list(Path(activities_dir).rglob("*.yaml"))
-
-        if not activity_files:
-            return VDOTError(
-                error_type="not_found",
-                message=(
-                    "No activities found. Run 'resilio sync' to import "
-                    "completed activities."
-                ),
+        with coordinated_plan_lock(
+            repository,
+            "estimate_current_vdot",
+        ):
+            profile = _load_profile_unlocked(repository)
+            if profile is None:
+                return VDOTError(
+                    "not_found",
+                    "Athlete profile does not exist",
+                )
+            planning_state = _load_planning_state_unlocked(repository)
+            resolved_as_of_date = as_of_date or athlete_local_date(
+                profile.training_timezone
             )
-
-        # Load all activities (we need full history for break detection)
-        all_activities: list[CanonicalActivity] = []
-        for activity_file in activity_files:
-            result = repo.read_yaml(str(activity_file), CanonicalActivity, ReadOptions())
-            if isinstance(result, CanonicalActivity):
-                if (
-                    result.status == "active"
-                    and result.sport_type.lower()
-                    in ["run", "trail_run", "treadmill_run", "track_run"]
-                ):
-                    all_activities.append(result)
-
-        if not all_activities:
-            return VDOTError(
-                error_type="not_found",
-                message="No running activities found. Run 'resilio sync' to import activities.",
-            )
-
-        # Get profile (for max_hr and race history)
-        profile_result = get_profile()
-        if isinstance(profile_result, ProfileError):
-            return VDOTError(
-                error_type="not_found",
-                message="Profile not found. Run 'resilio profile create' to create your profile.",
-            )
-        profile = profile_result
-
-        # Get max_hr for HR-based easy pace detection
-        max_hr = None
-        vital_signs = getattr(profile, "vital_signs", None)
-        candidate_max_hr = getattr(vital_signs, "max_hr", None) if vital_signs else None
-        if isinstance(candidate_max_hr, (int, float)) and candidate_max_hr > 0:
-            max_hr = int(candidate_max_hr)
-
-        # Step 1: Check for recent PB (<90 days)
-        if profile.personal_bests:
-            pbs_with_dates = [
-                (dist, pb)
-                for dist, pb in profile.personal_bests.items()
-                if pb.vdot and pb.date
-            ]
-
-            if pbs_with_dates:
-                # Sort by date descending (most recent first)
-                pbs_with_dates.sort(key=lambda x: x[1].date, reverse=True)
-                most_recent_dist, most_recent_pb = pbs_with_dates[0]
-                race_date = dt_date.fromisoformat(most_recent_pb.date)
-                days_since_race = (dt_date.today() - race_date).days
-
-                # Recent PB path (<90 days)
-                if days_since_race < 90:
-                    return VDOTEstimate(
-                        estimated_vdot=int(most_recent_pb.vdot),
-                        confidence=ConfidenceLevel.HIGH,
-                        source=f"recent_pb ({most_recent_dist} @ {most_recent_pb.time}, {days_since_race} days ago)",
-                        supporting_data=[]
+            if (
+                planning_state is not None
+                and planning_state.vdot_approval is not None
+            ):
+                approval, proposal = (
+                    load_vdot_approval_evidence_unlocked(
+                        repository,
+                        planning_state.vdot_approval,
                     )
-
-                # Step 2: PB >90 days - apply continuity-aware decay
-                # Detect training breaks
-                break_analysis = detect_training_breaks(
-                    all_activities,
-                    race_date,
-                    lookback_months=18
                 )
-
-                # Get CTL for multi-sport adjustment
-                ctl_current = None
-                metrics_result = get_current_metrics()
-                if not isinstance(metrics_result, MetricsError):
-                    ctl_current = metrics_result.ctl.value if hasattr(metrics_result, 'ctl') else None
-
-                # Calculate decay
-                decay_result = calculate_vdot_decay(
-                    base_vdot=most_recent_pb.vdot,
-                    race_date=race_date,
-                    break_analysis=break_analysis,
-                    ctl_at_race=None,  # TODO: Implement historical CTL estimation
-                    ctl_current=ctl_current
+                return _estimate_from_approval(
+                    approval=approval,
+                    proposal=proposal,
+                    profile=profile,
+                    as_of_date=resolved_as_of_date,
                 )
-
-                # Step 2c: Validate with recent pace data
-                pace_analysis = analyze_recent_paces(
-                    all_activities,
-                    lookback_days=lookback_days,
-                    max_hr=max_hr
-                )
-
-                # Adjust upward if pace data suggests higher fitness
-                if pace_analysis.implied_vdot_range:
-                    pace_min, pace_max = pace_analysis.implied_vdot_range
-
-                    # If decayed VDOT significantly lower than pace suggests
-                    if decay_result.decayed_vdot < pace_min - 2:
-                        adjusted_vdot = int((decay_result.decayed_vdot + pace_min) / 2)
-                        confidence = ConfidenceLevel.MEDIUM
-                        source = f"race_decay_adjusted ({break_analysis.continuity_score:.0%} continuity, {len(pace_analysis.quality_workouts + pace_analysis.easy_runs)} pace data points)"
-                    else:
-                        adjusted_vdot = decay_result.decayed_vdot
-                        confidence = decay_result.confidence
-                        source = f"race_decay ({break_analysis.continuity_score:.0%} continuity, {int(days_since_race/30.44)} months old)"
-                else:
-                    adjusted_vdot = decay_result.decayed_vdot
-                    confidence = decay_result.confidence
-                    source = f"race_decay ({break_analysis.continuity_score:.0%} continuity, {int(days_since_race/30.44)} months old)"
-
-                return VDOTEstimate(
-                    estimated_vdot=adjusted_vdot,
-                    confidence=confidence,
-                    source=source,
-                    supporting_data=pace_analysis.quality_workouts  # Convert easy_runs if needed
-                )
-
-        # Step 3: No race - use pace analysis only
-        pace_analysis = analyze_recent_paces(
-            all_activities,
-            lookback_days=lookback_days,
-            max_hr=max_hr
-        )
-
-        # Quality workouts (best signal)
-        if pace_analysis.quality_workouts:
-            vdots = [w.implied_vdot for w in pace_analysis.quality_workouts]
-            estimated_vdot = int(median(vdots))
-            confidence = ConfidenceLevel.MEDIUM if len(vdots) >= 3 else ConfidenceLevel.LOW
-            source = f"quality_workouts ({len(vdots)} workouts)"
-
-            return VDOTEstimate(
-                estimated_vdot=estimated_vdot,
-                confidence=confidence,
-                source=source,
-                supporting_data=pace_analysis.quality_workouts
+            return _estimate_from_personal_best(
+                profile=profile,
+                lookback_days=lookback_days,
+                as_of_date=resolved_as_of_date,
             )
-
-        # Easy runs (secondary signal)
-        if pace_analysis.easy_runs:
-            vdots = [e.implied_vdot for e in pace_analysis.easy_runs]
-            estimated_vdot = int(median(vdots))
-            confidence = ConfidenceLevel.LOW
-            source = f"easy_pace_analysis ({len(vdots)} easy runs, HR-detected)"
-
-            # Convert EasyPaceData to WorkoutPaceData for supporting_data
-            supporting_data = [
-                WorkoutPaceData(
-                    date=er.date,
-                    workout_type="easy",
-                    pace_sec_per_km=er.pace_sec_per_km,
-                    implied_vdot=er.implied_vdot
-                )
-                for er in pace_analysis.easy_runs
-            ]
-
-            return VDOTEstimate(
-                estimated_vdot=estimated_vdot,
-                confidence=confidence,
-                source=source,
-                supporting_data=supporting_data
-            )
-
-        # No data available - require baseline establishment
+    except ApprovalEvidenceError as exc:
+        return VDOTError("stale_approval_evidence", str(exc))
+    except OperationLockError:
         return VDOTError(
-            error_type="not_found",
-            message=(
-                "Insufficient data for VDOT estimation. To establish your baseline:\n\n"
-                "1. Add a PB: 'resilio profile set-pb --distance 10k --time MM:SS --date YYYY-MM-DD'\n"
-                "2. OR run quality workouts with keywords (tempo, threshold, interval)\n"
-                "3. OR run easy runs consistently (requires max HR in profile for detection)\n\n"
-                "Why no CTL-based estimate? CTL measures training volume, not pace capability.\n"
-                "We need actual pace data (PBs or workouts) to estimate your VDOT accurately."
-            )
+            "temporarily_unavailable",
+            "VDOT evidence is temporarily unavailable during a state transition",
         )
-
-    except Exception as e:
-        return VDOTError(error_type="calculation_failed", message=f"VDOT estimation failed: {e}")
-
-
-# Moved to resilio.core.vdot.pace_analysis
+    except (OSError, ValueError, PlanOperationError) as exc:
+        return VDOTError("invalid_state", str(exc))

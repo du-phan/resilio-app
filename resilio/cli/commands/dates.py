@@ -10,16 +10,15 @@ from typing import Optional
 
 import typer
 
+from resilio.cli.output import (
+    create_error_envelope,
+    create_success_envelope,
+    output_json,
+)
 from resilio.utils.dates import (
+    format_week_range,
     get_next_monday,
     get_week_boundaries,
-    format_week_range,
-    validate_week_start,
-)
-from resilio.cli.output import (
-    output_json,
-    create_success_envelope,
-    create_error_envelope,
 )
 
 # Create subcommand app
@@ -92,10 +91,8 @@ def today_command() -> None:
 @app.command(name="next-monday")
 def next_monday_command(
     from_date: Optional[str] = typer.Option(
-        None,
-        "--from-date",
-        help="Start date (YYYY-MM-DD). Defaults to today."
-    )
+        None, "--from-date", help="Start date (YYYY-MM-DD). Defaults to today."
+    ),
 ) -> None:
     """Get next Monday from a given date.
 
@@ -141,9 +138,7 @@ def next_monday_command(
 
     except ValueError as e:
         envelope = create_error_envelope(
-            error_type="invalid_input",
-            message=str(e),
-            data={"from_date": from_date}
+            error_type="invalid_input", message=str(e), data={"from_date": from_date}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -151,11 +146,7 @@ def next_monday_command(
 
 @app.command(name="week-boundaries")
 def week_boundaries_command(
-    start: str = typer.Option(
-        ...,
-        "--start",
-        help="Week start date (YYYY-MM-DD). Must be Monday."
-    )
+    start: str = typer.Option(..., "--start", help="Week start date (YYYY-MM-DD). Must be Monday."),
 ) -> None:
     """Get Monday-Sunday boundaries for a week.
 
@@ -197,9 +188,7 @@ def week_boundaries_command(
             error_msg = str(e)
 
         envelope = create_error_envelope(
-            error_type="invalid_input",
-            message=error_msg,
-            data={"start": start}
+            error_type="invalid_input", message=error_msg, data={"start": start}
         )
         output_json(envelope)
         raise typer.Exit(code=5)
@@ -207,16 +196,10 @@ def week_boundaries_command(
 
 @app.command(name="validate")
 def validate_command(
-    date_str: str = typer.Option(
-        ...,
-        "--date",
-        help="Date to validate (YYYY-MM-DD)"
-    ),
+    date_str: str = typer.Option(..., "--date", help="Date to validate (YYYY-MM-DD)"),
     must_be: str = typer.Option(
-        "monday",
-        "--must-be",
-        help="Required day of week (monday, tuesday, ..., sunday)"
-    )
+        "monday", "--must-be", help="Required day of week (monday, tuesday, ..., sunday)"
+    ),
 ) -> None:
     """Validate that a date is a specific day of week.
 
@@ -272,9 +255,7 @@ def validate_command(
 
     except ValueError as e:
         envelope = create_error_envelope(
-            error_type="invalid_input",
-            message=str(e),
-            data={"date": date_str, "must_be": must_be}
+            error_type="invalid_input", message=str(e), data={"date": date_str, "must_be": must_be}
         )
         output_json(envelope)
         raise typer.Exit(code=5)

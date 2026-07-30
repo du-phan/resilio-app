@@ -6,17 +6,13 @@ import httpx
 import pytest
 
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
-from resilio.integrations.intervals_icu.dto import (
-    EventWriteDTO,
-    ManualActivityWriteDTO,
-)
+from resilio.integrations.intervals_icu.dto import EventWriteDTO
 from resilio.integrations.intervals_icu.errors import (
     IntervalsAuthenticationError,
     IntervalsAuthorizationError,
     IntervalsInvalidPayloadError,
     IntervalsRateLimitError,
     IntervalsTransportError,
-    UnsupportedSportError,
 )
 from resilio.schemas.config import Config, Settings
 
@@ -279,172 +275,6 @@ def test_exact_event_delete_explicitly_disables_related_deletion() -> None:
         client.delete_event(42)
 
 
-def _manual_write() -> ManualActivityWriteDTO:
-    return ManualActivityWriteDTO(
-        external_id="resilio:v1:historical-activity:act_h_test",
-        type="RockClimbing",
-        name="Bouldering",
-        start_date="2026-07-28T17:00:00Z",
-        start_date_local="2026-07-28T19:00:00+02:00",
-        timezone="Europe/Paris",
-        elapsed_time=3600,
-        moving_time=3600,
-        description="Public description",
-        icu_rpe=6,
-    )
-
-
-def _manual_response(**updates):
-    payload = {
-        "id": "manual-1",
-        "external_id": "resilio:v1:historical-activity:act_h_test",
-        "type": "RockClimbing",
-        "name": "Bouldering",
-        "start_date": "2026-07-28T17:00:00Z",
-        "start_date_local": "2026-07-28T19:00:00+02:00",
-        "timezone": "Europe/Paris",
-        "elapsed_time": 3600,
-        "moving_time": 3600,
-        "description": "Public description",
-        "icu_rpe": 6,
-    }
-    payload.update(updates)
-    return payload
-
-
-def test_bulk_manual_activity_uses_strict_payload_and_personal_key_auth() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        assert request.method == "POST"
-        assert request.url.path == "/api/v1/athlete/0/activities/manual/bulk"
-        assert request.headers["Authorization"].startswith("Basic ")
-        payload = __import__("json").loads(request.content)
-        assert payload == [
-            {
-                "external_id": "resilio:v1:historical-activity:act_h_test",
-                "type": "RockClimbing",
-                "name": "Bouldering",
-                "start_date": "2026-07-28T17:00:00Z",
-                "start_date_local": "2026-07-28T19:00:00",
-                "timezone": "Europe/Paris",
-                "elapsed_time": 3600,
-                "moving_time": 3600,
-                "description": "Public description",
-                "icu_rpe": 6,
-            }
-        ]
-        assert "icu_training_load" not in payload[0]
-        return httpx.Response(200, json=[_manual_response()])
-
-    with IntervalsIcuClient(
-        _config(),
-        transport=httpx.MockTransport(handler),
-    ) as client:
-        created = client.create_manual_activities([_manual_write()])
-
-    assert created[0].type == "RockClimbing"
-    assert created[0].external_id.endswith("act_h_test")
-
-
-def test_bulk_manual_duplicate_response_is_rejected() -> None:
-    transport = httpx.MockTransport(
-        lambda _request: httpx.Response(
-            200,
-            json=[_manual_response(), _manual_response()],
-        )
-    )
-    with IntervalsIcuClient(_config(), transport=transport) as client:
-        with pytest.raises(IntervalsInvalidPayloadError, match="duplicate"):
-            client.create_manual_activities([_manual_write()])
-
-
-def test_bulk_manual_mutation_timeout_is_not_retried() -> None:
-    calls = 0
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        nonlocal calls
-        calls += 1
-        raise httpx.ReadTimeout("uncertain after create", request=request)
-
-    with IntervalsIcuClient(
-        _config(),
-        transport=httpx.MockTransport(handler),
-    ) as client:
-        with pytest.raises(IntervalsTransportError):
-            client.create_manual_activities([_manual_write()])
-
-    assert calls == 1
-
-
-@pytest.mark.parametrize(
-    ("status", "error"),
-    [
-        (401, IntervalsAuthenticationError),
-        (403, IntervalsAuthorizationError),
-        (422, IntervalsInvalidPayloadError),
-        (429, IntervalsRateLimitError),
-        (503, IntervalsTransportError),
-    ],
-)
-def test_bulk_manual_http_failure_is_not_retried(status, error) -> None:
-    calls = 0
-
-    def handler(_request: httpx.Request) -> httpx.Response:
-        nonlocal calls
-        calls += 1
-        return httpx.Response(
-            status,
-            text="private activity response",
-            headers={"Retry-After": "9"},
-        )
-
-    with IntervalsIcuClient(
-        _config(),
-        transport=httpx.MockTransport(handler),
-    ) as client:
-        with pytest.raises(error) as captured:
-            client.create_manual_activities([_manual_write()])
-
-    assert calls == 1
-    assert "private activity response" not in str(captured.value)
-
-
-def test_bulk_manual_reports_only_matching_sanitized_type_rejections() -> None:
-    transport = httpx.MockTransport(
-        lambda _request: httpx.Response(
-            422,
-            json={
-                "status": 422,
-                "error": "Activity[0] create failed: Invalid type [RockClimbing]",
-            },
-        )
-    )
-
-    with IntervalsIcuClient(_config(), transport=transport) as client:
-        with pytest.raises(UnsupportedSportError) as captured:
-            client.create_manual_activities([_manual_write()])
-
-    assert captured.value.error_type == "unsupported_sport"
-    assert "RockClimbing" in str(captured.value)
-
-
-def test_bulk_manual_does_not_echo_untrusted_validation_details() -> None:
-    transport = httpx.MockTransport(
-        lambda _request: httpx.Response(
-            422,
-            json={
-                "status": 422,
-                "error": "Activity[0] create failed: private activity response",
-            },
-        )
-    )
-
-    with IntervalsIcuClient(_config(), transport=transport) as client:
-        with pytest.raises(IntervalsInvalidPayloadError) as captured:
-            client.create_manual_activities([_manual_write()])
-
-    assert "private activity response" not in str(captured.value)
-
-
 def test_exact_activity_delete_is_single_target_and_not_retried() -> None:
     calls = 0
 
@@ -515,6 +345,36 @@ def test_hidden_activity_variant_is_explicit() -> None:
 
     assert rows[0].id == "hidden-1"
     assert rows[0].note == "Unavailable through this API"
+
+
+def test_activity_list_accepts_summary_zone_duration_arrays() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "a1",
+                    "type": "Run",
+                    "name": "Run",
+                    "start_date": "2026-07-28T05:00:00Z",
+                    "start_date_local": "2026-07-28T07:00:00",
+                    "elapsed_time": 3600,
+                    "moving_time": 3500,
+                    "icu_hr_zone_times": [600, 900, 1200, 800, 0, 0, 0],
+                    "polarization_index": -0.34,
+                }
+            ],
+        )
+    )
+
+    with IntervalsIcuClient(_config(), transport=transport) as client:
+        rows = client.list_activities(
+            date(2026, 7, 28),
+            date(2026, 7, 28),
+        )
+
+    assert rows[0].id == "a1"
+    assert rows[0].start_date_local == "2026-07-28T07:00:00"
 
 
 def test_nullable_activity_intervals_follow_live_contract() -> None:

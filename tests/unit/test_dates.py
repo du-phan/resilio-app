@@ -1,10 +1,12 @@
 """Tests for date utility functions."""
-import pytest
 from datetime import date, timedelta
+
+import pytest
+
 from resilio.utils.dates import (
+    format_week_range,
     get_next_monday,
     get_week_boundaries,
-    format_week_range,
     validate_week_start,
 )
 
@@ -58,7 +60,7 @@ class TestGetWeekBoundaries:
         assert start == date(2026, 1, 19)
         assert end == date(2026, 1, 25)
         assert start.weekday() == 0  # Monday
-        assert end.weekday() == 6    # Sunday
+        assert end.weekday() == 6  # Sunday
 
     def test_rejects_non_monday(self):
         """Should raise ValueError if input is not Monday."""
@@ -113,6 +115,5 @@ class TestValidateWeekStart:
 
         for i in range(7):
             day = monday + timedelta(days=i)
-            expected = (i == 0)  # Only Monday (i=0) should be True
-            assert validate_week_start(day) == expected, \
-                f"Day {i} ({day.strftime('%A')}) failed"
+            expected = i == 0  # Only Monday (i=0) should be True
+            assert validate_week_start(day) == expected, f"Day {i} ({day.strftime('%A')}) failed"

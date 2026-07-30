@@ -20,6 +20,27 @@ class PublishedWorkout(BaseModel):
     sport: str
     occurrence_date: date
     start_date_local: str
+    provider_computed_aerobic_load_points: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    provider_relative_intensity_percent: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=1_000,
+        allow_inf_nan=False,
+    )
+    provider_fitness_load_points: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    provider_fatigue_load_points: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
     verified_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -55,17 +76,13 @@ class PublicationManifest(BaseModel):
         identity_owners: dict[tuple[str, str], str] = {}
         for local_id, record in self.workouts.items():
             if record.local_workout_id != local_id:
-                raise ValueError(
-                    "publication manifest key must match local workout ID"
-                )
+                raise ValueError("publication manifest key must match local workout ID")
             prior_event_owner = event_owners.setdefault(
                 record.event_id,
                 local_id,
             )
             if prior_event_owner != local_id:
-                raise ValueError(
-                    "publication manifest event IDs must be unique"
-                )
+                raise ValueError("publication manifest event IDs must be unique")
             for field_name, value in (
                 ("requested_uid", record.requested_uid),
                 ("uid", record.uid),
@@ -76,31 +93,35 @@ class PublicationManifest(BaseModel):
                     local_id,
                 )
                 if prior_owner != local_id:
-                    raise ValueError(
-                        "publication manifest ownership identities must be unique"
-                    )
-        for local_id, record in self.pending.items():
-            if record.local_workout_id != local_id:
-                raise ValueError(
-                    "pending publication key must match local workout ID"
-                )
+                    raise ValueError("publication manifest ownership identities must be unique")
+        for local_id, pending_record in self.pending.items():
+            if pending_record.local_workout_id != local_id:
+                raise ValueError("pending publication key must match local workout ID")
             for field_name, value in (
-                ("uid", record.uid),
-                ("external_id", record.external_id),
+                ("uid", pending_record.uid),
+                ("external_id", pending_record.external_id),
             ):
                 prior_owner = identity_owners.setdefault(
                     (field_name, value),
                     local_id,
                 )
                 if prior_owner != local_id:
-                    raise ValueError(
-                        "publication manifest ownership identities must be unique"
-                    )
+                    raise ValueError("publication manifest ownership identities must be unique")
         return self
 
 
+PublicationAction = Literal[
+    "created",
+    "updated",
+    "noop",
+    "recovered",
+    "deleted",
+    "recovered_deleted",
+]
+
+
 class PublicationResult(BaseModel):
-    action: str
+    action: PublicationAction
     local_workout_id: str
     event_id: Optional[int] = None
     uid: str
@@ -121,6 +142,8 @@ class PlanPublicationItem(BaseModel):
         "skipped_rest",
         "skipped_unstructured",
         "error",
+        "deleted",
+        "recovered_deleted",
     ]
     event_id: Optional[int] = None
     error_type: Optional[str] = None
@@ -162,15 +185,11 @@ class WorkoutCompletionManifest(BaseModel):
         workout_owners: dict[str, str] = {}
         for local_activity_id, match in self.matches.items():
             if match.local_activity_id != local_activity_id:
-                raise ValueError(
-                    "completion manifest key must match local activity ID"
-                )
+                raise ValueError("completion manifest key must match local activity ID")
             prior_activity = workout_owners.setdefault(
                 match.local_workout_id,
                 local_activity_id,
             )
             if prior_activity != local_activity_id:
-                raise ValueError(
-                    "a local workout cannot match multiple activities"
-                )
+                raise ValueError("a local workout cannot match multiple activities")
         return self

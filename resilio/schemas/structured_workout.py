@@ -37,8 +37,15 @@ class StepDuration(BaseModel):
                 )
         elif self.value is None:
             raise ValueError("fixed duration requires value")
+        elif self.unit == StepDurationUnit.METERS:
+            if self.nominal_seconds is None:
+                raise ValueError(
+                    "distance duration requires nominal_seconds for exact " "session planning"
+                )
         elif self.nominal_seconds is not None:
-            raise ValueError("nominal_seconds is only valid with until_lap_press")
+            raise ValueError(
+                "nominal_seconds is only valid with distance or " "until_lap_press duration"
+            )
         return self
 
 
@@ -80,11 +87,15 @@ class WorkoutTarget(BaseModel):
             raise ValueError(f"{self.unit} is not valid for {self.mode}")
         if self.minimum > self.maximum:
             raise ValueError("target minimum cannot exceed maximum")
-        if self.unit in {
-            TargetUnit.PERCENT_LTHR,
-            TargetUnit.PERCENT_MAX_HEART_RATE,
-            TargetUnit.PERCENT_FTP,
-        } and self.maximum > 200:
+        if (
+            self.unit
+            in {
+                TargetUnit.PERCENT_LTHR,
+                TargetUnit.PERCENT_MAX_HEART_RATE,
+                TargetUnit.PERCENT_FTP,
+            }
+            and self.maximum > 200
+        ):
             raise ValueError("percentage targets cannot exceed 200")
         return self
 
@@ -107,10 +118,7 @@ class CadenceRange(BaseModel):
 
     @model_validator(mode="after")
     def ordered(self) -> "CadenceRange":
-        if (
-            self.minimum_revolutions_per_minute
-            > self.maximum_revolutions_per_minute
-        ):
+        if self.minimum_revolutions_per_minute > self.maximum_revolutions_per_minute:
             raise ValueError("cadence minimum cannot exceed maximum")
         return self
 
@@ -191,6 +199,20 @@ class StructuredWorkout(BaseModel):
             return any(visit(child) for child in step.steps)
 
         return any(visit(step) for step in self.steps)
+
+    def nominal_duration_seconds(self) -> int:
+        """Return the exact recursively expanded planning duration."""
+
+        def duration(step: WorkoutStep) -> int:
+            if isinstance(step, RepeatStep):
+                return step.repetitions * sum(duration(child) for child in step.steps)
+            if step.duration.unit == StepDurationUnit.SECONDS:
+                assert step.duration.value is not None
+                return step.duration.value
+            assert step.duration.nominal_seconds is not None
+            return step.duration.nominal_seconds
+
+        return sum(duration(step) for step in self.steps)
 
 
 RepeatStep.model_rebuild()

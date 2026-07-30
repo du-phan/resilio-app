@@ -112,7 +112,8 @@ def api_result_to_envelope(
             days_needed = error_data.get("minimum_days_needed", 14)
             days_remaining = days_needed - days_available
             error_data["next_steps"] = (
-                f"Keep logging activities. You'll get full metrics in {days_remaining} more days."
+                "Keep logging activities. The requested analysis needs "
+                f"{days_remaining} more covered days."
             )
 
         return create_error_envelope(

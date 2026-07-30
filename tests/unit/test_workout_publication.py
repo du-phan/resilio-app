@@ -13,8 +13,10 @@ from resilio.core.workout_publication.manifest import (
 from resilio.core.workout_publication.renderer import render_structured_workout
 from resilio.core.workout_publication.service import (
     PublicationSafetyError,
-    WorkoutPublicationService,
     uid_for,
+)
+from resilio.core.workout_publication.service import (
+    WorkoutPublicationService as ProductionWorkoutPublicationService,
 )
 from resilio.integrations.intervals_icu.dto import (
     AthleteDTO,
@@ -44,11 +46,7 @@ def _structure(
             "duration": {"unit": "seconds", "value": 600},
             "target": {
                 "mode": "pace" if sport == "run" else "power",
-                "unit": (
-                    "seconds_per_kilometer"
-                    if sport == "run"
-                    else "percent_ftp"
-                ),
+                "unit": ("seconds_per_kilometer" if sport == "run" else "percent_ftp"),
                 "minimum": 300 if sport == "run" else 85,
                 "maximum": 330 if sport == "run" else 95,
             },
@@ -60,14 +58,14 @@ def _structure(
             "steps": [
                 {
                     "kind": "steady",
-                    "duration": {"unit": "meters", "value": 1000},
+                    "duration": {
+                        "unit": "meters",
+                        "value": 1000,
+                        "nominal_seconds": 255,
+                    },
                     "target": {
                         "mode": "pace" if sport == "run" else "power",
-                        "unit": (
-                            "seconds_per_kilometer"
-                            if sport == "run"
-                            else "percent_ftp"
-                        ),
+                        "unit": ("seconds_per_kilometer" if sport == "run" else "percent_ftp"),
                         "minimum": 250 if sport == "run" else 105,
                         "maximum": 260 if sport == "run" else 110,
                     },
@@ -110,12 +108,15 @@ def _workout(
     return WorkoutPrescription(
         id=workout_id,
         date=occurrence,
+        start_time_local=time(7),
         sport=sport,
-        day_of_week=occurrence.weekday(),
         workout_type=WorkoutType.INTERVALS,
-        distance_km=9.0,
-        target_rpe=8,
-        week_number=1,
+        planned_duration_seconds=1_725,
+        planned_distance_meters=9_000 if sport == "run" else None,
+        planned_low_intensity_duration_seconds=960,
+        planned_moderate_intensity_duration_seconds=0,
+        planned_high_intensity_duration_seconds=765,
+        target_rpe_1_to_10=8,
         purpose="Three controlled repetitions",
         structured_workout=_structure(
             sport,
@@ -125,12 +126,79 @@ def _workout(
     )
 
 
+def test_structured_workout_requires_exact_approved_time_and_nominal_duration() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 60},
+                    "intensity": "warmup",
+                }
+            ],
+        }
+    )
+    common = {
+        "id": "approval-integrity",
+        "date": date(2026, 10, 25),
+        "sport": "run",
+        "workout_type": WorkoutType.EASY,
+        "planned_duration_seconds": 60,
+        "planned_distance_meters": 1000,
+        "planned_low_intensity_duration_seconds": 60,
+        "planned_moderate_intensity_duration_seconds": 0,
+        "planned_high_intensity_duration_seconds": 0,
+        "target_rpe_1_to_10": 2,
+        "purpose": "Approval integrity",
+        "structured_workout": structure,
+    }
+
+    with pytest.raises(ValidationError, match="start_time_local"):
+        WorkoutPrescription(**common)
+    with pytest.raises(ValidationError, match="nominal duration"):
+        WorkoutPrescription(
+            **{
+                **common,
+                "start_time_local": time(7),
+                "planned_duration_seconds": 3600,
+                "planned_low_intensity_duration_seconds": 3600,
+            }
+        )
+
+
+class WorkoutPublicationService(ProductionWorkoutPublicationService):
+    """Unit harness that isolates remote publication mechanics from approvals."""
+
+    def __init__(self, repo, client):
+        super().__init__(repo, client)
+        self._approved_workouts = {}
+        self._approved_plan_workout_ids = []
+
+    def publish(self, workout):
+        self._approved_workouts[workout.id] = workout
+        return super().publish(workout.id)
+
+    def publish_plan(self, workouts, *, from_date):
+        self._approved_workouts.update({workout.id: workout for workout in workouts})
+        self._approved_plan_workout_ids = [workout.id for workout in workouts]
+        return super().publish_plan(from_date=from_date)
+
+    def _load_approved_workout(self, workout_id):
+        return self._approved_workouts[workout_id]
+
+    def _load_approved_workouts(self):
+        return [
+            self._approved_workouts[workout_id] for workout_id in self._approved_plan_workout_ids
+        ]
+
+
 class FakeClient:
     def __init__(
         self,
         *,
         wahoo: bool = False,
-        threshold_pace: float | None = 300,
+        threshold_speed_meters_per_second: float | None = 3.33,
         ftp: int | None = 250,
         garmin_upload_workouts: bool = True,
         garmin_filters: list[dict] | None = None,
@@ -152,7 +220,7 @@ class FakeClient:
             SportSettingsDTO(
                 id=1,
                 types=["Run"],
-                threshold_pace=threshold_pace,
+                threshold_pace=threshold_speed_meters_per_second,
                 pace_zones=[360, 330, 300],
                 default_workout_time="07:00:00",
             ),
@@ -228,7 +296,11 @@ def test_metric_distance_and_max_hr_use_unambiguous_intervals_tokens() -> None:
             "steps": [
                 {
                     "kind": "steady",
-                    "duration": {"unit": "meters", "value": 5000},
+                    "duration": {
+                        "unit": "meters",
+                        "value": 5000,
+                        "nominal_seconds": 1500,
+                    },
                     "target": {
                         "mode": "heart_rate",
                         "unit": "percent_max_heart_rate",
@@ -269,6 +341,32 @@ def test_event_target_uses_intervals_enum(repo) -> None:
     assert client.events[result.event_id].target == "PACE"
 
 
+def test_publication_persists_provider_computed_readback(repo) -> None:
+    class ComputedReadbackClient(FakeClient):
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            stored = stored.model_copy(
+                update={
+                    "icu_training_load": 73.5,
+                    "icu_intensity": 91.2,
+                    "icu_ctl": 48.4,
+                    "icu_atl": 55.1,
+                }
+            )
+            self.events[stored.id] = stored
+            return stored
+
+    client = ComputedReadbackClient()
+
+    WorkoutPublicationService(repo, client).publish(_workout())
+    record = load_manifest(repo).workouts["workout-1"]
+
+    assert record.provider_computed_aerobic_load_points == 73.5
+    assert record.provider_relative_intensity_percent == 91.2
+    assert record.provider_fitness_load_points == 48.4
+    assert record.provider_fatigue_load_points == 55.1
+
+
 def test_server_assigned_uid_is_persisted_and_reused(repo) -> None:
     class ServerUidClient(FakeClient):
         def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
@@ -281,9 +379,7 @@ def test_server_assigned_uid_is_persisted_and_reused(repo) -> None:
     client = ServerUidClient()
     service = WorkoutPublicationService(repo, client)
     first = service.publish(_workout())
-    changed = service.publish(
-        _workout(occurrence=date(2026, 10, 26))
-    )
+    changed = service.publish(_workout(occurrence=date(2026, 10, 26)))
     manifest = load_manifest(repo)
 
     assert first.uid == "server-assigned-uid"
@@ -302,9 +398,7 @@ def test_publication_manifest_rejects_cross_workout_identity_collisions(
     service.publish(_workout(workout_id="first"))
     service.publish(_workout(workout_id="second"))
     payload = load_manifest(repo).model_dump(mode="json")
-    payload["workouts"]["second"]["event_id"] = payload["workouts"]["first"][
-        "event_id"
-    ]
+    payload["workouts"]["second"]["event_id"] = payload["workouts"]["first"]["event_id"]
 
     with pytest.raises(ValidationError, match="event IDs must be unique"):
         PublicationManifest.model_validate(payload)
@@ -340,27 +434,20 @@ def test_plan_publication_reconciles_future_workouts_and_reports_stale(
         workout_id="active-workout",
         occurrence=date(2026, 10, 26),
     )
-    rest = WorkoutPrescription(
-        id="rest-workout",
-        date=date(2026, 10, 27),
-        sport="run",
-        day_of_week=1,
-        workout_type=WorkoutType.REST,
-        distance_km=0,
-        target_rpe=1,
-        week_number=1,
-    )
     unstructured = WorkoutPrescription(
         id="unstructured-workout",
         date=date(2026, 10, 28),
         sport="run",
-        day_of_week=2,
         workout_type=WorkoutType.EASY,
-        distance_km=8,
-        target_rpe=3,
-        week_number=1,
+        planned_duration_seconds=2_700,
+        planned_distance_meters=8_000,
+        planned_low_intensity_duration_seconds=2_700,
+        planned_moderate_intensity_duration_seconds=0,
+        planned_high_intensity_duration_seconds=0,
+        target_rpe_1_to_10=3,
+        purpose="Build aerobic support.",
     )
-    workouts = [unstructured, active, rest]
+    workouts = [unstructured, active]
 
     first = service.publish_plan(
         workouts,
@@ -371,24 +458,22 @@ def test_plan_publication_reconciles_future_workouts_and_reports_stale(
         from_date=date(2026, 10, 25),
     )
     client.settings[0] = client.settings[0].model_copy(
-        update={"threshold_pace": 305}
+        update={"threshold_speed_meters_per_second": 3.28}
     )
     settings_changed = service.publish_plan(
         workouts,
         from_date=date(2026, 10, 25),
     )
 
-    assert first.workouts_considered == 3
+    assert first.workouts_considered == 2
     assert first.eligible_workouts == 1
     assert [item.status for item in first.items] == [
         "created",
-        "skipped_rest",
         "skipped_unstructured",
     ]
     assert first.stale_manifest_workout_ids == ["stale-workout"]
     assert [item.status for item in repeated.items] == [
         "noop",
-        "skipped_rest",
         "skipped_unstructured",
     ]
     assert settings_changed.items[0].status == "updated"
@@ -399,12 +484,8 @@ def test_plan_publication_reconciles_future_workouts_and_reports_stale(
 
 def test_plan_publication_uses_canonical_local_start_time(repo) -> None:
     client = FakeClient()
-    client.settings[0] = client.settings[0].model_copy(
-        update={"default_workout_time": None}
-    )
-    workout = _workout().model_copy(
-        update={"start_time_local": time(6, 30)}
-    )
+    client.settings[0] = client.settings[0].model_copy(update={"default_workout_time": None})
+    workout = _workout().model_copy(update={"start_time_local": time(6, 30)})
 
     report = WorkoutPublicationService(repo, client).publish_plan(
         [workout],
@@ -444,14 +525,12 @@ def test_plan_publication_reports_one_error_and_continues(repo) -> None:
 
 def test_cycling_power_workout_publishes_as_ride(repo) -> None:
     client = FakeClient(wahoo=True)
-    result = WorkoutPublicationService(repo, client).publish(
-        _workout(sport="cycle")
-    )
+    result = WorkoutPublicationService(repo, client).publish(_workout(sport="cycle"))
 
     remote = client.events[result.event_id]
     assert remote.type == "Ride"
     assert remote.target == "POWER"
-    assert remote.start_date_local.endswith("18:00:00")
+    assert remote.start_date_local.endswith("07:00:00")
 
     with pytest.raises(PublicationSafetyError, match="requires FTP"):
         WorkoutPublicationService(repo, FakeClient(ftp=None)).publish(
@@ -558,15 +637,11 @@ def test_rejected_initial_intent_can_be_replaced_when_no_remote_exists(
     with pytest.raises(IntervalsTransportError):
         service.publish(_workout())
 
-    created = service.publish(
-        _workout(occurrence=date(2026, 10, 26))
-    )
+    created = service.publish(_workout(occurrence=date(2026, 10, 26)))
 
     assert created.action == "created"
     assert len(client.events) == 1
-    assert client.events[created.event_id].start_date_local.startswith(
-        "2026-10-26"
-    )
+    assert client.events[created.event_id].start_date_local.startswith("2026-10-26")
 
 
 def test_owned_looking_remote_without_manifest_or_intent_is_rejected(repo) -> None:
@@ -585,9 +660,7 @@ def test_read_back_must_match_all_owned_rendered_fields(repo) -> None:
     class CorruptingClient(FakeClient):
         def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
             stored = super().upsert_event(event, athlete_id=athlete_id)
-            self.events[stored.id] = stored.model_copy(
-                update={"category": "NOTE"}
-            )
+            self.events[stored.id] = stored.model_copy(update={"category": "NOTE"})
             return self.events[stored.id]
 
     with pytest.raises(PublicationSafetyError, match="read-back"):
@@ -652,20 +725,16 @@ def test_interrupted_delete_verification_recovers_missing_owned_event(repo) -> N
 
 def test_wahoo_mixed_targets_and_missing_pace_settings_fail_closed(repo) -> None:
     with pytest.raises(PublicationSafetyError, match="Mixed target"):
-        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(
-            _workout(mixed=True)
-        )
+        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(_workout(mixed=True))
 
     with pytest.raises(PublicationSafetyError, match="threshold pace"):
         WorkoutPublicationService(
             repo,
-            FakeClient(threshold_pace=None),
+            FakeClient(threshold_speed_meters_per_second=None),
         ).publish(_workout())
 
     with pytest.raises(PublicationSafetyError, match="Lap-button"):
-        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(
-            _workout(lap_press=True)
-        )
+        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(_workout(lap_press=True))
 
 
 def test_device_forwarding_settings_fail_closed(repo) -> None:
@@ -698,10 +767,7 @@ def test_device_forwarding_settings_fail_closed(repo) -> None:
             }
         ]
     )
-    assert (
-        WorkoutPublicationService(repo, allowed).publish(_workout()).action
-        == "created"
-    )
+    assert WorkoutPublicationService(repo, allowed).publish(_workout()).action == "created"
 
     with pytest.raises(PublicationSafetyError, match="Wahoo.*not enabled"):
         WorkoutPublicationService(
@@ -725,25 +791,5 @@ def test_dst_transition_wall_times_fail_closed(
 ) -> None:
     with pytest.raises(PublicationSafetyError, match=message):
         WorkoutPublicationService(repo, FakeClient()).publish(
-            _workout(occurrence=occurrence),
-            start_time_local=local_time,
-        )
-
-
-def test_rest_day_cannot_be_published(repo) -> None:
-    occurrence = date(2026, 10, 25)
-    rest = WorkoutPrescription(
-        id="rest",
-        date=occurrence,
-        sport="run",
-        day_of_week=occurrence.weekday(),
-        workout_type=WorkoutType.REST,
-        distance_km=0,
-        target_rpe=1,
-        week_number=1,
-    )
-    with pytest.raises(PublicationSafetyError, match="Rest days"):
-        WorkoutPublicationService(repo, FakeClient()).publish(
-            rest,
-            start_time_local=time(7),
+            _workout(occurrence=occurrence).model_copy(update={"start_time_local": local_time}),
         )

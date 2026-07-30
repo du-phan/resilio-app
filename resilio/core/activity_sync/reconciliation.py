@@ -5,18 +5,14 @@ from __future__ import annotations
 import re
 from typing import Iterable, Optional
 
-from resilio.schemas.activity import (
-    ActivityAudit,
-    ActivityDevice,
-    ActivityOrigin,
-    CanonicalActivity,
+from resilio.core.activity_sync.activity_merge import (
+    merge_external_activity,
 )
+from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.reconciliation import (
     ReconciliationAction,
     ReconciliationDecision,
 )
-
-HISTORICAL_BACKFILL_PREFIX = "resilio:v1:historical-activity:"
 
 
 def _delta(left: Optional[float], right: Optional[float]) -> Optional[float]:
@@ -44,18 +40,14 @@ def _historical_wall_start_delta_seconds(
     external: CanonicalActivity,
     candidate: CanonicalActivity,
 ) -> Optional[float]:
-    """Compare wall-clock starts for records migrated from the v1 archive.
+    """Compare wall-clock starts for historical records without a timezone.
 
-    The retired importer persisted the upstream local timestamp in the sole
-    ``start_time`` field. During v2 migration that value could not safely be
-    reinterpreted as UTC because the original timezone was not retained.
-    This alternate is therefore limited to historical records whose timezone
-    is explicitly unknown.
+    Some preserved historical source records contain a local timestamp but no
+    source timezone, so interpreting that value as UTC would invent a fact.
+    This alternate remains limited to those explicitly timezone-unknown
+    records.
     """
-    if (
-        candidate.origin.kind != "historical_import"
-        or candidate.occurrence.timezone is not None
-    ):
+    if candidate.origin.kind != "historical_import" or candidate.occurrence.timezone is not None:
         return None
     external_start = external.occurrence.start_time_local
     historical_start = candidate.occurrence.start_time_local
@@ -63,8 +55,7 @@ def _historical_wall_start_delta_seconds(
         return None
     return abs(
         (
-            external_start.replace(tzinfo=None)
-            - historical_start.replace(tzinfo=None)
+            external_start.replace(tzinfo=None) - historical_start.replace(tzinfo=None)
         ).total_seconds()
     )
 
@@ -78,9 +69,7 @@ def _effective_start_deltas(
         external,
         candidate,
     )
-    comparable = [
-        value for value in (utc_delta, historical_wall_delta) if value is not None
-    ]
+    comparable = [value for value in (utc_delta, historical_wall_delta) if value is not None]
     effective = min(comparable) if comparable else None
     return effective, utc_delta, historical_wall_delta
 
@@ -112,8 +101,8 @@ def _strong_recorded(
     external: CanonicalActivity,
     candidate: CanonicalActivity,
 ) -> tuple[bool, dict[str, Optional[float]]]:
-    start_delta, utc_start_delta, historical_wall_start_delta = (
-        _effective_start_deltas(external, candidate)
+    start_delta, utc_start_delta, historical_wall_start_delta = _effective_start_deltas(
+        external, candidate
     )
     elapsed_delta = _delta(
         external.duration.elapsed_seconds,
@@ -194,8 +183,8 @@ def _review_candidate(
     external: CanonicalActivity,
     candidate: CanonicalActivity,
 ) -> tuple[bool, dict[str, Optional[float]]]:
-    start_delta, utc_start_delta, historical_wall_start_delta = (
-        _effective_start_deltas(external, candidate)
+    start_delta, utc_start_delta, historical_wall_start_delta = _effective_start_deltas(
+        external, candidate
     )
     elapsed_delta = _delta(
         external.duration.elapsed_seconds,
@@ -234,9 +223,7 @@ def _review_candidate(
         "distance_delta_meters": distance_delta,
     }
     duration_delta = (
-        historical_duration_delta
-        if candidate.origin.kind == "historical_import"
-        else elapsed_delta
+        historical_duration_delta if candidate.origin.kind == "historical_import" else elapsed_delta
     )
     duration_base = (
         candidate.duration.elapsed_seconds
@@ -263,143 +250,6 @@ def _review_candidate(
     return valid, evidence
 
 
-def _merged(
-    existing: CanonicalActivity,
-    external: CanonicalActivity,
-) -> CanonicalActivity:
-    """Merge validated external facts without overwriting authored facts."""
-    historical = existing.origin.kind == "historical_import"
-    origin = ActivityOrigin(
-        kind=existing.origin.kind,
-        recording_provider=(
-            existing.origin.recording_provider
-            if historical and existing.origin.recording_provider == "manual"
-            else external.origin.recording_provider
-        ),
-        intervals_icu_activity_id=external.origin.intervals_icu_activity_id,
-        upstream_external_id=(
-            existing.origin.upstream_external_id
-            or external.origin.upstream_external_id
-        ),
-        original_file_sha256=(
-            existing.origin.original_file_sha256
-            or external.origin.original_file_sha256
-        ),
-    )
-    audit = ActivityAudit(
-        imported_at_utc=existing.audit.imported_at_utc,
-        external_created_at_utc=external.audit.external_created_at_utc,
-        external_sync_at_utc=external.audit.external_sync_at_utc,
-        external_fingerprint_sha256=external.audit.external_fingerprint_sha256,
-    )
-    if historical:
-        if (
-            existing.origin.upstream_external_id
-            and existing.origin.upstream_external_id.startswith(
-                HISTORICAL_BACKFILL_PREFIX
-            )
-        ):
-            # Outbound historical publications are identity/status refreshes
-            # only. Their local facts and preserved provenance remain the
-            # authority and may not be replaced by the feedback sync.
-            return existing.model_copy(
-                update={
-                    "status": external.status,
-                    "origin": ActivityOrigin(
-                        kind=existing.origin.kind,
-                        recording_provider=existing.origin.recording_provider,
-                        intervals_icu_activity_id=(
-                            external.origin.intervals_icu_activity_id
-                        ),
-                        upstream_external_id=existing.origin.upstream_external_id,
-                        original_file_sha256=existing.origin.original_file_sha256,
-                    ),
-                    "audit": audit,
-                    "calculated_load": existing.calculated_load,
-                }
-            )
-        device = ActivityDevice(
-            name=existing.device.name or external.device.name,
-            gear_external_id=(
-                existing.device.gear_external_id
-                or external.device.gear_external_id
-            ),
-        )
-        return existing.model_copy(
-            update={
-                "status": external.status,
-                "source_sport_type": external.source_sport_type,
-                "source_sport_subtype": (
-                    existing.source_sport_subtype
-                    or external.source_sport_subtype
-                ),
-                "distance_meters": (
-                    existing.distance_meters
-                    if existing.distance_meters is not None
-                    else external.distance_meters
-                ),
-                "elevation_gain_meters": (
-                    existing.elevation_gain_meters
-                    if existing.elevation_gain_meters is not None
-                    else external.elevation_gain_meters
-                ),
-                "heart_rate": existing.heart_rate or external.heart_rate,
-                "power": existing.power or external.power,
-                "cadence": existing.cadence or external.cadence,
-                "perceived_effort": (
-                    existing.perceived_effort
-                    or external.perceived_effort
-                ),
-                "device": device,
-                "segments": existing.segments or external.segments,
-                "origin": origin,
-                "audit": audit,
-                "calculated_load": existing.calculated_load,
-            }
-        )
-
-    return existing.model_copy(
-        update={
-            "status": external.status,
-            "source_sport_type": external.source_sport_type,
-            "source_sport_subtype": external.source_sport_subtype,
-            "name": external.name,
-            "occurrence": external.occurrence,
-            "duration": external.duration,
-            "distance_meters": external.distance_meters,
-            "elevation_gain_meters": external.elevation_gain_meters,
-            "heart_rate": external.heart_rate or existing.heart_rate,
-            "power": external.power or existing.power,
-            "cadence": external.cadence or existing.cadence,
-            "perceived_effort": existing.perceived_effort or external.perceived_effort,
-            "device": external.device,
-            "classification": external.classification,
-            "segments": external.segments or existing.segments,
-            "origin": origin,
-            "audit": audit,
-            "calculated_load": None,
-        }
-    )
-
-
-def merge_reviewed_activity(
-    existing: CanonicalActivity,
-    external: CanonicalActivity,
-) -> CanonicalActivity:
-    """Apply a current explicit approval without weakening automatic rules."""
-    if existing.sport_type != external.sport_type or existing.date != external.date:
-        raise ValueError(
-            "reviewed activity must retain the current sport/date candidate block"
-        )
-    existing_external_id = existing.origin.intervals_icu_activity_id
-    incoming_external_id = external.origin.intervals_icu_activity_id
-    if existing_external_id and existing_external_id != incoming_external_id:
-        raise ValueError(
-            "reviewed activity is already linked to a different external ID"
-        )
-    return _merged(existing, external)
-
-
 def reconcile_activity(
     external: CanonicalActivity,
     existing_records: Iterable[CanonicalActivity],
@@ -410,11 +260,43 @@ def reconcile_activity(
         raise ValueError("external activity is missing its Intervals.icu ID")
     existing = list(existing_records)
 
-    linked = [
+    linked_decision = _linked_activity_decision(external, existing)
+    if linked_decision is not None:
+        return linked_decision
+
+    candidates = [
         item
         for item in existing
-        if item.origin.intervals_icu_activity_id == external_id
+        if (
+            item.sport == external.sport
+            and item.occurrence.local_date == external.occurrence.local_date
+        )
     ]
+    identity_decision = _candidate_identity_decision(external, candidates)
+    if identity_decision is not None:
+        return identity_decision
+    composite_decision = _strong_composite_decision(external, candidates)
+    if composite_decision is not None:
+        return composite_decision
+    review_decision = _review_window_decision(external, candidates)
+    if review_decision is not None:
+        return review_decision
+    return ReconciliationDecision(
+        action=ReconciliationAction.CREATE,
+        rule="no_candidate",
+        external_activity_id=external_id,
+        local_activity_id=external.local_activity_id,
+        activity=external,
+    )
+
+
+def _linked_activity_decision(
+    external: CanonicalActivity,
+    existing: list[CanonicalActivity],
+) -> ReconciliationDecision | None:
+    external_id = external.origin.intervals_icu_activity_id
+    assert external_id is not None
+    linked = [item for item in existing if item.origin.intervals_icu_activity_id == external_id]
     if len(linked) > 1:
         return ReconciliationDecision(
             action=ReconciliationAction.AMBIGUOUS,
@@ -425,8 +307,8 @@ def reconcile_activity(
     if linked:
         current = linked[0]
         if (
-            current.audit.external_fingerprint_sha256
-            == external.audit.external_fingerprint_sha256
+            current.audit.external_fingerprint_sha256 == external.audit.external_fingerprint_sha256
+            and current.audit.canonical_mapping_version == external.audit.canonical_mapping_version
         ):
             return ReconciliationDecision(
                 action=ReconciliationAction.UPDATE,
@@ -440,14 +322,17 @@ def reconcile_activity(
             rule="linked_fingerprint_changed",
             external_activity_id=external_id,
             local_activity_id=current.local_activity_id,
-            activity=_merged(current, external),
+            activity=merge_external_activity(current, external),
         )
+    return None
 
-    candidates = [
-        item
-        for item in existing
-        if item.sport_type == external.sport_type and item.date == external.date
-    ]
+
+def _candidate_identity_decision(
+    external: CanonicalActivity,
+    candidates: list[CanonicalActivity],
+) -> ReconciliationDecision | None:
+    external_id = external.origin.intervals_icu_activity_id
+    assert external_id is not None
     upstream = [
         item
         for item in candidates
@@ -461,7 +346,7 @@ def reconcile_activity(
             rule="unique_upstream_external_id",
             external_activity_id=external_id,
             local_activity_id=match.local_activity_id,
-            activity=_merged(match, external),
+            activity=merge_external_activity(match, external),
         )
 
     file_hash = [
@@ -477,9 +362,17 @@ def reconcile_activity(
             rule="unique_original_file_sha256",
             external_activity_id=external_id,
             local_activity_id=match.local_activity_id,
-            activity=_merged(match, external),
+            activity=merge_external_activity(match, external),
         )
+    return None
 
+
+def _strong_composite_decision(
+    external: CanonicalActivity,
+    candidates: list[CanonicalActivity],
+) -> ReconciliationDecision | None:
+    external_id = external.origin.intervals_icu_activity_id
+    assert external_id is not None
     strong: list[tuple[CanonicalActivity, dict[str, Optional[float]]]] = []
     for candidate in candidates:
         recorded, evidence = _strong_recorded(external, candidate)
@@ -493,7 +386,7 @@ def reconcile_activity(
             external_activity_id=external_id,
             local_activity_id=match.local_activity_id,
             evidence=evidence,
-            activity=_merged(match, external),
+            activity=merge_external_activity(match, external),
         )
     if len(strong) > 1:
         return ReconciliationDecision(
@@ -502,7 +395,15 @@ def reconcile_activity(
             external_activity_id=external_id,
             candidate_local_ids=sorted(item.local_activity_id for item, _ in strong),
         )
+    return None
 
+
+def _review_window_decision(
+    external: CanonicalActivity,
+    candidates: list[CanonicalActivity],
+) -> ReconciliationDecision | None:
+    external_id = external.origin.intervals_icu_activity_id
+    assert external_id is not None
     review = [
         (candidate, evidence)
         for candidate in candidates
@@ -520,11 +421,4 @@ def reconcile_activity(
                 for item, evidence in sorted(review, key=lambda pair: pair[0].local_activity_id)
             },
         )
-
-    return ReconciliationDecision(
-        action=ReconciliationAction.CREATE,
-        rule="no_candidate",
-        external_activity_id=external_id,
-        local_activity_id=external.local_activity_id,
-        activity=external,
-    )
+    return None
