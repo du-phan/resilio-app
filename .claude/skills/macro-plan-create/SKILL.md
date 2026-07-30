@@ -15,6 +15,9 @@ Require:
 - an approved baseline VDOT bound in approval state;
 - a confirmed goal and profile constraints;
 - a complete enough synchronized history to establish recent run exposure;
+- no active plan; use the plan-renewal procedure to review and close it first;
+- an immutable macro-planning context for the exact evidence date and intended
+  start Monday;
 - a target date that fits a contiguous Monday-Sunday plan horizon.
 
 Return a blocking checklist if any item is absent.
@@ -47,7 +50,22 @@ and labels the authority `coach_designed_conceptually_informed`.
    poetry run resilio approvals status
    poetry run resilio profile get
    poetry run resilio plan status
+   poetry run resilio dates today
    ```
+
+   Create the evidence gate if the plan-renewal procedure has not already
+   produced it:
+
+   ```bash
+   poetry run resilio plan create-macro-context \
+     --evidence-as-of <DATE> \
+     --start <PLAN_START_MONDAY>
+   ```
+
+   The start must be strictly after the evidence date. Use the returned exact
+   artifact reference and evidence index. It contains all closed-plan
+   summaries and goal outcomes, up to 52 compact historical weeks, 12 detailed
+   recent weeks, current profile constraints, and the active VDOT approval.
 
 2. Use completed run distance, duration, frequency, and longest-run exposure as
    the starting-capacity evidence. Use Intervals.icu native aerobic load,
@@ -66,12 +84,29 @@ and labels the authority `coach_designed_conceptually_informed`.
    `minimum_low_intensity_time_percent`; every other methodology must leave
    `intensity_distribution` null.
 
-4. Progress only from demonstrated exposure and athlete constraints. A
+4. Record `planning_context_reference`, an athlete-specific
+   `planning_rationale`, and typed `adaptation_decisions`. At minimum explain
+   methodology selection and starting run volume. Cite only `evidence_ids`
+   present in the returned context. The decisions must cite the latest recent
+   week; for a successor plan, they must also cite the latest closed-plan
+   summary and its goal outcome. For each decision separate:
+
+   - observed facts and their exact weeks or plan cycle;
+   - the planning change;
+   - affected week numbers;
+   - uncertainty or evidence limitations.
+
+   Add decisions for frequency, volume progression, quality structure, long
+   run, recovery, taper, or multisport scheduling only when that choice is
+   material. Do not cite a plan average when underlying coverage is
+   incomplete.
+
+5. Progress only from demonstrated exposure and athlete constraints. A
    percentage rule is not proof of capacity. Explain every substantial
    increase, long-run extension, recovery week, and taper as a coach-designed
    choice; never attribute numeric authority to the conceptual source.
 
-5. Create and validate the draft:
+6. Create and validate the draft:
 
    ```bash
    poetry run resilio plan template-macro \
@@ -85,8 +120,9 @@ and labels the authority `coach_designed_conceptually_informed`.
 
 Return the complete macro review, including methodology and rationale, dates,
 weekly run distance with units, phases, recovery weeks, quality and long-run
-intent, the exact profile-derived constraint snapshot, evidence limitations,
-and one approval prompt. The main coach records approval separately with
+intent, the exact profile-derived constraint snapshot, the historical context
+reference, evidence-cited adaptation decisions, evidence limitations, and one
+approval prompt. The main coach records approval separately with
 `poetry run resilio approvals approve-macro`. Approval binds the current plan
 ID, macro revision, VDOT approval, planning-profile fingerprint, and macro
 skeleton SHA-256.

@@ -85,6 +85,9 @@ names, or local paths. Use one Poetry environment throughout.
    - run the baseline VDOT proposal procedure and retain its exact JSON file;
    - after explicit approval, bind that exact file with
      `resilio approvals approve-vdot --file <PROPOSAL_JSON>`;
+   - compute the first plan Monday with `resilio dates`, then create the
+     immutable evidence gate with `resilio plan create-macro-context
+     --evidence-as-of <DATE> --start <MONDAY>`;
    - run the macro-plan procedure and present its methodology rationale;
    - after explicit approval, record `resilio approvals approve-macro`;
    - generate the first exact weekly proposal file;
@@ -92,9 +95,10 @@ names, or local paths. Use one Poetry environment throughout.
      `resilio approvals approve-week --file <WEEK_JSON>`;
    - apply that unchanged file and verify persistence.
 
-   The VDOT approval, current plan, macro approval, weekly approval, and
-   applied-week audit are one atomic planning aggregate. Never repair or
-   replace an approved file in place.
+   The VDOT approval history, active plan, immutable macro context, macro
+   approval, weekly approval, applied-week audit, and closed-cycle references
+   are one coordinated planning aggregate. Never repair or replace an approved
+   file or content-addressed evidence artifact in place.
 
 ## Completion
 

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from resilio.core.methodology import (
     MethodologyRegistryError,
@@ -19,6 +19,18 @@ from resilio.core.planning.approval_evidence import (
 from resilio.core.planning.approval_evidence import (
     load_vdot_proposal_unlocked as _load_vdot_proposal_unlocked,
 )
+from resilio.core.planning.artifacts import (
+    PlanningArtifactError,
+    canonical_data_sha256,
+    load_evidence_artifact,
+    save_closed_plan_cycle,
+)
+from resilio.core.planning.audit import (
+    new_planning_id as _new_id,
+)
+from resilio.core.planning.audit import (
+    validated_utc_timestamp as _now_utc,
+)
 from resilio.core.planning.errors import PlanOperationError as PlanOperationError
 from resilio.core.planning.freshness import (
     load_planning_profile_unlocked as _load_profile,
@@ -30,18 +42,14 @@ from resilio.core.planning.freshness import (
     require_verified_vdot_approval as _verify_vdot_approval,
 )
 from resilio.core.planning.integrity import (
-    applied_workout_sha256,
     macro_skeleton_sha256,
     planning_constraints_snapshot,
     planning_profile_sha256,
-    sha256_file,
-    target_week_skeleton_sha256,
-)
-from resilio.core.planning.policy import (
-    WeekPolicyError,
-    validate_populated_week,
 )
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
+from resilio.core.planning.source_state import (
+    coaching_evidence_source_sha256,
+)
 from resilio.core.planning.state_repository import (
     load_planning_aggregate as load_planning_aggregate,
 )
@@ -50,6 +58,18 @@ from resilio.core.planning.state_repository import (
 )
 from resilio.core.planning.state_repository import (
     required_planning_state_unlocked as _required_state,
+)
+from resilio.core.planning.weekly_service import (
+    apply_approved_week as apply_approved_week,
+)
+from resilio.core.planning.weekly_service import (
+    approve_week_application as approve_week_application,
+)
+from resilio.core.planning.weekly_service import (
+    load_week_application as load_week_application,
+)
+from resilio.core.planning.weekly_service import (
+    validate_week_application as validate_week_application,
 )
 from resilio.core.planning.workout_evidence import (
     load_approved_workouts_for_date_range as load_approved_workouts_for_date_range,
@@ -62,33 +82,25 @@ from resilio.core.planning.workout_evidence import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.vdot import parse_time_string
+from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.approvals import (
-    AppliedWeekRevision,
+    ActivePlanState,
+    ClosedPlanCycle,
     MacroApproval,
     PlanningState,
-    RetiredPlanRevision,
     VDOTApproval,
-    WeeklyApplicationAction,
-    WeeklyApproval,
 )
 from resilio.schemas.plan import (
     MacroPlanDraft,
     MasterPlan,
-    WeekApplication,
-    WeekPlan,
 )
+from resilio.schemas.plan_history import (
+    EvidenceArtifactReference,
+    PlanClosure,
+    PlanClosureDisposition,
+)
+from resilio.schemas.planning_evidence import MacroPlanningContext, PlanCycleReview
 from resilio.schemas.profile import AthleteProfile
-
-
-def _now_utc(value: datetime | None) -> datetime:
-    timestamp = value or datetime.now(timezone.utc)
-    if timestamp.tzinfo is None or timestamp.utcoffset() is None:
-        raise PlanOperationError("Planning timestamps must be timezone-aware")
-    return timestamp.astimezone(timezone.utc)
-
-
-def _new_id(prefix: str) -> str:
-    return f"{prefix}_{uuid.uuid4().hex[:16]}"
 
 
 def load_current_plan(
@@ -97,11 +109,11 @@ def load_current_plan(
     allow_missing: bool = False,
 ) -> MasterPlan | None:
     state = load_planning_aggregate(repo, allow_missing=allow_missing)
-    if state is None or state.current_plan is None:
+    if state is None or state.active_plan is None:
         if allow_missing:
             return None
         raise PlanOperationError("No current training plan is available")
-    return state.current_plan
+    return state.active_plan.plan
 
 
 def _draft_goal_matches_profile(
@@ -117,6 +129,84 @@ def _draft_goal_matches_profile(
         and profile_goal.target_date == draft.goal.target_date
         and profile_goal.target_finish_time_seconds == draft_target_seconds
     )
+
+
+def _load_validated_macro_context(
+    repo: RepositoryIO,
+    state: PlanningState,
+    draft: MacroPlanDraft,
+    profile: AthleteProfile,
+) -> MacroPlanningContext:
+    try:
+        context = load_evidence_artifact(
+            repo,
+            draft.planning_context_reference,
+            MacroPlanningContext,
+        )
+    except PlanningArtifactError as exc:
+        raise PlanOperationError(str(exc)) from exc
+    if context.planning_profile_sha256 != planning_profile_sha256(profile):
+        raise PlanOperationError(
+            "Macro-planning context does not match the current athlete profile"
+        )
+    if context.current_constraints != planning_constraints_snapshot(profile):
+        raise PlanOperationError(
+            "Macro-planning context constraints differ from the current profile"
+        )
+    if context.active_vdot_approval_id != state.active_vdot_approval_id:
+        raise PlanOperationError("Macro-planning context does not use the active VDOT approval")
+    if context.source_state_sha256 != coaching_evidence_source_sha256(
+        repo,
+        evidence_as_of_date=context.evidence_as_of_date,
+    ):
+        raise PlanOperationError("Macro-planning training evidence changed after context creation")
+    if min(week.start_date for week in draft.weeks) != context.intended_plan_start_date:
+        raise PlanOperationError("Macro draft does not start on its evidence-bound intended Monday")
+    archived_plan_ids = {reference.plan_id for reference in state.closed_plan_cycle_references}
+    context_plan_ids = {summary.plan_id for summary in context.historical_plan_summaries}
+    if context_plan_ids != archived_plan_ids:
+        raise PlanOperationError(
+            "Macro-planning context does not cover the complete closed-plan history"
+        )
+    if not context.recent_detailed_weeks:
+        raise PlanOperationError("Macro-planning context must contain recent training evidence")
+    available_evidence_ids = {pointer.evidence_id for pointer in context.evidence_index}
+    cited_evidence_ids: set[str] = set()
+    for decision in draft.adaptation_decisions:
+        cited_evidence_ids.update(decision.evidence_ids)
+        unknown_ids = set(decision.evidence_ids) - available_evidence_ids
+        if unknown_ids:
+            raise PlanOperationError(
+                "Macro decision cites evidence absent from its context: " f"{sorted(unknown_ids)}"
+            )
+        if any(week_number > len(draft.weeks) for week_number in decision.affected_week_numbers):
+            raise PlanOperationError("Macro decision references a week outside the draft horizon")
+    latest_recent_week = max(
+        context.recent_detailed_weeks,
+        key=lambda week: week.week_start,
+    )
+    required_evidence_ids = {f"recent_week.{latest_recent_week.week_start.isoformat()}"}
+    if context.historical_plan_summaries:
+        latest_plan = max(
+            context.historical_plan_summaries,
+            key=lambda summary: (
+                summary.effective_end_date,
+                summary.plan_id,
+            ),
+        )
+        required_evidence_ids.update(
+            {
+                f"closed_plan.{latest_plan.plan_id}.summary",
+                f"goal_outcome.{latest_plan.plan_id}",
+            }
+        )
+    missing_required_ids = required_evidence_ids - cited_evidence_ids
+    if missing_required_ids:
+        raise PlanOperationError(
+            "Macro decisions do not cite required renewal evidence: "
+            f"{sorted(missing_required_ids)}"
+        )
+    return context
 
 
 def approve_vdot_proposal(
@@ -147,81 +237,166 @@ def approve_vdot_proposal(
             proposal_file=str(resolved_file),
             proposal_file_sha256=proposal_file_evidence.file_sha256,
             evidence_type=proposal.evidence_type,
+            proposal_snapshot=proposal,
             approved_at_utc=approval_timestamp,
         )
         state = _required_state(repo)
-        retired_revisions = _retire_current_revision(
-            state,
-            retired_at_utc=approval.approved_at_utc,
-            reason="VDOT approval replaced; dependent plan revision retired",
-        )
+        if state.active_plan is not None:
+            raise PlanOperationError(
+                "Close the active plan with fresh cycle-review evidence before "
+                "replacing its VDOT approval"
+            )
         replacement = state.model_copy(
             update={
-                "vdot_approval": approval,
-                "current_plan": None,
-                "macro_approval": None,
-                "pending_weekly_approval": None,
-                "applied_week_revisions": [],
-                "retired_plan_revisions": retired_revisions,
-                "plan_invalidated_at_utc": None,
-                "plan_invalidation_reason": None,
+                "vdot_approvals": [*state.vdot_approvals, approval],
+                "active_vdot_approval_id": approval.approval_id,
             }
         )
         return _persist(repo, replacement)
 
 
-def _retire_current_revision(
-    state: PlanningState,
-    *,
-    retired_at_utc: datetime,
-    reason: str,
-) -> list[RetiredPlanRevision]:
-    history = list(state.retired_plan_revisions)
-    if state.current_plan is not None:
-        history.append(
-            RetiredPlanRevision(
-                plan=state.current_plan,
-                macro_approval=state.macro_approval,
-                applied_week_revisions=state.applied_week_revisions,
-                retired_at_utc=retired_at_utc,
-                retirement_reason=reason,
-            )
+def _validate_plan_closure(
+    repo: RepositoryIO,
+    active_plan: ActivePlanState,
+    closure: PlanClosure,
+) -> None:
+    plan = active_plan.plan
+    evidence_reference = EvidenceArtifactReference(
+        artifact_type="cycle_review",
+        artifact_sha256=closure.cycle_review_artifact_sha256,
+    )
+    try:
+        review = load_evidence_artifact(
+            repo,
+            evidence_reference,
+            PlanCycleReview,
         )
-    return history
+    except PlanningArtifactError as exc:
+        raise PlanOperationError(str(exc)) from exc
+    if review.plan_id != plan.id or review.macro_revision_id != plan.macro_revision_id:
+        raise PlanOperationError("Cycle review references another active plan revision")
+    if review.active_plan_sha256 != canonical_data_sha256(active_plan):
+        raise PlanOperationError("Active plan changed after cycle review")
+    if (
+        review.effective_end_date != closure.effective_end_date
+        or review.goal_outcome != closure.goal_outcome
+    ):
+        raise PlanOperationError("Plan closure facts do not match the immutable cycle review")
+    review_source_window_start = (
+        review.compact_weeks[0].week_start
+        if review.compact_weeks
+        else review.evidence_as_of_date - timedelta(days=review.evidence_as_of_date.weekday())
+    )
+    review_source_as_of_date = (
+        review.compact_weeks[-1].evidence_as_of_date
+        if review.compact_weeks
+        else review.evidence_as_of_date
+    )
+    if review.source_state_sha256 != coaching_evidence_source_sha256(
+        repo,
+        evidence_as_of_date=review_source_as_of_date,
+        evidence_window_start=review_source_window_start,
+    ):
+        raise PlanOperationError("Training evidence changed after cycle review")
+    closed_local_date = closure.closed_at_utc.astimezone(
+        ZoneInfo(plan.constraints_snapshot.training_timezone)
+    ).date()
+    if closure.effective_end_date > closed_local_date:
+        raise PlanOperationError("Plan closure effective date cannot follow closure time")
+    if closure.disposition == PlanClosureDisposition.COMPLETED_HORIZON:
+        if closure.effective_end_date != plan.end_date:
+            raise PlanOperationError("Completed-horizon closure must equal the plan end date")
+    elif closure.disposition == PlanClosureDisposition.NEVER_STARTED:
+        if review.plan_started:
+            raise PlanOperationError("A plan with reviewed training weeks is not never-started")
+    elif closure.effective_end_date >= plan.end_date:
+        raise PlanOperationError("Midcycle or early-stop closure must predate the plan end date")
+    is_general_fitness = str(plan.goal.type) == "general_fitness"
+    if is_general_fitness != (closure.goal_outcome.status == "not_applicable"):
+        raise PlanOperationError("Only general-fitness plans use a not-applicable goal outcome")
+    publication_manifest = load_manifest(repo)
+    future_owned_ids = sorted(
+        local_workout_id
+        for local_workout_id, publication in publication_manifest.workouts.items()
+        if publication.occurrence_date > closure.effective_end_date
+    )
+    future_pending_ids = sorted(
+        local_workout_id
+        for local_workout_id, publication in publication_manifest.pending.items()
+        if publication.occurrence_date > closure.effective_end_date
+    )
+    if future_owned_ids or future_pending_ids:
+        raise PlanOperationError(
+            "Delete or reconcile future owned workout events before closing "
+            f"the plan: {future_owned_ids + future_pending_ids}"
+        )
 
 
-def retire_current_plan(
+def close_current_plan(
     repo: RepositoryIO,
     *,
-    reason: str,
-    retired_at_utc: datetime | None = None,
+    closure: PlanClosure,
 ) -> PlanningState:
-    """Retire the current revision before a deliberate replacement."""
-    if len(reason.strip()) < 10:
-        raise PlanOperationError("Plan retirement reason must be specific")
-    timestamp = _now_utc(retired_at_utc)
-    with coordinated_plan_lock(repo, "retire_current_plan"):
+    """Archive the active plan only after exact retrospective evidence exists."""
+    with coordinated_plan_lock(repo, "close_current_plan"):
         state = _required_state(repo)
-        if state.current_plan is None:
+        if state.active_plan is None:
             raise PlanOperationError("No current plan is available to retire")
+        _validate_plan_closure(repo, state.active_plan, closure)
+        try:
+            reference = save_closed_plan_cycle(
+                repo,
+                ClosedPlanCycle(
+                    active_plan_snapshot=state.active_plan,
+                    closure=closure,
+                ),
+            )
+        except PlanningArtifactError as exc:
+            raise PlanOperationError(str(exc)) from exc
         return _persist(
             repo,
             state.model_copy(
                 update={
-                    "current_plan": None,
-                    "macro_approval": None,
-                    "pending_weekly_approval": None,
-                    "applied_week_revisions": [],
-                    "retired_plan_revisions": _retire_current_revision(
-                        state,
-                        retired_at_utc=timestamp,
-                        reason=reason.strip(),
-                    ),
-                    "plan_invalidated_at_utc": None,
-                    "plan_invalidation_reason": None,
+                    "active_plan": None,
+                    "closed_plan_cycle_references": [
+                        *state.closed_plan_cycle_references,
+                        reference,
+                    ],
                 }
             ),
         )
+
+
+def close_current_plan_from_review(
+    repo: RepositoryIO,
+    *,
+    cycle_review_reference: EvidenceArtifactReference,
+    disposition: PlanClosureDisposition,
+    reason: str,
+    athlete_confirmation_reference: str,
+    closed_at_utc: datetime | None = None,
+) -> PlanningState:
+    """Close the active cycle using facts loaded from one immutable review."""
+    if cycle_review_reference.artifact_type != "cycle_review":
+        raise PlanOperationError("Plan closure requires a cycle-review reference")
+    try:
+        review = load_evidence_artifact(
+            repo,
+            cycle_review_reference,
+            PlanCycleReview,
+        )
+    except PlanningArtifactError as exc:
+        raise PlanOperationError(str(exc)) from exc
+    closure = PlanClosure(
+        disposition=disposition,
+        effective_end_date=review.effective_end_date,
+        reason=reason,
+        athlete_confirmation_reference=athlete_confirmation_reference,
+        cycle_review_artifact_sha256=(cycle_review_reference.artifact_sha256),
+        goal_outcome=review.goal_outcome,
+        closed_at_utc=_now_utc(closed_at_utc),
+    )
+    return close_current_plan(repo, closure=closure)
 
 
 def create_macro_plan(
@@ -233,11 +408,9 @@ def create_macro_plan(
     """Create a fresh macro revision from the active VDOT approval and profile."""
     with coordinated_plan_lock(repo, "create_macro_plan"):
         state = _required_state(repo)
-        if state.current_plan is not None:
-            raise PlanOperationError(
-                "A current plan already exists; invalidate it before replacement"
-            )
-        vdot_approval = _verify_vdot_approval(repo, state.vdot_approval)
+        if state.active_plan is not None:
+            raise PlanOperationError("A current plan already exists; close it before replacement")
+        vdot_approval = _verify_vdot_approval(repo, state.active_vdot_approval)
         if draft.vdot_approval_id != vdot_approval.approval_id:
             raise PlanOperationError("Macro draft does not reference the active VDOT approval")
         profile = _load_profile(repo)
@@ -245,6 +418,12 @@ def create_macro_plan(
             raise PlanOperationError(
                 "Macro draft goal does not match the athlete-confirmed profile goal"
             )
+        context = _load_validated_macro_context(
+            repo,
+            state,
+            draft,
+            profile,
+        )
         profile_hash = planning_profile_sha256(profile)
         try:
             methodology = resolve_methodology_choice(
@@ -256,15 +435,18 @@ def create_macro_plan(
             raise PlanOperationError(str(exc)) from exc
         creation_timestamp = _now_utc(created_at_utc)
         if creation_timestamp < vdot_approval.approved_at_utc:
-            raise PlanOperationError(
-                "Macro plan creation cannot predate its VDOT approval"
-            )
+            raise PlanOperationError("Macro plan creation cannot predate its VDOT approval")
+        if creation_timestamp < context.generated_at_utc:
+            raise PlanOperationError("Macro plan creation cannot predate its planning context")
         plan = MasterPlan(
             id=_new_id("plan"),
             macro_revision_id=_new_id("macro_revision"),
             vdot_approval_id=vdot_approval.approval_id,
+            planning_context_reference=draft.planning_context_reference,
             planning_profile_sha256=profile_hash,
             created_at_utc=creation_timestamp,
+            planning_rationale=draft.planning_rationale,
+            adaptation_decisions=draft.adaptation_decisions,
             goal=draft.goal,
             methodology=methodology,
             weeks=draft.weeks,
@@ -272,16 +454,7 @@ def create_macro_plan(
             constraints_snapshot=planning_constraints_snapshot(profile),
             conflict_policy=profile.conflict_policy,
         )
-        updated = state.model_copy(
-            update={
-                "current_plan": plan,
-                "macro_approval": None,
-                "pending_weekly_approval": None,
-                "applied_week_revisions": [],
-                "plan_invalidated_at_utc": None,
-                "plan_invalidation_reason": None,
-            }
-        )
+        updated = state.model_copy(update={"active_plan": ActivePlanState(plan=plan)})
         _persist(repo, updated)
         return plan
 
@@ -295,224 +468,22 @@ def approve_current_macro_plan(
     with coordinated_plan_lock(repo, "approve_current_macro_plan"):
         state = _required_state(repo)
         plan = _require_fresh_plan(repo, state)
-        assert state.vdot_approval is not None
+        assert state.active_vdot_approval is not None
         approval_timestamp = _now_utc(approved_at_utc)
         if approval_timestamp < plan.created_at_utc:
-            raise PlanOperationError(
-                "Macro approval cannot predate plan creation"
-            )
+            raise PlanOperationError("Macro approval cannot predate plan creation")
         approval = MacroApproval(
             approval_id=_new_id("macro_approval"),
             plan_id=plan.id,
             macro_revision_id=plan.macro_revision_id,
             macro_skeleton_sha256=macro_skeleton_sha256(plan),
-            vdot_approval_id=state.vdot_approval.approval_id,
+            vdot_approval_id=state.active_vdot_approval.approval_id,
             planning_profile_sha256=plan.planning_profile_sha256,
             approved_at_utc=approval_timestamp,
         )
-        return _persist(state=state.model_copy(update={"macro_approval": approval}), repo=repo)
-
-
-def load_week_application(path: Path) -> WeekApplication:
-    try:
-        return WeekApplication.model_validate_json(path.read_text())
-    except OSError as exc:
-        raise PlanOperationError(f"Approved week file could not be read: {exc}") from exc
-    except ValueError as exc:
-        raise PlanOperationError(f"Approved week file is invalid: {exc}") from exc
-
-
-def validate_week_application(
-    repo: RepositoryIO,
-    application_file: Path,
-) -> WeekApplication:
-    """Validate an exact file against the fresh current macro and profile."""
-    application = load_week_application(application_file)
-    with coordinated_plan_lock(repo, "validate_week_application"):
-        state = _required_state(repo)
-        plan = _require_fresh_plan(repo, state)
-        if state.macro_approval is None:
-            raise PlanOperationError("The current macro plan is not approved")
-        target_week = _find_week(plan, application.week_number)
-        _populate_and_validate_week(plan, target_week, application)
-    return application
-
-
-def _find_week(plan: MasterPlan, week_number: int) -> WeekPlan:
-    matching = [week for week in plan.weeks if week.week_number == week_number]
-    if len(matching) != 1:
-        raise PlanOperationError("Weekly payload does not identify exactly one macro-plan week")
-    return matching[0]
-
-
-def _populate_and_validate_week(
-    plan: MasterPlan,
-    target_week: WeekPlan,
-    application: WeekApplication,
-) -> WeekPlan:
-    try:
-        populated_week = WeekPlan(
-            week_number=target_week.week_number,
-            phase=target_week.phase,
-            start_date=target_week.start_date,
-            end_date=target_week.end_date,
-            target_run_volume_meters=(target_week.target_run_volume_meters),
-            workout_structure_hints=target_week.workout_structure_hints,
-            workouts=application.workouts,
-            is_recovery_week=target_week.is_recovery_week,
-            notes=application.adjustment_rationale,
-        )
-        validate_populated_week(plan, populated_week)
-    except (ValueError, WeekPolicyError) as exc:
-        raise PlanOperationError(f"Weekly application violates approved policy: {exc}") from exc
-    return populated_week
-
-
-def approve_week_application(
-    repo: RepositoryIO,
-    approved_file: Path,
-    *,
-    approved_at_utc: datetime | None = None,
-) -> PlanningState:
-    """Bind an exact weekly proposal to its plan, revision, and prior content."""
-    resolved_file = approved_file.expanduser().resolve()
-    application = load_week_application(resolved_file)
-    with coordinated_plan_lock(repo, "approve_week_application"):
-        state = _required_state(repo)
-        plan = _require_fresh_plan(repo, state)
-        macro_approval = state.macro_approval
-        if macro_approval is None:
-            raise PlanOperationError("The current macro plan is not approved")
-        if macro_approval.macro_skeleton_sha256 != macro_skeleton_sha256(plan):
-            raise PlanOperationError("The approved macro skeleton has changed")
-        week = _find_week(plan, application.week_number)
-        _populate_and_validate_week(plan, week, application)
-        existing_hash = applied_workout_sha256(week) if week.workouts else None
-        action = (
-            WeeklyApplicationAction.REPLACE
-            if existing_hash is not None
-            else WeeklyApplicationAction.INITIAL
-        )
-        approval_timestamp = _now_utc(approved_at_utc)
-        if approval_timestamp < macro_approval.approved_at_utc:
-            raise PlanOperationError(
-                "Weekly approval cannot predate macro approval"
-            )
-        approval = WeeklyApproval(
-            approval_id=_new_id("week_approval"),
-            plan_id=plan.id,
-            macro_revision_id=plan.macro_revision_id,
-            macro_skeleton_sha256=macro_approval.macro_skeleton_sha256,
-            week_number=application.week_number,
-            target_week_skeleton_sha256=target_week_skeleton_sha256(week),
-            action=action,
-            previous_applied_workout_sha256=existing_hash,
-            approved_at_utc=approval_timestamp,
-            approved_file=str(resolved_file),
-            approved_file_sha256=sha256_file(resolved_file),
-        )
+        assert state.active_plan is not None
+        active_plan = state.active_plan.model_copy(update={"macro_approval": approval})
         return _persist(
-            repo,
-            state.model_copy(update={"pending_weekly_approval": approval}),
+            state=state.model_copy(update={"active_plan": active_plan}),
+            repo=repo,
         )
-
-
-def apply_approved_week(
-    repo: RepositoryIO,
-    approved_file: Path,
-    *,
-    applied_at_utc: datetime | None = None,
-) -> MasterPlan:
-    """Atomically consume an exact-file approval into its bound macro revision."""
-    resolved_file = approved_file.expanduser().resolve()
-    application = load_week_application(resolved_file)
-    with coordinated_plan_lock(repo, "apply_approved_week"):
-        state = _required_state(repo)
-        plan = _require_fresh_plan(repo, state)
-        approval = state.pending_weekly_approval
-        if approval is None:
-            raise PlanOperationError("Weekly approval is missing")
-        if approval.plan_id != plan.id or approval.macro_revision_id != plan.macro_revision_id:
-            raise PlanOperationError("Weekly approval references another plan revision")
-        if approval.week_number != application.week_number:
-            raise PlanOperationError("Approved week number does not match the payload")
-        if Path(approval.approved_file) != resolved_file:
-            raise PlanOperationError("Approved file path does not match the payload")
-        if sha256_file(resolved_file) != approval.approved_file_sha256:
-            raise PlanOperationError("Approved week file changed after approval")
-        week = _find_week(plan, application.week_number)
-        if target_week_skeleton_sha256(week) != approval.target_week_skeleton_sha256:
-            raise PlanOperationError("Target macro week changed after approval")
-        current_hash = applied_workout_sha256(week) if week.workouts else None
-        if current_hash != approval.previous_applied_workout_sha256:
-            raise PlanOperationError("Previously applied weekly content changed")
-        populated_week = _populate_and_validate_week(
-            plan,
-            week,
-            application,
-        )
-        updated_plan = MasterPlan.model_validate(
-            plan.model_copy(
-                update={
-                    "weeks": [
-                        populated_week
-                        if candidate.week_number == populated_week.week_number
-                        else candidate
-                        for candidate in plan.weeks
-                    ]
-                }
-            ).model_dump(mode="python", by_alias=True)
-        )
-        applied_revisions = list(state.applied_week_revisions)
-        previous = next(
-            (
-                item
-                for item in applied_revisions
-                if item.week_number == application.week_number and item.active
-            ),
-            None,
-        )
-        timestamp = _now_utc(applied_at_utc)
-        if timestamp < approval.approved_at_utc:
-            raise PlanOperationError(
-                "Weekly application cannot predate its weekly approval"
-            )
-        if previous is not None and previous.active:
-            applied_revisions = [
-                item.model_copy(
-                    update={
-                        "active": False,
-                        "invalidated_at_utc": timestamp,
-                        "invalidation_reason": "replaced_by_new_week_approval",
-                    }
-                )
-                if item.approval_id == previous.approval_id
-                else item
-                for item in applied_revisions
-            ]
-        profile = _load_profile(repo)
-        applied_revisions.append(
-            AppliedWeekRevision(
-                approval_id=approval.approval_id,
-                plan_id=plan.id,
-                macro_revision_id=plan.macro_revision_id,
-                week_number=application.week_number,
-                approved_file_sha256=approval.approved_file_sha256,
-                applied_workout_sha256=applied_workout_sha256(populated_week),
-                applied_week_snapshot=populated_week,
-                schedule_timezone=profile.training_timezone,
-                weekly_approved_at_utc=approval.approved_at_utc,
-                applied_at_utc=timestamp,
-            )
-        )
-        _persist(
-            repo,
-            state.model_copy(
-                update={
-                    "current_plan": updated_plan,
-                    "pending_weekly_approval": None,
-                    "applied_week_revisions": applied_revisions,
-                }
-            ),
-        )
-        return updated_plan

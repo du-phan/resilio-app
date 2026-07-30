@@ -51,8 +51,18 @@ authority. Commands return JSON envelopes.
 ## Planning and approvals
 
 - `resilio plan show|status|week|next-unpopulated` — current plan reads.
+- `resilio plan create-cycle-review|close-cycle` — evidence-bound lifecycle
+  review and immutable plan archival; completed and did-not-finish goals may
+  bind exact owned completion evidence or an athlete-confirmed canonical
+  activity, including its retained performance measurements.
+- `resilio plan create-macro-context` — new-plan evidence gate containing all
+  closed-cycle summaries, up to 52 compact historical weeks, 12 detailed
+  recent weeks, past goal performances, current constraints, the active VDOT
+  approval, and a freshness fingerprint of the mutable source evidence.
 - `resilio plan template-macro|create-macro` — methodology-explicit macro
-  skeleton creation.
+  skeleton creation bound to one exact macro-planning context and
+  evidence-cited adaptation decisions; the latest recent week and, for
+  renewals, the latest cycle summary and goal outcome are mandatory evidence.
 - `resilio plan validate-week|apply-week` — exact weekly proposal boundary.
 - `resilio approvals status|approve-vdot --file|approve-macro|approve-week
   --file` — one atomic planning aggregate; VDOT and weekly approvals bind exact
@@ -62,7 +72,7 @@ authority. Commands return JSON envelopes.
 
 - `resilio workout publish|publish-plan|delete` — ownership-proven structured
   workout mutation and provider readback; publication accepts only locally
-  applied, still-approved workout identities.
+  applied, still-approved plan/macro/week/workout identities.
 
 Do not use removed local metrics, analysis, risk, recommendation, enrichment,
 guardrail, performance-baseline, or historical-publication command families.

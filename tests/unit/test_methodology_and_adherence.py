@@ -13,6 +13,7 @@ from resilio.core.methodology import (
     resolve_methodology_choice,
     verify_methodology_selection,
 )
+from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.schemas.activity import (
     ActivityAudit,
     ActivityDuration,
@@ -26,12 +27,25 @@ from resilio.schemas.methodology import (
     TrainingMethodology,
 )
 from resilio.schemas.plan import WorkoutPrescription, WorkoutType
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import (
     WorkoutCompletionManifest,
     WorkoutCompletionMatch,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _authoritative(workout: WorkoutPrescription) -> AuthoritativeWorkout:
+    return AuthoritativeWorkout(
+        identity=PlanWorkoutIdentity(
+            plan_id="plan_test",
+            macro_revision_id="macro_revision_1111111111111111",
+            week_number=1,
+            local_workout_id=workout.id,
+        ),
+        prescription=workout,
+    )
 
 
 def _workout(
@@ -182,7 +196,7 @@ def test_only_exact_completion_ownership_counts_as_adherence() -> None:
         matches={
             activity.local_activity_id: WorkoutCompletionMatch(
                 local_activity_id=activity.local_activity_id,
-                local_workout_id=workout.id,
+                workout_identity=_authoritative(workout).identity,
                 match_method="paired_event_id",
                 matched_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
             )
@@ -190,7 +204,7 @@ def test_only_exact_completion_ownership_counts_as_adherence() -> None:
     )
 
     context = build_adherence_context(
-        workouts=[workout],
+        workouts=[_authoritative(workout)],
         activities=[activity],
         completion_manifest=manifest,
         as_of_date=date(2026, 7, 30),
@@ -208,7 +222,7 @@ def test_same_day_activity_without_owned_pairing_remains_unmatched() -> None:
     activity = _activity("act_i_same_day", date(2026, 7, 28))
 
     context = build_adherence_context(
-        workouts=[workout],
+        workouts=[_authoritative(workout)],
         activities=[activity],
         completion_manifest=WorkoutCompletionManifest(),
         as_of_date=date(2026, 7, 30),
@@ -224,7 +238,7 @@ def test_future_workout_is_not_treated_as_due() -> None:
     workout = _workout("w_future", date(2026, 8, 1), WorkoutType.LONG_RUN)
 
     context = build_adherence_context(
-        workouts=[workout],
+        workouts=[_authoritative(workout)],
         activities=[],
         completion_manifest=WorkoutCompletionManifest(),
         as_of_date=date(2026, 7, 30),

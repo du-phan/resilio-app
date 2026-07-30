@@ -150,17 +150,27 @@ events. Completed-workout adherence accepts only the provider’s exact paired
 event identity; date/sport/duration resemblance remains a report-only
 candidate.
 
-Only a workout resolved from the current planning-state aggregate may be
-published. The aggregate must have a fresh planning-profile fingerprint, an
-approved macro skeleton, an active applied-week approval, and an unchanged
-applied-workout SHA-256.
+Only a qualified plan/macro/week/workout identity resolved from the active
+planning-state aggregate may be published. The aggregate must have a fresh
+planning-profile fingerprint, an approved macro skeleton, an active
+applied-week approval, and an unchanged applied-workout SHA-256. Publication
+and completion manifests retain that full lineage.
 
-Historical adherence is revision-aware: retired plan revisions retain their
-macro approval and immutable applied-week snapshots. The resolver compares
-approval, invalidation, and retirement instants with each workout's scheduled
-UTC instant using the recorded IANA timezone. It refuses competing revisions,
-missing approvals, invalid or ambiguous local wall times, or changed
-approval-bound content.
+Historical adherence is revision-aware: content-addressed closed-plan archives
+retain their macro approval, closure facts, cycle-review evidence, and
+immutable applied-week snapshots. The resolver compares approval,
+invalidation, and closure instants with each workout's scheduled UTC instant
+using the recorded IANA timezone. It refuses competing revisions, missing
+approvals, invalid or ambiguous local wall times, changed approval-bound
+content, or an archive whose bytes no longer match its planning-state
+reference. The effective closure date is the final workout-authority boundary;
+a later administrative closure timestamp cannot extend the training cycle.
+
+Completed and did-not-finish target events can retain one athlete-confirmed
+canonical activity with distance, elapsed and moving duration, elevation,
+aerobic load, subjective effort, thresholds, and native analysis when those
+measurements exist. Macro planning receives that immutable goal-performance
+summary instead of trying to rediscover a historical race heuristically.
 
 ## Crash consistency
 

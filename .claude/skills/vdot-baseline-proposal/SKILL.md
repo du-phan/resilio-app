@@ -14,6 +14,8 @@ do not approve it or mutate the profile or planning state.
   distance, elapsed time, and date.
 - An active exact-file VDOT approval in planning state is valid evidence and
   must be labeled as such.
+- A new VDOT approval cannot replace the dependency of an active plan. For a
+  successor plan, complete the plan-renewal review and closure first.
 - Do not infer VDOT from easy pace, average activity pace, provider VO2 max,
   heart rate, native aerobic load, fitness/fatigue, or an arbitrary decay
   formula.
@@ -98,7 +100,8 @@ temperature, altitude, or arbitrary time adjustment. Then return:
 
 VDOT approval does not authorize Resilio to manufacture training paces.
 
-After explicit athlete approval, the main coach records:
+After explicit athlete approval, and only when no active plan depends on the
+previous approval, the main coach records:
 
 ```bash
 poetry run resilio approvals approve-vdot --file <PROPOSAL_JSON>

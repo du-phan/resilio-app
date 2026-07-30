@@ -1,4 +1,4 @@
-"""Planning-state v3 revision-bound aggregate behavior."""
+"""Planning-state v4 lifecycle, evidence, and revision-bound behavior."""
 
 import json
 from datetime import date, datetime, timezone
@@ -8,12 +8,19 @@ import pytest
 from pydantic import ValidationError
 
 import resilio.core.profile.repository as profile_repository_module
+from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.coaching_context import build_week_planning_context
 from resilio.core.planning.approval_evidence import (
     ApprovalEvidenceError,
     verify_vdot_approval,
 )
-from resilio.core.planning.integrity import macro_skeleton_sha256, sha256_file
+from resilio.core.planning.artifacts import load_evidence_artifact
+from resilio.core.planning.cycle_review import (
+    confirmed_goal_outcome,
+    create_cycle_review,
+)
+from resilio.core.planning.integrity import sha256_file
+from resilio.core.planning.macro_context import create_macro_planning_context
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.service import (
     PlanOperationError,
@@ -21,22 +28,24 @@ from resilio.core.planning.service import (
     approve_current_macro_plan,
     approve_vdot_proposal,
     approve_week_application,
+    close_current_plan_from_review,
     create_macro_plan,
     load_approved_workouts_for_date_range,
     load_current_plan,
     load_planning_aggregate,
     load_publishable_workout,
-    retire_current_plan,
 )
 from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.core.state import save_planning_state
+from resilio.core.sync_state import write_sync_state
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
     PlanningState,
-    RetiredPlanRevision,
 )
 from resilio.schemas.plan import MacroPlanDraft
+from resilio.schemas.plan_history import GoalOutcome, PlanClosureDisposition
+from resilio.schemas.planning_evidence import PlanCycleReview
 from resilio.schemas.profile import (
     AthleteProfile,
     ConflictPolicy,
@@ -46,6 +55,8 @@ from resilio.schemas.profile import (
     RunningPriority,
     TrainingConstraints,
 )
+from resilio.schemas.sync import ActivityCoverageWindow, ActivitySyncState
+from tests.factories import make_activity
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -63,6 +74,32 @@ def _hints() -> dict:
 
 
 def _draft(vdot_approval_id: str) -> MacroPlanDraft:
+    context_paths = sorted(
+        Path("data/plans/evidence/macro_planning_context").glob("*.json"),
+        key=lambda path: path.stat().st_mtime_ns,
+    )
+    assert context_paths
+    context_path = context_paths[-1]
+    context_sha256 = context_path.stem
+    context_payload = json.loads(context_path.read_text())
+    required_renewal_evidence_ids = [
+        context_payload["evidence_index"][-1]["evidence_id"],
+    ]
+    historical_summaries = context_payload["historical_plan_summaries"]
+    if historical_summaries:
+        latest_plan_id = max(
+            historical_summaries,
+            key=lambda summary: (
+                summary["effective_end_date"],
+                summary["plan_id"],
+            ),
+        )["plan_id"]
+        required_renewal_evidence_ids.extend(
+            [
+                f"closed_plan.{latest_plan_id}.summary",
+                f"goal_outcome.{latest_plan_id}",
+            ]
+        )
     return MacroPlanDraft.model_validate(
         {
             "goal": {
@@ -89,6 +126,48 @@ def _draft(vdot_approval_id: str) -> MacroPlanDraft:
                 }
             ],
             "vdot_approval_id": vdot_approval_id,
+            "planning_context_reference": {
+                "artifact_type": "macro_planning_context",
+                "artifact_sha256": context_sha256,
+            },
+            "planning_rationale": (
+                "The plan starts from athlete-confirmed availability, approved "
+                "VDOT evidence, and the exact recent training evidence context."
+            ),
+            "adaptation_decisions": [
+                {
+                    "decision_type": "methodology_selection",
+                    "evidence_ids": [
+                        "profile.current_constraints",
+                        f"vdot.{vdot_approval_id}",
+                    ],
+                    "observed_facts": (
+                        "The athlete has a current 10K goal and four available "
+                        "running days with a verified performance baseline."
+                    ),
+                    "planning_change": (
+                        "Use Daniels as the single conceptual methodology for "
+                        "the complete macro-plan horizon."
+                    ),
+                    "affected_week_numbers": [1],
+                },
+                {
+                    "decision_type": "starting_volume",
+                    "evidence_ids": [
+                        "profile.current_constraints",
+                        *required_renewal_evidence_ids,
+                    ],
+                    "observed_facts": (
+                        "The athlete-confirmed constraints permit two to four "
+                        "weekly runs without additional sport commitments."
+                    ),
+                    "planning_change": (
+                        "Start with ten thousand planned running meters in the "
+                        "opening week and review exact execution evidence."
+                    ),
+                    "affected_week_numbers": [1],
+                },
+            ],
         }
     )
 
@@ -162,8 +241,15 @@ def _approve_vdot(repo: RepositoryIO, tmp_path: Path) -> str:
         proposal_path,
         approved_at_utc=datetime(2026, 7, 25, 9, tzinfo=timezone.utc),
     )
-    assert state.vdot_approval is not None
-    return state.vdot_approval.approval_id
+    assert state.active_vdot_approval is not None
+    create_macro_planning_context(
+        repo,
+        evidence_as_of_date=date(2026, 7, 26),
+        intended_plan_start_date=date(2026, 7, 27),
+        generated_at_utc=datetime(2026, 7, 26, tzinfo=timezone.utc),
+        current_local_date=date(2026, 7, 26),
+    )
+    return state.active_vdot_approval.approval_id
 
 
 def test_vdot_proposal_cannot_be_approved_before_it_was_generated(
@@ -191,6 +277,27 @@ def test_macro_plan_cannot_predate_its_vdot_approval(
             repo,
             _draft(approval_id),
             created_at_utc=datetime(2026, 7, 25, 8, tzinfo=timezone.utc),
+        )
+
+
+def test_macro_context_cannot_claim_evidence_from_after_generation(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    proposal_path = _write_vdot_proposal(tmp_path)
+    approve_vdot_proposal(
+        repo,
+        proposal_path,
+        approved_at_utc=datetime(2026, 7, 25, 9, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(PlanOperationError, match="postdate context generation"):
+        create_macro_planning_context(
+            repo,
+            evidence_as_of_date=date(2026, 7, 26),
+            intended_plan_start_date=date(2026, 7, 27),
+            generated_at_utc=datetime(2026, 7, 25, 10, tzinfo=timezone.utc),
+            current_local_date=date(2026, 7, 26),
         )
 
 
@@ -284,6 +391,281 @@ def _apply_test_week(repo: RepositoryIO, tmp_path: Path) -> None:
     )
 
 
+def _close_test_plan(
+    repo: RepositoryIO,
+    *,
+    effective_end_date: date = date(2026, 8, 2),
+    evidence_as_of_date: date = date(2026, 8, 2),
+    closed_at_utc: datetime = datetime(
+        2026,
+        8,
+        2,
+        23,
+        tzinfo=timezone.utc,
+    ),
+    disposition: PlanClosureDisposition = (PlanClosureDisposition.COMPLETED_HORIZON),
+) -> PlanningState:
+    reference = create_cycle_review(
+        repo,
+        effective_end_date=effective_end_date,
+        evidence_as_of_date=evidence_as_of_date,
+        goal_outcome=GoalOutcome(
+            status="did_not_start",
+            athlete_confirmation_reference=(
+                "Athlete confirmed that they did not start the target event."
+            ),
+        ),
+        generated_at_utc=closed_at_utc,
+    )
+    return close_current_plan_from_review(
+        repo,
+        cycle_review_reference=reference,
+        disposition=disposition,
+        reason=(
+            "The athlete reviewed the complete cycle evidence and requested "
+            "that this exact plan revision be closed."
+        ),
+        athlete_confirmation_reference=(
+            "Athlete confirmed the goal outcome and requested a new plan."
+        ),
+        closed_at_utc=closed_at_utc,
+    )
+
+
+@pytest.mark.parametrize(
+    ("activity_date", "sport", "expected_message"),
+    [
+        (
+            date(2026, 7, 26),
+            "run",
+            "outside the effective plan cycle",
+        ),
+        (
+            date(2026, 8, 2),
+            "cycle",
+            "canonical running activity",
+        ),
+    ],
+)
+def test_cycle_review_rejects_unqualified_goal_activity(
+    repo: RepositoryIO,
+    tmp_path: Path,
+    activity_date: date,
+    sport: str,
+    expected_message: str,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    activity = make_activity(
+        id=f"goal-{sport}-{activity_date.isoformat()}",
+        date=activity_date,
+        sport=sport,
+    )
+    ActivityArchive(repo.resolve_path("data/activities")).write(activity)
+    outcome = confirmed_goal_outcome(
+        repo,
+        status="completed",
+        local_activity_id=activity.local_activity_id,
+        athlete_confirmation_reference=(
+            "Athlete confirmed this exact activity as their goal event."
+        ),
+    )
+
+    with pytest.raises(PlanOperationError, match=expected_message):
+        create_cycle_review(
+            repo,
+            effective_end_date=date(2026, 8, 2),
+            evidence_as_of_date=date(2026, 8, 2),
+            goal_outcome=outcome,
+            generated_at_utc=datetime(
+                2026,
+                8,
+                2,
+                20,
+                tzinfo=timezone.utc,
+            ),
+        )
+
+
+def test_cycle_review_retains_goal_performance_for_future_planning(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    activity = make_activity(
+        id="goal-race-completed",
+        date=date(2026, 8, 2),
+        sport="run",
+        distance_meters=10_000,
+        duration_seconds=2_655,
+    )
+    ActivityArchive(repo.resolve_path("data/activities")).write(activity)
+    outcome = confirmed_goal_outcome(
+        repo,
+        status="completed",
+        local_activity_id=activity.local_activity_id,
+        athlete_confirmation_reference=(
+            "Athlete confirmed this exact recording as their completed target race."
+        ),
+    )
+    reference = create_cycle_review(
+        repo,
+        effective_end_date=date(2026, 8, 2),
+        evidence_as_of_date=date(2026, 8, 2),
+        goal_outcome=outcome,
+        generated_at_utc=datetime(2026, 8, 2, 20, tzinfo=timezone.utc),
+    )
+
+    review = load_evidence_artifact(repo, reference, PlanCycleReview)
+
+    assert review.goal_activity is not None
+    assert review.goal_activity.distance_km == 10
+    assert review.goal_activity.elapsed_duration_seconds == 2_655
+    assert any(
+        "source coverage" in limitation.lower() for limitation in review.evidence_limitations
+    )
+
+
+def test_plan_closure_rejects_training_evidence_changed_after_review(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    reference = create_cycle_review(
+        repo,
+        effective_end_date=date(2026, 8, 2),
+        evidence_as_of_date=date(2026, 8, 2),
+        goal_outcome=GoalOutcome(
+            status="did_not_start",
+            athlete_confirmation_reference=(
+                "Athlete confirmed that they did not start the target event."
+            ),
+        ),
+        generated_at_utc=datetime(2026, 8, 2, 20, tzinfo=timezone.utc),
+    )
+    write_sync_state(
+        repo,
+        ActivitySyncState(
+            last_successful_incremental_at_utc=datetime(
+                2026,
+                8,
+                2,
+                18,
+                tzinfo=timezone.utc,
+            ),
+            complete_activity_windows=[
+                ActivityCoverageWindow(
+                    start_date=date(2026, 7, 27),
+                    end_date=date(2026, 8, 2),
+                )
+            ],
+        ),
+    )
+
+    with pytest.raises(
+        PlanOperationError,
+        match="Training evidence changed after cycle review",
+    ):
+        close_current_plan_from_review(
+            repo,
+            cycle_review_reference=reference,
+            disposition=PlanClosureDisposition.COMPLETED_HORIZON,
+            reason=("The athlete reviewed the full plan horizon and requested closure."),
+            athlete_confirmation_reference=(
+                "Athlete confirmed the review and requested plan closure."
+            ),
+            closed_at_utc=datetime(2026, 8, 2, 21, tzinfo=timezone.utc),
+        )
+
+
+def test_plan_closure_rejects_active_plan_changed_after_review(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    reference = create_cycle_review(
+        repo,
+        effective_end_date=date(2026, 8, 2),
+        evidence_as_of_date=date(2026, 8, 2),
+        goal_outcome=GoalOutcome(
+            status="did_not_start",
+            athlete_confirmation_reference=(
+                "Athlete confirmed that they did not start the target event."
+            ),
+        ),
+        generated_at_utc=datetime(2026, 8, 2, 20, tzinfo=timezone.utc),
+    )
+    state = load_planning_aggregate(repo)
+    assert state is not None and state.active_plan is not None
+    changed_week = state.active_plan.plan.weeks[0].model_copy(
+        update={"target_run_volume_meters": 9_000}
+    )
+    changed_plan = state.active_plan.plan.model_copy(update={"weeks": [changed_week]})
+    error = save_planning_state(
+        state.model_copy(
+            update={"active_plan": state.active_plan.model_copy(update={"plan": changed_plan})}
+        ),
+        repo,
+    )
+    assert error is None
+
+    with pytest.raises(
+        PlanOperationError,
+        match="Active plan changed after cycle review",
+    ):
+        close_current_plan_from_review(
+            repo,
+            cycle_review_reference=reference,
+            disposition=PlanClosureDisposition.COMPLETED_HORIZON,
+            reason=("The athlete reviewed the full plan horizon and requested closure."),
+            athlete_confirmation_reference=(
+                "Athlete confirmed the review and requested plan closure."
+            ),
+            closed_at_utc=datetime(2026, 8, 2, 21, tzinfo=timezone.utc),
+        )
+
+
+@pytest.mark.parametrize(
+    ("effective_end_date", "evidence_as_of_date", "generated_at_utc", "message"),
+    [
+        (
+            date(2026, 7, 25),
+            date(2026, 7, 25),
+            datetime(2026, 7, 26, 12, tzinfo=timezone.utc),
+            "predate plan creation",
+        ),
+        (
+            date(2026, 8, 2),
+            date(2026, 8, 2),
+            datetime(2026, 7, 31, 12, tzinfo=timezone.utc),
+            "postdate review generation",
+        ),
+    ],
+)
+def test_cycle_review_rejects_impossible_evidence_dates(
+    repo: RepositoryIO,
+    tmp_path: Path,
+    effective_end_date: date,
+    evidence_as_of_date: date,
+    generated_at_utc: datetime,
+    message: str,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+
+    with pytest.raises(PlanOperationError, match=message):
+        create_cycle_review(
+            repo,
+            effective_end_date=effective_end_date,
+            evidence_as_of_date=evidence_as_of_date,
+            goal_outcome=GoalOutcome(
+                status="did_not_start",
+                athlete_confirmation_reference=(
+                    "Athlete confirmed that they did not start the target event."
+                ),
+            ),
+            generated_at_utc=generated_at_utc,
+        )
+
+
 def test_macro_approval_cannot_predate_plan_creation(
     repo: RepositoryIO,
     tmp_path: Path,
@@ -339,7 +721,7 @@ def test_week_application_cannot_predate_week_approval(
         )
 
 
-def test_create_macro_plan_persists_v3_aggregate(
+def test_create_macro_plan_persists_v4_aggregate(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
@@ -355,7 +737,9 @@ def test_create_macro_plan_persists_v3_aggregate(
 
     assert loaded == created
     assert state is not None
-    assert state.current_plan == created
+    assert state.active_plan is not None
+    assert state.active_plan.plan == created
+    assert state.schema_version == 4
     assert loaded.schema_info.version == 3
     assert loaded.vdot_approval_id == approval_id
     assert loaded.baseline_vdot == 45
@@ -390,6 +774,111 @@ def test_macro_creation_requires_exact_approved_vdot_file(
         create_macro_plan(repo, _draft(approval_id))
 
 
+def test_macro_creation_rejects_training_evidence_changed_after_context(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    approval_id = _approve_vdot(repo, tmp_path)
+    write_sync_state(
+        repo,
+        ActivitySyncState(
+            last_successful_incremental_at_utc=datetime(
+                2026,
+                7,
+                26,
+                8,
+                tzinfo=timezone.utc,
+            ),
+            complete_activity_windows=[
+                ActivityCoverageWindow(
+                    start_date=date(2026, 4, 1),
+                    end_date=date(2026, 7, 26),
+                )
+            ],
+        ),
+    )
+
+    with pytest.raises(
+        PlanOperationError,
+        match="training evidence changed after context creation",
+    ):
+        create_macro_plan(repo, _draft(approval_id))
+
+
+def test_macro_plan_must_cite_recent_training_evidence(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    approval_id = _approve_vdot(repo, tmp_path)
+    draft = _draft(approval_id)
+    decisions_without_training_evidence = [
+        decision.model_copy(
+            update={
+                "evidence_ids": [
+                    evidence_id
+                    for evidence_id in decision.evidence_ids
+                    if not evidence_id.startswith(("recent_week.", "closed_plan.", "goal_outcome."))
+                ]
+            }
+        )
+        for decision in draft.adaptation_decisions
+    ]
+
+    with pytest.raises(
+        PlanOperationError,
+        match="required renewal evidence",
+    ):
+        create_macro_plan(
+            repo,
+            draft.model_copy(update={"adaptation_decisions": decisions_without_training_evidence}),
+        )
+
+
+def test_renewal_macro_plan_must_cite_latest_plan_and_goal_outcome(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    _close_test_plan(
+        repo,
+        effective_end_date=date(2026, 7, 26),
+        evidence_as_of_date=date(2026, 7, 26),
+        closed_at_utc=datetime(2026, 7, 26, 23, tzinfo=timezone.utc),
+        disposition=PlanClosureDisposition.NEVER_STARTED,
+    )
+    create_macro_planning_context(
+        repo,
+        evidence_as_of_date=date(2026, 7, 26),
+        intended_plan_start_date=date(2026, 7, 27),
+        generated_at_utc=datetime(2026, 7, 26, 23, 30, tzinfo=timezone.utc),
+        current_local_date=date(2026, 7, 26),
+    )
+    state = load_planning_aggregate(repo)
+    assert state is not None and state.active_vdot_approval is not None
+    draft = _draft(state.active_vdot_approval.approval_id)
+    decisions_without_plan_history = [
+        decision.model_copy(
+            update={
+                "evidence_ids": [
+                    evidence_id
+                    for evidence_id in decision.evidence_ids
+                    if not evidence_id.startswith(("closed_plan.", "goal_outcome."))
+                ]
+            }
+        )
+        for decision in draft.adaptation_decisions
+    ]
+
+    with pytest.raises(
+        PlanOperationError,
+        match="required renewal evidence",
+    ):
+        create_macro_plan(
+            repo,
+            draft.model_copy(update={"adaptation_decisions": decisions_without_plan_history}),
+        )
+
+
 def test_vdot_approval_recomputes_structured_race_evidence(
     repo: RepositoryIO,
     tmp_path: Path,
@@ -409,9 +898,7 @@ def test_vdot_approval_recomputes_structured_race_evidence(
                     "source_local_activity_id": "act_i_slow_10k",
                     "source_external_fingerprint_sha256": "a" * 64,
                 },
-                "evidence_summary": (
-                    "The structured performance must determine the proposal."
-                ),
+                "evidence_summary": ("The structured performance must determine the proposal."),
                 "generated_at_utc": "2026-07-25T08:00:00Z",
             }
         )
@@ -428,8 +915,8 @@ def test_vdot_approval_verifier_rejects_missing_hash_and_semantic_drift(
     _approve_vdot(repo, tmp_path)
     state = load_planning_aggregate(repo)
     assert state is not None
-    assert state.vdot_approval is not None
-    approval = state.vdot_approval
+    assert state.active_vdot_approval is not None
+    approval = state.active_vdot_approval
     proposal_path = Path(approval.proposal_file)
 
     original = proposal_path.read_text()
@@ -458,8 +945,8 @@ def test_vdot_approval_verifier_rejects_approval_before_proposal(
     _approve_vdot(repo, tmp_path)
     state = load_planning_aggregate(repo)
     assert state is not None
-    assert state.vdot_approval is not None
-    impossible_approval = state.vdot_approval.model_copy(
+    assert state.active_vdot_approval is not None
+    impossible_approval = state.active_vdot_approval.model_copy(
         update={
             "approved_at_utc": datetime(
                 2026,
@@ -489,18 +976,22 @@ def test_planning_state_rejects_plan_created_before_vdot_approval(
         PlanningState.model_validate(
             state.model_copy(
                 update={
-                    "current_plan": plan.model_copy(
+                    "active_plan": state.active_plan.model_copy(
                         update={
-                            "created_at_utc": datetime(
-                                2026,
-                                7,
-                                25,
-                                8,
-                                59,
-                                tzinfo=timezone.utc,
+                            "plan": plan.model_copy(
+                                update={
+                                    "created_at_utc": datetime(
+                                        2026,
+                                        7,
+                                        25,
+                                        8,
+                                        59,
+                                        tzinfo=timezone.utc,
+                                    )
+                                }
                             )
                         }
-                    )
+                    ),
                 }
             ).model_dump(mode="python")
         )
@@ -536,8 +1027,9 @@ def test_planning_relevant_profile_update_durably_invalidates_plan(
 
     state = load_planning_aggregate(repo)
     assert state is not None
-    assert state.plan_invalidated_at_utc is not None
-    assert "constraints" in (state.plan_invalidation_reason or "")
+    assert state.active_plan is not None
+    assert state.active_plan.invalidated_at_utc is not None
+    assert "constraints" in (state.active_plan.invalidation_reason or "")
 
 
 def test_profile_update_rolls_back_when_plan_invalidation_cannot_persist(
@@ -642,13 +1134,26 @@ def test_week_approval_cannot_cross_macro_plan_revisions(
     plan_a = load_current_plan(repo)
     assert plan_a is not None
 
-    retire_current_plan(
+    _close_test_plan(
         repo,
-        reason="Athlete requested a complete macro plan replacement",
+        effective_end_date=date(2026, 7, 26),
+        evidence_as_of_date=date(2026, 7, 26),
+        closed_at_utc=datetime(2026, 7, 26, 23, tzinfo=timezone.utc),
+        disposition=PlanClosureDisposition.NEVER_STARTED,
     )
     state = load_planning_aggregate(repo)
-    assert state is not None and state.vdot_approval is not None
-    plan_b = create_macro_plan(repo, _draft(state.vdot_approval.approval_id))
+    assert state is not None and state.active_vdot_approval is not None
+    create_macro_planning_context(
+        repo,
+        evidence_as_of_date=date(2026, 7, 26),
+        intended_plan_start_date=date(2026, 7, 27),
+        generated_at_utc=datetime(2026, 7, 26, 23, 30, tzinfo=timezone.utc),
+        current_local_date=date(2026, 7, 26),
+    )
+    plan_b = create_macro_plan(
+        repo,
+        _draft(state.active_vdot_approval.approval_id),
+    )
     assert plan_b.macro_revision_id != plan_a.macro_revision_id
 
     with pytest.raises(PlanOperationError, match="approval is missing"):
@@ -694,10 +1199,10 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
         "w_long_1",
     ]
     state = load_planning_aggregate(repo)
-    assert state is not None
-    assert state.pending_weekly_approval is None
-    assert len(state.applied_week_revisions) == 1
-    assert state.applied_week_revisions[0].active is True
+    assert state is not None and state.active_plan is not None
+    assert state.active_plan.pending_weekly_approval is None
+    assert len(state.active_plan.applied_week_revisions) == 1
+    assert state.active_plan.applied_week_revisions[0].active is True
 
     evidence = load_approved_workouts_for_date_range(
         repo,
@@ -705,23 +1210,19 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
         window_end=date(2026, 8, 2),
     )
     assert evidence.status == "available"
-    assert [workout.id for workout in evidence.workouts] == [
+    assert [workout.prescription.id for workout in evidence.workouts] == [
         "w_easy_1",
         "w_easy_2",
         "w_long_1",
     ]
 
 
-def test_retired_revision_remains_authoritative_for_historical_adherence(
+def test_closed_revision_remains_authoritative_for_historical_adherence(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
     _apply_test_week(repo, tmp_path)
-    retire_current_plan(
-        repo,
-        reason="The athlete approved a subsequent macro plan revision",
-        retired_at_utc=datetime(2026, 8, 2, 23, tzinfo=timezone.utc),
-    )
+    _close_test_plan(repo)
 
     evidence = load_approved_workouts_for_date_range(
         repo,
@@ -730,49 +1231,24 @@ def test_retired_revision_remains_authoritative_for_historical_adherence(
     )
 
     assert evidence.status == "available"
-    assert [workout.id for workout in evidence.workouts] == [
+    assert [workout.prescription.id for workout in evidence.workouts] == [
         "w_easy_1",
         "w_easy_2",
         "w_long_1",
     ]
 
 
-def test_unpopulated_retired_revision_does_not_hide_current_authority(
+def test_early_closure_excludes_workouts_after_effective_plan_end(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
     _apply_test_week(repo, tmp_path)
-    state = load_planning_aggregate(repo)
-    assert state is not None
-    assert state.current_plan is not None
-    assert state.macro_approval is not None
-    historical_plan = state.current_plan.model_copy(
-        update={
-            "id": "plan_historical_empty",
-            "macro_revision_id": "macro_revision_1111111111111111",
-            "weeks": [state.current_plan.weeks[0].model_copy(update={"workouts": []})],
-        }
-    )
-    historical_macro_approval = state.macro_approval.model_copy(
-        update={
-            "plan_id": historical_plan.id,
-            "macro_revision_id": historical_plan.macro_revision_id,
-            "macro_skeleton_sha256": macro_skeleton_sha256(historical_plan),
-        }
-    )
-    historical = RetiredPlanRevision(
-        plan=historical_plan,
-        macro_approval=historical_macro_approval,
-        applied_week_revisions=[],
-        retired_at_utc=datetime(2026, 8, 2, 23, tzinfo=timezone.utc),
-        retirement_reason="A draft-only historical revision was superseded",
-    )
-    assert (
-        save_planning_state(
-            state.model_copy(update={"retired_plan_revisions": [historical]}),
-            repo,
-        )
-        is None
+    _close_test_plan(
+        repo,
+        effective_end_date=date(2026, 7, 29),
+        evidence_as_of_date=date(2026, 7, 29),
+        closed_at_utc=datetime(2026, 8, 1, 23, tzinfo=timezone.utc),
+        disposition=PlanClosureDisposition.STOPPED_EARLY,
     )
 
     evidence = load_approved_workouts_for_date_range(
@@ -782,53 +1258,22 @@ def test_unpopulated_retired_revision_does_not_hide_current_authority(
     )
 
     assert evidence.status == "available"
-    assert len(evidence.workouts) == 3
+    assert [workout.prescription.id for workout in evidence.workouts] == ["w_easy_1"]
 
 
-def test_competing_approved_revisions_make_adherence_unavailable(
+def test_closed_revision_tampering_makes_adherence_unavailable(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
     _apply_test_week(repo, tmp_path)
-    state = load_planning_aggregate(repo)
-    assert state is not None
-    assert state.current_plan is not None
-    assert state.macro_approval is not None
-    competing_plan = state.current_plan.model_copy(
-        update={
-            "id": "plan_competing_history",
-            "macro_revision_id": "macro_revision_2222222222222222",
-        }
-    )
-    competing_macro_approval = state.macro_approval.model_copy(
-        update={
-            "plan_id": competing_plan.id,
-            "macro_revision_id": competing_plan.macro_revision_id,
-            "macro_skeleton_sha256": macro_skeleton_sha256(competing_plan),
-        }
-    )
-    competing_applied = [
-        approval.model_copy(
-            update={
-                "plan_id": competing_plan.id,
-                "macro_revision_id": competing_plan.macro_revision_id,
-            }
+    closed_state = _close_test_plan(repo)
+    reference = closed_state.closed_plan_cycle_references[0]
+    archive_path = repo.resolve_path(f"data/plans/archive/{reference.plan_id}.json")
+    archive_path.write_text(
+        archive_path.read_text().replace(
+            "Aerobic support",
+            "Content changed after archival",
         )
-        for approval in state.applied_week_revisions
-    ]
-    competing = RetiredPlanRevision(
-        plan=competing_plan,
-        macro_approval=competing_macro_approval,
-        applied_week_revisions=competing_applied,
-        retired_at_utc=datetime(2026, 8, 2, 23, tzinfo=timezone.utc),
-        retirement_reason="A competing historical authority was preserved",
-    )
-    assert (
-        save_planning_state(
-            state.model_copy(update={"retired_plan_revisions": [competing]}),
-            repo,
-        )
-        is None
     )
 
     evidence = load_approved_workouts_for_date_range(
@@ -838,50 +1283,34 @@ def test_competing_approved_revisions_make_adherence_unavailable(
     )
 
     assert evidence.status == "unavailable"
-    assert evidence.reason == "competing_approved_plan_authorities"
+    assert evidence.reason is not None
+    assert "changed after closure" in evidence.reason
 
 
-def test_retired_revision_tampering_makes_adherence_unavailable(
+def test_planning_aggregate_rejects_orphaned_historical_vdot_approval(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
-    _apply_test_week(repo, tmp_path)
-    retired_state = retire_current_plan(
+    _create_approved_macro(repo, tmp_path)
+    _close_test_plan(repo)
+    proposal_path = _write_vdot_proposal(tmp_path)
+    state = approve_vdot_proposal(
         repo,
-        reason="The athlete approved a subsequent macro plan revision",
-        retired_at_utc=datetime(2026, 8, 2, 23, tzinfo=timezone.utc),
+        proposal_path,
+        approved_at_utc=datetime(2026, 8, 3, tzinfo=timezone.utc),
     )
-    retired = retired_state.retired_plan_revisions[0]
-    applied_revision = retired.applied_week_revisions[0]
-    original_week = applied_revision.applied_week_snapshot
-    changed_workout = original_week.workouts[0].model_copy(
-        update={"purpose": "Content changed after application"}
-    )
-    changed_week = original_week.model_copy(
-        update={"workouts": [changed_workout, *original_week.workouts[1:]]}
-    )
-    changed_applied_revision = applied_revision.model_copy(
-        update={"applied_week_snapshot": changed_week}
-    )
-    changed_retired = retired.model_copy(
-        update={"applied_week_revisions": [changed_applied_revision]}
-    )
-    assert (
-        save_planning_state(
-            retired_state.model_copy(update={"retired_plan_revisions": [changed_retired]}),
-            repo,
-        )
-        is None
-    )
-
-    evidence = load_approved_workouts_for_date_range(
+    assert state.active_vdot_approval is not None
+    error = save_planning_state(
+        state.model_copy(update={"vdot_approvals": [state.active_vdot_approval]}),
         repo,
-        window_start=date(2026, 7, 27),
-        window_end=date(2026, 8, 2),
     )
+    assert error is None
 
-    assert evidence.status == "unavailable"
-    assert evidence.reason == "week_1_changed_after_application"
+    with pytest.raises(
+        PlanOperationError,
+        match="historical VDOT approval",
+    ):
+        load_planning_aggregate(repo)
 
 
 def test_week_replacement_preserves_original_historical_authority(
@@ -909,12 +1338,12 @@ def test_week_replacement_preserves_original_historical_authority(
     )
 
     assert evidence.status == "available"
-    assert [workout.id for workout in evidence.workouts] == [
+    assert [workout.prescription.id for workout in evidence.workouts] == [
         "w_easy_1",
         "w_easy_2",
         "w_long_1",
     ]
-    assert evidence.workouts[0].purpose == "Aerobic support"
+    assert evidence.workouts[0].prescription.purpose == "Aerobic support"
 
 
 def test_application_after_scheduled_instant_is_not_retroactive(
@@ -942,7 +1371,7 @@ def test_application_after_scheduled_instant_is_not_retroactive(
     )
 
     assert evidence.status == "available"
-    assert [workout.id for workout in evidence.workouts] == [
+    assert [workout.prescription.id for workout in evidence.workouts] == [
         "w_easy_2",
         "w_long_1",
     ]
@@ -992,11 +1421,17 @@ def test_publication_requires_unchanged_applied_workout_bytes(
         load_publishable_workout(repo, "w_easy_1")
 
     apply_approved_week(repo, payload_path)
-    assert load_publishable_workout(repo, "w_easy_1").id == "w_easy_1"
+    assert (
+        load_publishable_workout(
+            repo,
+            "w_easy_1",
+        ).prescription.id
+        == "w_easy_1"
+    )
 
     state = load_planning_aggregate(repo)
-    assert state is not None and state.current_plan is not None
-    current_week = state.current_plan.weeks[0]
+    assert state is not None and state.active_plan is not None
+    current_week = state.active_plan.plan.weeks[0]
     changed_workout = current_week.workouts[0].model_copy(
         update={"purpose": "Changed after application"}
     )
@@ -1008,9 +1443,11 @@ def test_publication_requires_unchanged_applied_workout_bytes(
             ]
         }
     )
-    changed_plan = state.current_plan.model_copy(update={"weeks": [changed_week]})
+    changed_plan = state.active_plan.plan.model_copy(update={"weeks": [changed_week]})
     error = save_planning_state(
-        state.model_copy(update={"current_plan": changed_plan}),
+        state.model_copy(
+            update={"active_plan": state.active_plan.model_copy(update={"plan": changed_plan})}
+        ),
         repo,
     )
     assert error is None
@@ -1026,7 +1463,8 @@ def test_applied_week_audit_rejects_naive_timestamp(
     _apply_test_week(repo, tmp_path)
     state = load_planning_aggregate(repo)
     assert state is not None
-    payload = state.applied_week_revisions[0].model_dump(mode="python")
+    assert state.active_plan is not None
+    payload = state.active_plan.applied_week_revisions[0].model_dump(mode="python")
     payload["applied_at_utc"] = datetime(2026, 7, 27)
 
     with pytest.raises(ValidationError, match="timezone-aware"):
@@ -1040,21 +1478,36 @@ def test_applied_week_audit_rejects_unknown_schedule_timezone(
     _apply_test_week(repo, tmp_path)
     state = load_planning_aggregate(repo)
     assert state is not None
-    payload = state.applied_week_revisions[0].model_dump(mode="python")
+    assert state.active_plan is not None
+    payload = state.active_plan.applied_week_revisions[0].model_dump(mode="python")
     payload["schedule_timezone"] = "Paris local time"
 
     with pytest.raises(ValidationError, match="recognized IANA timezone"):
         AppliedWeekRevision.model_validate(payload)
 
 
-def test_plan_invalidation_metadata_requires_a_current_plan() -> None:
-    with pytest.raises(ValidationError, match="requires a current plan"):
-        PlanningState(
-            plan_invalidated_at_utc=datetime(
-                2026,
-                7,
-                27,
-                tzinfo=timezone.utc,
-            ),
-            plan_invalidation_reason="Planning profile changed materially",
+def test_plan_invalidation_metadata_must_be_complete(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    approval_id = _approve_vdot(repo, tmp_path)
+    create_macro_plan(repo, _draft(approval_id))
+    state = load_planning_aggregate(repo)
+    assert state is not None and state.active_plan is not None
+    with pytest.raises(ValidationError, match="requires timestamp and reason"):
+        PlanningState.model_validate(
+            state.model_copy(
+                update={
+                    "active_plan": state.active_plan.model_copy(
+                        update={
+                            "invalidated_at_utc": datetime(
+                                2026,
+                                7,
+                                27,
+                                tzinfo=timezone.utc,
+                            ),
+                        }
+                    )
+                }
+            ).model_dump(mode="python")
         )

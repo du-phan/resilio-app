@@ -10,6 +10,10 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from resilio.schemas.plan import MasterPlan, WeekPlan
+from resilio.schemas.plan_history import (
+    ClosedPlanCycleReference,
+    PlanClosure,
+)
 from resilio.schemas.vdot import RaceDistance
 
 
@@ -33,9 +37,7 @@ class PerformanceVDOTEvidence(BaseModel):
         try:
             ZoneInfo(value)
         except ZoneInfoNotFoundError as exc:
-            raise ValueError(
-                "performance_timezone must be a recognized IANA timezone"
-            ) from exc
+            raise ValueError("performance_timezone must be a recognized IANA timezone") from exc
         return value
 
 
@@ -43,12 +45,8 @@ class RacePerformanceVDOTEvidence(PerformanceVDOTEvidence):
     """Race evidence bound to one exact synchronized activity version."""
 
     evidence_type: Literal["race_performance"]
-    source_local_activity_id: str = Field(
-        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
-    )
-    source_external_fingerprint_sha256: str = Field(
-        pattern=r"^[0-9a-f]{64}$"
-    )
+    source_local_activity_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+    source_external_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class PersonalBestVDOTEvidence(PerformanceVDOTEvidence):
@@ -66,9 +64,7 @@ class ManualVDOTEvidence(BaseModel):
 
 
 StructuredVDOTEvidence = Annotated[
-    RacePerformanceVDOTEvidence
-    | PersonalBestVDOTEvidence
-    | ManualVDOTEvidence,
+    RacePerformanceVDOTEvidence | PersonalBestVDOTEvidence | ManualVDOTEvidence,
     Field(discriminator="evidence_type"),
 ]
 
@@ -100,9 +96,7 @@ class VDOTProposal(BaseModel):
         if (
             isinstance(self.evidence, PerformanceVDOTEvidence)
             and self.evidence.performance_date
-            > self.generated_at_utc.astimezone(
-                ZoneInfo(self.evidence.performance_timezone)
-            ).date()
+            > self.generated_at_utc.astimezone(ZoneInfo(self.evidence.performance_timezone)).date()
         ):
             raise ValueError("race performance cannot postdate the proposal")
         return self
@@ -114,6 +108,7 @@ class VDOTApproval(BaseModel):
     proposal_file: str = Field(min_length=1)
     proposal_file_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_type: VDOTEvidenceType
+    proposal_snapshot: VDOTProposal
     approved_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
@@ -124,6 +119,16 @@ class VDOTApproval(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("approved_at_utc must be timezone-aware")
         return value
+
+    @model_validator(mode="after")
+    def proposal_snapshot_matches_approval(self) -> "VDOTApproval":
+        if self.proposal_snapshot.proposed_vdot != self.approved_vdot:
+            raise ValueError("VDOT approval value must match its proposal snapshot")
+        if self.proposal_snapshot.evidence_type != self.evidence_type:
+            raise ValueError("VDOT approval evidence type must match its proposal snapshot")
+        if self.approved_at_utc < self.proposal_snapshot.generated_at_utc:
+            raise ValueError("VDOT approval cannot predate its proposal snapshot")
+        return self
 
 
 class MacroApproval(BaseModel):
@@ -224,9 +229,7 @@ class AppliedWeekRevision(BaseModel):
         try:
             ZoneInfo(value)
         except ZoneInfoNotFoundError as exc:
-            raise ValueError(
-                "schedule_timezone must be a recognized IANA timezone"
-            ) from exc
+            raise ValueError("schedule_timezone must be a recognized IANA timezone") from exc
         return value
 
     @model_validator(mode="after")
@@ -241,150 +244,57 @@ class AppliedWeekRevision(BaseModel):
         if not self.applied_week_snapshot.workouts:
             raise ValueError("applied week snapshot must preserve exact workouts")
         if self.applied_at_utc < self.weekly_approved_at_utc:
-            raise ValueError(
-                "applied week revision cannot predate its weekly approval"
-            )
-        if (
-            self.invalidated_at_utc is not None
-            and self.invalidated_at_utc <= self.applied_at_utc
-        ):
+            raise ValueError("applied week revision cannot predate its weekly approval")
+        if self.invalidated_at_utc is not None and self.invalidated_at_utc <= self.applied_at_utc:
             raise ValueError("applied week revision must be invalidated after application")
         return self
 
 
-class RetiredPlanRevision(BaseModel):
-    """Immutable audit record for a superseded macro revision."""
+class ActivePlanState(BaseModel):
+    """The complete mutable state for the one active plan revision."""
 
     plan: MasterPlan
     macro_approval: MacroApproval | None = None
-    applied_week_revisions: list[AppliedWeekRevision] = Field(default_factory=list)
-    retired_at_utc: datetime
-    retirement_reason: str = Field(min_length=10, max_length=1_000)
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("retired_at_utc")
-    @classmethod
-    def retirement_time_is_aware(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("retired_at_utc must be timezone-aware")
-        return value
-
-    @model_validator(mode="after")
-    def approval_lineage_matches_retired_plan(
-        self,
-    ) -> "RetiredPlanRevision":
-        plan = self.plan
-        if self.retired_at_utc < plan.created_at_utc:
-            raise ValueError("plan revision cannot retire before it was created")
-        if self.macro_approval is not None:
-            approval = self.macro_approval
-            if (
-                approval.plan_id != plan.id
-                or approval.macro_revision_id != plan.macro_revision_id
-                or approval.vdot_approval_id != plan.vdot_approval_id
-            ):
-                raise ValueError("retired macro approval references another plan lineage")
-            if approval.approved_at_utc > self.retired_at_utc:
-                raise ValueError("retired macro approval cannot postdate retirement")
-            if approval.approved_at_utc < plan.created_at_utc:
-                raise ValueError("retired macro approval cannot predate plan creation")
-        active_week_numbers: list[int] = []
-        for applied_revision in self.applied_week_revisions:
-            if (
-                applied_revision.plan_id != plan.id
-                or applied_revision.macro_revision_id != plan.macro_revision_id
-            ):
-                raise ValueError("retired applied approval references another plan lineage")
-            if applied_revision.applied_at_utc > self.retired_at_utc:
-                raise ValueError("retired applied approval cannot postdate retirement")
-            if (
-                self.macro_approval is not None
-                and applied_revision.weekly_approved_at_utc
-                < self.macro_approval.approved_at_utc
-            ):
-                raise ValueError(
-                    "retired weekly approval cannot predate macro approval"
-                )
-            if applied_revision.active:
-                active_week_numbers.append(applied_revision.week_number)
-        if len(active_week_numbers) != len(set(active_week_numbers)):
-            raise ValueError("only one retired applied approval may be active per week")
-        return self
-
-
-class PlanningState(BaseModel):
-    """The single atomically persisted plan and approval aggregate."""
-
-    schema_version: Literal[3] = 3
-    vdot_approval: VDOTApproval | None = None
-    current_plan: MasterPlan | None = None
-    macro_approval: MacroApproval | None = None
     pending_weekly_approval: WeeklyApproval | None = None
     applied_week_revisions: list[AppliedWeekRevision] = Field(default_factory=list)
-    retired_plan_revisions: list[RetiredPlanRevision] = Field(default_factory=list)
-    plan_invalidated_at_utc: datetime | None = None
-    plan_invalidation_reason: str | None = None
+    invalidated_at_utc: datetime | None = None
+    invalidation_reason: str | None = None
 
     model_config = ConfigDict(extra="forbid")
 
-    @field_validator("plan_invalidated_at_utc")
+    @field_validator("invalidated_at_utc")
     @classmethod
     def invalidation_time_is_aware(
         cls,
         value: datetime | None,
     ) -> datetime | None:
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
-            raise ValueError("plan_invalidated_at_utc must be timezone-aware")
+            raise ValueError("invalidated_at_utc must be timezone-aware")
         return value
 
     @model_validator(mode="after")
-    def approval_chain_is_coherent(self) -> "PlanningState":
-        invalidated = self.plan_invalidated_at_utc is not None
-        if invalidated != (self.plan_invalidation_reason is not None):
-            raise ValueError("plan invalidation requires both timestamp and reason")
-        if self.current_plan is None:
-            if (
-                self.macro_approval is not None
-                or self.pending_weekly_approval is not None
-                or self.applied_week_revisions
-            ):
-                raise ValueError("plan approvals require a current plan")
-            if invalidated:
-                raise ValueError("plan invalidation requires a current plan")
-            return self
-        if self.current_plan.vdot_approval_id != (
-            self.vdot_approval.approval_id if self.vdot_approval else None
-        ):
-            raise ValueError("current plan does not reference the active VDOT approval")
-        assert self.vdot_approval is not None
-        if (
-            self.current_plan.created_at_utc
-            < self.vdot_approval.approved_at_utc
-        ):
-            raise ValueError(
-                "plan creation cannot predate the active VDOT approval"
-            )
+    def approval_chain_is_coherent(self) -> "ActivePlanState":
+        invalidated = self.invalidated_at_utc is not None
+        if invalidated != (self.invalidation_reason is not None):
+            raise ValueError("plan invalidation requires timestamp and reason")
         if self.macro_approval is not None:
             self._validate_macro_reference(self.macro_approval)
         if self.pending_weekly_approval is not None:
             if self.macro_approval is None:
                 raise ValueError("weekly approval requires macro approval")
             self._validate_week_reference(self.pending_weekly_approval)
-        active_week_numbers: list[int] = []
         if self.applied_week_revisions and self.macro_approval is None:
             raise ValueError("applied week revisions require macro approval")
+        active_week_numbers: list[int] = []
         for approval in self.applied_week_revisions:
             if (
-                approval.plan_id != self.current_plan.id
-                or approval.macro_revision_id != self.current_plan.macro_revision_id
+                approval.plan_id != self.plan.id
+                or approval.macro_revision_id != self.plan.macro_revision_id
             ):
                 raise ValueError("applied approval references another plan revision")
             assert self.macro_approval is not None
             if approval.weekly_approved_at_utc < self.macro_approval.approved_at_utc:
-                raise ValueError(
-                    "applied weekly approval cannot predate macro approval"
-                )
+                raise ValueError("applied weekly approval cannot predate macro approval")
             if approval.active:
                 active_week_numbers.append(approval.week_number)
         if len(active_week_numbers) != len(set(active_week_numbers)):
@@ -392,25 +302,105 @@ class PlanningState(BaseModel):
         return self
 
     def _validate_macro_reference(self, approval: MacroApproval) -> None:
-        assert self.current_plan is not None
-        assert self.vdot_approval is not None
         if (
-            approval.plan_id != self.current_plan.id
-            or approval.macro_revision_id != self.current_plan.macro_revision_id
-            or approval.vdot_approval_id != self.vdot_approval.approval_id
+            approval.plan_id != self.plan.id
+            or approval.macro_revision_id != self.plan.macro_revision_id
+            or approval.vdot_approval_id != self.plan.vdot_approval_id
         ):
             raise ValueError("macro approval references another planning revision")
-        if approval.approved_at_utc < self.current_plan.created_at_utc:
+        if approval.approved_at_utc < self.plan.created_at_utc:
             raise ValueError("macro approval cannot predate plan creation")
 
     def _validate_week_reference(self, approval: WeeklyApproval) -> None:
-        assert self.current_plan is not None
         assert self.macro_approval is not None
         if (
-            approval.plan_id != self.current_plan.id
-            or approval.macro_revision_id != self.current_plan.macro_revision_id
+            approval.plan_id != self.plan.id
+            or approval.macro_revision_id != self.plan.macro_revision_id
             or approval.macro_skeleton_sha256 != self.macro_approval.macro_skeleton_sha256
         ):
             raise ValueError("weekly approval references another planning revision")
         if approval.approved_at_utc < self.macro_approval.approved_at_utc:
             raise ValueError("weekly approval cannot predate macro approval")
+
+
+class ClosedPlanCycle(BaseModel):
+    """Immutable archived active-plan state plus confirmed closure facts."""
+
+    schema_version: Literal[1] = 1
+    active_plan_snapshot: ActivePlanState
+    closure: PlanClosure
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def closure_follows_plan_history(self) -> "ClosedPlanCycle":
+        snapshot = self.active_plan_snapshot
+        latest_timestamp = snapshot.plan.created_at_utc
+        if snapshot.macro_approval is not None:
+            latest_timestamp = max(
+                latest_timestamp,
+                snapshot.macro_approval.approved_at_utc,
+            )
+        for revision in snapshot.applied_week_revisions:
+            latest_timestamp = max(latest_timestamp, revision.applied_at_utc)
+            if revision.invalidated_at_utc is not None:
+                latest_timestamp = max(latest_timestamp, revision.invalidated_at_utc)
+        if self.closure.closed_at_utc < latest_timestamp:
+            raise ValueError("plan closure cannot predate its recorded plan history")
+        return self
+
+
+class PlanningState(BaseModel):
+    """Compact active state with immutable plan-history references."""
+
+    schema_version: Literal[4] = 4
+    vdot_approvals: list[VDOTApproval] = Field(default_factory=list)
+    active_vdot_approval_id: str | None = None
+    active_plan: ActivePlanState | None = None
+    closed_plan_cycle_references: list[ClosedPlanCycleReference] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def state_references_are_coherent(self) -> "PlanningState":
+        approval_ids = [approval.approval_id for approval in self.vdot_approvals]
+        if len(approval_ids) != len(set(approval_ids)):
+            raise ValueError("VDOT approval identities must be unique")
+        if self.active_vdot_approval_id is not None:
+            if self.active_vdot_approval_id not in set(approval_ids):
+                raise ValueError("active VDOT approval ID is absent from approval history")
+        elif approval_ids:
+            raise ValueError("VDOT approval history requires one active approval ID")
+        if self.active_plan is not None:
+            if self.active_vdot_approval_id is None:
+                raise ValueError("active plan requires an active VDOT approval")
+            if self.active_plan.plan.vdot_approval_id != self.active_vdot_approval_id:
+                raise ValueError("active plan references another VDOT approval")
+            approval = self.active_vdot_approval
+            assert approval is not None
+            if self.active_plan.plan.created_at_utc < approval.approved_at_utc:
+                raise ValueError("plan creation cannot predate its VDOT approval")
+        plan_ids = [reference.plan_id for reference in self.closed_plan_cycle_references]
+        macro_revision_ids = [
+            reference.macro_revision_id for reference in self.closed_plan_cycle_references
+        ]
+        if len(plan_ids) != len(set(plan_ids)):
+            raise ValueError("closed plan cycle IDs must be unique")
+        if len(macro_revision_ids) != len(set(macro_revision_ids)):
+            raise ValueError("closed macro revision IDs must be unique")
+        if self.active_plan is not None:
+            if self.active_plan.plan.id in set(plan_ids):
+                raise ValueError("active plan cannot also be a closed cycle")
+            if self.active_plan.plan.macro_revision_id in set(macro_revision_ids):
+                raise ValueError("active macro revision cannot also be a closed cycle")
+        return self
+
+    @property
+    def active_vdot_approval(self) -> VDOTApproval | None:
+        if self.active_vdot_approval_id is None:
+            return None
+        return next(
+            approval
+            for approval in self.vdot_approvals
+            if approval.approval_id == self.active_vdot_approval_id
+        )

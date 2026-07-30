@@ -4,7 +4,12 @@ from datetime import date
 
 from resilio.core.planning.adherence_evidence import (
     ApprovedWorkoutWindow,
+    AuthoritativeWorkout,
     resolve_approved_workouts_for_date_range,
+)
+from resilio.core.planning.artifacts import (
+    PlanningArtifactError,
+    load_all_closed_plan_cycles,
 )
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.freshness import require_fresh_plan
@@ -22,26 +27,26 @@ from resilio.core.planning.state_repository import (
     required_planning_state_unlocked,
 )
 from resilio.core.repository import RepositoryIO
-from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 
 
 def load_publishable_workouts(
     repo: RepositoryIO,
-) -> list[WorkoutPrescription]:
+) -> list[AuthoritativeWorkout]:
     """Return workouts covered by active, exact applied-week approvals."""
     with coordinated_plan_lock(repo, "load_publishable_workouts"):
         state = required_planning_state_unlocked(repo)
         plan = require_fresh_plan(repo, state)
-        if state.macro_approval is None:
+        if state.active_plan is None or state.active_plan.macro_approval is None:
             raise PlanOperationError("The current macro plan is not approved")
-        if state.macro_approval.macro_skeleton_sha256 != macro_skeleton_sha256(plan):
+        if state.active_plan.macro_approval.macro_skeleton_sha256 != macro_skeleton_sha256(plan):
             raise PlanOperationError("The approved macro skeleton has changed")
         active_by_week = {
             approval.week_number: approval
-            for approval in state.applied_week_revisions
+            for approval in state.active_plan.applied_week_revisions
             if approval.active
         }
-        workouts: list[WorkoutPrescription] = []
+        workouts: list[AuthoritativeWorkout] = []
         for week in plan.weeks:
             if not week.workouts:
                 continue
@@ -60,15 +65,30 @@ def load_publishable_workouts(
                 raise PlanOperationError(
                     f"Week {week.week_number} changed after its approval was applied"
                 )
-            workouts.extend(week.workouts)
+            workouts.extend(
+                AuthoritativeWorkout(
+                    identity=PlanWorkoutIdentity(
+                        plan_id=plan.id,
+                        macro_revision_id=plan.macro_revision_id,
+                        week_number=week.week_number,
+                        local_workout_id=workout.id,
+                    ),
+                    prescription=workout,
+                )
+                for workout in week.workouts
+            )
         return workouts
 
 
 def load_publishable_workout(
     repo: RepositoryIO,
     workout_id: str,
-) -> WorkoutPrescription:
-    matches = [workout for workout in load_publishable_workouts(repo) if workout.id == workout_id]
+) -> AuthoritativeWorkout:
+    matches = [
+        workout
+        for workout in load_publishable_workouts(repo)
+        if workout.identity.local_workout_id == workout_id
+    ]
     if len(matches) != 1:
         raise PlanOperationError(
             "Approved workout ID does not identify exactly one workout: " f"{workout_id}"
@@ -98,8 +118,20 @@ def load_approved_workouts_for_date_range(
             workouts=[],
             reason="planning_state_missing",
         )
+    try:
+        closed_cycles = load_all_closed_plan_cycles(
+            repo,
+            state.closed_plan_cycle_references,
+        )
+    except PlanningArtifactError as exc:
+        return ApprovedWorkoutWindow(
+            status="unavailable",
+            workouts=[],
+            reason=str(exc),
+        )
     return resolve_approved_workouts_for_date_range(
         state,
         window_start=window_start,
         window_end=window_end,
+        closed_plan_cycles=closed_cycles,
     )

@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 
 from resilio.core.locking import OperationLock
+from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.planning.service import (
     PlanOperationError,
     load_publishable_workout,
@@ -36,7 +37,6 @@ from resilio.core.workout_publication.preparation import (
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
 from resilio.integrations.intervals_icu.errors import IntervalsNotFoundError
-from resilio.schemas.plan import WorkoutPrescription
 from resilio.schemas.publication import (
     PendingWorkoutPublication,
     PlanPublicationItem,
@@ -59,10 +59,10 @@ class WorkoutPublicationService:
     def _load_approved_workout(
         self,
         workout_id: str,
-    ) -> WorkoutPrescription:
+    ) -> AuthoritativeWorkout:
         return load_publishable_workout(self.repo, workout_id)
 
-    def _load_approved_workouts(self) -> list[WorkoutPrescription]:
+    def _load_approved_workouts(self) -> list[AuthoritativeWorkout]:
         return load_publishable_workouts(self.repo)
 
     def publish(
@@ -89,7 +89,7 @@ class WorkoutPublicationService:
                 workouts = self._load_approved_workouts()
             except PlanOperationError as exc:
                 raise PublicationSafetyError(str(exc)) from exc
-            workout_ids = [workout.id for workout in workouts]
+            workout_ids = [workout.identity.local_workout_id for workout in workouts]
             if len(workout_ids) != len(set(workout_ids)):
                 raise PublicationSafetyError("Plan contains duplicate workout IDs")
             manifest = load_manifest(self.repo)
@@ -101,16 +101,20 @@ class WorkoutPublicationService:
                 ),
             )
             selected = sorted(
-                (workout for workout in workouts if workout.date >= from_date),
-                key=lambda workout: (workout.date, workout.id),
+                (workout for workout in workouts if workout.prescription.date >= from_date),
+                key=lambda workout: (
+                    workout.prescription.date,
+                    workout.identity.local_workout_id,
+                ),
             )
             report.workouts_considered = len(selected)
             for workout in selected:
-                if workout.structured_workout is None:
+                prescription = workout.prescription
+                if prescription.structured_workout is None:
                     report.items.append(
                         PlanPublicationItem(
-                            local_workout_id=workout.id,
-                            occurrence_date=workout.date,
+                            local_workout_id=workout.identity.local_workout_id,
+                            occurrence_date=prescription.date,
                             status="skipped_unstructured",
                         )
                     )
@@ -122,8 +126,8 @@ class WorkoutPublicationService:
                     report.partial = True
                     report.items.append(
                         PlanPublicationItem(
-                            local_workout_id=workout.id,
-                            occurrence_date=workout.date,
+                            local_workout_id=workout.identity.local_workout_id,
+                            occurrence_date=prescription.date,
                             status="error",
                             error_type=getattr(
                                 exc,
@@ -143,8 +147,8 @@ class WorkoutPublicationService:
                     continue
                 report.items.append(
                     PlanPublicationItem(
-                        local_workout_id=workout.id,
-                        occurrence_date=workout.date,
+                        local_workout_id=workout.identity.local_workout_id,
+                        occurrence_date=prescription.date,
                         status=result.action,
                         event_id=result.event_id,
                     )
@@ -153,13 +157,14 @@ class WorkoutPublicationService:
 
     def _publish(
         self,
-        workout: WorkoutPrescription,
+        authoritative_workout: AuthoritativeWorkout,
     ) -> PublicationResult:
+        workout = authoritative_workout.prescription
         manifest = load_manifest(self.repo)
         previous = manifest.workouts.get(workout.id)
         prepared = prepare_publication(
             self.client,
-            workout,
+            authoritative_workout,
             previous=previous,
         )
         pending = manifest.pending.get(workout.id)
@@ -287,6 +292,7 @@ class WorkoutPublicationService:
                 )
                 manifest.workouts[prepared.workout.id] = published_record(
                     workout=prepared.workout,
+                    workout_identity=prepared.workout_identity,
                     event_id=recovered.id,
                     requested_uid=prepared.requested_uid,
                     uid=remote_uid,
@@ -341,6 +347,7 @@ class WorkoutPublicationService:
                 else:
                     manifest.workouts[prepared.workout.id] = published_record(
                         workout=prepared.workout,
+                        workout_identity=prepared.workout_identity,
                         event_id=remote.id,
                         requested_uid=prepared.requested_uid,
                         uid=prepared.event.uid,
@@ -365,6 +372,7 @@ class WorkoutPublicationService:
                 assert_remote_matches(remote, prepared.event)
                 manifest.workouts[prepared.workout.id] = published_record(
                     workout=prepared.workout,
+                    workout_identity=prepared.workout_identity,
                     event_id=remote.id,
                     requested_uid=prepared.requested_uid,
                     uid=prepared.event.uid,
@@ -394,7 +402,7 @@ class WorkoutPublicationService:
     ) -> PublicationResult:
         workout = prepared.workout
         manifest.pending[workout.id] = PendingWorkoutPublication(
-            local_workout_id=workout.id,
+            workout_identity=prepared.workout_identity,
             uid=prepared.event.uid,
             external_id=prepared.external_id,
             publication_fingerprint_sha256=(prepared.publication_fingerprint_sha256),
@@ -427,6 +435,7 @@ class WorkoutPublicationService:
 
         manifest.workouts[workout.id] = published_record(
             workout=workout,
+            workout_identity=prepared.workout_identity,
             event_id=read_back.id,
             requested_uid=prepared.requested_uid,
             uid=remote_uid,

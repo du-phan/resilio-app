@@ -231,18 +231,18 @@ def build_week_planning_context(
     state = load_planning_aggregate(repo)
     if (
         state is None
-        or state.current_plan is None
-        or state.macro_approval is None
-        or state.vdot_approval is None
+        or state.active_plan is None
+        or state.active_plan.macro_approval is None
+        or state.active_vdot_approval is None
     ):
         raise ValueError("An approved current macro plan and VDOT are required")
-    matching = [week for week in state.current_plan.weeks if week.week_number == week_number]
+    matching = [week for week in state.active_plan.plan.weeks if week.week_number == week_number]
     if len(matching) != 1:
         raise ValueError(f"Week {week_number} does not exist in the current macro plan")
     target = matching[0]
     if target.workouts:
         raise ValueError(f"Week {week_number} already contains applied workouts")
-    plan = state.current_plan
+    plan = state.active_plan.plan
     return WeekPlanningContext(
         evidence_as_of_date=evidence_as_of_date,
         target_week=TargetWeekSkeletonContext(
@@ -264,9 +264,9 @@ def build_week_planning_context(
             week_count=history_week_count,
         ),
         approved_vdot=ApprovedVDOTContext(
-            approval_id=state.vdot_approval.approval_id,
-            approved_vdot=state.vdot_approval.approved_vdot,
-            evidence_type=str(state.vdot_approval.evidence_type),
+            approval_id=state.active_vdot_approval.approval_id,
+            approved_vdot=state.active_vdot_approval.approved_vdot,
+            evidence_type=str(state.active_vdot_approval.evidence_type),
         ),
         methodology=plan.methodology,
         constraints=plan.constraints_snapshot,

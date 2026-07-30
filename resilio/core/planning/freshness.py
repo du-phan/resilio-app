@@ -42,10 +42,11 @@ def require_fresh_plan(
     repo: RepositoryIO,
     state: PlanningState,
 ) -> MasterPlan:
-    plan = state.current_plan
-    if plan is None:
+    active_plan = state.active_plan
+    if active_plan is None:
         raise PlanOperationError("No current training plan is available")
-    require_verified_vdot_approval(repo, state.vdot_approval)
+    plan = active_plan.plan
+    require_verified_vdot_approval(repo, state.active_vdot_approval)
     try:
         verify_methodology_selection(repo.repo_root, plan.methodology)
     except MethodologyRegistryError as exc:
@@ -57,8 +58,8 @@ def require_fresh_plan(
         raise PlanOperationError(
             "The planning profile changed after this macro revision was created"
         )
-    if state.plan_invalidated_at_utc is not None:
+    if active_plan.invalidated_at_utc is not None:
         raise PlanOperationError(
-            f"The current plan is invalidated: " f"{state.plan_invalidation_reason}"
+            f"The current plan is invalidated: " f"{active_plan.invalidation_reason}"
         )
     return plan

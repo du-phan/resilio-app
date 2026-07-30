@@ -144,9 +144,7 @@ def _estimate_from_approval(
     evidence_date = (
         proposal.evidence.performance_date
         if isinstance(proposal.evidence, PerformanceVDOTEvidence)
-        else approval.approved_at_utc.astimezone(
-            ZoneInfo(profile.training_timezone)
-        ).date()
+        else approval.approved_at_utc.astimezone(ZoneInfo(profile.training_timezone)).date()
     )
     evidence_age_days = (as_of_date - evidence_date).days
     if evidence_age_days < 0:
@@ -171,9 +169,7 @@ def _estimate_from_personal_best(
     lookback_days: int,
     as_of_date: date,
 ) -> VDOTEstimate | VDOTError:
-    dated_personal_bests = list(
-        profile.personal_bests_by_distance.items()
-    )
+    dated_personal_bests = list(profile.personal_bests_by_distance.items())
     if not dated_personal_bests:
         return VDOTError(
             "not_found",
@@ -203,10 +199,7 @@ def _estimate_from_personal_best(
         evidence_age_days=days_old,
         athlete_approved=False,
         applicability_window_days=lookback_days,
-        source=(
-            f"recent_personal_best:{distance_name}:"
-            f"{performance_date.isoformat()}"
-        ),
+        source=(f"recent_personal_best:{distance_name}:" f"{performance_date.isoformat()}"),
     )
 
 
@@ -236,18 +229,11 @@ def estimate_current_vdot(
                     "Athlete profile does not exist",
                 )
             planning_state = _load_planning_state_unlocked(repository)
-            resolved_as_of_date = as_of_date or athlete_local_date(
-                profile.training_timezone
-            )
-            if (
-                planning_state is not None
-                and planning_state.vdot_approval is not None
-            ):
-                approval, proposal = (
-                    load_vdot_approval_evidence_unlocked(
-                        repository,
-                        planning_state.vdot_approval,
-                    )
+            resolved_as_of_date = as_of_date or athlete_local_date(profile.training_timezone)
+            if planning_state is not None and planning_state.active_vdot_approval is not None:
+                approval, proposal = load_vdot_approval_evidence_unlocked(
+                    repository,
+                    planning_state.active_vdot_approval,
                 )
                 return _estimate_from_approval(
                     approval=approval,

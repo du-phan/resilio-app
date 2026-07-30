@@ -141,6 +141,36 @@ class RepositoryIO:
     # WRITE OPERATIONS
     # ============================================================
 
+    def write_text(
+        self,
+        path: str | Path,
+        content: str,
+        *,
+        atomic: bool = True,
+    ) -> Optional["RepoError"]:
+        """Write exact text bytes through the repository privacy boundary."""
+        resolved_path = self.resolve_path(path)
+        is_private_state = self._prepare_parent(resolved_path)
+        if atomic:
+            return self._atomic_write(
+                resolved_path,
+                content,
+                private_state=is_private_state,
+            )
+        try:
+            if is_private_state and resolved_path.exists():
+                harden_sensitive_file(resolved_path)
+            resolved_path.write_text(content)
+            if is_private_state:
+                harden_sensitive_file(resolved_path)
+            return None
+        except Exception as exc:
+            return RepoError(
+                error_type=RepoErrorType.WRITE_ERROR,
+                message=str(exc),
+                path=str(resolved_path),
+            )
+
     def write_yaml(
         self,
         path: str | Path,

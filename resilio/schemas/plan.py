@@ -11,6 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from resilio.schemas.activity import SportType
 from resilio.schemas.methodology import MethodologyChoice, MethodologySelection
+from resilio.schemas.plan_history import (
+    EvidenceArtifactReference,
+    PlanAdaptationDecision,
+    PlanAdaptationDecisionType,
+)
 from resilio.schemas.profile import ConflictPolicy, GoalType
 from resilio.schemas.structured_workout import StructuredWorkout
 
@@ -46,7 +51,7 @@ class WorkoutPrescription(BaseModel):
     """One explicit planned session; units are encoded in every numeric field."""
 
     id: str = Field(
-        default_factory=lambda: f"w_{uuid.uuid4().hex[:12]}",
+        default_factory=lambda: f"w_{uuid.uuid4().hex}",
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
     )
     date: date
@@ -317,8 +322,11 @@ class MasterPlan(BaseModel):
     vdot_approval_id: str = Field(
         pattern=r"^vdot_approval_[a-f0-9]{16}$",
     )
+    planning_context_reference: EvidenceArtifactReference
     planning_profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     created_at_utc: datetime
+    planning_rationale: str = Field(min_length=40, max_length=4_000)
+    adaptation_decisions: list[PlanAdaptationDecision] = Field(min_length=2)
     goal: PlanGoal
     methodology: MethodologySelection
     weeks: list[WeekPlan] = Field(min_length=1)
@@ -360,7 +368,21 @@ class MasterPlan(BaseModel):
             raise ValueError("Fitzgerald plans require a weekly time-based intensity distribution")
         if not selected_fitzgerald and any(uses_fitzgerald_distribution):
             raise ValueError("time-based 80/20 targets are only valid for Fitzgerald plans")
+        self._validate_evidence_binding()
         return self
+
+    def _validate_evidence_binding(self) -> None:
+        if self.planning_context_reference.artifact_type != "macro_planning_context":
+            raise ValueError("master plan requires macro-planning context evidence")
+        decision_types = [str(decision.decision_type) for decision in self.adaptation_decisions]
+        if len(decision_types) != len(set(decision_types)):
+            raise ValueError("macro plan adaptation decision types must be unique")
+        required = {
+            PlanAdaptationDecisionType.METHODOLOGY_SELECTION.value,
+            PlanAdaptationDecisionType.STARTING_VOLUME.value,
+        }
+        if not required.issubset(set(decision_types)):
+            raise ValueError("macro plan must explain methodology and starting-volume decisions")
 
     @property
     def start_date(self) -> date:
@@ -395,12 +417,26 @@ class MacroPlanDraft(BaseModel):
     vdot_approval_id: str = Field(
         pattern=r"^vdot_approval_[a-f0-9]{16}$",
     )
+    planning_context_reference: EvidenceArtifactReference
+    planning_rationale: str = Field(min_length=40, max_length=4_000)
+    adaptation_decisions: list[PlanAdaptationDecision] = Field(min_length=2)
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     @model_validator(mode="after")
     def macro_weeks_are_unpopulated(self) -> "MacroPlanDraft":
         if any(week.workouts for week in self.weeks):
             raise ValueError("macro plan weeks must not contain exact workouts")
+        if self.planning_context_reference.artifact_type != "macro_planning_context":
+            raise ValueError("macro draft requires macro-planning context evidence")
+        decision_types = [str(decision.decision_type) for decision in self.adaptation_decisions]
+        if len(decision_types) != len(set(decision_types)):
+            raise ValueError("macro draft adaptation decision types must be unique")
+        required = {
+            PlanAdaptationDecisionType.METHODOLOGY_SELECTION.value,
+            PlanAdaptationDecisionType.STARTING_VOLUME.value,
+        }
+        if not required.issubset(set(decision_types)):
+            raise ValueError("macro draft must explain methodology and starting-volume decisions")
         return self
 
 

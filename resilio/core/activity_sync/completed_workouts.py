@@ -55,18 +55,18 @@ def reconcile_workout_completion(
                 conflict={
                     "rule": "paired_event_sport_mismatch",
                     "local_activity_id": activity.local_activity_id,
-                    "local_workout_id": publication.local_workout_id,
+                    "local_workout_id": (publication.workout_identity.local_workout_id),
                 }
             )
         if (
             existing_match is not None
-            and existing_match.local_workout_id == publication.local_workout_id
+            and existing_match.workout_identity == publication.workout_identity
         ):
             return CompletionReconciliation()
         return CompletionReconciliation(
             match=WorkoutCompletionMatch(
                 local_activity_id=activity.local_activity_id,
-                local_workout_id=publication.local_workout_id,
+                workout_identity=publication.workout_identity,
                 match_method="paired_event_id",
                 matched_at_utc=matched_at_utc,
             )
@@ -91,7 +91,7 @@ def reconcile_workout_completion(
     return CompletionReconciliation(
         candidate={
             "local_activity_id": activity.local_activity_id,
-            "local_workout_id": candidate.local_workout_id,
+            "local_workout_id": candidate.workout_identity.local_workout_id,
             "rule": "unique_date_sport_time_candidate",
             "start_delta_seconds": start_delta,
         }

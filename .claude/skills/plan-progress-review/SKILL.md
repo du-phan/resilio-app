@@ -6,6 +6,8 @@ description: Review progress across multiple completed weeks of the current trai
 # Review plan progress
 
 This is read-only. Do not mutate the plan, approval state, or profile.
+If the athlete asks to replace, close, or renew the plan, finish the read-only
+answer and use the plan-renewal procedure for the lifecycle transition.
 
 ## Workflow
 
@@ -70,4 +72,5 @@ Return:
 - explicit missing-data limitations;
 - progress relative to the current phase and goal;
 - prioritized next steps, with any plan change presented as a proposal that
-  requires a new approval.
+  requires plan-renewal review, closure, fresh macro evidence, and a new
+  approval.

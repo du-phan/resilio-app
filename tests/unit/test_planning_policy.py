@@ -118,8 +118,43 @@ def _plan(
         id="plan_policy",
         macro_revision_id="macro_revision_0123456789abcdef",
         vdot_approval_id="vdot_approval_0123456789abcdef",
+        planning_context_reference={
+            "artifact_type": "macro_planning_context",
+            "artifact_sha256": "c" * 64,
+        },
         planning_profile_sha256="a" * 64,
         created_at_utc=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        planning_rationale=(
+            "The policy fixture binds its macro choices to explicit athlete "
+            "constraints and an approved performance baseline."
+        ),
+        adaptation_decisions=[
+            {
+                "decision_type": "methodology_selection",
+                "evidence_ids": ["profile.current_constraints"],
+                "observed_facts": (
+                    "The athlete goal and weekly availability are explicit in "
+                    "the planning evidence fixture."
+                ),
+                "planning_change": (
+                    "Use one controlled methodology for this complete policy " "validation horizon."
+                ),
+                "affected_week_numbers": [1],
+            },
+            {
+                "decision_type": "starting_volume",
+                "evidence_ids": ["profile.current_constraints"],
+                "observed_facts": (
+                    "The athlete evidence supports the exact opening-week "
+                    "frequency and running-volume fixture."
+                ),
+                "planning_change": (
+                    "Begin at ten thousand planned running meters and preserve "
+                    "the explicit session constraints."
+                ),
+                "affected_week_numbers": [1],
+            },
+        ],
         goal={
             "type": "10k",
             "target_date": date(2026, 8, 2),

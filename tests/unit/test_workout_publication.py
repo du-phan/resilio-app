@@ -5,6 +5,7 @@ from datetime import date, time
 import pytest
 from pydantic import ValidationError
 
+from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.manifest import (
     load_manifest,
@@ -30,6 +31,7 @@ from resilio.integrations.intervals_icu.errors import (
     IntervalsTransportError,
 )
 from resilio.schemas.plan import WorkoutPrescription, WorkoutType
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import PublicationManifest
 from resilio.schemas.structured_workout import StructuredWorkout
 
@@ -176,11 +178,13 @@ class WorkoutPublicationService(ProductionWorkoutPublicationService):
         self._approved_plan_workout_ids = []
 
     def publish(self, workout):
-        self._approved_workouts[workout.id] = workout
+        self._approved_workouts[workout.id] = self._authoritative(workout)
         return super().publish(workout.id)
 
     def publish_plan(self, workouts, *, from_date):
-        self._approved_workouts.update({workout.id: workout for workout in workouts})
+        self._approved_workouts.update(
+            {workout.id: self._authoritative(workout) for workout in workouts}
+        )
         self._approved_plan_workout_ids = [workout.id for workout in workouts]
         return super().publish_plan(from_date=from_date)
 
@@ -191,6 +195,18 @@ class WorkoutPublicationService(ProductionWorkoutPublicationService):
         return [
             self._approved_workouts[workout_id] for workout_id in self._approved_plan_workout_ids
         ]
+
+    @staticmethod
+    def _authoritative(workout):
+        return AuthoritativeWorkout(
+            identity=PlanWorkoutIdentity(
+                plan_id="plan_publication_test",
+                macro_revision_id="macro_revision_1111111111111111",
+                week_number=1,
+                local_workout_id=workout.id,
+            ),
+            prescription=workout,
+        )
 
 
 class FakeClient:

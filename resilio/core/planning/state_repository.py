@@ -1,6 +1,10 @@
 """Typed persistence boundary for the planning aggregate."""
 
 from resilio.core.locking import OperationLockError
+from resilio.core.planning.artifacts import (
+    PlanningArtifactError,
+    load_all_closed_plan_cycles,
+)
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.profile_plan_transaction import (
     coordinated_plan_lock,
@@ -21,6 +25,24 @@ def load_planning_aggregate_unlocked(
         return None
     if isinstance(result, RepoError):
         raise PlanOperationError(f"Planning state is invalid: {result}")
+    if result is not None:
+        try:
+            closed_cycles = load_all_closed_plan_cycles(
+                repo,
+                result.closed_plan_cycle_references,
+            )
+        except PlanningArtifactError as exc:
+            raise PlanOperationError(f"Planning history is invalid: {exc}") from exc
+        approval_ids = {approval.approval_id for approval in result.vdot_approvals}
+        missing_historical_approval_ids = sorted(
+            {cycle.active_plan_snapshot.plan.vdot_approval_id for cycle in closed_cycles}
+            - approval_ids
+        )
+        if missing_historical_approval_ids:
+            raise PlanOperationError(
+                "Planning history references an absent historical VDOT approval: "
+                f"{missing_historical_approval_ids}"
+            )
     return result
 
 

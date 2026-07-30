@@ -16,6 +16,7 @@ from resilio.integrations.intervals_icu.dto import (
     SportSettingsDTO,
 )
 from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
 from resilio.schemas.structured_workout import TargetMode, WorkoutSport
 
@@ -219,6 +220,7 @@ def pending_matches(
 def published_record(
     *,
     workout: WorkoutPrescription,
+    workout_identity: PlanWorkoutIdentity,
     event_id: int,
     requested_uid: str,
     uid: str,
@@ -231,7 +233,7 @@ def published_record(
 ) -> PublishedWorkout:
     """Build a verified provider read-back record."""
     return PublishedWorkout(
-        local_workout_id=workout.id,
+        workout_identity=workout_identity,
         event_id=event_id,
         requested_uid=requested_uid,
         uid=uid,

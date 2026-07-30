@@ -49,6 +49,7 @@ from resilio.schemas.activity import (
     RecordingProvider,
 )
 from resilio.schemas.config import Config, IntervalsIcuSettings, Settings
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import (
     PublicationManifest,
     PublishedWorkout,
@@ -456,7 +457,12 @@ def _publication(
     sport: str = "run",
 ) -> PublishedWorkout:
     return PublishedWorkout(
-        local_workout_id=workout_id,
+        workout_identity=PlanWorkoutIdentity(
+            plan_id="plan_test",
+            macro_revision_id="macro_revision_1111111111111111",
+            week_number=1,
+            local_workout_id=workout_id,
+        ),
         event_id=event_id,
         requested_uid=f"uid-{workout_id}",
         uid=f"uid-{workout_id}",
@@ -474,7 +480,7 @@ def _publication(
 def _save_publication(repo: RepositoryIO, publication: PublishedWorkout) -> None:
     save_manifest(
         repo,
-        PublicationManifest(workouts={publication.local_workout_id: publication}),
+        PublicationManifest(workouts={publication.workout_identity.local_workout_id: publication}),
     )
 
 
@@ -529,8 +535,8 @@ def test_exact_paired_event_links_completion_idempotently(
     assert first_manifest == second_manifest
     assert pairing_omitted.completion_candidates_reported == 0
     assert final_manifest == first_manifest
-    assert first_manifest.matches[local_activity_id].local_workout_id == (
-        publication.local_workout_id
+    assert (
+        first_manifest.matches[local_activity_id].workout_identity == publication.workout_identity
     )
 
 
@@ -558,7 +564,7 @@ def test_unique_unpaired_candidate_is_reported_without_automatic_link(
             "local_activity_id": (
                 ActivityArchive(tmp_path / "data" / "activities").load_all()[0].local_activity_id
             ),
-            "local_workout_id": publication.local_workout_id,
+            "local_workout_id": publication.workout_identity.local_workout_id,
             "rule": "unique_date_sport_time_candidate",
             "start_delta_seconds": 0.0,
         }
@@ -838,7 +844,12 @@ def test_sync_state_failure_restores_workout_completion_manifest(
     repo = RepositoryIO()
     old_match = WorkoutCompletionMatch(
         local_activity_id="act_h_0123456789abcdef01234567",
-        local_workout_id="older-workout",
+        workout_identity=PlanWorkoutIdentity(
+            plan_id="plan_old",
+            macro_revision_id="macro_revision_2222222222222222",
+            week_number=1,
+            local_workout_id="older-workout",
+        ),
         match_method="paired_event_id",
         matched_at_utc=datetime(2026, 7, 1, tzinfo=timezone.utc),
     )
@@ -872,7 +883,12 @@ def test_completion_save_revalidates_mutated_mapping(
     repo = RepositoryIO()
     first = WorkoutCompletionMatch(
         local_activity_id="act_h_0123456789abcdef01234567",
-        local_workout_id="planned-run",
+        workout_identity=PlanWorkoutIdentity(
+            plan_id="plan_test",
+            macro_revision_id="macro_revision_1111111111111111",
+            week_number=1,
+            local_workout_id="planned-run",
+        ),
         match_method="paired_event_id",
         matched_at_utc=datetime(2026, 7, 1, tzinfo=timezone.utc),
     )

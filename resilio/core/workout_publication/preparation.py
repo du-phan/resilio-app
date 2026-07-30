@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     event_target_for_modes,
@@ -26,6 +27,7 @@ from resilio.integrations.intervals_icu.dto import (
     SportSettingsDTO,
 )
 from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import PublishedWorkout
 from resilio.schemas.structured_workout import TargetMode
 
@@ -35,6 +37,7 @@ class PreparedPublication:
     """All immutable inputs required to reconcile one remote event."""
 
     workout: WorkoutPrescription
+    workout_identity: PlanWorkoutIdentity
     athlete_id: str
     event: EventWriteDTO
     requested_uid: str
@@ -47,11 +50,14 @@ class PreparedPublication:
 
 def prepare_publication(
     client: IntervalsIcuClient,
-    workout: WorkoutPrescription,
+    authoritative_workout: AuthoritativeWorkout,
     *,
     previous: PublishedWorkout | None,
 ) -> PreparedPublication:
     """Validate device policy, render content, and bind deterministic identity."""
+    workout = authoritative_workout.prescription
+    if previous is not None and previous.workout_identity != authoritative_workout.identity:
+        raise PublicationSafetyError("Published workout ID belongs to a different plan lineage")
     if workout.structured_workout is None:
         raise PublicationSafetyError("Publishing requires a typed structured_workout")
     if str(workout.structured_workout.sport) != str(workout.sport):
@@ -100,6 +106,7 @@ def prepare_publication(
     settings_version_sha256 = sport_settings_version(settings)
     return PreparedPublication(
         workout=workout,
+        workout_identity=authoritative_workout.identity,
         athlete_id=athlete.id,
         event=event,
         requested_uid=requested_uid,

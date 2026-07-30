@@ -5,9 +5,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
+from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.coaching import AdherenceContext, PlannedWorkoutContext
-from resilio.schemas.plan import WorkoutPrescription
 from resilio.schemas.publication import (
     PublicationManifest,
     WorkoutCompletionManifest,
@@ -16,7 +16,7 @@ from resilio.schemas.publication import (
 
 def build_adherence_context(
     *,
-    workouts: list[WorkoutPrescription],
+    workouts: list[AuthoritativeWorkout],
     activities: list[CanonicalActivity],
     completion_manifest: WorkoutCompletionManifest,
     as_of_date: date,
@@ -43,8 +43,13 @@ def build_adherence_context(
             due_planned_high_intensity_duration_seconds=0,
         )
     activities_by_id = {activity.local_activity_id: activity for activity in activities}
-    activity_id_by_workout_id = {
-        match.local_workout_id: local_activity_id
+    activity_id_by_workout_identity = {
+        (
+            match.workout_identity.plan_id,
+            match.workout_identity.macro_revision_id,
+            match.workout_identity.week_number,
+            match.workout_identity.local_workout_id,
+        ): local_activity_id
         for local_activity_id, match in completion_manifest.matches.items()
         if local_activity_id in activities_by_id
     }
@@ -58,9 +63,24 @@ def build_adherence_context(
     due_moderate_duration_seconds = 0
     due_high_duration_seconds = 0
 
-    for workout in sorted(workouts, key=lambda item: (item.date, item.id)):
+    for authoritative_workout in sorted(
+        workouts,
+        key=lambda item: (
+            item.prescription.date,
+            item.identity.local_workout_id,
+        ),
+    ):
+        workout = authoritative_workout.prescription
+        workout_identity = authoritative_workout.identity
         is_due = workout.date <= as_of_date
-        matched_activity_id = activity_id_by_workout_id.get(workout.id)
+        matched_activity_id = activity_id_by_workout_identity.get(
+            (
+                workout_identity.plan_id,
+                workout_identity.macro_revision_id,
+                workout_identity.week_number,
+                workout_identity.local_workout_id,
+            )
+        )
         if is_due:
             due_count += 1
             due_low_duration_seconds += workout.planned_low_intensity_duration_seconds
@@ -71,8 +91,11 @@ def build_adherence_context(
             else:
                 verified_count += 1
         publication = published.get(workout.id)
+        if publication is not None and publication.workout_identity != workout_identity:
+            publication = None
         contexts.append(
             PlannedWorkoutContext(
+                workout_identity=workout_identity,
                 local_workout_id=workout.id,
                 occurrence_date=workout.date,
                 sport=str(workout.sport),

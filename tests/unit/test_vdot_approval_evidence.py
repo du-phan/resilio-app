@@ -81,9 +81,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
             ),
             "audit": ActivityAudit(
                 imported_at_utc=datetime(2026, 7, 20, 9, tzinfo=timezone.utc),
-                external_fingerprint_sha256=(
-                    SOURCE_EXTERNAL_FINGERPRINT_SHA256
-                ),
+                external_fingerprint_sha256=(SOURCE_EXTERNAL_FINGERPRINT_SHA256),
                 canonical_mapping_version=7,
             ),
         }
@@ -95,9 +93,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
 def _write_race_proposal(
     path: Path,
     *,
-    source_external_fingerprint_sha256: str = (
-        SOURCE_EXTERNAL_FINGERPRINT_SHA256
-    ),
+    source_external_fingerprint_sha256: str = (SOURCE_EXTERNAL_FINGERPRINT_SHA256),
 ) -> Path:
     path.write_text(
         json.dumps(
@@ -111,13 +107,9 @@ def _write_race_proposal(
                     "performance_date": "2026-07-20",
                     "performance_timezone": "Europe/Paris",
                     "source_local_activity_id": SOURCE_LOCAL_ACTIVITY_ID,
-                    "source_external_fingerprint_sha256": (
-                        source_external_fingerprint_sha256
-                    ),
+                    "source_external_fingerprint_sha256": (source_external_fingerprint_sha256),
                 },
-                "evidence_summary": (
-                    "The exact synchronized 10K race supports this baseline."
-                ),
+                "evidence_summary": ("The exact synchronized 10K race supports this baseline."),
                 "generated_at_utc": "2026-07-25T08:00:00Z",
             }
         )
@@ -135,8 +127,8 @@ def test_race_proposal_requires_an_exact_synchronized_activity_source(
         approved_at_utc=datetime(2026, 7, 25, 9, tzinfo=timezone.utc),
     )
 
-    assert state.vdot_approval is not None
-    assert state.vdot_approval.approved_vdot == 45
+    assert state.active_vdot_approval is not None
+    assert state.active_vdot_approval.approved_vdot == 45
 
 
 def test_race_proposal_rejects_a_changed_source_fingerprint(
@@ -199,9 +191,7 @@ def test_race_proposal_rejects_source_fact_drift(
         activity.sport = str(replacement)
         activity.source_sport_type = str(replacement)
     else:
-        activity.occurrence = activity.occurrence.model_copy(
-            update={"timezone": str(replacement)}
-        )
+        activity.occurrence = activity.occurrence.model_copy(update={"timezone": str(replacement)})
     archive.write(activity)
 
     with pytest.raises(PlanOperationError, match=message):
@@ -249,7 +239,7 @@ def test_personal_best_proposal_is_bound_to_the_confirmed_profile_record(
 
     state = approve_vdot_proposal(repo, proposal_path)
 
-    assert state.vdot_approval is not None
+    assert state.active_vdot_approval is not None
     ProfileRepository(repo).update(
         {
             "personal_bests_by_distance": {
@@ -293,13 +283,9 @@ def test_race_proposal_date_is_compared_in_its_declared_timezone() -> None:
             "performance_date": "2026-07-30",
             "performance_timezone": "Europe/Paris",
             "source_local_activity_id": SOURCE_LOCAL_ACTIVITY_ID,
-            "source_external_fingerprint_sha256": (
-                SOURCE_EXTERNAL_FINGERPRINT_SHA256
-            ),
+            "source_external_fingerprint_sha256": (SOURCE_EXTERNAL_FINGERPRINT_SHA256),
         },
-        "evidence_summary": (
-            "The athlete-local performance date is valid across UTC midnight."
-        ),
+        "evidence_summary": ("The athlete-local performance date is valid across UTC midnight."),
         "generated_at_utc": "2026-07-29T22:30:00Z",
     }
 

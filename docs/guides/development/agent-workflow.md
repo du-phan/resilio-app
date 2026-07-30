@@ -26,9 +26,9 @@ separate. Interpret recovery signal by signal; do not compute a composite
 readiness score or injury probability.
 
 Use the matching skill for onboarding, weekly analysis, multi-week review,
-VDOT proposal, macro planning, weekly generation, and weekly application. The
-main coach owns athlete questions and approvals. Executor skills do not approve
-or apply their own proposals.
+plan renewal, VDOT proposal, macro planning, weekly generation, and weekly
+application. The main coach owns athlete questions and approvals. Executor
+skills do not approve or apply their own proposals.
 
 ## Dates and weather
 
@@ -59,16 +59,30 @@ The required sequence is:
 
 1. propose baseline VDOT;
 2. record athlete VDOT approval;
-3. create and present the methodology-explicit macro plan;
-4. record macro approval;
-5. generate a new exact weekly file;
-6. bind athlete approval to that path and SHA-256;
-7. apply those unchanged bytes and verify approval consumption.
+3. create the immutable macro-planning evidence context;
+4. create and present the methodology-explicit, evidence-cited macro plan;
+5. record macro approval;
+6. generate a new exact weekly file;
+7. bind athlete approval to that path and SHA-256;
+8. apply those unchanged bytes and verify approval consumption.
+
+Before a successor plan, synchronize through the evidence date, record the
+athlete-confirmed goal outcome, create and present an immutable cycle review,
+close and archive the active plan, then reassess profile, goal, and VDOT before
+creating the successor context. A plan cannot be silently overwritten, and a
+new VDOT cannot replace the dependency of an active plan.
+
+The cycle review retains an exact completed or did-not-finish goal activity,
+including its measured performance fields, when the athlete identifies one.
+Closure re-proves the active-plan bytes and mutable training-evidence
+fingerprint. Macro creation likewise re-proves its context fingerprint and
+requires decisions to cite the latest recent week plus the latest closed-plan
+summary and goal outcome for a renewal.
 
 Every transition timestamp must follow that sequence; persisted state rejects
-pre-approval plans, pre-macro weekly approvals, pre-approval applications,
-and later approval or retirement records that contradict their source
-revision. Any revision is a new proposal and a new approval.
+pre-approval plans, pre-context macro plans, pre-macro weekly approvals,
+pre-approval applications, and closure records that contradict their source
+revision or cycle review. Any revision is a new proposal and a new approval.
 
 ## Engineering workflow
 

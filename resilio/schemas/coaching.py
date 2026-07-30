@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from resilio.schemas.activity import (
     ActivityAnalysisThresholds,
@@ -19,6 +19,7 @@ from resilio.schemas.plan import (
     PlanningConstraintsSnapshot,
     WorkoutStructureHints,
 )
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.sync import SourceCoverageExclusion, SourceCoverageGap
 
 
@@ -174,6 +175,7 @@ class IntensityContext(BaseModel):
 
 
 class PlannedWorkoutContext(BaseModel):
+    workout_identity: PlanWorkoutIdentity
     local_workout_id: str
     occurrence_date: date
     sport: str
@@ -198,6 +200,12 @@ class PlannedWorkoutContext(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def local_id_matches_qualified_identity(self) -> "PlannedWorkoutContext":
+        if self.local_workout_id != self.workout_identity.local_workout_id:
+            raise ValueError("local workout ID must match the qualified workout identity")
+        return self
 
 
 class AdherenceContext(BaseModel):

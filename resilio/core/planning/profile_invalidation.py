@@ -19,12 +19,13 @@ def invalidated_state_for_profile_change(
     """Return state that fails closed when planning inputs have changed."""
     if planning_profile_sha256(previous_profile) == planning_profile_sha256(updated_profile):
         return state
-    if state is None or state.current_plan is None:
+    if state is None or state.active_plan is None:
         return state
-    return state.model_copy(
+    active_plan = state.active_plan.model_copy(
         update={
             "pending_weekly_approval": None,
-            "plan_invalidated_at_utc": invalidated_at_utc,
-            "plan_invalidation_reason": ("Athlete-confirmed planning constraints or goal changed"),
+            "invalidated_at_utc": invalidated_at_utc,
+            "invalidation_reason": ("Athlete-confirmed planning constraints or goal changed"),
         }
     )
+    return state.model_copy(update={"active_plan": active_plan})

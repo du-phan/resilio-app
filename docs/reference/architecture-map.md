@@ -49,7 +49,8 @@ mirror.
 | Athlete profile v2 | Athlete-confirmed durable facts |
 | Provider profile candidates | Read-only projections from settings and wellness |
 | VDOT approval | Recomputable performance plus a verified canonical activity/fingerprint or exact profile personal best, or an explicit athlete-confirmed manual value; every approval also binds the proposal path and byte SHA-256 |
-| Plan and all approvals | One atomic planning-state v3 aggregate with immutable revision identities |
+| Plan lifecycle and approvals | Compact planning-state v4 active state plus immutable content-addressed closed-cycle archives and evidence artifacts |
+| Plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed-plan summaries, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
 | Weekly application | Exact proposal path, byte SHA-256, target-week hash, and prior applied-workout hash |
 | Completed-workout adherence | Exact owned-event pairing manifest |
 | External calendar ownership | Local manifest plus matching remote readback |
@@ -87,28 +88,35 @@ Coaching evidence coverage is date-scoped and reads only strict sync-state v3
 coverage windows. Complete source windows, unresolved source gaps, and
 explicit exclusions are separate contracts; a partial sync never promotes its
 requested range to complete and no obsolete checkpoint field can act as a
-fallback. Historical adherence resolves
-the exact immutable applied-week snapshot, schedule timezone, and approval
-interval that was authoritative at each workout's scheduled instant,
-including retired and replaced revisions. Competing authorities, invalid local
+fallback. Historical adherence resolves the full
+plan/macro/week/workout identity and the exact immutable applied-week snapshot,
+schedule timezone, and approval interval that was authoritative at each
+workout's scheduled instant, including closed and replaced revisions. A closed
+revision's workout authority ends on its effective closure date even when the
+athlete records the closure later.
+Competing authorities, invalid local
 wall times, or changed approval-bound content make adherence unavailable
 rather than guessed.
 
 ## Planning package
 
 `resilio/core/planning/` separates approval evidence, content fingerprints,
-methodology-independent policy, persistence, profile-driven invalidation,
-historical adherence, publication evidence, and orchestration. The plan
+methodology-independent policy, active-state persistence, immutable archives,
+cycle review, bounded macro context, profile-driven invalidation, historical
+adherence, publication evidence, and orchestration. The plan
 mutation lock is shared by planning services and profile updates. A
 planning-relevant profile update uses a durable profile/plan transaction
 journal under that lock. Recovery rolls back a prepared or partially written
 pair and rolls forward a committed pair, so readers never accept mismatched
 profile and plan state after an abrupt process stop. Profile, planning, VDOT
 file, and VDOT-source reads use that same coordinated boundary. Proposal,
-VDOT approval, macro creation, macro approval, weekly approval, weekly
-application, invalidation, and retirement timestamps must be chronological;
-persisted-state validation rejects an impossible sequence even if a service
-was bypassed.
+VDOT approval, macro-context creation, macro creation, macro approval, weekly
+approval, weekly application, invalidation, and closure timestamps must be
+chronological. Persisted-state validation rejects an impossible sequence even
+if a service was bypassed. Cycle closure also re-verifies the exact active-plan
+snapshot and the date-bounded activity, wellness, coverage, completion, and
+publication inputs used by the review. Macro creation performs the analogous
+freshness check for its 12-week context.
 
 ## Mutation boundaries
 
@@ -124,8 +132,9 @@ was bypassed.
 - Weekly plans apply only when the current file path and SHA-256 match the
   recorded approval, macro revision, week skeleton, and previous applied
   content.
-- Publication resolves workouts by opaque ID from fresh, macro-approved,
-  applied weekly content; callers cannot publish an arbitrary workout object.
+- Publication resolves a qualified plan/macro/week/workout identity from
+  fresh, macro-approved, applied weekly content; callers cannot publish an
+  arbitrary workout object or reuse an ID across plan lineages.
 - Calendar update or deletion requires deterministic local identity, manifest
   ownership, and exact remote proof.
 

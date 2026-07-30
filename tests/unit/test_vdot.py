@@ -217,17 +217,41 @@ def test_estimate_current_vdot_rejects_unverifiable_approval(
     from unittest.mock import Mock
 
     from resilio.api.vdot import VDOTError, estimate_current_vdot
-    from resilio.schemas.approvals import PlanningState, VDOTApproval
+    from resilio.schemas.approvals import (
+        PlanningState,
+        VDOTApproval,
+        VDOTProposal,
+    )
 
+    approval = VDOTApproval(
+        approval_id="vdot_approval_0123456789abcdef",
+        approved_vdot=45,
+        proposal_file=str(tmp_path / "missing-proposal.json"),
+        proposal_file_sha256="0" * 64,
+        evidence_type="race_performance",
+        proposal_snapshot=VDOTProposal.model_validate(
+            {
+                "proposed_vdot": 45,
+                "evidence": {
+                    "evidence_type": "race_performance",
+                    "race_distance": "10k",
+                    "elapsed_time_seconds": 2700,
+                    "performance_date": "2026-07-20",
+                    "performance_timezone": "UTC",
+                    "source_local_activity_id": "act_i_test",
+                    "source_external_fingerprint_sha256": "a" * 64,
+                },
+                "evidence_summary": (
+                    "The exact synchronized race evidence supports this baseline."
+                ),
+                "generated_at_utc": "2026-07-24T09:00:00Z",
+            }
+        ),
+        approved_at_utc=datetime(2026, 7, 25, tzinfo=timezone.utc),
+    )
     state = PlanningState(
-        vdot_approval=VDOTApproval(
-            approval_id="vdot_approval_0123456789abcdef",
-            approved_vdot=45,
-            proposal_file=str(tmp_path / "missing-proposal.json"),
-            proposal_file_sha256="0" * 64,
-            evidence_type="race_performance",
-            approved_at_utc=datetime(2026, 7, 25, tzinfo=timezone.utc),
-        )
+        vdot_approvals=[approval],
+        active_vdot_approval_id=approval.approval_id,
     )
     profile = Mock()
     profile.personal_bests_by_distance = {}
@@ -257,7 +281,7 @@ def test_estimate_current_vdot_rejects_future_approved_evidence(
     from unittest.mock import Mock
 
     from resilio.api.vdot import VDOTError, estimate_current_vdot
-    from resilio.schemas.approvals import PlanningState, VDOTApproval
+    from resilio.schemas.approvals import PlanningState, VDOTApproval, VDOTProposal
 
     as_of_date = date(2026, 7, 30)
     future_date = as_of_date + timedelta(days=1)
@@ -277,24 +301,24 @@ def test_estimate_current_vdot_rejects_future_approved_evidence(
                     "athlete_confirmed_vdot": 45,
                     "confirmation_reference": "future-dated test confirmation",
                 },
-                "evidence_summary": (
-                    "Future-dated approved evidence must fail explicitly."
-                ),
+                "evidence_summary": ("Future-dated approved evidence must fail explicitly."),
                 "generated_at_utc": generated_at_utc.isoformat(),
             }
         )
     )
+    proposal_snapshot = VDOTProposal.model_validate_json(proposal_path.read_text())
+    approval = VDOTApproval(
+        approval_id="vdot_approval_0123456789abcdef",
+        approved_vdot=45,
+        proposal_file=str(proposal_path),
+        proposal_file_sha256=hashlib.sha256(proposal_path.read_bytes()).hexdigest(),
+        evidence_type="manual_athlete_value",
+        proposal_snapshot=proposal_snapshot,
+        approved_at_utc=generated_at_utc,
+    )
     state = PlanningState(
-        vdot_approval=VDOTApproval(
-            approval_id="vdot_approval_0123456789abcdef",
-            approved_vdot=45,
-            proposal_file=str(proposal_path),
-            proposal_file_sha256=hashlib.sha256(
-                proposal_path.read_bytes()
-            ).hexdigest(),
-            evidence_type="manual_athlete_value",
-            approved_at_utc=generated_at_utc,
-        )
+        vdot_approvals=[approval],
+        active_vdot_approval_id=approval.approval_id,
     )
     profile = Mock()
     profile.personal_bests_by_distance = {}
