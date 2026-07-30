@@ -1,4 +1,4 @@
-# Design Patterns and Design Systems Research (Advisory)
+# Website design-pattern research
 
 ## Advisory Scope
 
@@ -216,9 +216,9 @@ as long as product truth, conversion intent, and factual constraints from the co
 
 Source alignment:
 
-1. `docs/long_term_vision/[Run app] Product Vision Doc.md`
-2. `docs/mvp/v0_product_requirements_document.md`
-3. `docs/mvp/v0_technical_specification.md`
+1. `docs/product/vision.md`
+2. `docs/reference/architecture-map.md`
+3. `docs/reference/intervals-icu-integration.md`
 4. `docs/coaching/methodology.md`
 
 Implications for final landing expression:

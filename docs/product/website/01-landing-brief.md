@@ -1,4 +1,4 @@
-# Landing Brief (Core)
+# Resilio landing-page brief
 
 ## Purpose
 
@@ -37,7 +37,7 @@ often without a single multi-discipline event as the organizing goal.
 7. Many athletes prefer fewer runs per week (2-3) plus other cardio, as long as progress is still meaningful.
 
 Primary evidence source:
-`docs/long_term_vision/[Run app] User quotes.csv`
+`docs/product/user-quotes.csv`
 
 ## Moat
 
@@ -69,15 +69,15 @@ Visitor starts a coaching session by using the starter prompt.
 
 1. Supported setup workflow: macOS, Linux.
 2. Unsupported setup workflow: Windows, WSL.
-3. Intervals.icu account plus one-time app credentials are required.
+3. An Intervals.icu account and personal API key are required.
 4. First sync may pause on Intervals.icu API limits and resume later.
 5. Project data is local-first with Intervals.icu used for auth and sync.
 
 ## Source-of-Truth References
 
-1. `docs/long_term_vision/[Run app] Product Vision Doc.md`
-2. `docs/mvp/v0_product_requirements_document.md`
-3. `docs/mvp/v0_technical_specification.md`
+1. `docs/product/vision.md`
+2. `docs/reference/architecture-map.md`
+3. `docs/reference/intervals-icu-integration.md`
 4. `docs/coaching/methodology.md`
 5. `AGENTS.md`
 6. `CLAUDE.md`

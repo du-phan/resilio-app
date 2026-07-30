@@ -1,6 +1,9 @@
-# \[Product vision\] Adaptive Running App for Multi‑Sport Athletes and Coaches
+# Resilio product vision
 
-## Last update: Nov 15, 2025
+This document describes strategic product direction, not current runtime
+behavior. Use the [architecture map](../reference/architecture-map.md) and
+[Intervals.icu integration reference](../reference/intervals-icu-integration.md)
+for implemented contracts.
 
 ---
 

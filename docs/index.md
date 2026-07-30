@@ -8,24 +8,27 @@ Documentation authority, highest first:
 2. Root [AGENTS.md](../AGENTS.md)
 3. This index
 4. [Agent workflow](guides/development/agent-workflow.md)
-5. [Architecture map](reference/architecture-map.md) and active specifications
-6. Active implementation plan and issue
-7. Task-specific skills
-8. Tool-specific [CLAUDE.md](../CLAUDE.md)
-9. Historical plans and decisions
+5. [Architecture map](reference/architecture-map.md), current references, and
+   specifications
+6. Task-specific skills
+7. Tool-specific [CLAUDE.md](../CLAUDE.md)
 
-## Current work
+Completed execution plans are not retained in the active documentation tree;
+Git history is the archive.
 
-- [Intervals.icu migration and agent-legible architecture](plans/2026-07-28-intervals-icu-migration.md)
-- [Historical bouldering backfill](plans/2026-07-29-historical-bouldering-backfill.md)
-- [Intervals.icu acceptance record](acceptance/2026-07-28-intervals-icu.md)
+## Current system
+
+- [Architecture map](reference/architecture-map.md)
+- [Intervals.icu integration](reference/intervals-icu-integration.md)
+- [Agent workflow](guides/development/agent-workflow.md)
+- [Coaching CLI index](coaching/cli/index.md)
 
 ## Engineering
 
-- [Architecture map](reference/architecture-map.md)
-- [Agent workflow](guides/development/agent-workflow.md)
 - [API layer](specs/api_layer.md)
-- [Intervals.icu OpenAPI contract](api/intervals_icu_openapi_spec.json)
+- [Module specifications](specs/modules/)
+- [Split oversized plan modules](issues/split-oversized-plan-modules.md)
+- [Establish repository-wide Ruff](issues/establish-repository-ruff-gate.md)
 
 ## Coaching
 
@@ -34,9 +37,7 @@ Documentation authority, highest first:
 - [Scenarios](coaching/scenarios.md)
 - [Training-book summaries](training_books/)
 
-## Product and history
+## Product
 
-- [Module specifications](specs/modules/)
-- [Implementation plans](plans/)
-- [MVP documents](mvp/)
-- [Long-term vision](long_term_vision/)
+- [Product vision](product/vision.md)
+- [Website handoff](product/website/)

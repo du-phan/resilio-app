@@ -1,4 +1,4 @@
-# Messaging and Claims (Core)
+# Resilio website messaging and claims
 
 ## Positioning
 

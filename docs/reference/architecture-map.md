@@ -60,5 +60,5 @@ cli
   ownership proof.
 - Automated tests use fake transports and fake environment mappings.
 
-The active migration plan is
-[2026-07-28 Intervals.icu migration](../plans/2026-07-28-intervals-icu-migration.md).
+The external boundary is documented in the
+[Intervals.icu integration reference](intervals-icu-integration.md).

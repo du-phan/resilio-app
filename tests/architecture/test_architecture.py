@@ -16,15 +16,15 @@ WARNING_LINE_LIMIT = 800
 OVERSIZED_ALLOWLIST = {
     "resilio/api/plan.py": (
         2_948,
-        "docs/issues/architecture-debt-api-plan.md",
+        "docs/issues/split-oversized-plan-modules.md",
     ),
     "resilio/core/plan.py": (
         2_630,
-        "docs/issues/architecture-debt-core-plan.md",
+        "docs/issues/split-oversized-plan-modules.md",
     ),
     "resilio/cli/commands/plan.py": (
         2_036,
-        "docs/issues/architecture-debt-cli-plan.md",
+        "docs/issues/split-oversized-plan-modules.md",
     ),
 }
 
@@ -183,14 +183,13 @@ def test_weekly_plan_skill_uses_typed_structured_workouts():
     )
 
 
-def test_documentation_authority_and_active_plan_links_exist():
+def test_documentation_authority_and_current_reference_links_exist():
     index = (REPO_ROOT / "docs/index.md").read_text()
     required = [
         "AGENTS.md",
         "guides/development/agent-workflow.md",
         "reference/architecture-map.md",
-        "plans/2026-07-28-intervals-icu-migration.md",
-        "plans/2026-07-29-historical-bouldering-backfill.md",
+        "reference/intervals-icu-integration.md",
     ]
     missing = [value for value in required if value not in index]
     assert not missing, f"docs/index.md is missing authority/navigation links: {missing}"
@@ -199,8 +198,7 @@ def test_documentation_authority_and_active_plan_links_exist():
         "AGENTS.md",
         "docs/guides/development/agent-workflow.md",
         "docs/reference/architecture-map.md",
-        "docs/plans/2026-07-28-intervals-icu-migration.md",
-        "docs/plans/2026-07-29-historical-bouldering-backfill.md",
+        "docs/reference/intervals-icu-integration.md",
     ]:
         assert (REPO_ROOT / relative).is_file(), f"Required documentation missing: {relative}"
 
@@ -222,11 +220,7 @@ def test_activity_mutation_services_remain_focused_and_share_lock_boundary():
 
 
 def test_active_markdown_links_resolve():
-    """Check repository-owned operational docs, excluding imported reference sets."""
-    excluded_prefixes = (
-        "docs/agent_skill_standard/",
-        "docs/claude_documentation/",
-    )
+    """Check every repository-owned Markdown document."""
     documents = [
         *sorted((REPO_ROOT / "docs").rglob("*.md")),
         REPO_ROOT / "README.md",
@@ -237,8 +231,6 @@ def test_active_markdown_links_resolve():
     failures: list[str] = []
     for document in documents:
         relative = document.relative_to(REPO_ROOT).as_posix()
-        if relative.startswith(excluded_prefixes):
-            continue
         for raw_target in link_pattern.findall(document.read_text()):
             target = (
                 raw_target.strip()
@@ -259,10 +251,6 @@ def test_active_markdown_links_resolve():
 
 def test_obsolete_provider_term_is_absent_from_active_repository_files():
     forbidden = ("stra" + "va").casefold()
-    allowed = {
-        "docs/api/intervals_icu_openapi_spec.json",
-        "docs/plans/2026-07-28-intervals-icu-migration.md",
-    }
     text_suffixes = {
         "",
         ".csv",
@@ -280,8 +268,7 @@ def test_obsolete_provider_term_is_absent_from_active_repository_files():
             continue
         relative = path.relative_to(REPO_ROOT).as_posix()
         if (
-            relative in allowed
-            or relative.startswith((".git/", "data/"))
+            relative.startswith((".git/", "data/"))
             or "/__pycache__/" in relative
             or relative == ".env.local"
             or path.suffix.casefold() not in text_suffixes

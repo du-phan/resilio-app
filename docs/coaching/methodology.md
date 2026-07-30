@@ -627,9 +627,8 @@ resilio analysis load
 
 ## See Also
 
-- [Methodology Expert Review](methodology_expert_feedback/methodology_expert_review.md) - Detailed methodology, books vs metrics, and questions for coaching experts
 - [CLI Command Index](cli/index.md) - Command documentation
 - [Coaching Scenarios](scenarios.md) - Example workflows
 - [API Layer Spec](../specs/api_layer.md) - Python API for scripting
-- [PRD](../mvp/v0_product_requirements_document.md) - Product philosophy
-- [Technical Spec](../mvp/v0_technical_specification.md) - System architecture
+- [Product vision](../product/vision.md) - Product philosophy
+- [Architecture map](../reference/architecture-map.md) - System architecture
