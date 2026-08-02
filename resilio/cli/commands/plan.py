@@ -7,25 +7,43 @@ from datetime import date
 from pathlib import Path
 
 import typer
+from pydantic import TypeAdapter, ValidationError
 
 from resilio.api.plan import (
     PlanError,
-    apply_week_file,
+    build_assessment_template,
     build_macro_template,
+    close_assessment,
     close_plan_cycle,
+    create_assessment_context_evidence,
+    create_assessment_plan_from_file,
+    create_assessment_review_evidence,
     create_cycle_review_evidence,
     create_macro_context_evidence,
     create_macro_plan_from_file,
+    discard_unapproved_plan,
+    get_assessment_result_candidates,
     get_current_plan,
     get_plan_status,
     get_plan_week,
-    validate_week_file,
 )
+from resilio.api.week_application import apply_week_file, validate_week_file
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from resilio.cli.output import create_success_envelope, output_json
+from resilio.schemas.assessment import (
+    AssessmentReason,
+    TemporaryOtherSportCommitmentOverride,
+    TemporaryScheduleConstraint,
+)
 from resilio.schemas.plan_history import PlanClosureDisposition
 
 app = typer.Typer(help="Create, inspect, and apply approved training plans")
+SCHEDULE_CONSTRAINTS_ADAPTER: TypeAdapter[list[TemporaryScheduleConstraint]] = TypeAdapter(
+    list[TemporaryScheduleConstraint]
+)
+SPORT_OVERRIDES_ADAPTER: TypeAdapter[
+    list[TemporaryOtherSportCommitmentOverride]
+] = TypeAdapter(list[TemporaryOtherSportCommitmentOverride])
 
 
 def _emit_result(result: object, message: str) -> None:
@@ -37,6 +55,21 @@ def _emit_result(result: object, message: str) -> None:
 @app.command("show")
 def show_command() -> None:
     _emit_result(get_current_plan(), "Current training plan")
+
+
+@app.command("discard-unapproved")
+def discard_unapproved_command(
+    plan_revision_id: str = typer.Option(
+        ...,
+        "--plan-revision",
+        help="Exact current proposal revision selected for discard.",
+    ),
+) -> None:
+    """Discard an exact plan proposal that has never been approved or applied."""
+    _emit_result(
+        discard_unapproved_plan(expected_plan_revision_id=plan_revision_id),
+        "Unapproved training-plan proposal discarded",
+    )
 
 
 @app.command("status")
@@ -84,6 +117,159 @@ def create_macro_command(
     _emit_result(
         create_macro_plan_from_file(draft_file),
         "Methodology-explicit macro plan created",
+    )
+
+
+@app.command("template-assessment")
+def template_assessment_command(
+    total_weeks: int = typer.Option(..., "--total-weeks", min=1),
+    output_path: Path = typer.Option(..., "--out"),
+) -> None:
+    template = build_assessment_template(total_weeks)
+    if not isinstance(template, dict):
+        _emit_result(template, "Assessment template")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(template, indent=2) + "\n")
+    output_json(
+        create_success_envelope(
+            message="Assessment template created",
+            data={"path": str(output_path.resolve()), "template": template},
+        )
+    )
+
+
+@app.command("create-assessment")
+def create_assessment_command(
+    draft_file: Path = typer.Option(..., "--from-json"),
+) -> None:
+    _emit_result(
+        create_assessment_plan_from_file(draft_file),
+        "Baseline-assessment plan created",
+    )
+
+
+@app.command("create-assessment-context")
+def create_assessment_context_command(
+    evidence_as_of_date: str = typer.Option(..., "--evidence-as-of"),
+    intended_plan_start_date: str = typer.Option(..., "--start"),
+    assessment_reasons: list[AssessmentReason] = typer.Option(..., "--reason"),
+    schedule_constraints_file: Path | None = typer.Option(
+        None,
+        "--constraints-file",
+        help="JSON array of athlete-confirmed unavailable date ranges.",
+    ),
+    other_sport_file: Path | None = typer.Option(
+        None,
+        "--other-sport-file",
+        help="JSON array of coach-proposed weekly other-sport counts.",
+    ),
+) -> None:
+    """Create bounded evidence for a non-rehabilitation assessment block."""
+    try:
+        parsed_evidence_as_of = date.fromisoformat(evidence_as_of_date)
+        parsed_plan_start = date.fromisoformat(intended_plan_start_date)
+    except ValueError as exc:
+        _emit_result(
+            PlanError("validation", f"Dates must use YYYY-MM-DD format: {exc}"),
+            "Assessment-planning context",
+        )
+    try:
+        schedule_constraints = (
+            SCHEDULE_CONSTRAINTS_ADAPTER.validate_python(
+                json.loads(schedule_constraints_file.read_text())
+            )
+            if schedule_constraints_file is not None
+            else []
+        )
+    except (OSError, json.JSONDecodeError, ValidationError) as exc:
+        _emit_result(
+            PlanError("validation", f"Schedule constraints file is invalid: {exc}"),
+            "Assessment-planning context",
+        )
+    try:
+        sport_overrides = (
+            SPORT_OVERRIDES_ADAPTER.validate_python(
+                json.loads(other_sport_file.read_text())
+            )
+            if other_sport_file is not None
+            else []
+        )
+    except (OSError, json.JSONDecodeError, ValidationError) as exc:
+        _emit_result(
+            PlanError("validation", f"Sport overrides file is invalid: {exc}"),
+            "Assessment-planning context",
+        )
+    _emit_result(
+        create_assessment_context_evidence(
+            evidence_as_of_date=parsed_evidence_as_of,
+            intended_plan_start_date=parsed_plan_start,
+            assessment_reasons=assessment_reasons,
+            temporary_schedule_constraints=schedule_constraints,
+            temporary_other_sport_commitment_overrides=sport_overrides,
+        ),
+        "Immutable assessment-planning evidence context created",
+    )
+
+
+@app.command("assessment-candidates")
+def assessment_candidates_command() -> None:
+    _emit_result(
+        get_assessment_result_candidates(),
+        "Owned baseline-assessment result candidates",
+    )
+
+
+@app.command("create-assessment-review")
+def create_assessment_review_command(
+    candidate_id: str = typer.Option(..., "--candidate"),
+    evidence_as_of_date: str = typer.Option(..., "--evidence-as-of"),
+    official_distance_confirmation_reference: str = typer.Option(
+        ...,
+        "--official-distance-confirmation",
+    ),
+    athlete_confirmation_reference: str = typer.Option(
+        ...,
+        "--athlete-confirmation",
+    ),
+    review_summary: str = typer.Option(..., "--summary"),
+) -> None:
+    try:
+        parsed_evidence_as_of = date.fromisoformat(evidence_as_of_date)
+    except ValueError as exc:
+        _emit_result(
+            PlanError("validation", f"Date must use YYYY-MM-DD format: {exc}"),
+            "Assessment review",
+        )
+    _emit_result(
+        create_assessment_review_evidence(
+            candidate_id=candidate_id,
+            evidence_as_of_date=parsed_evidence_as_of,
+            official_distance_confirmation_reference=(
+                official_distance_confirmation_reference
+            ),
+            athlete_confirmation_reference=athlete_confirmation_reference,
+            review_summary=review_summary,
+        ),
+        "Immutable baseline-assessment review created",
+    )
+
+
+@app.command("close-assessment")
+def close_assessment_command(
+    assessment_review_sha256: str = typer.Option(..., "--review-sha256"),
+    reason: str = typer.Option(..., "--reason"),
+    athlete_confirmation_reference: str = typer.Option(
+        ...,
+        "--athlete-confirmation",
+    ),
+) -> None:
+    _emit_result(
+        close_assessment(
+            assessment_review_sha256=assessment_review_sha256,
+            reason=reason,
+            athlete_confirmation_reference=athlete_confirmation_reference,
+        ),
+        "Baseline assessment closed and archived",
     )
 
 
@@ -187,3 +373,7 @@ def apply_week_command(
         apply_week_file(approved_file),
         "Approved weekly plan applied",
     )
+    create_assessment_context_evidence,
+    create_assessment_plan_from_file,
+    create_assessment_review_evidence,
+    get_assessment_result_candidates,

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Baseline Assessment Plan"
+  short_description: "Plan a safe return and owned benchmark"
+  default_prompt: "Use $baseline-assessment-plan to prepare a gradual return-to-running assessment block and benchmark for athlete approval."

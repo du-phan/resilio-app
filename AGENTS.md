@@ -44,9 +44,9 @@ projections and typed coaching context locally.
 
 ## Coaching workflow
 
-Use the matching skill for onboarding, weekly analysis, multi-week progress,
-plan renewal, VDOT proposal, macro planning, weekly generation, or weekly
-application.
+Use the matching skill for onboarding, baseline-assessment planning and review,
+weekly analysis, multi-week progress, plan renewal, VDOT proposal, race-macro
+planning, weekly generation, or weekly application.
 The coach owns all athlete questions and approvals; executor skills do not ask
 questions. Explain coaching outcomes and measurements in athlete language without
 exposing commands, tools, skills, or file paths.

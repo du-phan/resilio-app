@@ -16,7 +16,7 @@ Require the approved file path and week number. Verify:
 poetry run resilio approvals status
 ```
 
-The recorded plan ID, macro revision, macro-skeleton SHA-256, week number,
+The recorded plan kind, plan ID, plan revision, plan-skeleton SHA-256, week number,
 target-week-skeleton SHA-256, action, prior applied-workout SHA-256, absolute
 path, and file SHA-256 must correspond to the current aggregate and supplied
 file. If not, stop with a blocking checklist.
@@ -36,4 +36,14 @@ weekly approval state. It also requires a new active applied-week audit whose
 workout SHA-256 matches the current week. A replacement must invalidate the
 previous active audit for that week.
 
-Return only `applied_file`, `week_number`, and verification status.
+The `apply-week` result is the authoritative combined outcome. It always
+reports the successful local commit separately from run synchronization. When
+the athlete-confirmed synchronization mode is `after_weekly_apply`, application
+immediately reconciles that exact week's running workouts. Do not invoke a
+second publish step after a synchronized result.
+
+A `blocked` or `failed` run-synchronization status must not roll back or
+obscure `local_application_status: applied`. Return the exact typed sync report
+or error to the coach; the running-workout-publication procedure owns explicit
+status inspection, idempotent retry, and athlete-confirmed drift resolution.
+Never describe `eligible_unverified` as watch delivery.

@@ -10,9 +10,9 @@ from typing import Any
 from pydantic import BaseModel
 
 from resilio.schemas.plan import (
-    MasterPlan,
     OtherSportPlanningConstraint,
     PlanningConstraintsSnapshot,
+    TrainingPlan,
     WeekPlan,
 )
 from resilio.schemas.profile import AthleteProfile
@@ -85,8 +85,8 @@ def planning_constraints_snapshot(
     )
 
 
-def macro_skeleton_sha256(plan: MasterPlan) -> str:
-    """Hash immutable macro content, excluding exact weekly workouts."""
+def plan_skeleton_sha256(plan: TrainingPlan) -> str:
+    """Hash immutable plan content, excluding exact weekly workouts."""
     payload = plan.model_dump(mode="json", by_alias=True)
     payload["weeks"] = [
         {

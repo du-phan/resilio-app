@@ -46,7 +46,7 @@ def build_adherence_context(
     activity_id_by_workout_identity = {
         (
             match.workout_identity.plan_id,
-            match.workout_identity.macro_revision_id,
+            match.workout_identity.plan_revision_id,
             match.workout_identity.week_number,
             match.workout_identity.local_workout_id,
         ): local_activity_id
@@ -76,7 +76,7 @@ def build_adherence_context(
         matched_activity_id = activity_id_by_workout_identity.get(
             (
                 workout_identity.plan_id,
-                workout_identity.macro_revision_id,
+                workout_identity.plan_revision_id,
                 workout_identity.week_number,
                 workout_identity.local_workout_id,
             )

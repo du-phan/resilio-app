@@ -1,5 +1,1 @@
-"""Owned planned-workout publication."""
-
-from resilio.core.workout_publication.service import WorkoutPublicationService
-
-__all__ = ["WorkoutPublicationService"]
+"""Owned planned-workout publication package."""

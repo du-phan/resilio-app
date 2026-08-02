@@ -19,7 +19,7 @@ from resilio.core.coaching_context.recovery import (
     training_state,
 )
 from resilio.core.planning.integrity import (
-    macro_skeleton_sha256,
+    plan_skeleton_sha256,
     target_week_skeleton_sha256,
 )
 from resilio.core.planning.service import (
@@ -41,6 +41,7 @@ from resilio.schemas.coaching import (
     WeeklyCoachContext,
     WeekPlanningContext,
 )
+from resilio.schemas.plan import BaselineAssessmentPlan, RaceMacroPlan
 
 
 def _planned_workouts_for_week(
@@ -232,23 +233,21 @@ def build_week_planning_context(
     if (
         state is None
         or state.active_plan is None
-        or state.active_plan.macro_approval is None
-        or state.active_vdot_approval is None
+        or state.active_plan.plan_approval is None
     ):
-        raise ValueError("An approved current macro plan and VDOT are required")
+        raise ValueError("An approved current plan is required")
     matching = [week for week in state.active_plan.plan.weeks if week.week_number == week_number]
     if len(matching) != 1:
-        raise ValueError(f"Week {week_number} does not exist in the current macro plan")
+        raise ValueError(f"Week {week_number} does not exist in the current plan")
     target = matching[0]
-    if target.workouts:
-        raise ValueError(f"Week {week_number} already contains applied workouts")
     plan = state.active_plan.plan
     return WeekPlanningContext(
         evidence_as_of_date=evidence_as_of_date,
         target_week=TargetWeekSkeletonContext(
+            plan_kind=plan.kind,
             plan_id=plan.id,
-            macro_revision_id=plan.macro_revision_id,
-            macro_skeleton_sha256=macro_skeleton_sha256(plan),
+            plan_revision_id=plan.plan_revision_id,
+            plan_skeleton_sha256=plan_skeleton_sha256(plan),
             target_week_skeleton_sha256=target_week_skeleton_sha256(target),
             week_number=target.week_number,
             phase=str(target.phase),
@@ -263,11 +262,36 @@ def build_week_planning_context(
             as_of_date=evidence_as_of_date,
             week_count=history_week_count,
         ),
-        approved_vdot=ApprovedVDOTContext(
-            approval_id=state.active_vdot_approval.approval_id,
-            approved_vdot=state.active_vdot_approval.approved_vdot,
-            evidence_type=str(state.active_vdot_approval.evidence_type),
+        approved_vdot=(
+            ApprovedVDOTContext(
+                approval_id=state.active_vdot_approval.approval_id,
+                approved_vdot=state.active_vdot_approval.approved_vdot,
+                evidence_type=str(state.active_vdot_approval.evidence_type),
+            )
+            if isinstance(plan, RaceMacroPlan)
+            and state.active_vdot_approval is not None
+            else None
         ),
-        methodology=plan.methodology,
+        methodology=(plan.methodology if isinstance(plan, RaceMacroPlan) else None),
+        assessment_reasons=(
+            plan.assessment_reasons
+            if isinstance(plan, BaselineAssessmentPlan)
+            else []
+        ),
+        benchmark_intent=(
+            plan.benchmark_intent
+            if isinstance(plan, BaselineAssessmentPlan)
+            else None
+        ),
+        temporary_schedule_constraints=(
+            plan.temporary_schedule_constraints
+            if isinstance(plan, BaselineAssessmentPlan)
+            else []
+        ),
+        temporary_other_sport_commitment_overrides=(
+            plan.temporary_other_sport_commitment_overrides
+            if isinstance(plan, BaselineAssessmentPlan)
+            else []
+        ),
         constraints=plan.constraints_snapshot,
     )

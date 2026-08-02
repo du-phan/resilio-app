@@ -1,0 +1,4 @@
+interface:
+  display_name: "Synchronize Running Workouts"
+  short_description: "Keep approved runs aligned with Intervals"
+  default_prompt: "Use $running-workout-publication to inspect and reconcile my approved running workouts."

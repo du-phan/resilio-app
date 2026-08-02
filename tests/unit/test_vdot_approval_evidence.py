@@ -98,7 +98,7 @@ def _write_race_proposal(
     path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "proposed_vdot": 45,
                 "evidence": {
                     "evidence_type": "race_performance",
@@ -108,6 +108,10 @@ def _write_race_proposal(
                     "performance_timezone": "Europe/Paris",
                     "source_local_activity_id": SOURCE_LOCAL_ACTIVITY_ID,
                     "source_external_fingerprint_sha256": (source_external_fingerprint_sha256),
+                    "measured_distance_meters": 10_000,
+                    "official_distance_confirmation_reference": (
+                        "Athlete confirmed this synchronized effort as an official 10K."
+                    ),
                 },
                 "evidence_summary": ("The exact synchronized 10K race supports this baseline."),
                 "generated_at_utc": "2026-07-25T08:00:00Z",
@@ -151,6 +155,7 @@ def test_race_proposal_rejects_a_changed_source_fingerprint(
         ("date", date(2026, 7, 21), "performance date"),
         ("sport", "cycle", "running activity"),
         ("timezone", "UTC", "performance timezone"),
+        ("distance", 9_950, "measured distance"),
     ],
 )
 def test_race_proposal_rejects_source_fact_drift(
@@ -190,8 +195,10 @@ def test_race_proposal_rejects_source_fact_drift(
     elif field == "sport":
         activity.sport = str(replacement)
         activity.source_sport_type = str(replacement)
-    else:
+    elif field == "timezone":
         activity.occurrence = activity.occurrence.model_copy(update={"timezone": str(replacement)})
+    else:
+        activity.distance_meters = float(replacement)
     archive.write(activity)
 
     with pytest.raises(PlanOperationError, match=message):
@@ -220,7 +227,7 @@ def test_personal_best_proposal_is_bound_to_the_confirmed_profile_record(
     proposal_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "proposed_vdot": 45,
                 "evidence": {
                     "evidence_type": "personal_best",
@@ -274,7 +281,7 @@ def test_personal_best_proposal_is_bound_to_the_confirmed_profile_record(
 
 def test_race_proposal_date_is_compared_in_its_declared_timezone() -> None:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "proposed_vdot": 45,
         "evidence": {
             "evidence_type": "race_performance",
@@ -284,6 +291,10 @@ def test_race_proposal_date_is_compared_in_its_declared_timezone() -> None:
             "performance_timezone": "Europe/Paris",
             "source_local_activity_id": SOURCE_LOCAL_ACTIVITY_ID,
             "source_external_fingerprint_sha256": (SOURCE_EXTERNAL_FINGERPRINT_SHA256),
+            "measured_distance_meters": 10_000,
+            "official_distance_confirmation_reference": (
+                "Athlete confirmed this synchronized effort as an official 10K."
+            ),
         },
         "evidence_summary": ("The athlete-local performance date is valid across UTC midnight."),
         "generated_at_utc": "2026-07-29T22:30:00Z",

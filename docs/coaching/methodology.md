@@ -16,7 +16,8 @@ training methodology, and leaves the final coaching judgment to the coach.
 | Wellness | Intervals.icu daily records | Compare individual signals with personal baselines |
 | Athlete identity, constraints, goals | Athlete-confirmed profile | Never overwrite from provider candidates |
 | Running pace prescription | Separately verified pace source | Approved VDOT alone does not create training paces |
-| Plan structure and adaptation | Resilio coach | Use one named, versioned primary methodology |
+| Race-plan structure and adaptation | Resilio coach | Use one named, versioned primary methodology |
+| Baseline assessment | Resilio coach and athlete | Use an evidence-bound return block and athlete-confirmed benchmark result without inventing VDOT |
 | Plan approval | Athlete | Bind approvals to exact persisted bytes |
 
 ## Quantities that must remain separate
@@ -96,7 +97,35 @@ Decoupling remains raw when the provider does not declare its power-to-heart-
 rate or pace-to-heart-rate basis. Do not apply a universal cutoff or compare
 variable-terrain, interval, and steady sessions as though they were equivalent.
 
-## Selecting one primary methodology
+## Baseline assessment
+
+When baseline VDOT evidence is missing, disputed, conflicting, or stale after
+inactivity, a non-injured athlete may use a short baseline-assessment plan
+before race planning. It is not a race methodology and does not prescribe a
+target result, training pace, heart-rate target, readiness score, or injury-risk
+estimate.
+
+The default benchmark is 5,000 meters. A longer distance requires explicit
+athlete confirmation and an evidence-backed rationale. The approved plan owns
+one timed-distance benchmark workout. Result evidence is accepted only after
+exact calendar publication and provider completion pairing; the athlete then
+selects the complete paired activity or one exact canonical segment and
+separately confirms the official benchmark distance. GPS distance remains a
+measured fact, not proof of official distance.
+
+Assessment closure archives that immutable result but does not approve VDOT.
+The resulting VDOT proposal and the successor race plan each retain their own
+athlete approval boundaries. The race plan's planning rationale must cite the
+latest assessment result.
+
+Temporary holidays remain date-range constraints rather than durable profile
+changes. If a holiday-shortened assessment week cannot safely accommodate the
+normal other-sport count, the coach may propose a typed session count for that
+one sport and Monday-Sunday week. The rationale and count are presented with
+the complete plan and become approved only with that plan; normal sessions must
+not be silently removed or compressed before the benchmark.
+
+## Selecting one primary race methodology
 
 Every macro plan records one identifier, controlled source path and SHA-256,
 edition status, source-summary version, conceptual-only verification scope,
@@ -136,7 +165,7 @@ weekly structure, intensity distribution, or progression rules.
 
 ## Planning from evidence
 
-Macro planning starts from demonstrated run exposure and athlete constraints,
+Race-macro planning starts from demonstrated run exposure and athlete constraints,
 not from a load-to-kilometer conversion.
 
 - Use recent consistent running distance, duration, frequency, longest-run
@@ -154,8 +183,21 @@ Weekly planning uses only facts available through the planning date:
 - provider training state and wellness signals with coverage;
 - profile availability and duration limits;
 - local weekly weather;
-- approved VDOT;
-- the plan’s primary methodology and phase.
+- approved VDOT and the plan’s primary methodology and phase for race plans;
+- approved benchmark intent and return progression for baseline assessments.
+
+A date-only workout is valid at weekly approval and remains due on its approved
+local date. It may be published as a calendar-day workout whose provider
+timestamp is local midnight, without asserting an athlete-approved midnight
+start. A benchmark has exactly one timed-distance step and no pace or
+heart-rate target.
+
+Every approved run has a typed structured prescription, including targetless
+easy runs. VDOT does not authorize training paces or an Intervals threshold
+pace. A five-kilometre benchmark triggers evidence review, not an automatic
+threshold-setting mutation. Threshold pace remains missing until the coach
+needs pace-targeted training and qualifying threshold-specific evidence plus
+exact athlete approval supports the external value.
 
 Use Intervals.icu-computed load, relative intensity, decoupling, polarization,
 TRIMP, zone time, fitness, and fatigue when present. Do not recreate them
@@ -166,7 +208,9 @@ activity evidence.
 VDOT is approved from an exact evidence proposal. The proposal contains either
 race distance, elapsed seconds, athlete-local performance date and timezone,
 plus either an exact canonical activity identity and Intervals.icu source
-fingerprint or an exact matching athlete-profile personal best. Source facts
+fingerprint, an exact matching athlete-profile personal best, or an immutable
+owned baseline-assessment review. Canonical race evidence also retains measured
+GPS distance and explicit confirmation of the official distance. Source facts
 are reverified whenever approval evidence is consumed. Manual evidence
 requires an explicit athlete-confirmed value and confirmation record. Race
 calculations use the Daniels–Gilbert performance equations inside the

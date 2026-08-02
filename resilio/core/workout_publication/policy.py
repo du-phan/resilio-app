@@ -9,6 +9,11 @@ from datetime import date, datetime, time, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from resilio.core.workout_publication.semantics import (
+    StepSemantics,
+    WorkoutSemanticsError,
+    assert_workout_semantics_match,
+)
 from resilio.integrations.intervals_icu.dto import (
     ActivityFilterDTO,
     EventDTO,
@@ -17,7 +22,12 @@ from resilio.integrations.intervals_icu.dto import (
 )
 from resilio.schemas.plan import WorkoutPrescription
 from resilio.schemas.plan_history import PlanWorkoutIdentity
-from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
+from resilio.schemas.publication import (
+    GarminForwardingStatus,
+    PendingWorkoutPublication,
+    PublicationPushError,
+    PublishedWorkout,
+)
 from resilio.schemas.structured_workout import TargetMode, WorkoutSport
 
 OWNERSHIP_PREFIX = "resilio:v1:workout:"
@@ -25,6 +35,14 @@ OWNERSHIP_PREFIX = "resilio:v1:workout:"
 
 class PublicationSafetyError(RuntimeError):
     """Publication cannot proceed without complete ownership and safety proof."""
+
+
+class ProviderSemanticsMismatchError(PublicationSafetyError):
+    """Intervals parsed a different executable workout than prescribed."""
+
+
+class RemoteWorkoutDriftError(PublicationSafetyError):
+    """An exact owned event differs from its last verified remote fields."""
 
 
 def external_id_for(workout_id: str) -> str:
@@ -44,6 +62,29 @@ def sport_settings_version(settings: SportSettingsDTO) -> str:
     return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
+def publication_settings_version(
+    settings: SportSettingsDTO,
+    *,
+    target_modes: set[str],
+    target_units: set[str],
+) -> str:
+    """Hash only provider settings that can change prescribed step targets."""
+    payload: dict[str, object] = {
+        "target_modes": sorted(target_modes),
+        "target_units": sorted(target_units),
+    }
+    if TargetMode.PACE in target_modes:
+        payload["threshold_speed_meters_per_second"] = (
+            settings.threshold_speed_meters_per_second
+        )
+        payload["pace_zones"] = settings.pace_zones
+    if "percent_lthr" in target_units:
+        payload["lactate_threshold_heart_rate_beats_per_minute"] = settings.lthr
+    if "percent_max_heart_rate" in target_units:
+        payload["maximum_heart_rate_beats_per_minute"] = settings.max_hr
+    return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+
 def publication_fingerprint(
     event: EventWriteDTO,
     settings_version: str,
@@ -55,12 +96,34 @@ def publication_fingerprint(
     return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
+def provider_event_fingerprint(remote: EventDTO) -> str:
+    """Fingerprint only provider fields owned and verified by Resilio."""
+    payload = {
+        "uid": remote.uid,
+        "external_id": remote.external_id,
+        "category": remote.category,
+        "type": remote.type,
+        "name": remote.name,
+        "description": remote.description,
+        "start_date_local": remote.start_date_local,
+        "target": remote.target,
+    }
+    return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+
+def assert_remote_unchanged(remote: EventDTO, previous: PublishedWorkout) -> None:
+    if provider_event_fingerprint(remote) != previous.provider_event_fingerprint_sha256:
+        raise RemoteWorkoutDriftError(
+            "Remote event changed since Resilio verified the previous publication"
+        )
+
+
 def event_type_for_sport(sport: str) -> str:
     if sport == WorkoutSport.RUN:
         return "Run"
-    if sport == WorkoutSport.CYCLE:
-        return "Ride"
-    raise PublicationSafetyError(f"Unsupported workout sport: {sport}")
+    raise PublicationSafetyError(
+        f"Only running workouts can be published; received sport {sport!r}"
+    )
 
 
 def event_target_for_modes(
@@ -119,7 +182,11 @@ def assert_remote_external_ownership(
     return remote.uid
 
 
-def assert_remote_matches(remote: EventDTO, event: EventWriteDTO) -> None:
+def assert_remote_matches(
+    remote: EventDTO,
+    event: EventWriteDTO,
+    expected_step_semantics: tuple[StepSemantics, ...],
+) -> None:
     """Require the remote owned event to match every rendered field."""
     if (
         remote.category != event.category
@@ -132,6 +199,16 @@ def assert_remote_matches(remote: EventDTO, event: EventWriteDTO) -> None:
         raise PublicationSafetyError(
             "Remote event read-back does not match the owned rendered workout"
         )
+    if remote.workout_doc is None:
+        raise ProviderSemanticsMismatchError(
+            "Remote event read-back has no parsed workout document"
+        )
+    try:
+        assert_workout_semantics_match(expected_step_semantics, remote.workout_doc)
+    except WorkoutSemanticsError as exc:
+        raise ProviderSemanticsMismatchError(
+            f"Provider workout semantics mismatch: {exc}"
+        ) from exc
 
 
 def garmin_filter_allows(
@@ -171,10 +248,10 @@ def _filter_values(value: object) -> set[str]:
 
 def validated_local_start(
     occurrence_date: date,
-    local_time: time,
+    local_time: time | None,
     timezone_name: str,
 ) -> str:
-    """Reject ambiguous or nonexistent wall times before publication."""
+    """Project an optional approved wall time into Intervals' local timestamp."""
     try:
         zone = ZoneInfo(timezone_name)
     except ZoneInfoNotFoundError as exc:
@@ -182,7 +259,7 @@ def validated_local_start(
             f"Athlete timezone is not recognized: {timezone_name}"
         ) from exc
 
-    naive = datetime.combine(occurrence_date, local_time)
+    naive = datetime.combine(occurrence_date, local_time or time.min)
     valid_offsets = {
         aware.utcoffset()
         for fold in (0, 1)
@@ -201,6 +278,28 @@ def validated_local_start(
             "Local workout time is ambiguous because of a daylight-saving transition"
         )
     return naive.isoformat()
+
+
+def provider_push_errors(remote: EventDTO) -> list[PublicationPushError]:
+    return [
+        PublicationPushError(
+            service=error.service,
+            message=error.message,
+            observed_at_utc=error.date,
+        )
+        for error in remote.push_errors
+    ]
+
+
+def garmin_forwarding_status(
+    *,
+    eligible: bool,
+    remote: EventDTO,
+) -> GarminForwardingStatus:
+    has_garmin_error = any("garmin" in error.service.casefold() for error in remote.push_errors)
+    if has_garmin_error:
+        return "provider_error_observed"
+    return "eligible_unverified" if eligible else "not_configured"
 
 
 def pending_matches(
@@ -228,7 +327,8 @@ def published_record(
     fingerprint: str,
     rendered_hash: str,
     settings_version: str,
-    start_local: str,
+    provider_start_local: str,
+    garmin_eligible: bool,
     remote: EventDTO,
 ) -> PublishedWorkout:
     """Build a verified provider read-back record."""
@@ -241,9 +341,16 @@ def published_record(
         publication_fingerprint_sha256=fingerprint,
         rendered_workout_sha256=rendered_hash,
         sport_settings_version_sha256=settings_version,
+        provider_event_fingerprint_sha256=provider_event_fingerprint(remote),
         sport=str(workout.sport),
         occurrence_date=workout.date,
-        start_date_local=start_local,
+        approved_start_time_local=workout.start_time_local,
+        provider_start_date_local=provider_start_local,
+        garmin_forwarding_status=garmin_forwarding_status(
+            eligible=garmin_eligible,
+            remote=remote,
+        ),
+        provider_push_errors=provider_push_errors(remote),
         provider_computed_aerobic_load_points=remote.icu_training_load,
         provider_relative_intensity_percent=remote.icu_intensity,
         provider_fitness_load_points=remote.icu_ctl,

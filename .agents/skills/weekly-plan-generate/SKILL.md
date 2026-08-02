@@ -1,6 +1,6 @@
 ---
 name: weekly-plan-generate
-description: Design and validate exact workouts for one existing macro-plan week without applying them. Use for Week 1, a subsequent unpopulated week, or a revised weekly proposal that still requires athlete approval.
+description: Design and validate exact workouts for one existing race-macro or baseline-assessment week without applying them. Use for Week 1, a subsequent unpopulated week, or a revised weekly proposal that still requires athlete approval.
 ---
 
 # Generate one training week
@@ -16,6 +16,7 @@ it, or overwrite a previously presented proposal.
    poetry run resilio plan status
    poetry run resilio plan week --week <WEEK_NUMBER>
    poetry run resilio profile get
+   poetry run resilio workout capabilities --sport run
    ```
 
 2. Compute dates through the CLI, never mentally. Fetch the future-target
@@ -47,11 +48,20 @@ it, or overwrite a previously presented proposal.
 
 ## Coaching decisions
 
-- Follow the macro plan’s single primary methodology and phase. Training-book
-  records are source-only context, not workout constructors.
+- Branch on `target_week.plan_kind`:
+
+  - for `race_macro`, follow the plan’s single primary methodology and phase;
+    training-book records are source-only context, not workout constructors;
+  - for `baseline_assessment`, do not require VDOT or methodology. Preserve the
+    approved return progression and benchmark intent without inventing a pace,
+    heart-rate, target time, readiness score, or injury-risk estimate.
+
 - Approved VDOT is performance evidence, not a training-pace table. Omit pace
-  targets unless a separate verified source supplies exact bounds. Use
+  targets unless a separate verified source supplies exact bounds and current
+  capabilities report both Run threshold pace and pace zones. Use
   athlete-approved RPE or Intervals.icu-native heart-rate guidance otherwise.
+  Match relative heart-rate targets to their exact LTHR or maximum-heart-rate
+  capability.
 - Interpret native fitness, fatigue, form, ramp, aerobic load, relative
   intensity, decoupling, polarization, TRIMP, and zone time as provider
   observations, not automatic go/no-go rules. Never recreate a missing native
@@ -70,14 +80,41 @@ it, or overwrite a previously presented proposal.
 - Prescribe every session with `planned_duration_seconds`, exact low-,
   moderate-, and high-intensity duration seconds that sum to it,
   `target_rpe_1_to_10`, and a purpose. Every run also requires positive
-  `planned_distance_meters`; other sports may be duration-only. Include an
-  exact `start_time_local` for every session. Use complete
-  seconds-per-kilometer or beats-per-minute bounds when those targets are
-  present. Include warm-up and cool-down in all totals.
-- Represent publishable session steps under the typed `"structured_workout"`
-  field; use recursive warm-up, work, recovery, repetition, and cool-down step
-  contracts rather than an untyped interval list.
+  `planned_distance_meters`; other sports may be duration-only. An exact
+  `start_time_local` is optional at weekly approval. A date-only session stays
+  due on its approved local date and publishes as an untimed calendar-day
+  workout; never invent or imply an athlete-approved midnight start. Use
+  complete seconds-per-kilometer or beats-per-minute bounds when those targets
+  are present. Include warm-up and cool-down in all totals.
+- Represent every running session under the typed `"structured_workout"`
+  field, including targetless easy runs. Use recursive warm-up, work,
+  recovery, repetition, and cool-down step contracts rather than an untyped
+  interval list. Leave other sports unstructured unless their own workflow
+  requires otherwise.
 - Schedule rest as rest; do not create filler workouts to satisfy a count.
+
+### Baseline-assessment benchmark
+
+When the target week belongs to a baseline assessment:
+
+- schedule the benchmark only inside its approved fallback window and prefer
+  the approved preferred date unless weather, recovery, or an athlete-approved
+  conflict supports another date in that window;
+- keep every confirmed holiday date workout-free. A holiday from Friday 21
+  through Monday 24 August, for example, excludes all four dates rather than
+  only the weekend; enforce the typed `temporary_schedule_constraints` returned
+  by the planning context;
+- preserve all active bouldering or other-sport commitments as their own
+  sessions and respect the profile conflict policy;
+- require exactly one `benchmark` workout and one `timed_distance` step whose
+  `distance_meters` equals the approved benchmark distance. Include explicit
+  warm-up and cool-down steps in the workout totals;
+- never add pace or heart-rate targets to the benchmark. Its
+  `nominal_seconds` is a scheduling-duration estimate, not a target result;
+- do not exceed 5,000 benchmark meters unless the assessment plan already
+  contains the required athlete confirmation and evidence-backed rationale;
+- if current pain, active injury, systemic illness, or rehabilitation
+  constraints are present, stop this workflow and return the safety blocker.
 
 ## Validation and output
 
@@ -100,6 +137,7 @@ poetry run resilio plan validate-week --file <NEW_PROPOSAL_JSON>
 ```
 
 Return the exact proposal contents, the evidence and uncertainty summary, the
-validation result, the new file path, and one athlete-facing approval prompt.
+validation result, whether any workout is date-only, its publication-capability
+summary, the new file path, and one athlete-facing approval prompt.
 The main coach records approval with
 `poetry run resilio approvals approve-week --file <NEW_PROPOSAL_JSON>`.

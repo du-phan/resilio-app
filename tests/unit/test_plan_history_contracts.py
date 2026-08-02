@@ -38,7 +38,7 @@ def repo(tmp_path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
 def test_plan_workout_identity_is_fully_qualified() -> None:
     identity = PlanWorkoutIdentity(
         plan_id="plan_renewal",
-        macro_revision_id="macro_revision_1111111111111111",
+        plan_revision_id="plan_revision_1111111111111111",
         week_number=3,
         local_workout_id="workout_11111111111111111111111111111111",
     )
@@ -129,6 +129,7 @@ def test_macro_context_requires_start_after_evidence_and_unique_evidence_ids() -
         },
         "active_vdot_approval_id": "vdot_approval_1111111111111111",
         "historical_plan_summaries": [],
+        "historical_assessment_summaries": [],
         "historical_compact_weeks": [],
         "recent_detailed_weeks": [],
         "evidence_index": [

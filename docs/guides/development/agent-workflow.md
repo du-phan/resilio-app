@@ -25,10 +25,11 @@ session-RPE arbitrary units, run exposure, other-sport exposure, and wellness
 separate. Interpret recovery signal by signal; do not compute a composite
 readiness score or injury probability.
 
-Use the matching skill for onboarding, weekly analysis, multi-week review,
-plan renewal, VDOT proposal, macro planning, weekly generation, and weekly
-application. The main coach owns athlete questions and approvals. Executor
-skills do not approve or apply their own proposals.
+Use the matching skill for onboarding, baseline-assessment planning and review,
+weekly analysis, multi-week review, plan renewal, VDOT proposal, race-macro
+planning, weekly generation, and weekly application. The main coach owns
+athlete questions and approvals. Executor skills do not approve or apply their
+own proposals.
 
 ## Dates and weather
 
@@ -51,20 +52,60 @@ Do not use web weather. If the forecast is unavailable, state the uncertainty.
 
 ## Planning and approvals
 
-Use one named, versioned primary methodology for the entire macro plan. Follow
-the [methodology reference](../../coaching/methodology.md) and the selected
-source in `docs/training_books/`.
+Race-macro plans use one named, versioned primary methodology. Follow the
+[methodology reference](../../coaching/methodology.md) and the selected source
+in `docs/training_books/`. A baseline-assessment plan is a separate,
+methodology-free lifecycle for establishing evidence after missing, disputed,
+conflicting, or stale baseline evidence; it never requires an invented VDOT.
 
-The required sequence is:
+The race-planning sequence is:
 
 1. propose baseline VDOT;
 2. record athlete VDOT approval;
 3. create the immutable macro-planning evidence context;
 4. create and present the methodology-explicit, evidence-cited macro plan;
-5. record macro approval;
+5. record plan approval;
 6. generate a new exact weekly file;
 7. bind athlete approval to that path and SHA-256;
 8. apply those unchanged bytes and verify approval consumption.
+
+The baseline-assessment sequence is:
+
+1. exclude medical rehabilitation and record the exact assessment reason;
+2. create the immutable assessment-planning context;
+3. create and separately approve a short return plan with one timed-distance
+   benchmark intent;
+4. generate, approve, and apply exact weekly files;
+5. publish the approved benchmark as a structured calendar-day or exactly
+   timed run and require exact owned completion pairing;
+6. let the athlete select either the whole paired activity or an exact
+   canonical segment and confirm the official benchmark distance;
+7. create the immutable review, separately confirm closure, and archive the
+   assessment;
+8. propose VDOT from that closed review and record a separate VDOT approval.
+
+Five kilometers is the default benchmark distance. A longer benchmark requires
+explicit athlete confirmation plus an evidence-backed rationale. Exact weekly
+approval may retain a date-only workout; calendar publication represents it at
+provider local midnight without treating midnight as an approved start time.
+Weekly application returns local commit and automatic run-synchronization
+outcomes separately. Enabled synchronization reconciles the exact applied week
+immediately; a provider failure never rolls back or obscures the local commit.
+Ordinary reconciliation blocks owned remote drift. Restore-local requires a
+separate athlete-confirmation reference and never implies Garmin watch delivery.
+Cycle-specific holidays and other unavailable date ranges belong in typed
+assessment scheduling constraints with an athlete-confirmation reference, not
+inferred from weekday availability or silently written into the durable profile.
+When that shortened week makes a durable other-sport commitment infeasible,
+the coach may propose a week-and-sport-specific session-count override with an
+explicit rationale. It becomes binding only with whole-plan approval; do not
+mislabel the proposal as a prior athlete confirmation or cram the normal count
+into the remaining days.
+
+An unapproved, unapplied plan proposal may be discarded for revision only by
+its exact plan revision ID and only after local publication and completion
+manifests prove that no ownership record exists. Approved plans always require
+the normal evidence-backed closure lifecycle.
 
 Before a successor plan, synchronize through the evidence date, record the
 athlete-confirmed goal outcome, create and present an immutable cycle review,
@@ -79,8 +120,8 @@ fingerprint. Macro creation likewise re-proves its context fingerprint and
 requires decisions to cite the latest recent week plus the latest closed-plan
 summary and goal outcome for a renewal.
 
-Every transition timestamp must follow that sequence; persisted state rejects
-pre-approval plans, pre-context macro plans, pre-macro weekly approvals,
+Every transition timestamp must follow its sequence; persisted state rejects
+pre-approval plans, pre-context race plans, pre-plan weekly approvals,
 pre-approval applications, and closure records that contradict their source
 revision or cycle review. Any revision is a new proposal and a new approval.
 

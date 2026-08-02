@@ -13,11 +13,13 @@ from resilio.core.planning.schedule import (
 )
 from resilio.schemas.activity import RUNNING_SPORT_VALUES
 from resilio.schemas.plan import (
-    MasterPlan,
+    BaselineAssessmentPlan,
+    TrainingPlan,
     WeekPlan,
     WorkoutPrescription,
     WorkoutType,
 )
+from resilio.schemas.vdot import RaceDistance
 
 PLANNING_POLICY_VERSION: Literal[
     "coach_planning_policy_v1"
@@ -31,6 +33,7 @@ QUALITY_ROLE_BY_WORKOUT_TYPE = {
     WorkoutType.FARTLEK.value: "fartlek",
     WorkoutType.STRIDES.value: "strides_only",
     WorkoutType.RACE.value: "race_pace",
+    WorkoutType.BENCHMARK.value: "benchmark",
 }
 
 
@@ -72,7 +75,7 @@ def _append(
     )
 
 
-def validate_populated_week(plan: MasterPlan, week: WeekPlan) -> None:
+def validate_populated_week(plan: TrainingPlan, week: WeekPlan) -> None:
     """Fail with stable violations when exact workouts break approved policy."""
     violations: list[WeekPolicyViolation] = []
     constraints = plan.constraints_snapshot
@@ -107,12 +110,15 @@ def validate_populated_week(plan: MasterPlan, week: WeekPlan) -> None:
     unavailable_run_days = set(constraints.unavailable_run_days)
     for index, workout in enumerate(week.workouts):
         path = f"workouts[{index}]"
-        if workout.start_time_local is None:
+        if (
+            str(workout.sport) in RUNNING_SPORT_VALUES
+            and workout.structured_workout is None
+        ):
             _append(
                 violations,
-                code="missing_start_time",
-                path=f"{path}.start_time_local",
-                message="exact weekly applications require a local start time",
+                code="run_structured_workout_missing",
+                path=f"{path}.structured_workout",
+                message="running workouts require a typed structured prescription",
             )
         if (
             constraints.maximum_session_duration_seconds is not None
@@ -150,12 +156,33 @@ def validate_populated_week(plan: MasterPlan, week: WeekPlan) -> None:
     _validate_quality_hints(week, violations)
     _validate_long_run(week, run_workouts, violations)
     _validate_fitzgerald_distribution(week, run_workouts, violations)
+    if isinstance(plan, BaselineAssessmentPlan):
+        _validate_temporary_schedule(plan, week, violations)
+        _validate_assessment_benchmark(plan, week, violations)
     if violations:
         raise WeekPolicyError(violations)
 
 
+def _validate_temporary_schedule(
+    plan: BaselineAssessmentPlan,
+    week: WeekPlan,
+    violations: list[WeekPolicyViolation],
+) -> None:
+    for index, workout in enumerate(week.workouts):
+        if any(
+            constraint.contains(workout.date)
+            for constraint in plan.temporary_schedule_constraints
+        ):
+            _append(
+                violations,
+                code="workout_on_temporary_unavailable_date",
+                path=f"workouts[{index}].date",
+                message="workout is scheduled during athlete-confirmed unavailability",
+            )
+
+
 def _validate_other_sports(
-    plan: MasterPlan,
+    plan: TrainingPlan,
     week: WeekPlan,
     violations: list[WeekPolicyViolation],
 ) -> None:
@@ -175,15 +202,25 @@ def _validate_other_sports(
 
     for sport_name, commitment in commitments.items():
         sessions = planned_other_sports.get(sport_name, [])
-        if len(sessions) != commitment.sessions_per_week:
+        required_sessions_per_week = commitment.sessions_per_week
+        if isinstance(plan, BaselineAssessmentPlan):
+            overrides = [
+                override
+                for override in plan.temporary_other_sport_commitment_overrides
+                if override.week_start_date == week.start_date
+                and override.sport_name == sport_name
+            ]
+            if overrides:
+                required_sessions_per_week = overrides[0].sessions_per_week
+        if len(sessions) != required_sessions_per_week:
             _append(
                 violations,
                 code="other_sport_session_count_mismatch",
                 path="workouts",
                 message=(
                     f"{sport_name} has {len(sessions)} sessions; the "
-                    f"athlete-confirmed commitment requires "
-                    f"{commitment.sessions_per_week}"
+                    f"approved plan requires "
+                    f"{required_sessions_per_week}"
                 ),
             )
         unavailable_days = set(commitment.unavailable_days)
@@ -206,7 +243,7 @@ def _validate_other_sports(
 
 
 def _validate_session_overlaps(
-    plan: MasterPlan,
+    plan: TrainingPlan,
     week: WeekPlan,
     violations: list[WeekPolicyViolation],
 ) -> None:
@@ -363,4 +400,53 @@ def _validate_fitzgerald_distribution(
             code="fitzgerald_low_intensity_below_minimum",
             path="workouts",
             message="planned low-intensity run time is below the macro minimum",
+        )
+
+
+def _validate_assessment_benchmark(
+    plan: BaselineAssessmentPlan,
+    week: WeekPlan,
+    violations: list[WeekPolicyViolation],
+) -> None:
+    intent = plan.benchmark_intent
+    contains_window = week.start_date <= intent.fallback_window_start <= week.end_date
+    benchmarks = [
+        (index, workout)
+        for index, workout in enumerate(week.workouts)
+        if workout.workout_type == WorkoutType.BENCHMARK.value
+    ]
+    if not contains_window:
+        if benchmarks:
+            _append(
+                violations,
+                code="benchmark_outside_assessment_week",
+                path="workouts",
+                message="benchmark is outside the approved fallback-window week",
+            )
+        return
+    if len(benchmarks) != 1:
+        _append(
+            violations,
+            code="benchmark_count_not_one",
+            path="workouts",
+            message=f"assessment week requires exactly one benchmark, found {len(benchmarks)}",
+        )
+        return
+    index, benchmark = benchmarks[0]
+    if not intent.fallback_window_start <= benchmark.date <= intent.fallback_window_end:
+        _append(
+            violations,
+            code="benchmark_outside_fallback_window",
+            path=f"workouts[{index}].date",
+            message="benchmark date is outside the athlete-approved fallback window",
+        )
+    assert benchmark.structured_workout is not None
+    timed_step = benchmark.structured_workout.timed_distance_steps()[0]
+    expected_distance_meters = RaceDistance(intent.race_distance).distance_meters
+    if abs(timed_step.distance_meters - expected_distance_meters) > 0.01:
+        _append(
+            violations,
+            code="benchmark_distance_mismatch",
+            path=f"workouts[{index}].structured_workout",
+            message="timed-distance step differs from the approved benchmark distance",
         )

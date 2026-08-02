@@ -9,17 +9,13 @@ from resilio.core.planning.adherence_evidence import (
 )
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
-    load_all_closed_plan_cycles,
+    load_all_closed_plan_archives,
 )
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.freshness import require_fresh_plan
 from resilio.core.planning.integrity import (
     applied_workout_sha256,
-    macro_skeleton_sha256,
-)
-from resilio.core.planning.policy import (
-    WeekPolicyError,
-    validate_populated_week,
+    plan_skeleton_sha256,
 )
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.state_repository import (
@@ -27,7 +23,56 @@ from resilio.core.planning.state_repository import (
     required_planning_state_unlocked,
 )
 from resilio.core.repository import RepositoryIO
+from resilio.schemas.approvals import PlanningState
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+
+
+def load_publishable_workouts_unlocked(
+    repo: RepositoryIO,
+    state: PlanningState,
+) -> list[AuthoritativeWorkout]:
+    """Return exact applied authority while the caller holds the plan lock.
+
+    Application policy is enforced before a week is approved and applied. This
+    read path verifies immutable approval identity and bytes without reapplying
+    today's policy to historical evidence.
+    """
+    plan = require_fresh_plan(repo, state)
+    if state.active_plan is None or state.active_plan.plan_approval is None:
+        raise PlanOperationError("The current plan is not approved")
+    if state.active_plan.plan_approval.plan_skeleton_sha256 != plan_skeleton_sha256(plan):
+        raise PlanOperationError("The approved plan skeleton has changed")
+    active_by_week = {
+        approval.week_number: approval
+        for approval in state.active_plan.applied_week_revisions
+        if approval.active
+    }
+    workouts: list[AuthoritativeWorkout] = []
+    for week in plan.weeks:
+        if not week.workouts:
+            continue
+        approval = active_by_week.get(week.week_number)
+        if approval is None:
+            raise PlanOperationError(
+                f"Week {week.week_number} has workouts without an active approval"
+            )
+        if approval.applied_workout_sha256 != applied_workout_sha256(week):
+            raise PlanOperationError(
+                f"Week {week.week_number} changed after its approval was applied"
+            )
+        workouts.extend(
+            AuthoritativeWorkout(
+                identity=PlanWorkoutIdentity(
+                    plan_id=plan.id,
+                    plan_revision_id=plan.plan_revision_id,
+                    week_number=week.week_number,
+                    local_workout_id=workout.id,
+                ),
+                prescription=workout,
+            )
+            for workout in week.workouts
+        )
+    return workouts
 
 
 def load_publishable_workouts(
@@ -35,49 +80,10 @@ def load_publishable_workouts(
 ) -> list[AuthoritativeWorkout]:
     """Return workouts covered by active, exact applied-week approvals."""
     with coordinated_plan_lock(repo, "load_publishable_workouts"):
-        state = required_planning_state_unlocked(repo)
-        plan = require_fresh_plan(repo, state)
-        if state.active_plan is None or state.active_plan.macro_approval is None:
-            raise PlanOperationError("The current macro plan is not approved")
-        if state.active_plan.macro_approval.macro_skeleton_sha256 != macro_skeleton_sha256(plan):
-            raise PlanOperationError("The approved macro skeleton has changed")
-        active_by_week = {
-            approval.week_number: approval
-            for approval in state.active_plan.applied_week_revisions
-            if approval.active
-        }
-        workouts: list[AuthoritativeWorkout] = []
-        for week in plan.weeks:
-            if not week.workouts:
-                continue
-            try:
-                validate_populated_week(plan, week)
-            except WeekPolicyError as exc:
-                raise PlanOperationError(
-                    f"Week {week.week_number} violates approved policy: {exc}"
-                ) from exc
-            approval = active_by_week.get(week.week_number)
-            if approval is None:
-                raise PlanOperationError(
-                    f"Week {week.week_number} has workouts without an active approval"
-                )
-            if approval.applied_workout_sha256 != applied_workout_sha256(week):
-                raise PlanOperationError(
-                    f"Week {week.week_number} changed after its approval was applied"
-                )
-            workouts.extend(
-                AuthoritativeWorkout(
-                    identity=PlanWorkoutIdentity(
-                        plan_id=plan.id,
-                        macro_revision_id=plan.macro_revision_id,
-                        week_number=week.week_number,
-                        local_workout_id=workout.id,
-                    ),
-                    prescription=workout,
-                )
-                for workout in week.workouts
-            )
-        return workouts
+        return load_publishable_workouts_unlocked(
+            repo,
+            required_planning_state_unlocked(repo),
+        )
 
 
 def load_publishable_workout(
@@ -119,9 +125,9 @@ def load_approved_workouts_for_date_range(
             reason="planning_state_missing",
         )
     try:
-        closed_cycles = load_all_closed_plan_cycles(
+        closed_archives = load_all_closed_plan_archives(
             repo,
-            state.closed_plan_cycle_references,
+            state.closed_plan_references,
         )
     except PlanningArtifactError as exc:
         return ApprovedWorkoutWindow(
@@ -133,5 +139,5 @@ def load_approved_workouts_for_date_range(
         state,
         window_start=window_start,
         window_end=window_end,
-        closed_plan_cycles=closed_cycles,
+        closed_plan_archives=closed_archives,
     )

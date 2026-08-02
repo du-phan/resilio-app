@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
+from resilio.core.workout_publication.naming import provider_workout_name
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     event_target_for_modes,
@@ -12,13 +13,18 @@ from resilio.core.workout_publication.policy import (
     external_id_for,
     garmin_filter_allows,
     publication_fingerprint,
+    publication_settings_version,
     settings_for_event_type,
     sha256_text,
-    sport_settings_version,
     uid_for,
     validated_local_start,
 )
 from resilio.core.workout_publication.renderer import render_structured_workout
+from resilio.core.workout_publication.semantics import (
+    StepSemantics,
+    WorkoutSemanticsError,
+    expected_workout_semantics,
+)
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import (
     AthleteDTO,
@@ -29,7 +35,7 @@ from resilio.integrations.intervals_icu.dto import (
 from resilio.schemas.plan import WorkoutPrescription
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import PublishedWorkout
-from resilio.schemas.structured_workout import TargetMode
+from resilio.schemas.structured_workout import TargetMode, TargetUnit
 
 
 @dataclass(frozen=True)
@@ -45,7 +51,9 @@ class PreparedPublication:
     settings_version_sha256: str
     publication_fingerprint_sha256: str
     rendered_workout_sha256: str
-    start_date_local: str
+    provider_start_date_local: str
+    garmin_forwarding_eligible: bool
+    expected_step_semantics: tuple[StepSemantics, ...]
 
 
 def prepare_publication(
@@ -53,6 +61,7 @@ def prepare_publication(
     authoritative_workout: AuthoritativeWorkout,
     *,
     previous: PublishedWorkout | None,
+    provider_name: str | None = None,
 ) -> PreparedPublication:
     """Validate device policy, render content, and bind deterministic identity."""
     workout = authoritative_workout.prescription
@@ -73,20 +82,26 @@ def prepare_publication(
         event_type,
     )
     modes = workout.structured_workout.target_modes()
-    _validate_device_policy(
-        event_type=event_type,
+    _validate_target_settings(
         modes=modes,
-        athlete=athlete,
-        connections=connections,
         settings=settings,
         workout=workout,
     )
+    garmin_eligible = _garmin_forwarding_eligible(
+        event_type=event_type,
+        athlete=athlete,
+        connections=connections,
+    )
 
-    if workout.start_time_local is None:
-        raise PublicationSafetyError(
-            "Publishing requires the exact athlete-approved local start time"
+    rendered_steps = render_structured_workout(workout.structured_workout.steps)
+    purpose = " ".join((workout.purpose or "").split())
+    rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
+    try:
+        expected_semantics = expected_workout_semantics(
+            workout.structured_workout.steps
         )
-    rendered = render_structured_workout(workout.structured_workout.steps)
+    except WorkoutSemanticsError as exc:
+        raise PublicationSafetyError(str(exc)) from exc
     external_id = external_id_for(workout.id)
     requested_uid = uid_for(workout.id)
     start_local = validated_local_start(
@@ -98,12 +113,19 @@ def prepare_publication(
         uid=previous.uid if previous is not None else requested_uid,
         external_id=external_id,
         type=event_type,
-        name=workout.purpose or str(workout.workout_type),
+        name=provider_name or provider_workout_name(workout),
         description=rendered,
         start_date_local=start_local,
         target=event_target_for_modes(modes),
     )
-    settings_version_sha256 = sport_settings_version(settings)
+    target_units = {
+        str(target.unit) for target in workout.structured_workout.targets()
+    }
+    settings_version_sha256 = publication_settings_version(
+        settings,
+        target_modes=modes,
+        target_units=target_units,
+    )
     return PreparedPublication(
         workout=workout,
         workout_identity=authoritative_workout.identity,
@@ -117,46 +139,58 @@ def prepare_publication(
             settings_version_sha256,
         ),
         rendered_workout_sha256=sha256_text(rendered),
-        start_date_local=start_local,
+        provider_start_date_local=start_local,
+        garmin_forwarding_eligible=garmin_eligible,
+        expected_step_semantics=expected_semantics,
     )
 
 
-def _validate_device_policy(
+def _garmin_forwarding_eligible(
     *,
     event_type: str,
-    modes: set[str],
     athlete: AthleteDTO,
     connections: ConnectionsDTO,
+) -> bool:
+    return (
+        connections.garmin_training_connected
+        and athlete.garmin_upload_workouts is True
+        and garmin_filter_allows(athlete.garmin_upload_filters, event_type)
+    )
+
+
+def _validate_target_settings(
+    *,
+    modes: set[str],
     settings: SportSettingsDTO,
     workout: WorkoutPrescription,
 ) -> None:
-    """Enforce provider device and sport-setting preconditions."""
-    garmin_connected = connections.garmin_training_connected
-    wahoo_connected = connections.wahoo_connected
-    if not (garmin_connected or wahoo_connected):
-        raise PublicationSafetyError("No supported device workout connection is active")
-    if garmin_connected:
-        if athlete.garmin_upload_workouts is not True:
-            raise PublicationSafetyError("Garmin planned-workout forwarding is not enabled")
-        if not garmin_filter_allows(
-            athlete.garmin_upload_filters,
-            event_type,
-        ):
-            raise PublicationSafetyError(f"Garmin workout filters do not admit {event_type}")
-    if wahoo_connected and athlete.wahoo_upload_workouts is not True:
-        raise PublicationSafetyError("Wahoo planned-workout forwarding is not enabled")
+    """Enforce sport-setting requirements that preserve prescribed targets."""
+    assert workout.structured_workout is not None
+    target_units = {
+        str(target.unit) for target in workout.structured_workout.targets()
+    }
+    if len(modes) > 1:
+        raise PublicationSafetyError(
+            "A published running workout must use at most one target mode"
+        )
     if TargetMode.PACE in modes and (
         settings.threshold_speed_meters_per_second is None or not settings.pace_zones
     ):
         raise PublicationSafetyError(
             "Pace-target publication requires threshold pace and pace zones"
         )
-    if TargetMode.POWER in modes and settings.ftp is None:
-        raise PublicationSafetyError("Power-target publication requires FTP")
-    if wahoo_connected and len(modes) > 1:
-        raise PublicationSafetyError("Mixed target modes are blocked for Wahoo publication")
-    assert workout.structured_workout is not None
-    if wahoo_connected and workout.structured_workout.uses_lap_press():
+    if TargetMode.POWER in modes:
         raise PublicationSafetyError(
-            "Lap-button steps are blocked for Wahoo until device support is verified"
+            "Running workout publication supports targetless, pace, or heart-rate steps"
+        )
+    if TargetUnit.PERCENT_LTHR in target_units and settings.lthr is None:
+        raise PublicationSafetyError(
+            "Percent-LTHR publication requires lactate-threshold heart rate"
+        )
+    if (
+        TargetUnit.PERCENT_MAX_HEART_RATE in target_units
+        and settings.max_hr is None
+    ):
+        raise PublicationSafetyError(
+            "Percent-max-heart-rate publication requires maximum heart rate"
         )

@@ -20,6 +20,17 @@ class RaceDistance(str, Enum):
     HALF_MARATHON = "half_marathon"
     MARATHON = "marathon"
 
+    @property
+    def distance_meters(self) -> float:
+        """Return the internationally defined distance represented by this value."""
+        return {
+            RaceDistance.MILE: 1_609.344,
+            RaceDistance.FIVE_K: 5_000.0,
+            RaceDistance.TEN_K: 10_000.0,
+            RaceDistance.HALF_MARATHON: 21_097.5,
+            RaceDistance.MARATHON: 42_195.0,
+        }[self]
+
 
 # ============================================================
 # CORE VDOT MODELS

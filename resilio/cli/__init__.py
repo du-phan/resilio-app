@@ -98,4 +98,8 @@ app.add_typer(
 )
 app.add_typer(dates.app, name="dates", help="Date utilities for training plan generation")
 app.add_typer(approvals.app, name="approvals", help="Manage approval state for planning workflows")
-app.add_typer(workout.app, name="workout", help="Publish structured planned workouts")
+app.add_typer(
+    workout.app,
+    name="workout",
+    help="Synchronize approved running workouts",
+)

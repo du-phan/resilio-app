@@ -14,6 +14,12 @@ from resilio.schemas.activity import (
     NativeAnalysisApplicability,
     SubjectiveSessionEffort,
 )
+from resilio.schemas.assessment import (
+    AssessmentReason,
+    TemporaryOtherSportCommitmentOverride,
+    TemporaryScheduleConstraint,
+    TimedBenchmarkIntent,
+)
 from resilio.schemas.methodology import MethodologySelection
 from resilio.schemas.plan import (
     PlanningConstraintsSnapshot,
@@ -288,9 +294,10 @@ class CoachHistoryContext(BaseModel):
 
 
 class TargetWeekSkeletonContext(BaseModel):
+    plan_kind: Literal["race_macro", "baseline_assessment"]
     plan_id: str
-    macro_revision_id: str
-    macro_skeleton_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    plan_revision_id: str
+    plan_skeleton_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     target_week_skeleton_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     week_number: int = Field(ge=1)
     phase: str
@@ -317,8 +324,34 @@ class WeekPlanningContext(BaseModel):
     evidence_as_of_date: date
     target_week: TargetWeekSkeletonContext
     recent_history: CoachHistoryContext
-    approved_vdot: ApprovedVDOTContext
-    methodology: MethodologySelection
+    approved_vdot: ApprovedVDOTContext | None = None
+    methodology: MethodologySelection | None = None
+    assessment_reasons: list[AssessmentReason] = Field(default_factory=list)
+    benchmark_intent: TimedBenchmarkIntent | None = None
+    temporary_schedule_constraints: list[TemporaryScheduleConstraint] = Field(
+        default_factory=list
+    )
+    temporary_other_sport_commitment_overrides: list[
+        TemporaryOtherSportCommitmentOverride
+    ] = Field(default_factory=list)
     constraints: PlanningConstraintsSnapshot
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def plan_specific_context_is_complete(self) -> "WeekPlanningContext":
+        is_race_plan = self.target_week.plan_kind == "race_macro"
+        if is_race_plan != (self.approved_vdot is not None and self.methodology is not None):
+            raise ValueError("race planning context requires approved VDOT and methodology")
+        if is_race_plan and (
+            self.assessment_reasons
+            or self.benchmark_intent is not None
+            or self.temporary_schedule_constraints
+            or self.temporary_other_sport_commitment_overrides
+        ):
+            raise ValueError("race planning context cannot contain assessment intent")
+        if not is_race_plan and (
+            not self.assessment_reasons or self.benchmark_intent is None
+        ):
+            raise ValueError("assessment planning context requires reasons and benchmark intent")
+        return self

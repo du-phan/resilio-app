@@ -240,6 +240,10 @@ def test_estimate_current_vdot_rejects_unverifiable_approval(
                     "performance_timezone": "UTC",
                     "source_local_activity_id": "act_i_test",
                     "source_external_fingerprint_sha256": "a" * 64,
+                    "measured_distance_meters": 10_000,
+                    "official_distance_confirmation_reference": (
+                        "Athlete confirmed this synchronized effort as an official 10K."
+                    ),
                 },
                 "evidence_summary": (
                     "The exact synchronized race evidence supports this baseline."
@@ -294,7 +298,7 @@ def test_estimate_current_vdot_rejects_future_approved_evidence(
     proposal_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "proposed_vdot": 45,
                 "evidence": {
                     "evidence_type": "manual_athlete_value",

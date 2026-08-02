@@ -155,6 +155,17 @@ class RampStep(BaseModel):
         return self
 
 
+class TimedDistanceStep(BaseModel):
+    """One untargeted measured effort over an athlete-confirmed distance."""
+
+    kind: Literal["timed_distance"] = "timed_distance"
+    distance_meters: float = Field(gt=0, allow_inf_nan=False)
+    nominal_seconds: int = Field(gt=0)
+    cue: Optional[str] = Field(default=None, max_length=500)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class RepeatStep(BaseModel):
     kind: Literal["repeat"] = "repeat"
     repetitions: int = Field(ge=2, le=100)
@@ -165,7 +176,7 @@ class RepeatStep(BaseModel):
 
 
 WorkoutStep = Annotated[
-    Union[SteadyStep, RampStep, RepeatStep],
+    Union[SteadyStep, RampStep, TimedDistanceStep, RepeatStep],
     Field(discriminator="kind"),
 ]
 
@@ -192,10 +203,30 @@ class StructuredWorkout(BaseModel):
             visit(root)
         return modes
 
+    def targets(self) -> list[WorkoutTarget]:
+        """Return all explicit targets in deterministic depth-first order."""
+
+        targets: list[WorkoutTarget] = []
+
+        def visit(step: WorkoutStep) -> None:
+            if isinstance(step, SteadyStep) and step.target is not None:
+                targets.append(step.target)
+            elif isinstance(step, RampStep):
+                targets.extend((step.start_target, step.end_target))
+            elif isinstance(step, RepeatStep):
+                for child in step.steps:
+                    visit(child)
+
+        for root in self.steps:
+            visit(root)
+        return targets
+
     def uses_lap_press(self) -> bool:
         def visit(step: WorkoutStep) -> bool:
             if isinstance(step, (SteadyStep, RampStep)):
                 return step.duration.unit == StepDurationUnit.UNTIL_LAP_PRESS
+            if isinstance(step, TimedDistanceStep):
+                return False
             return any(visit(child) for child in step.steps)
 
         return any(visit(step) for step in self.steps)
@@ -206,6 +237,8 @@ class StructuredWorkout(BaseModel):
         def duration(step: WorkoutStep) -> int:
             if isinstance(step, RepeatStep):
                 return step.repetitions * sum(duration(child) for child in step.steps)
+            if isinstance(step, TimedDistanceStep):
+                return step.nominal_seconds
             if step.duration.unit == StepDurationUnit.SECONDS:
                 assert step.duration.value is not None
                 return step.duration.value
@@ -213,6 +246,22 @@ class StructuredWorkout(BaseModel):
             return step.duration.nominal_seconds
 
         return sum(duration(step) for step in self.steps)
+
+    def timed_distance_steps(self) -> list[TimedDistanceStep]:
+        """Return timed-distance steps in deterministic depth-first order."""
+
+        timed_steps: list[TimedDistanceStep] = []
+
+        def visit(step: WorkoutStep) -> None:
+            if isinstance(step, TimedDistanceStep):
+                timed_steps.append(step)
+            elif isinstance(step, RepeatStep):
+                for child in step.steps:
+                    visit(child)
+
+        for root in self.steps:
+            visit(root)
+        return timed_steps
 
 
 RepeatStep.model_rebuild()

@@ -64,8 +64,9 @@ and labels the authority `coach_designed_conceptually_informed`.
 
    The start must be strictly after the evidence date. Use the returned exact
    artifact reference and evidence index. It contains all closed-plan
-   summaries and goal outcomes, up to 52 compact historical weeks, 12 detailed
-   recent weeks, current profile constraints, and the active VDOT approval.
+   race-cycle summaries, assessment-result summaries, and goal outcomes, up to
+   52 compact historical weeks, 12 detailed recent weeks, current profile
+   constraints, and the active VDOT approval.
 
 2. Use completed run distance, duration, frequency, and longest-run exposure as
    the starting-capacity evidence. Use Intervals.icu native aerobic load,
@@ -88,8 +89,9 @@ and labels the authority `coach_designed_conceptually_informed`.
    `planning_rationale`, and typed `adaptation_decisions`. At minimum explain
    methodology selection and starting run volume. Cite only `evidence_ids`
    present in the returned context. The decisions must cite the latest recent
-   week; for a successor plan, they must also cite the latest closed-plan
-   summary and its goal outcome. For each decision separate:
+   week; for a successor race plan, they must also cite the latest closed race
+   summary and goal outcome. When a baseline assessment is present, cite its
+   latest `assessment_result.<PLAN_ID>` evidence. For each decision separate:
 
    - observed facts and their exact weeks or plan cycle;
    - the planning change;
@@ -123,6 +125,6 @@ weekly run distance with units, phases, recovery weeks, quality and long-run
 intent, the exact profile-derived constraint snapshot, the historical context
 reference, evidence-cited adaptation decisions, evidence limitations, and one
 approval prompt. The main coach records approval separately with
-`poetry run resilio approvals approve-macro`. Approval binds the current plan
-ID, macro revision, VDOT approval, planning-profile fingerprint, and macro
-skeleton SHA-256.
+`poetry run resilio approvals approve-plan`. Approval binds the current plan
+kind, plan ID, plan revision, VDOT approval, planning-profile fingerprint, and
+plan-skeleton SHA-256.

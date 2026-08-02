@@ -1,13 +1,15 @@
-"""Exact-file approval and application for one macro-plan week."""
+"""Exact-file approval and application for one plan week."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
 
+from pydantic import TypeAdapter
+
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
-    load_all_closed_plan_cycles,
+    load_all_closed_plan_archives,
 )
 from resilio.core.planning.audit import (
     new_planning_id,
@@ -20,7 +22,7 @@ from resilio.core.planning.freshness import (
 )
 from resilio.core.planning.integrity import (
     applied_workout_sha256,
-    macro_skeleton_sha256,
+    plan_skeleton_sha256,
     sha256_file,
     target_week_skeleton_sha256,
 )
@@ -41,10 +43,12 @@ from resilio.schemas.approvals import (
     WeeklyApproval,
 )
 from resilio.schemas.plan import (
-    MasterPlan,
-    WeekApplication,
+    TrainingPlan,
     WeekPlan,
 )
+from resilio.schemas.week_application import WeekApplication
+
+TRAINING_PLAN_ADAPTER: TypeAdapter[TrainingPlan] = TypeAdapter(TrainingPlan)
 
 
 def load_week_application(path: Path) -> WeekApplication:
@@ -56,15 +60,15 @@ def load_week_application(path: Path) -> WeekApplication:
         raise PlanOperationError(f"Approved week file is invalid: {exc}") from exc
 
 
-def _find_week(plan: MasterPlan, week_number: int) -> WeekPlan:
+def _find_week(plan: TrainingPlan, week_number: int) -> WeekPlan:
     matching = [week for week in plan.weeks if week.week_number == week_number]
     if len(matching) != 1:
-        raise PlanOperationError("Weekly payload does not identify exactly one macro-plan week")
+        raise PlanOperationError("Weekly payload does not identify exactly one plan week")
     return matching[0]
 
 
 def _populate_and_validate_week(
-    plan: MasterPlan,
+    plan: TrainingPlan,
     target_week: WeekPlan,
     application: WeekApplication,
 ) -> WeekPlan:
@@ -96,9 +100,9 @@ def _validate_workout_ids_are_globally_unique(
     active_plan = state.active_plan.plan
     owners_by_workout_id: dict[str, tuple[str, int]] = {}
     try:
-        closed_cycles = load_all_closed_plan_cycles(
+        closed_cycles = load_all_closed_plan_archives(
             repo,
-            state.closed_plan_cycle_references,
+            state.closed_plan_references,
         )
     except PlanningArtifactError as exc:
         raise PlanOperationError(str(exc)) from exc
@@ -134,8 +138,8 @@ def validate_week_application(
     with coordinated_plan_lock(repo, "validate_week_application"):
         state = required_planning_state_unlocked(repo)
         plan = require_fresh_plan(repo, state)
-        if state.active_plan is None or state.active_plan.macro_approval is None:
-            raise PlanOperationError("The current macro plan is not approved")
+        if state.active_plan is None or state.active_plan.plan_approval is None:
+            raise PlanOperationError("The current plan is not approved")
         target_week = _find_week(plan, application.week_number)
         populated_week = _populate_and_validate_week(
             plan,
@@ -163,11 +167,11 @@ def approve_week_application(
         state = required_planning_state_unlocked(repo)
         plan = require_fresh_plan(repo, state)
         assert state.active_plan is not None
-        macro_approval = state.active_plan.macro_approval
-        if macro_approval is None:
-            raise PlanOperationError("The current macro plan is not approved")
-        if macro_approval.macro_skeleton_sha256 != macro_skeleton_sha256(plan):
-            raise PlanOperationError("The approved macro skeleton has changed")
+        plan_approval = state.active_plan.plan_approval
+        if plan_approval is None:
+            raise PlanOperationError("The current plan is not approved")
+        if plan_approval.plan_skeleton_sha256 != plan_skeleton_sha256(plan):
+            raise PlanOperationError("The approved plan skeleton has changed")
         week = _find_week(plan, application.week_number)
         populated_week = _populate_and_validate_week(plan, week, application)
         _validate_workout_ids_are_globally_unique(repo, state, populated_week)
@@ -178,13 +182,13 @@ def approve_week_application(
             else WeeklyApplicationAction.INITIAL
         )
         approval_timestamp = validated_utc_timestamp(approved_at_utc)
-        if approval_timestamp < macro_approval.approved_at_utc:
-            raise PlanOperationError("Weekly approval cannot predate macro approval")
+        if approval_timestamp < plan_approval.approved_at_utc:
+            raise PlanOperationError("Weekly approval cannot predate plan approval")
         approval = WeeklyApproval(
             approval_id=new_planning_id("week_approval"),
             plan_id=plan.id,
-            macro_revision_id=plan.macro_revision_id,
-            macro_skeleton_sha256=macro_approval.macro_skeleton_sha256,
+            plan_revision_id=plan.plan_revision_id,
+            plan_skeleton_sha256=plan_approval.plan_skeleton_sha256,
             week_number=application.week_number,
             target_week_skeleton_sha256=target_week_skeleton_sha256(week),
             action=action,
@@ -201,10 +205,10 @@ def approve_week_application(
 
 
 def _updated_plan(
-    plan: MasterPlan,
+    plan: TrainingPlan,
     populated_week: WeekPlan,
-) -> MasterPlan:
-    return MasterPlan.model_validate(
+) -> TrainingPlan:
+    return TRAINING_PLAN_ADAPTER.validate_python(
         plan.model_copy(
             update={
                 "weeks": [
@@ -223,8 +227,8 @@ def apply_approved_week(
     approved_file: Path,
     *,
     applied_at_utc: datetime | None = None,
-) -> MasterPlan:
-    """Atomically consume an exact-file approval into its bound macro revision."""
+) -> TrainingPlan:
+    """Atomically consume an exact-file approval into its bound plan revision."""
     resolved_file = approved_file.expanduser().resolve()
     application = load_week_application(resolved_file)
     with coordinated_plan_lock(repo, "apply_approved_week"):
@@ -235,7 +239,7 @@ def apply_approved_week(
         approval = state.active_plan.pending_weekly_approval
         if approval is None:
             raise PlanOperationError("Weekly approval is missing")
-        if approval.plan_id != plan.id or approval.macro_revision_id != plan.macro_revision_id:
+        if approval.plan_id != plan.id or approval.plan_revision_id != plan.plan_revision_id:
             raise PlanOperationError("Weekly approval references another plan revision")
         if approval.week_number != application.week_number:
             raise PlanOperationError("Approved week number does not match the payload")
@@ -245,7 +249,7 @@ def apply_approved_week(
             raise PlanOperationError("Approved week file changed after approval")
         week = _find_week(plan, application.week_number)
         if target_week_skeleton_sha256(week) != approval.target_week_skeleton_sha256:
-            raise PlanOperationError("Target macro week changed after approval")
+            raise PlanOperationError("Target plan week changed after approval")
         current_hash = applied_workout_sha256(week) if week.workouts else None
         if current_hash != approval.previous_applied_workout_sha256:
             raise PlanOperationError("Previously applied weekly content changed")
@@ -281,7 +285,7 @@ def apply_approved_week(
             AppliedWeekRevision(
                 approval_id=approval.approval_id,
                 plan_id=plan.id,
-                macro_revision_id=plan.macro_revision_id,
+                plan_revision_id=plan.plan_revision_id,
                 week_number=application.week_number,
                 approved_file_sha256=approval.approved_file_sha256,
                 applied_workout_sha256=applied_workout_sha256(populated_week),

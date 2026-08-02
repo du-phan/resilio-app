@@ -1,6 +1,7 @@
 """Structured rendering and ownership-safe publication tests."""
 
-from datetime import date, time
+import re
+from datetime import date, datetime, time, timezone
 
 import pytest
 from pydantic import ValidationError
@@ -11,7 +12,17 @@ from resilio.core.workout_publication.manifest import (
     load_manifest,
     save_manifest,
 )
+from resilio.core.workout_publication.naming import (
+    MAX_PROVIDER_WORKOUT_NAME_CHARACTERS,
+    provider_workout_name,
+    provider_workout_names,
+)
 from resilio.core.workout_publication.renderer import render_structured_workout
+from resilio.core.workout_publication.semantics import (
+    WorkoutSemanticsError,
+    assert_workout_semantics_match,
+    expected_workout_semantics,
+)
 from resilio.core.workout_publication.service import (
     PublicationSafetyError,
     uid_for,
@@ -25,6 +36,7 @@ from resilio.integrations.intervals_icu.dto import (
     EventDTO,
     EventWriteDTO,
     SportSettingsDTO,
+    WorkoutDocumentDTO,
 )
 from resilio.integrations.intervals_icu.errors import (
     IntervalsNotFoundError,
@@ -128,7 +140,39 @@ def _workout(
     )
 
 
-def test_structured_workout_requires_exact_approved_time_and_nominal_duration() -> None:
+def _targetless_workout(
+    *,
+    workout_id: str = "targetless",
+    planned_distance_meters: float = 1_500,
+) -> WorkoutPrescription:
+    return WorkoutPrescription.model_validate(
+        {
+            "id": workout_id,
+            "date": date(2026, 10, 25),
+            "sport": "run",
+            "workout_type": "easy",
+            "planned_duration_seconds": 600,
+            "planned_distance_meters": planned_distance_meters,
+            "planned_low_intensity_duration_seconds": 600,
+            "planned_moderate_intensity_duration_seconds": 0,
+            "planned_high_intensity_duration_seconds": 0,
+            "target_rpe_1_to_10": 3,
+            "purpose": "Easy conversational running.",
+            "structured_workout": {
+                "sport": "run",
+                "steps": [
+                    {
+                        "kind": "steady",
+                        "duration": {"unit": "seconds", "value": 600},
+                        "intensity": "active",
+                    }
+                ],
+            },
+        }
+    )
+
+
+def test_structured_workout_allows_date_only_approval_and_requires_nominal_duration() -> None:
     structure = StructuredWorkout.model_validate(
         {
             "sport": "run",
@@ -156,8 +200,8 @@ def test_structured_workout_requires_exact_approved_time_and_nominal_duration() 
         "structured_workout": structure,
     }
 
-    with pytest.raises(ValidationError, match="start_time_local"):
-        WorkoutPrescription(**common)
+    date_only = WorkoutPrescription(**common)
+    assert date_only.start_time_local is None
     with pytest.raises(ValidationError, match="nominal duration"):
         WorkoutPrescription(
             **{
@@ -175,33 +219,20 @@ class WorkoutPublicationService(ProductionWorkoutPublicationService):
     def __init__(self, repo, client):
         super().__init__(repo, client)
         self._approved_workouts = {}
-        self._approved_plan_workout_ids = []
 
     def publish(self, workout):
         self._approved_workouts[workout.id] = self._authoritative(workout)
         return super().publish(workout.id)
 
-    def publish_plan(self, workouts, *, from_date):
-        self._approved_workouts.update(
-            {workout.id: self._authoritative(workout) for workout in workouts}
-        )
-        self._approved_plan_workout_ids = [workout.id for workout in workouts]
-        return super().publish_plan(from_date=from_date)
-
     def _load_approved_workout(self, workout_id):
         return self._approved_workouts[workout_id]
-
-    def _load_approved_workouts(self):
-        return [
-            self._approved_workouts[workout_id] for workout_id in self._approved_plan_workout_ids
-        ]
 
     @staticmethod
     def _authoritative(workout):
         return AuthoritativeWorkout(
             identity=PlanWorkoutIdentity(
                 plan_id="plan_publication_test",
-                macro_revision_id="macro_revision_1111111111111111",
+                plan_revision_id="plan_revision_1111111111111111",
                 week_number=1,
                 local_workout_id=workout.id,
             ),
@@ -280,12 +311,95 @@ class FakeClient:
         )
         event_id = existing.id if existing else self.next_id
         self.next_id += 0 if existing else 1
-        stored = EventDTO(id=event_id, **event.model_dump())
+        stored = EventDTO(
+            id=event_id,
+            workout_doc={"steps": _parse_fake_workout_steps(event.description)},
+            **event.model_dump(),
+        )
         self.events[event_id] = stored
         return stored
 
     def delete_event(self, event_id, *, athlete_id=None):
         del self.events[event_id]
+
+
+def _parse_fake_workout_steps(description: str) -> list[dict[str, object]]:
+    """Independent narrow fake of the Intervals text parser used by unit tests."""
+    roots: list[dict[str, object]] = []
+    stack: list[tuple[int, list[dict[str, object]]]] = [(-1, roots)]
+    for raw_line in description.splitlines():
+        stripped = raw_line.strip()
+        indentation = len(raw_line) - len(raw_line.lstrip())
+        repeat_match = re.fullmatch(r".+\s(\d+)x", stripped)
+        if repeat_match:
+            while stack[-1][0] >= indentation:
+                stack.pop()
+            nested: list[dict[str, object]] = []
+            block: dict[str, object] = {
+                "reps": int(repeat_match.group(1)),
+                "steps": nested,
+            }
+            stack[-1][1].append(block)
+            stack.append((indentation, nested))
+            continue
+        if not stripped.startswith("- "):
+            continue
+        while stack[-1][0] >= indentation:
+            stack.pop()
+        stack[-1][1].append(_parse_fake_step(stripped[2:]))
+    return roots
+
+
+def _parse_fake_step(payload: str) -> dict[str, object]:
+    tokens = payload.split()
+    termination_index = next(
+        index
+        for index, token in enumerate(tokens)
+        if re.fullmatch(r"\d+(?:\.\d+)?mtr|\d+[ms]", token)
+    )
+    result: dict[str, object] = {}
+    if termination_index:
+        result["text"] = " ".join(tokens[:termination_index])
+    termination = tokens[termination_index]
+    if termination.endswith("mtr"):
+        result["distance"] = float(termination[:-3])
+    elif termination.endswith("m"):
+        result["duration"] = float(termination[:-1]) * 60
+    else:
+        result["duration"] = float(termination[:-1])
+    remaining_tokens = tokens[termination_index + 1 :]
+    for token_index, token in enumerate(
+        remaining_tokens,
+        start=termination_index + 1,
+    ):
+        if token.startswith("intensity="):
+            result["intensity"] = token.removeprefix("intensity=")
+        elif pace_match := re.fullmatch(
+            r"(\d+):(\d{2})-(\d+):(\d{2})/km",
+            token,
+        ):
+            first = int(pace_match.group(1)) * 60 + int(pace_match.group(2))
+            second = int(pace_match.group(3)) * 60 + int(pace_match.group(4))
+            result["pace"] = {
+                "start": first,
+                "end": second,
+                "units": "secs/km",
+            }
+        elif token.lower() == "bpm" and token_index:
+            bounds = tokens[token_index - 1].split("-")
+            result["hr"] = {
+                "start": float(bounds[0]),
+                "end": float(bounds[-1]),
+                "units": "bpm",
+            }
+        elif token == "HR" and token_index:
+            bounds = tokens[token_index - 1].removesuffix("%").split("-")
+            result["hr"] = {
+                "start": float(bounds[0]),
+                "end": float(bounds[-1]),
+                "units": "%hr",
+            }
+    return result
 
 
 @pytest.fixture
@@ -300,9 +414,284 @@ def test_recursive_native_text_render_is_deterministic() -> None:
     second = render_structured_workout(_structure().steps)
 
     assert first == second
-    assert "3x" in first
-    assert "1000mtr 4:10-4:20/km interval" in first
+    assert "Repeat 3x" in first
+    assert (
+        "- Smooth and controlled 1000mtr 4:10-4:20/km "
+        "intensity=interval"
+    ) in first
+    assert "- 10m 5:00-5:30/km intensity=warmup" in first
     assert first.endswith("\n")
+
+
+def test_provider_names_are_date_independent_and_reuse_identical_structures() -> None:
+    first = _targetless_workout(workout_id="a", planned_distance_meters=4_000)
+    moved = _targetless_workout(
+        workout_id="b",
+        planned_distance_meters=4_000,
+    ).model_copy(
+        update={"date": date(2026, 11, 1)}
+    )
+
+    names = provider_workout_names([moved, first])
+
+    assert provider_workout_name(first) == "Easy4K"
+    assert provider_workout_name(moved) == "Easy4K"
+    assert names == {"a": "Easy4K", "b": "Easy4K"}
+    assert all(
+        len(name) <= MAX_PROVIDER_WORKOUT_NAME_CHARACTERS
+        for name in names.values()
+    )
+
+
+def test_provider_name_describes_the_primary_repeat_structure() -> None:
+    workout = WorkoutPrescription.model_validate(
+        {
+            "id": "tempo-2x7",
+            "date": date(2026, 10, 25),
+            "sport": "run",
+            "workout_type": "tempo",
+            "planned_duration_seconds": 1_680,
+            "planned_distance_meters": 5_000,
+            "planned_low_intensity_duration_seconds": 760,
+            "planned_moderate_intensity_duration_seconds": 0,
+            "planned_high_intensity_duration_seconds": 920,
+            "target_rpe_1_to_10": 7,
+            "purpose": "Two controlled seven-minute tempo repetitions.",
+            "structured_workout": {
+                "sport": "run",
+                "steps": [
+                    {
+                        "kind": "steady",
+                        "duration": {"unit": "seconds", "value": 180},
+                        "intensity": "warmup",
+                    },
+                    {
+                        "kind": "repeat",
+                        "repetitions": 4,
+                        "steps": [
+                            {
+                                "kind": "steady",
+                                "duration": {"unit": "seconds", "value": 20},
+                                "intensity": "active",
+                            },
+                            {
+                                "kind": "steady",
+                                "duration": {"unit": "seconds", "value": 40},
+                                "intensity": "recovery",
+                            },
+                        ],
+                    },
+                    {
+                        "kind": "repeat",
+                        "repetitions": 2,
+                        "steps": [
+                            {
+                                "kind": "steady",
+                                "duration": {"unit": "seconds", "value": 420},
+                                "intensity": "interval",
+                            },
+                            {
+                                "kind": "steady",
+                                "duration": {"unit": "seconds", "value": 120},
+                                "intensity": "recovery",
+                            },
+                        ],
+                    },
+                    {
+                        "kind": "steady",
+                        "duration": {"unit": "seconds", "value": 180},
+                        "intensity": "cooldown",
+                    },
+                ],
+            },
+        }
+    )
+
+    assert provider_workout_name(workout) == "Tempo2x7m"
+
+
+def test_provider_name_uses_the_complete_interval_label() -> None:
+    assert provider_workout_name(_workout()) == "Interval3x1K"
+
+
+def test_provider_name_describes_a_timed_distance_benchmark() -> None:
+    workout = WorkoutPrescription.model_validate(
+        {
+            "id": "benchmark-5k",
+            "date": date(2026, 10, 25),
+            "sport": "run",
+            "workout_type": "benchmark",
+            "planned_duration_seconds": 1_500,
+            "planned_distance_meters": 5_000,
+            "planned_low_intensity_duration_seconds": 0,
+            "planned_moderate_intensity_duration_seconds": 0,
+            "planned_high_intensity_duration_seconds": 1_500,
+            "target_rpe_1_to_10": 9,
+            "purpose": "Establish a current five-kilometre baseline.",
+            "structured_workout": {
+                "sport": "run",
+                "steps": [
+                    {
+                        "kind": "timed_distance",
+                        "distance_meters": 5_000,
+                        "nominal_seconds": 1_500,
+                    }
+                ],
+            },
+        }
+    )
+
+    assert provider_workout_name(workout) == "5KTest"
+
+
+def test_provider_names_disambiguate_different_structures_with_same_summary() -> None:
+    first = _targetless_workout(workout_id="a")
+    payload = _targetless_workout(workout_id="b").model_dump(mode="json")
+    payload["structured_workout"]["steps"] = [
+        {
+            "kind": "steady",
+            "duration": {"unit": "seconds", "value": 300},
+            "intensity": "warmup",
+        },
+        {
+            "kind": "steady",
+            "duration": {"unit": "seconds", "value": 300},
+            "intensity": "active",
+        },
+    ]
+    second = WorkoutPrescription.model_validate(payload)
+
+    names = provider_workout_names([second, first])
+
+    assert set(names.values()) == {"Easy1.5K-1", "Easy1.5K-2"}
+
+
+def test_distance_semantics_ignore_provider_estimated_duration() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {
+                        "unit": "meters",
+                        "value": 500,
+                        "nominal_seconds": 300,
+                    },
+                    "intensity": "warmup",
+                    "cue": "Easy warm-up",
+                }
+            ],
+        }
+    )
+    provider_document = WorkoutDocumentDTO.model_validate(
+        {
+            "steps": [
+                {
+                    "distance": 500,
+                    "duration": 180,
+                    "intensity": "warmup",
+                    "text": "Easy warm-up",
+                }
+            ]
+        }
+    )
+
+    assert_workout_semantics_match(
+        expected_workout_semantics(structure.steps),
+        provider_document,
+    )
+
+
+def test_ramp_syntax_and_direction_match_provider_semantics() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "ramp",
+                    "duration": {"unit": "seconds", "value": 300},
+                    "start_target": {
+                        "mode": "pace",
+                        "unit": "seconds_per_kilometer",
+                        "minimum": 330,
+                        "maximum": 330,
+                    },
+                    "end_target": {
+                        "mode": "pace",
+                        "unit": "seconds_per_kilometer",
+                        "minimum": 270,
+                        "maximum": 270,
+                    },
+                    "intensity": "active",
+                    "cue": "Build",
+                }
+            ],
+        }
+    )
+    document = WorkoutDocumentDTO.model_validate(
+        {
+            "steps": [
+                {
+                    "duration": 300,
+                    "ramp": True,
+                    "intensity": "active",
+                    "text": "Build",
+                    "pace": {
+                        "start": 330,
+                        "end": 270,
+                        "units": "secs/km",
+                    },
+                }
+            ]
+        }
+    )
+
+    assert (
+        render_structured_workout(structure.steps)
+        == "- Build 5m ramp 5:30-4:30/km intensity=active\n"
+    )
+    assert_workout_semantics_match(
+        expected_workout_semantics(structure.steps),
+        document,
+    )
+
+
+def test_lap_press_semantics_require_provider_confirmation() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {
+                        "unit": "until_lap_press",
+                        "nominal_seconds": 120,
+                    },
+                    "intensity": "recovery",
+                }
+            ],
+        }
+    )
+    missing_lap_flag = WorkoutDocumentDTO.model_validate(
+        {"steps": [{"duration": 120, "intensity": "recovery"}]}
+    )
+    confirmed_lap_flag = WorkoutDocumentDTO.model_validate(
+        {
+            "steps": [
+                {
+                    "duration": 120,
+                    "press_lap": True,
+                    "intensity": "recovery",
+                }
+            ]
+        }
+    )
+
+    expected = expected_workout_semantics(structure.steps)
+    with pytest.raises(WorkoutSemanticsError, match="step 1"):
+        assert_workout_semantics_match(expected, missing_lap_flag)
+    assert_workout_semantics_match(expected, confirmed_lap_flag)
 
 
 def test_metric_distance_and_max_hr_use_unambiguous_intervals_tokens() -> None:
@@ -331,9 +720,93 @@ def test_metric_distance_and_max_hr_use_unambiguous_intervals_tokens() -> None:
 
     rendered = render_structured_workout(structure.steps)
 
-    assert rendered == "- 5000mtr 65-75% HR active\n"
+    assert rendered == "- 5000mtr 65-75% HR intensity=active\n"
     assert "5000m " not in rendered
     assert "% max HR" not in rendered
+
+
+@pytest.mark.parametrize(
+    ("target_unit", "settings_update", "expected_message"),
+    [
+        ("percent_lthr", {"lthr": None}, "lactate-threshold heart rate"),
+        ("percent_max_heart_rate", {"max_hr": None}, "maximum heart rate"),
+    ],
+)
+def test_relative_heart_rate_targets_require_their_exact_reference_setting(
+    repo,
+    target_unit,
+    settings_update,
+    expected_message,
+) -> None:
+    client = FakeClient()
+    client.settings[0] = client.settings[0].model_copy(
+        update={"lthr": 176, "max_hr": 195, **settings_update}
+    )
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "target": {
+                        "mode": "heart_rate",
+                        "unit": target_unit,
+                        "minimum": 80,
+                        "maximum": 90,
+                    },
+                    "intensity": "active",
+                }
+            ],
+        }
+    )
+    workout = _workout().model_copy(
+        update={
+            "planned_duration_seconds": 600,
+            "planned_low_intensity_duration_seconds": 600,
+            "planned_high_intensity_duration_seconds": 0,
+            "structured_workout": structure,
+        }
+    )
+
+    with pytest.raises(PublicationSafetyError, match=expected_message):
+        WorkoutPublicationService(repo, client).publish(workout)
+
+
+def test_absolute_heart_rate_target_does_not_require_threshold_settings(repo) -> None:
+    client = FakeClient()
+    client.settings[0] = client.settings[0].model_copy(
+        update={"lthr": None, "max_hr": None, "hr_zones": []}
+    )
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "target": {
+                        "mode": "heart_rate",
+                        "unit": "beats_per_minute",
+                        "minimum": 120,
+                        "maximum": 140,
+                    },
+                    "intensity": "active",
+                }
+            ],
+        }
+    )
+    workout = _workout().model_copy(
+        update={
+            "planned_duration_seconds": 600,
+            "planned_distance_meters": 1_500,
+            "planned_low_intensity_duration_seconds": 600,
+            "planned_high_intensity_duration_seconds": 0,
+            "structured_workout": structure,
+        }
+    )
+
+    assert WorkoutPublicationService(repo, client).publish(workout).action == "created"
 
 
 def test_repeated_publication_is_remote_noop(repo) -> None:
@@ -347,6 +820,23 @@ def test_repeated_publication_is_remote_noop(repo) -> None:
     assert repeated.action == "noop"
     assert client.upserts == 1
     assert len(client.events) == 1
+
+
+def test_targetless_workout_ignores_unrelated_pace_setting_changes(repo) -> None:
+    client = FakeClient()
+    service = WorkoutPublicationService(repo, client)
+    service.publish(_targetless_workout())
+    client.settings[0] = client.settings[0].model_copy(
+        update={
+            "threshold_speed_meters_per_second": 4.0,
+            "pace_zones": [400, 360, 320],
+        }
+    )
+
+    repeated = service.publish(_targetless_workout())
+
+    assert repeated.action == "noop"
+    assert client.upserts == 1
 
 
 def test_event_target_uses_intervals_enum(repo) -> None:
@@ -435,122 +925,34 @@ def test_publication_manifest_rejects_cross_workout_identity_collisions(
         save_manifest(repo, mutated)
 
 
-def test_plan_publication_reconciles_future_workouts_and_reports_stale(
-    repo,
-) -> None:
-    client = FakeClient()
-    service = WorkoutPublicationService(repo, client)
-    stale = service.publish(
-        _workout(
-            workout_id="stale-workout",
-            occurrence=date(2026, 10, 24),
-        )
-    )
-    active = _workout(
-        workout_id="active-workout",
-        occurrence=date(2026, 10, 26),
-    )
-    unstructured = WorkoutPrescription(
-        id="unstructured-workout",
-        date=date(2026, 10, 28),
-        sport="run",
-        workout_type=WorkoutType.EASY,
-        planned_duration_seconds=2_700,
-        planned_distance_meters=8_000,
-        planned_low_intensity_duration_seconds=2_700,
-        planned_moderate_intensity_duration_seconds=0,
-        planned_high_intensity_duration_seconds=0,
-        target_rpe_1_to_10=3,
-        purpose="Build aerobic support.",
-    )
-    workouts = [unstructured, active]
-
-    first = service.publish_plan(
-        workouts,
-        from_date=date(2026, 10, 25),
-    )
-    repeated = service.publish_plan(
-        workouts,
-        from_date=date(2026, 10, 25),
-    )
-    client.settings[0] = client.settings[0].model_copy(
-        update={"threshold_speed_meters_per_second": 3.28}
-    )
-    settings_changed = service.publish_plan(
-        workouts,
-        from_date=date(2026, 10, 25),
-    )
-
-    assert first.workouts_considered == 2
-    assert first.eligible_workouts == 1
-    assert [item.status for item in first.items] == [
-        "created",
-        "skipped_unstructured",
-    ]
-    assert first.stale_manifest_workout_ids == ["stale-workout"]
-    assert [item.status for item in repeated.items] == [
-        "noop",
-        "skipped_unstructured",
-    ]
-    assert settings_changed.items[0].status == "updated"
-    assert stale.event_id in client.events
-    assert len(client.events) == 2
-    assert client.upserts == 3
-
-
-def test_plan_publication_uses_canonical_local_start_time(repo) -> None:
+def test_publication_uses_exact_approved_local_start_time(repo) -> None:
     client = FakeClient()
     client.settings[0] = client.settings[0].model_copy(update={"default_workout_time": None})
     workout = _workout().model_copy(update={"start_time_local": time(6, 30)})
 
-    report = WorkoutPublicationService(repo, client).publish_plan(
-        [workout],
-        from_date=workout.date,
-    )
+    result = WorkoutPublicationService(repo, client).publish(workout)
 
-    assert not report.partial
-    assert report.items[0].status == "created"
-    event = next(iter(client.events.values()))
+    assert result.action == "created"
+    event = client.events[result.event_id]
     assert event.start_date_local.endswith("06:30:00")
 
 
-def test_plan_publication_reports_one_error_and_continues(repo) -> None:
-    client = FakeClient(wahoo=True)
-    report = WorkoutPublicationService(repo, client).publish_plan(
-        [
-            _workout(
-                workout_id="unsupported-lap",
-                occurrence=date(2026, 10, 25),
-                lap_press=True,
-            ),
-            _workout(
-                workout_id="valid-cycle",
-                occurrence=date(2026, 10, 26),
-                sport="cycle",
-            ),
-        ],
-        from_date=date(2026, 10, 25),
-    )
+def test_date_only_publication_uses_provider_midnight_and_preserves_approval(repo) -> None:
+    client = FakeClient()
+    workout = _workout().model_copy(update={"start_time_local": None})
 
-    assert report.partial
-    assert report.eligible_workouts == 2
-    assert [item.status for item in report.items] == ["error", "created"]
-    assert report.items[0].error_type == "publication_safety"
-    assert len(client.events) == 1
+    result = WorkoutPublicationService(repo, client).publish(workout)
+    record = load_manifest(repo).workouts[workout.id]
+
+    assert client.events[result.event_id].start_date_local == "2026-10-25T00:00:00"
+    assert record.approved_start_time_local is None
+    assert record.provider_start_date_local == "2026-10-25T00:00:00"
 
 
-def test_cycling_power_workout_publishes_as_ride(repo) -> None:
-    client = FakeClient(wahoo=True)
-    result = WorkoutPublicationService(repo, client).publish(_workout(sport="cycle"))
-
-    remote = client.events[result.event_id]
-    assert remote.type == "Ride"
-    assert remote.target == "POWER"
-    assert remote.start_date_local.endswith("07:00:00")
-
-    with pytest.raises(PublicationSafetyError, match="requires FTP"):
-        WorkoutPublicationService(repo, FakeClient(ftp=None)).publish(
-            _workout(workout_id="cycle-no-ftp", sport="cycle")
+def test_calendar_publication_rejects_non_running_workouts(repo) -> None:
+    with pytest.raises(PublicationSafetyError, match="Only running workouts"):
+        WorkoutPublicationService(repo, FakeClient()).publish(
+            _workout(workout_id="cycle-workout", sport="cycle")
         )
 
 
@@ -562,8 +964,22 @@ def test_remote_drift_blocks_same_fingerprint_noop(repo) -> None:
         update={"description": "changed outside Resilio"}
     )
 
-    with pytest.raises(PublicationSafetyError, match="read-back"):
+    with pytest.raises(PublicationSafetyError, match="changed since Resilio verified"):
         service.publish(_workout())
+
+    assert client.upserts == 1
+
+
+def test_remote_drift_blocks_an_otherwise_valid_local_update(repo) -> None:
+    client = FakeClient()
+    service = WorkoutPublicationService(repo, client)
+    created = service.publish(_workout())
+    client.events[created.event_id] = client.events[created.event_id].model_copy(
+        update={"description": "changed outside Resilio"}
+    )
+
+    with pytest.raises(PublicationSafetyError, match="changed since Resilio verified"):
+        service.publish(_workout(occurrence=date(2026, 10, 26)))
 
     assert client.upserts == 1
 
@@ -683,6 +1099,46 @@ def test_read_back_must_match_all_owned_rendered_fields(repo) -> None:
         WorkoutPublicationService(repo, CorruptingClient()).publish(_workout())
 
 
+def test_read_back_requires_a_semantically_complete_parsed_workout_document(repo) -> None:
+    class UnparsedWorkoutClient(FakeClient):
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            self.events[stored.id] = EventDTO.model_validate(
+                {
+                    **stored.model_dump(mode="json", exclude={"workout_doc"}),
+                    "workout_doc": {"steps": [{"duration": 600}]},
+                }
+            )
+            return self.events[stored.id]
+
+    with pytest.raises(PublicationSafetyError, match="semantics"):
+        WorkoutPublicationService(repo, UnparsedWorkoutClient()).publish(_workout())
+
+
+def test_provider_push_errors_are_persisted_and_reported(repo) -> None:
+    class PushErrorClient(FakeClient):
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            self.events[stored.id] = EventDTO(
+                **stored.model_dump(exclude={"push_errors"}),
+                push_errors=[
+                    {
+                        "service": "GARMIN",
+                        "message": "Provider rejected the workout",
+                        "date": datetime(2026, 10, 25, 6, tzinfo=timezone.utc),
+                    }
+                ],
+            )
+            return self.events[stored.id]
+
+    result = WorkoutPublicationService(repo, PushErrorClient()).publish(_workout())
+    record = load_manifest(repo).workouts["workout-1"]
+
+    assert result.garmin_forwarding_status == "provider_error_observed"
+    assert result.provider_push_errors[0].service == "GARMIN"
+    assert record.provider_push_errors == result.provider_push_errors
+
+
 def test_reschedule_keeps_identity_and_updates_one_event(repo) -> None:
     client = FakeClient()
     service = WorkoutPublicationService(repo, client)
@@ -706,6 +1162,20 @@ def test_exact_owned_delete_and_unowned_rejection(repo) -> None:
     )
 
     with pytest.raises(PublicationSafetyError, match="ownership proof"):
+        service.delete("workout-1")
+
+    assert created.event_id in client.events
+
+
+def test_owned_delete_rejects_remote_content_drift(repo) -> None:
+    client = FakeClient()
+    service = WorkoutPublicationService(repo, client)
+    created = service.publish(_workout())
+    client.events[created.event_id] = client.events[created.event_id].model_copy(
+        update={"description": "Athlete edited this event in Intervals.icu"}
+    )
+
+    with pytest.raises(PublicationSafetyError, match="changed since Resilio"):
         service.delete("workout-1")
 
     assert created.event_id in client.events
@@ -739,57 +1209,91 @@ def test_interrupted_delete_verification_recovers_missing_owned_event(repo) -> N
     assert "workout-1" not in load_manifest(repo).workouts
 
 
-def test_wahoo_mixed_targets_and_missing_pace_settings_fail_closed(repo) -> None:
-    with pytest.raises(PublicationSafetyError, match="Mixed target"):
-        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(_workout(mixed=True))
-
+def test_target_settings_fail_closed_without_applying_wahoo_constraints(repo) -> None:
     with pytest.raises(PublicationSafetyError, match="threshold pace"):
         WorkoutPublicationService(
             repo,
             FakeClient(threshold_speed_meters_per_second=None),
         ).publish(_workout())
 
-    with pytest.raises(PublicationSafetyError, match="Lap-button"):
-        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(_workout(lap_press=True))
+    assert (
+        WorkoutPublicationService(repo, FakeClient(wahoo=True))
+        .publish(_workout())
+        .action
+        == "created"
+    )
 
 
-def test_device_forwarding_settings_fail_closed(repo) -> None:
-    with pytest.raises(PublicationSafetyError, match="Garmin.*not enabled"):
-        WorkoutPublicationService(
-            repo,
-            FakeClient(garmin_upload_workouts=False),
-        ).publish(_workout())
+def test_mixed_step_target_modes_are_rejected_before_remote_mutation(repo) -> None:
+    client = FakeClient()
 
-    with pytest.raises(PublicationSafetyError, match="filters do not admit Run"):
-        WorkoutPublicationService(
-            repo,
-            FakeClient(
-                garmin_filters=[
-                    {
-                        "field_id": "type",
-                        "operator": "=",
-                        "value": {"value": "Ride"},
-                    }
-                ]
-            ),
-        ).publish(_workout())
+    with pytest.raises(PublicationSafetyError, match="at most one target mode"):
+        WorkoutPublicationService(repo, client).publish(_workout(mixed=True))
 
-    allowed = FakeClient(
-        garmin_filters=[
+    assert client.upserts == 0
+
+
+def test_wahoo_state_does_not_block_garmin_focused_run_publication(repo) -> None:
+    client = FakeClient(wahoo=True, wahoo_upload_workouts=False)
+
+    result = WorkoutPublicationService(repo, client).publish(_workout())
+
+    assert result.action == "created"
+    assert result.garmin_forwarding_status == "eligible_unverified"
+
+
+def test_device_forwarding_settings_are_reported_separately(repo) -> None:
+    client = FakeClient(garmin_upload_workouts=False)
+    disabled = WorkoutPublicationService(
+        repo,
+        client,
+    ).publish(_workout())
+    assert disabled.garmin_forwarding_status == "not_configured"
+
+    client.athlete = AthleteDTO(
+        id="athlete-1",
+        timezone="Europe/Paris",
+        icu_garmin_upload_workouts=True,
+        icu_garmin_upload_filters=[
+            {
+                "field_id": "type",
+                "operator": "=",
+                "value": {"value": "Ride"},
+            }
+        ],
+    )
+    filtered = WorkoutPublicationService(
+        repo,
+        client,
+    ).publish(_workout(workout_id="filtered"))
+    assert filtered.garmin_forwarding_status == "not_configured"
+
+    client.athlete = AthleteDTO(
+        id="athlete-1",
+        timezone="Europe/Paris",
+        icu_garmin_upload_workouts=True,
+        icu_garmin_upload_filters=[
             {
                 "field_id": "type",
                 "operator": "=",
                 "value": {"value": "Run"},
             }
-        ]
+        ],
     )
-    assert WorkoutPublicationService(repo, allowed).publish(_workout()).action == "created"
+    assert (
+        WorkoutPublicationService(repo, client)
+        .publish(_workout(workout_id="allowed"))
+        .garmin_forwarding_status
+        == "eligible_unverified"
+    )
 
-    with pytest.raises(PublicationSafetyError, match="Wahoo.*not enabled"):
-        WorkoutPublicationService(
-            repo,
-            FakeClient(wahoo=True, wahoo_upload_workouts=False),
-        ).publish(_workout())
+    client.connections = client.connections.model_copy(update={"wahoo_connected": True})
+    client.athlete = client.athlete.model_copy(update={"wahoo_upload_workouts": False})
+    wahoo_disabled = WorkoutPublicationService(
+        repo,
+        client,
+    ).publish(_workout(workout_id="wahoo-disabled"))
+    assert wahoo_disabled.garmin_forwarding_status == "eligible_unverified"
 
 
 @pytest.mark.parametrize(

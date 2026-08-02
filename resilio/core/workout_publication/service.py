@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 
 from resilio.core.locking import OperationLock
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.planning.service import (
     PlanOperationError,
     load_publishable_workout,
-    load_publishable_workouts,
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
@@ -20,7 +19,10 @@ from resilio.core.workout_publication.policy import (
     assert_remote_external_ownership,
     assert_remote_matches,
     assert_remote_ownership,
+    assert_remote_unchanged,
+    garmin_forwarding_status,
     pending_matches,
+    provider_push_errors,
     publication_fingerprint,
     published_record,
 )
@@ -39,8 +41,6 @@ from resilio.integrations.intervals_icu.dto import EventDTO
 from resilio.integrations.intervals_icu.errors import IntervalsNotFoundError
 from resilio.schemas.publication import (
     PendingWorkoutPublication,
-    PlanPublicationItem,
-    PlanPublicationReport,
     PublicationManifest,
     PublicationResult,
     PublishedWorkout,
@@ -62,9 +62,6 @@ class WorkoutPublicationService:
     ) -> AuthoritativeWorkout:
         return load_publishable_workout(self.repo, workout_id)
 
-    def _load_approved_workouts(self) -> list[AuthoritativeWorkout]:
-        return load_publishable_workouts(self.repo)
-
     def publish(
         self,
         workout_id: str,
@@ -77,87 +74,12 @@ class WorkoutPublicationService:
                 raise PublicationSafetyError(str(exc)) from exc
             return self._publish(workout)
 
-    def publish_plan(
-        self,
-        *,
-        from_date: date,
-    ) -> PlanPublicationReport:
-        """Reconcile all future structured workouts without deleting stale events."""
-        lock_path = self.repo.resolve_path("data/state/.workout-publication.lock")
-        with OperationLock(lock_path, "workout_publication"):
-            try:
-                workouts = self._load_approved_workouts()
-            except PlanOperationError as exc:
-                raise PublicationSafetyError(str(exc)) from exc
-            workout_ids = [workout.identity.local_workout_id for workout in workouts]
-            if len(workout_ids) != len(set(workout_ids)):
-                raise PublicationSafetyError("Plan contains duplicate workout IDs")
-            manifest = load_manifest(self.repo)
-            known_workout_ids = set(workout_ids)
-            report = PlanPublicationReport(
-                from_date=from_date,
-                stale_manifest_workout_ids=sorted(
-                    (set(manifest.workouts) | set(manifest.pending)) - known_workout_ids
-                ),
-            )
-            selected = sorted(
-                (workout for workout in workouts if workout.prescription.date >= from_date),
-                key=lambda workout: (
-                    workout.prescription.date,
-                    workout.identity.local_workout_id,
-                ),
-            )
-            report.workouts_considered = len(selected)
-            for workout in selected:
-                prescription = workout.prescription
-                if prescription.structured_workout is None:
-                    report.items.append(
-                        PlanPublicationItem(
-                            local_workout_id=workout.identity.local_workout_id,
-                            occurrence_date=prescription.date,
-                            status="skipped_unstructured",
-                        )
-                    )
-                    continue
-                report.eligible_workouts += 1
-                try:
-                    result = self._publish(workout)
-                except Exception as exc:
-                    report.partial = True
-                    report.items.append(
-                        PlanPublicationItem(
-                            local_workout_id=workout.identity.local_workout_id,
-                            occurrence_date=prescription.date,
-                            status="error",
-                            error_type=getattr(
-                                exc,
-                                "error_type",
-                                (
-                                    "publication_safety"
-                                    if isinstance(
-                                        exc,
-                                        PublicationSafetyError,
-                                    )
-                                    else "publication"
-                                ),
-                            ),
-                            message=str(exc),
-                        )
-                    )
-                    continue
-                report.items.append(
-                    PlanPublicationItem(
-                        local_workout_id=workout.identity.local_workout_id,
-                        occurrence_date=prescription.date,
-                        status=result.action,
-                        event_id=result.event_id,
-                    )
-                )
-            return report
-
     def _publish(
         self,
         authoritative_workout: AuthoritativeWorkout,
+        *,
+        restore_local: bool = False,
+        provider_name: str | None = None,
     ) -> PublicationResult:
         workout = authoritative_workout.prescription
         manifest = load_manifest(self.repo)
@@ -166,6 +88,7 @@ class WorkoutPublicationService:
             self.client,
             authoritative_workout,
             previous=previous,
+            provider_name=provider_name,
         )
         pending = manifest.pending.get(workout.id)
         identity_matches = self._identity_matches(prepared, previous, pending)
@@ -182,6 +105,7 @@ class WorkoutPublicationService:
             previous,
             pending,
             identity_matches,
+            restore_local=restore_local,
         )
         if recovered is not None:
             return recovered
@@ -190,6 +114,7 @@ class WorkoutPublicationService:
             manifest,
             previous,
             pending,
+            restore_local=restore_local,
         )
         if recovered_or_noop is not None:
             return recovered_or_noop
@@ -270,16 +195,27 @@ class WorkoutPublicationService:
         previous: PublishedWorkout | None,
         pending: PendingWorkoutPublication | None,
         identity_matches: list[EventDTO],
+        *,
+        restore_local: bool,
     ) -> PublicationResult | None:
         if pending is not None and identity_matches:
             recovered = identity_matches[0]
             try:
-                assert_remote_matches(recovered, prepared.event)
+                assert_remote_matches(
+                    recovered,
+                    prepared.event,
+                    prepared.expected_step_semantics,
+                )
             except PublicationSafetyError:
                 if previous is None:
+                    if restore_local:
+                        return None
                     raise
+                if restore_local:
+                    return None
                 # A known previous version can legitimately remain when the
                 # interrupted upsert failed before applying the pending update.
+                assert_remote_unchanged(recovered, previous)
             else:
                 remote_uid = assert_remote_external_ownership(
                     recovered,
@@ -300,7 +236,8 @@ class WorkoutPublicationService:
                     fingerprint=recovered_fingerprint,
                     rendered_hash=prepared.rendered_workout_sha256,
                     settings_version=prepared.settings_version_sha256,
-                    start_local=prepared.start_date_local,
+                    provider_start_local=prepared.provider_start_date_local,
+                    garmin_eligible=prepared.garmin_forwarding_eligible,
                     remote=recovered,
                 )
                 del manifest.pending[prepared.workout.id]
@@ -312,6 +249,11 @@ class WorkoutPublicationService:
                     uid=remote_uid,
                     external_id=prepared.external_id,
                     fingerprint_sha256=recovered_fingerprint,
+                    garmin_forwarding_status=garmin_forwarding_status(
+                        eligible=prepared.garmin_forwarding_eligible,
+                        remote=recovered,
+                    ),
+                    provider_push_errors=provider_push_errors(recovered),
                 )
         return None
 
@@ -321,6 +263,8 @@ class WorkoutPublicationService:
         manifest: PublicationManifest,
         previous: PublishedWorkout | None,
         pending: PendingWorkoutPublication | None,
+        *,
+        restore_local: bool,
     ) -> PublicationResult | None:
         if previous is not None:
             if (
@@ -339,11 +283,17 @@ class WorkoutPublicationService:
             )
             if pending is not None:
                 try:
-                    assert_remote_matches(remote, prepared.event)
+                    assert_remote_matches(
+                        remote,
+                        prepared.event,
+                        prepared.expected_step_semantics,
+                    )
                 except PublicationSafetyError:
                     # The durable intent is for a not-yet-applied update. The
                     # known, manifest-owned prior version may be upserted.
-                    pass
+                    if restore_local:
+                        return None
+                    assert_remote_unchanged(remote, previous)
                 else:
                     manifest.workouts[prepared.workout.id] = published_record(
                         workout=prepared.workout,
@@ -355,7 +305,8 @@ class WorkoutPublicationService:
                         fingerprint=prepared.publication_fingerprint_sha256,
                         rendered_hash=prepared.rendered_workout_sha256,
                         settings_version=prepared.settings_version_sha256,
-                        start_local=prepared.start_date_local,
+                        provider_start_local=prepared.provider_start_date_local,
+                        garmin_eligible=prepared.garmin_forwarding_eligible,
                         remote=remote,
                     )
                     del manifest.pending[prepared.workout.id]
@@ -367,9 +318,30 @@ class WorkoutPublicationService:
                         uid=prepared.event.uid,
                         external_id=prepared.external_id,
                         fingerprint_sha256=prepared.publication_fingerprint_sha256,
+                        garmin_forwarding_status=garmin_forwarding_status(
+                            eligible=prepared.garmin_forwarding_eligible,
+                            remote=remote,
+                        ),
+                        provider_push_errors=provider_push_errors(remote),
                     )
+            else:
+                if restore_local:
+                    try:
+                        assert_remote_matches(
+                            remote,
+                            prepared.event,
+                            prepared.expected_step_semantics,
+                        )
+                    except PublicationSafetyError:
+                        return None
+                else:
+                    assert_remote_unchanged(remote, previous)
             if previous.publication_fingerprint_sha256 == prepared.publication_fingerprint_sha256:
-                assert_remote_matches(remote, prepared.event)
+                assert_remote_matches(
+                    remote,
+                    prepared.event,
+                    prepared.expected_step_semantics,
+                )
                 manifest.workouts[prepared.workout.id] = published_record(
                     workout=prepared.workout,
                     workout_identity=prepared.workout_identity,
@@ -380,7 +352,8 @@ class WorkoutPublicationService:
                     fingerprint=prepared.publication_fingerprint_sha256,
                     rendered_hash=prepared.rendered_workout_sha256,
                     settings_version=prepared.settings_version_sha256,
-                    start_local=prepared.start_date_local,
+                    provider_start_local=prepared.provider_start_date_local,
+                    garmin_eligible=prepared.garmin_forwarding_eligible,
                     remote=remote,
                 )
                 save_manifest(self.repo, manifest)
@@ -391,6 +364,11 @@ class WorkoutPublicationService:
                     uid=prepared.event.uid,
                     external_id=prepared.external_id,
                     fingerprint_sha256=prepared.publication_fingerprint_sha256,
+                    garmin_forwarding_status=garmin_forwarding_status(
+                        eligible=prepared.garmin_forwarding_eligible,
+                        remote=remote,
+                    ),
+                    provider_push_errors=provider_push_errors(remote),
                 )
         return None
 
@@ -410,7 +388,8 @@ class WorkoutPublicationService:
             sport_settings_version_sha256=prepared.settings_version_sha256,
             sport=str(workout.sport),
             occurrence_date=workout.date,
-            start_date_local=prepared.start_date_local,
+            approved_start_time_local=workout.start_time_local,
+            provider_start_date_local=prepared.provider_start_date_local,
             prepared_at_utc=datetime.now(timezone.utc),
         )
         save_manifest(self.repo, manifest)
@@ -426,7 +405,11 @@ class WorkoutPublicationService:
             read_back,
             external_id=prepared.external_id,
         )
-        assert_remote_matches(read_back, prepared.event)
+        assert_remote_matches(
+            read_back,
+            prepared.event,
+            prepared.expected_step_semantics,
+        )
         persisted_event = prepared.event.model_copy(update={"uid": remote_uid})
         persisted_fingerprint = publication_fingerprint(
             persisted_event,
@@ -443,7 +426,8 @@ class WorkoutPublicationService:
             fingerprint=persisted_fingerprint,
             rendered_hash=prepared.rendered_workout_sha256,
             settings_version=prepared.settings_version_sha256,
-            start_local=prepared.start_date_local,
+            provider_start_local=prepared.provider_start_date_local,
+            garmin_eligible=prepared.garmin_forwarding_eligible,
             remote=read_back,
         )
         del manifest.pending[workout.id]
@@ -455,6 +439,11 @@ class WorkoutPublicationService:
             uid=remote_uid,
             external_id=prepared.external_id,
             fingerprint_sha256=persisted_fingerprint,
+            garmin_forwarding_status=garmin_forwarding_status(
+                eligible=prepared.garmin_forwarding_eligible,
+                remote=read_back,
+            ),
+            provider_push_errors=provider_push_errors(read_back),
         )
 
     def delete(self, local_workout_id: str) -> PublicationResult:
@@ -462,7 +451,12 @@ class WorkoutPublicationService:
         with OperationLock(lock_path, "workout_publication"):
             return self._delete(local_workout_id)
 
-    def _delete(self, local_workout_id: str) -> PublicationResult:
+    def _delete(
+        self,
+        local_workout_id: str,
+        *,
+        restore_local: bool = False,
+    ) -> PublicationResult:
         manifest = load_manifest(self.repo)
         record = manifest.workouts.get(local_workout_id)
         if record is None:
@@ -488,6 +482,8 @@ class WorkoutPublicationService:
             uid=record.uid,
             external_id=record.external_id,
         )
+        if not restore_local:
+            assert_remote_unchanged(remote, record)
         self.client.delete_event(record.event_id, athlete_id=athlete.id)
         try:
             self.client.get_event(record.event_id, athlete_id=athlete.id)

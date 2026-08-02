@@ -136,28 +136,75 @@ and elapsed seconds against the athlete-confirmed profile. Proposal and
 approval dates are evaluated in the declared performance or athlete training
 timezone, never the host machine’s date.
 
-## Planned-workout publication
+## Planned running-workout synchronization
 
-Resilio publishes typed run and cycling workouts with deterministic external
-identities. Before mutation it verifies the relevant sport settings and
-forwarding configuration. After create or update it reads the event back and
-persists provider-computed planned aerobic load, relative intensity, fitness,
-and fatigue when supplied.
+Resilio publishes only typed running workouts with deterministic external
+identities. Every approved run has a provider-neutral structured prescription;
+bouldering and all other sports stay local. Date-only runs remain date-only in
+coaching state and use local midnight only as the Intervals calendar
+representation. An exact athlete-approved time takes precedence.
 
-The publication manifest plus exact remote UID/external ID is the ownership
-proof. Update, reschedule, and delete refuse ambiguous, unowned, or drifted
-events. Completed-workout adherence accepts only the provider’s exact paired
-event identity; date/sport/duration resemblance remains a report-only
-candidate.
+The bounded workflow reads athlete-confirmed synchronization preferences,
+reports Intervals/Garmin capabilities, inspects one exact applied week without
+mutation, then reconciles only that week's running-workout desired state.
+Applying an approved week triggers reconciliation immediately when automation
+is enabled and returns local-commit and provider outcomes separately. The
+active applied week remains the durable retry obligation; no background daemon
+or redundant outbox is required. A later explicit reconcile is idempotent.
+Pace targets require Run threshold pace and pace zones. Percent-LTHR and
+percent-max-heart-rate targets require their corresponding Run setting;
+absolute-heart-rate and targetless workouts require none of those metrics.
+The capability projection reports these target styles independently and lists
+missing settings as limitations, not as blockers for unrelated target styles.
+Wahoo configuration never blocks this workflow.
 
-Only a qualified plan/macro/week/workout identity resolved from the active
+Provider names are deterministic, date-independent, derived from executable
+content, and limited to 15 characters for small watch lists. Examples include
+`Easy4K`, `Tempo2x7m`, `Interval6x800m`, and `5KTest`; opaque abbreviations are
+not used. Moving a workout to another calendar day does not rename it.
+Identical structures reuse the same name; only genuinely different structures
+with the same summary receive a compact variant suffix. The full purpose
+remains in the description. Workout text puts prompts before step termination
+tokens and emits explicit `intensity=...` metadata. One run uses at most one
+target mode.
+
+After create or update, Resilio reads the event back and requires exact owned
+fields plus semantic equivalence of the typed provider-parsed workout document.
+It compares ordered expanded steps, termination, explicit intensity, prompts,
+cadence, and targets. Provider-estimated time is ignored when distance
+terminates a step. A nonempty but incomplete workout document fails with
+`provider_semantics_mismatch`. Resilio persists provider-computed planned
+aerobic load, relative intensity, fitness, fatigue, and downstream push errors
+when supplied. Intervals synchronization and Garmin forwarding are distinct
+results. `eligible_unverified` proves only the observed Intervals
+connection/settings/filter and absence of a reported Garmin push error; it
+never proves Garmin Connect or the watch received the workout.
+Garmin Connect can present third-party workouts as read-only; edits remain
+local-plan changes followed by reconciliation. The Garmin workout-list preview
+is target-oriented, not a step-count proof. A targetless run can therefore show
+`--` instead of a colored target skyline while still containing valid
+distance/time steps, intensities, and prompts.
+
+The publication manifest plus exact remote UID/external ID and the last
+verified owned-field fingerprint is the ownership proof. Update, reschedule,
+and delete refuse ambiguous, unowned, or drifted events. One canonical lock
+order holds publication authority before plan authority for reconciliation and
+plan closure. A replacement week updates retained identities and deletes only
+removed future, uncompleted events after exact ownership proof. Past and
+completed events remain for pairing. Explicit restore-local drift resolution
+records athlete confirmation before overwriting exact owned content; ordinary
+reconciliation never overwrites drift. Completed-workout adherence accepts
+only the provider’s exact paired event identity; date/sport/duration resemblance
+remains a report-only candidate.
+
+Only a qualified plan/revision/week/workout identity resolved from the active
 planning-state aggregate may be published. The aggregate must have a fresh
-planning-profile fingerprint, an approved macro skeleton, an active
+planning-profile fingerprint, an approved plan skeleton, an active
 applied-week approval, and an unchanged applied-workout SHA-256. Publication
 and completion manifests retain that full lineage.
 
 Historical adherence is revision-aware: content-addressed closed-plan archives
-retain their macro approval, closure facts, cycle-review evidence, and
+retain their plan approval, closure facts, lifecycle-review evidence, and
 immutable applied-week snapshots. The resolver compares approval,
 invalidation, and closure instants with each workout's scheduled UTC instant
 using the recorded IANA timezone. It refuses competing revisions, missing

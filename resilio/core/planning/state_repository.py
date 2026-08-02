@@ -3,7 +3,7 @@
 from resilio.core.locking import OperationLockError
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
-    load_all_closed_plan_cycles,
+    load_all_closed_plan_archives,
 )
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.profile_plan_transaction import (
@@ -12,6 +12,7 @@ from resilio.core.planning.profile_plan_transaction import (
 from resilio.core.repository import RepositoryIO
 from resilio.core.state import load_planning_state, save_planning_state
 from resilio.schemas.approvals import PlanningState
+from resilio.schemas.plan import RaceMacroPlan
 from resilio.schemas.repository import RepoError
 
 
@@ -27,15 +28,19 @@ def load_planning_aggregate_unlocked(
         raise PlanOperationError(f"Planning state is invalid: {result}")
     if result is not None:
         try:
-            closed_cycles = load_all_closed_plan_cycles(
+            closed_cycles = load_all_closed_plan_archives(
                 repo,
-                result.closed_plan_cycle_references,
+                result.closed_plan_references,
             )
         except PlanningArtifactError as exc:
             raise PlanOperationError(f"Planning history is invalid: {exc}") from exc
         approval_ids = {approval.approval_id for approval in result.vdot_approvals}
         missing_historical_approval_ids = sorted(
-            {cycle.active_plan_snapshot.plan.vdot_approval_id for cycle in closed_cycles}
+            {
+                archive.active_plan_snapshot.plan.vdot_approval_id
+                for archive in closed_cycles
+                if isinstance(archive.active_plan_snapshot.plan, RaceMacroPlan)
+            }
             - approval_ids
         )
         if missing_historical_approval_ids:

@@ -27,7 +27,7 @@ from resilio.schemas.activity import (
     CanonicalActivity,
 )
 from resilio.schemas.coaching import WeeklyCoachContext
-from resilio.schemas.plan import MasterPlan
+from resilio.schemas.plan import RaceMacroPlan
 from resilio.schemas.plan_history import (
     AthleteConfirmedGoalActivityEvidence,
     EvidenceArtifactReference,
@@ -186,7 +186,7 @@ def _compact_week(context: WeeklyCoachContext) -> CompactTrainingWeek:
 
 
 def _cycle_totals(
-    plan: MasterPlan,
+    plan: RaceMacroPlan,
     compact_weeks: list[CompactTrainingWeek],
 ) -> PlanCycleTotals:
     distance_values = [
@@ -217,7 +217,7 @@ def _cycle_totals(
 def _reviewed_weeks_and_source_sha256(
     repo: RepositoryIO,
     *,
-    plan: MasterPlan,
+    plan: RaceMacroPlan,
     plan_started: bool,
     effective_end_date: date,
     evidence_as_of_date: date,
@@ -278,6 +278,8 @@ def create_cycle_review(
         raise PlanOperationError("Cycle review requires one active plan")
     active_plan = state.active_plan
     plan = active_plan.plan
+    if not isinstance(plan, RaceMacroPlan):
+        raise PlanOperationError("Cycle review requires an active race macro plan")
     generation_timestamp = _validated_timestamp(generated_at_utc)
     training_timezone = ZoneInfo(plan.constraints_snapshot.training_timezone)
     plan_creation_local_date = plan.created_at_utc.astimezone(training_timezone).date()
@@ -301,7 +303,7 @@ def create_cycle_review(
         if not (plan.start_date <= goal_activity.occurrence.local_date <= effective_end_date):
             raise PlanOperationError("Goal outcome activity falls outside the effective plan cycle")
     plan_started = (
-        active_plan.macro_approval is not None
+        active_plan.plan_approval is not None
         and plan.start_date <= evidence_as_of_date
         and effective_end_date >= plan.start_date
     )
@@ -323,7 +325,7 @@ def create_cycle_review(
         )
     review = PlanCycleReview(
         plan_id=plan.id,
-        macro_revision_id=plan.macro_revision_id,
+        plan_revision_id=plan.plan_revision_id,
         plan_start_date=plan.start_date,
         planned_end_date=plan.end_date,
         effective_end_date=effective_end_date,

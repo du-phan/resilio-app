@@ -20,6 +20,7 @@ from resilio.core.vdot import VDOTCalculationRangeError, calculate_vdot
 from resilio.schemas.activity import ActivityStatus, is_running_sport
 from resilio.schemas.approvals import (
     ManualVDOTEvidence,
+    OwnedBaselineAssessmentVDOTEvidence,
     PersonalBestVDOTEvidence,
     RacePerformanceVDOTEvidence,
     VDOTApproval,
@@ -73,7 +74,9 @@ def _verify_proposal_calculation(proposal: VDOTProposal) -> None:
         return
     assert isinstance(
         evidence,
-        RacePerformanceVDOTEvidence | PersonalBestVDOTEvidence,
+        RacePerformanceVDOTEvidence
+        | PersonalBestVDOTEvidence
+        | OwnedBaselineAssessmentVDOTEvidence,
     )
     try:
         calculated = calculate_vdot(
@@ -164,6 +167,13 @@ def _verify_race_activity_source(
         raise ApprovalEvidenceError(
             "The source race activity does not match the elapsed time"
         )
+    if (
+        activity.distance_meters is None
+        or abs(activity.distance_meters - evidence.measured_distance_meters) > 0.01
+    ):
+        raise ApprovalEvidenceError(
+            "The source race activity does not match the measured distance"
+        )
     if activity.occurrence.timezone != evidence.performance_timezone:
         raise ApprovalEvidenceError(
             "The source race activity does not match the performance timezone"
@@ -186,6 +196,16 @@ def _verify_proposal_source(
         _verify_personal_best_source(repo, evidence)
     elif isinstance(evidence, RacePerformanceVDOTEvidence):
         _verify_race_activity_source(repo, evidence)
+    elif isinstance(evidence, OwnedBaselineAssessmentVDOTEvidence):
+        from resilio.core.planning.assessment_evidence import (
+            verify_owned_assessment_vdot_evidence,
+        )
+        from resilio.core.planning.errors import PlanOperationError
+
+        try:
+            verify_owned_assessment_vdot_evidence(repo, evidence)
+        except PlanOperationError as exc:
+            raise ApprovalEvidenceError(str(exc)) from exc
 
 
 def load_vdot_proposal_unlocked(

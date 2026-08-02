@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from resilio.schemas.plan import WorkoutPrescription
@@ -43,3 +43,31 @@ def scheduled_start_utc(
             "local workout start is ambiguous because of a daylight-saving transition"
         )
     return candidates.pop()
+
+
+def schedule_authority_deadline_utc(
+    workout: WorkoutPrescription,
+    *,
+    training_timezone: str,
+) -> datetime:
+    """Return the authority cutoff for a timed or athlete-timed workout date.
+
+    Exact-time prescriptions use their start instant. Date-only prescriptions
+    use the next local midnight, which keeps them valid historical schedules
+    without pretending that an exact start was approved.
+    """
+    if workout.start_time_local is not None:
+        return scheduled_start_utc(
+            workout,
+            training_timezone=training_timezone,
+        )
+    next_day = workout.model_copy(
+        update={
+            "date": workout.date + timedelta(days=1),
+            "start_time_local": time.min,
+        }
+    )
+    return scheduled_start_utc(
+        next_day,
+        training_timezone=training_timezone,
+    )

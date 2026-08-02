@@ -9,6 +9,10 @@ The main coach owns every athlete question and confirmation. Do not invent a
 goal result, infer a completed course from date or distance, or create the
 successor before the current cycle is reviewed and closed.
 
+If the active plan kind is `baseline_assessment`, stop this race-cycle
+procedure and use baseline-assessment-review. Assessment closure has its own
+candidate, review, archive, and VDOT proposal contract.
+
 ## Preconditions
 
 Require:
@@ -104,14 +108,16 @@ Use `superseded_midcycle` for an athlete-requested replacement and
      --start <NEXT_PLAN_MONDAY>
    ```
 
-   The returned context contains every closed-plan summary, goal outcomes, up
-   to 52 compact historical weeks, 12 detailed recent weeks, current profile
-   constraints, the active VDOT approval, and stable evidence IDs.
+   The returned context contains every closed race summary, baseline-assessment
+   result summary, goal outcome, up to 52 compact historical weeks, 12 detailed
+   recent weeks, current profile constraints, the active VDOT approval, and
+   stable evidence IDs.
 
 4. Invoke the macro-plan procedure with this exact context reference. Every
    substantial plan decision must cite returned evidence IDs and distinguish
    observed facts, the planning change, and uncertainty. At minimum, cite the
-   latest recent week plus the latest closed-plan summary and goal outcome.
+   latest recent week plus the latest relevant closed-plan summary and goal
+   outcome. Cite the latest assessment-result evidence when one exists.
    If synchronized evidence changes, discard the stale context and create a
    fresh one before drafting.
 

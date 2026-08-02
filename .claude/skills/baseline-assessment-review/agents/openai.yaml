@@ -1,0 +1,4 @@
+interface:
+  display_name: "Baseline Assessment Review"
+  short_description: "Review an owned benchmark and propose VDOT"
+  default_prompt: "Use $baseline-assessment-review to confirm an owned benchmark result, close the assessment, and prepare a VDOT proposal."

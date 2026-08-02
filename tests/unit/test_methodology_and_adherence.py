@@ -40,7 +40,7 @@ def _authoritative(workout: WorkoutPrescription) -> AuthoritativeWorkout:
     return AuthoritativeWorkout(
         identity=PlanWorkoutIdentity(
             plan_id="plan_test",
-            macro_revision_id="macro_revision_1111111111111111",
+            plan_revision_id="plan_revision_1111111111111111",
             week_number=1,
             local_workout_id=workout.id,
         ),

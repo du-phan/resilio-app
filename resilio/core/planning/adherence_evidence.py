@@ -8,17 +8,20 @@ from typing import Literal
 
 from resilio.core.planning.integrity import (
     applied_workout_sha256,
-    macro_skeleton_sha256,
+    plan_skeleton_sha256,
     target_week_skeleton_sha256,
 )
-from resilio.core.planning.schedule import WorkoutScheduleError, scheduled_start_utc
+from resilio.core.planning.schedule import (
+    WorkoutScheduleError,
+    schedule_authority_deadline_utc,
+)
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
-    ClosedPlanCycle,
-    MacroApproval,
+    ClosedPlanArchive,
+    PlanApproval,
     PlanningState,
 )
-from resilio.schemas.plan import MasterPlan, WorkoutPrescription
+from resilio.schemas.plan import RaceMacroPlan, TrainingPlan, WorkoutPrescription
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 
 
@@ -39,8 +42,8 @@ class ApprovedWorkoutWindow:
 
 @dataclass(frozen=True)
 class _RevisionAuthority:
-    plan: MasterPlan
-    macro_approval: MacroApproval | None
+    plan: TrainingPlan
+    plan_approval: PlanApproval | None
     applied_week_revisions: list[AppliedWeekRevision]
     effective_end_date: date
     retired_at_utc: datetime | None
@@ -62,17 +65,19 @@ def _unavailable(reason: str) -> ApprovedWorkoutWindow:
     )
 
 
-def _macro_approval_invalid_reason(
-    plan: MasterPlan,
-    macro_approval: MacroApproval,
+def _plan_approval_invalid_reason(
+    plan: TrainingPlan,
+    plan_approval: PlanApproval,
 ) -> str | None:
     if (
-        macro_approval.plan_id != plan.id
-        or macro_approval.macro_revision_id != plan.macro_revision_id
-        or macro_approval.vdot_approval_id != plan.vdot_approval_id
-        or macro_approval.macro_skeleton_sha256 != macro_skeleton_sha256(plan)
+        plan_approval.plan_id != plan.id
+        or plan_approval.plan_revision_id != plan.plan_revision_id
+        or plan_approval.plan_kind != plan.kind
+        or plan_approval.vdot_approval_id
+        != (plan.vdot_approval_id if isinstance(plan, RaceMacroPlan) else None)
+        or plan_approval.plan_skeleton_sha256 != plan_skeleton_sha256(plan)
     ):
-        return "approved_macro_skeleton_changed"
+        return "approved_plan_skeleton_changed"
     return None
 
 
@@ -84,8 +89,8 @@ def _collect_authoritative_workouts(
     window_end: date,
 ) -> _RevisionResolution:
     plan = revision.plan
-    macro_approval = revision.macro_approval
-    assert macro_approval is not None
+    plan_approval = revision.plan_approval
+    assert plan_approval is not None
     plan_weeks = {week.week_number: week for week in plan.weeks}
     workouts_by_date: dict[date, tuple[str, list[AuthoritativeWorkout]]] = {}
     for applied_revision in applied_revisions:
@@ -101,7 +106,7 @@ def _collect_authoritative_workouts(
             )
         if (
             applied_revision.plan_id != plan.id
-            or applied_revision.macro_revision_id != plan.macro_revision_id
+            or applied_revision.plan_revision_id != plan.plan_revision_id
             or applied_revision.applied_workout_sha256 != applied_workout_sha256(week)
         ):
             return _RevisionResolution(
@@ -109,14 +114,14 @@ def _collect_authoritative_workouts(
                 {},
                 invalid_reason=(f"week_{applied_revision.week_number}_changed_after_application"),
             )
-        authority_id = f"{plan.id}:{plan.macro_revision_id}:" f"{applied_revision.approval_id}"
+        authority_id = f"{plan.id}:{plan.plan_revision_id}:" f"{applied_revision.approval_id}"
         for workout in week.workouts:
             if not window_start <= workout.date <= window_end:
                 continue
             if workout.date > revision.effective_end_date:
                 continue
             try:
-                scheduled_at_utc = scheduled_start_utc(
+                authority_deadline_utc = schedule_authority_deadline_utc(
                     workout,
                     training_timezone=applied_revision.schedule_timezone,
                 )
@@ -126,18 +131,21 @@ def _collect_authoritative_workouts(
                     {},
                     invalid_reason=(f"week_{applied_revision.week_number}_schedule_is_invalid"),
                 )
-            if macro_approval.approved_at_utc > scheduled_at_utc:
+            if plan_approval.approved_at_utc > authority_deadline_utc:
                 continue
-            if applied_revision.weekly_approved_at_utc > scheduled_at_utc:
+            if applied_revision.weekly_approved_at_utc > authority_deadline_utc:
                 continue
-            if applied_revision.applied_at_utc > scheduled_at_utc:
+            if applied_revision.applied_at_utc > authority_deadline_utc:
                 continue
             if (
                 applied_revision.invalidated_at_utc is not None
-                and applied_revision.invalidated_at_utc <= scheduled_at_utc
+                and applied_revision.invalidated_at_utc <= authority_deadline_utc
             ):
                 continue
-            if revision.retired_at_utc is not None and revision.retired_at_utc <= scheduled_at_utc:
+            if (
+                revision.retired_at_utc is not None
+                and revision.retired_at_utc <= authority_deadline_utc
+            ):
                 continue
             existing = workouts_by_date.setdefault(
                 workout.date,
@@ -147,7 +155,7 @@ def _collect_authoritative_workouts(
                 AuthoritativeWorkout(
                     identity=PlanWorkoutIdentity(
                         plan_id=plan.id,
-                        macro_revision_id=plan.macro_revision_id,
+                        plan_revision_id=plan.plan_revision_id,
                         week_number=applied_revision.week_number,
                         local_workout_id=workout.id,
                     ),
@@ -177,9 +185,9 @@ def _resolve_revision(
         if applied_revision.applied_week_snapshot.end_date >= window_start
         and applied_revision.applied_week_snapshot.start_date <= window_end
     ]
-    macro_approval = revision.macro_approval
-    if macro_approval is None:
-        reason = "overlapping_macro_plan_is_not_approved"
+    plan_approval = revision.plan_approval
+    if plan_approval is None:
+        reason = "overlapping_plan_is_not_approved"
         return _RevisionResolution(
             True,
             {},
@@ -192,7 +200,7 @@ def _resolve_revision(
                 reason if overlapping_populated_weeks or overlapping_applied_revisions else None
             ),
         )
-    if invalid_reason := _macro_approval_invalid_reason(plan, macro_approval):
+    if invalid_reason := _plan_approval_invalid_reason(plan, plan_approval):
         return _RevisionResolution(
             True,
             {},
@@ -221,26 +229,26 @@ def resolve_approved_workouts_for_date_range(
     *,
     window_start: date,
     window_end: date,
-    closed_plan_cycles: list[ClosedPlanCycle] | None = None,
+    closed_plan_archives: list[ClosedPlanArchive] | None = None,
 ) -> ApprovedWorkoutWindow:
     """Select exact, temporally applicable approval authority by workout date."""
-    closed_cycles = closed_plan_cycles or []
+    closed_archives = closed_plan_archives or []
     revisions = [
         *[
             _RevisionAuthority(
                 plan=cycle.active_plan_snapshot.plan,
-                macro_approval=cycle.active_plan_snapshot.macro_approval,
+                plan_approval=cycle.active_plan_snapshot.plan_approval,
                 applied_week_revisions=(cycle.active_plan_snapshot.applied_week_revisions),
                 effective_end_date=cycle.closure.effective_end_date,
                 retired_at_utc=cycle.closure.closed_at_utc,
             )
-            for cycle in closed_cycles
+            for cycle in closed_archives
         ],
         *(
             [
                 _RevisionAuthority(
                     plan=state.active_plan.plan,
-                    macro_approval=state.active_plan.macro_approval,
+                    plan_approval=state.active_plan.plan_approval,
                     applied_week_revisions=state.active_plan.applied_week_revisions,
                     effective_end_date=state.active_plan.plan.end_date,
                     retired_at_utc=None,
@@ -287,7 +295,7 @@ def resolve_approved_workouts_for_date_range(
         workout_identities = [
             (
                 workout.identity.plan_id,
-                workout.identity.macro_revision_id,
+                workout.identity.plan_revision_id,
                 workout.identity.week_number,
                 workout.identity.local_workout_id,
             )

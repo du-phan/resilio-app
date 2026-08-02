@@ -38,6 +38,9 @@ judgment.
 - Adherence: use only provider-paired completion identities. Do not infer a
   match from date, sport, title, distance, or duration. For a mid-week review,
   count only workouts due through `as_of`; future sessions are not missed.
+  A date-only approved workout is a valid schedule, not corrupt evidence. It
+  remains due by its approved local date and may be published as an untimed
+  calendar-day workout without asserting a midnight start.
 - Run exposure: report sessions, exact duration, distance in kilometers,
   elevation gain in meters, longest-run distance, and native aerobic load only
   when fully covered. If any run lacks distance or elevation, preserve the

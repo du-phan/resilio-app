@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     ConfigDict,
     Field,
@@ -15,7 +16,7 @@ from pydantic import (
 
 
 class ExternalDTO(BaseModel):
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
 
 class ActivityFilterDTO(ExternalDTO):
@@ -52,6 +53,14 @@ class ConnectionsDTO(ExternalDTO):
     id: str
     garmin_training_connected: bool = False
     wahoo_connected: bool = False
+
+
+class PushErrorDTO(ExternalDTO):
+    """One downstream workout-forwarding error reported by Intervals.icu."""
+
+    service: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+    date: Optional[datetime] = None
 
 
 class SportSettingsDTO(ExternalDTO):
@@ -331,6 +340,70 @@ class ActivityDTO(ExternalDTO):
         return self
 
 
+class WorkoutStepTargetDTO(ExternalDTO):
+    """One provider workout-step target in its native units."""
+
+    units: str
+    value: Optional[float] = Field(default=None, allow_inf_nan=False)
+    start: Optional[float] = Field(default=None, allow_inf_nan=False)
+    end: Optional[float] = Field(default=None, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def has_value_or_range(self) -> "WorkoutStepTargetDTO":
+        if self.value is None and (self.start is None or self.end is None):
+            raise ValueError("workout target requires a value or complete range")
+        return self
+
+
+class WorkoutDocumentStepDTO(ExternalDTO):
+    """Narrow recursive projection of one parsed Intervals workout step."""
+
+    text: Optional[str] = None
+    intensity: Optional[str] = None
+    warmup: bool = False
+    cooldown: bool = False
+    ramp: bool = False
+    press_lap: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("press_lap", "lap"),
+    )
+    duration_seconds: Optional[float] = Field(
+        default=None,
+        validation_alias="duration",
+        gt=0,
+        allow_inf_nan=False,
+    )
+    distance_meters: Optional[float] = Field(
+        default=None,
+        validation_alias="distance",
+        gt=0,
+        allow_inf_nan=False,
+    )
+    repetitions: Optional[int] = Field(
+        default=None,
+        validation_alias=AliasChoices("reps", "repetitions"),
+        ge=2,
+        le=100,
+    )
+    steps: list["WorkoutDocumentStepDTO"] = Field(default_factory=list)
+    pace: Optional[WorkoutStepTargetDTO] = None
+    heart_rate: Optional[WorkoutStepTargetDTO] = Field(
+        default=None,
+        validation_alias=AliasChoices("heartrate", "hr"),
+    )
+    power: Optional[WorkoutStepTargetDTO] = None
+    cadence: Optional[WorkoutStepTargetDTO] = None
+
+
+class WorkoutDocumentDTO(ExternalDTO):
+    """Parsed provider workout document used for semantic verification."""
+
+    steps: list[WorkoutDocumentStepDTO] = Field(default_factory=list)
+
+
+WorkoutDocumentStepDTO.model_rebuild()
+
+
 class EventDTO(ExternalDTO):
     id: int
     uid: Optional[str] = None
@@ -341,7 +414,8 @@ class EventDTO(ExternalDTO):
     description: Optional[str] = None
     start_date_local: Optional[str] = None
     target: Optional[str] = None
-    workout_doc: Optional[dict[str, Any]] = None
+    workout_doc: Optional[WorkoutDocumentDTO] = None
+    push_errors: list[PushErrorDTO] = Field(default_factory=list)
     icu_training_load: Optional[float] = Field(
         default=None,
         ge=0,
@@ -356,6 +430,11 @@ class EventDTO(ExternalDTO):
     icu_ctl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     icu_atl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     updated: Optional[datetime] = None
+
+    @field_validator("push_errors", mode="before")
+    @classmethod
+    def null_push_errors_are_empty(cls, value: Any) -> Any:
+        return [] if value is None else value
 
 
 class WellnessDTO(ExternalDTO):

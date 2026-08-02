@@ -48,12 +48,14 @@ mirror.
 | Thresholds, zones, and priorities | Intervals.icu sport settings |
 | Athlete profile v2 | Athlete-confirmed durable facts |
 | Provider profile candidates | Read-only projections from settings and wellness |
-| VDOT approval | Recomputable performance plus a verified canonical activity/fingerprint or exact profile personal best, or an explicit athlete-confirmed manual value; every approval also binds the proposal path and byte SHA-256 |
-| Plan lifecycle and approvals | Compact planning-state v4 active state plus immutable content-addressed closed-cycle archives and evidence artifacts |
-| Plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed-plan summaries, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
+| VDOT approval | Recomputable performance plus a verified canonical activity/fingerprint, exact profile personal best, owned closed assessment review, or explicit athlete-confirmed manual value; every approval also binds the proposal path and byte SHA-256 |
+| Plan lifecycle and approvals | Compact planning-state v5 with a discriminated race-macro or baseline-assessment active plan, generic plan revision/approval identity, and immutable content-addressed archives and evidence artifacts |
+| Race-plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed race summaries and assessment results, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
+| Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, exact publication/completion pairing, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
 | Weekly application | Exact proposal path, byte SHA-256, target-week hash, and prior applied-workout hash |
 | Completed-workout adherence | Exact owned-event pairing manifest |
-| External calendar ownership | Local manifest plus matching remote readback |
+| Run synchronization preferences | Athlete-confirmed automation mode, calendar-day policy, and requested Garmin destination |
+| External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, semantic parsed-workout readback, drift-resolution audit, and push-error evidence |
 | Raw external response | Ephemeral only |
 
 ## Coordinated state boundary
@@ -89,7 +91,7 @@ coverage windows. Complete source windows, unresolved source gaps, and
 explicit exclusions are separate contracts; a partial sync never promotes its
 requested range to complete and no obsolete checkpoint field can act as a
 fallback. Historical adherence resolves the full
-plan/macro/week/workout identity and the exact immutable applied-week snapshot,
+plan/revision/week/workout identity and the exact immutable applied-week snapshot,
 schedule timezone, and approval interval that was authoritative at each
 workout's scheduled instant, including closed and replaced revisions. A closed
 revision's workout authority ends on its effective closure date even when the
@@ -102,21 +104,24 @@ rather than guessed.
 
 `resilio/core/planning/` separates approval evidence, content fingerprints,
 methodology-independent policy, active-state persistence, immutable archives,
-cycle review, bounded macro context, profile-driven invalidation, historical
-adherence, publication evidence, and orchestration. The plan
+race-cycle review, baseline-assessment context/review/VDOT evidence, bounded
+macro context, profile-driven invalidation, historical adherence, publication
+evidence, exact unapproved-proposal discard, and orchestration. The plan
 mutation lock is shared by planning services and profile updates. A
 planning-relevant profile update uses a durable profile/plan transaction
 journal under that lock. Recovery rolls back a prepared or partially written
 pair and rolls forward a committed pair, so readers never accept mismatched
 profile and plan state after an abrupt process stop. Profile, planning, VDOT
 file, and VDOT-source reads use that same coordinated boundary. Proposal,
-VDOT approval, macro-context creation, macro creation, macro approval, weekly
+VDOT approval, planning-context creation, plan creation, plan approval, weekly
 approval, weekly application, invalidation, and closure timestamps must be
 chronological. Persisted-state validation rejects an impossible sequence even
 if a service was bypassed. Cycle closure also re-verifies the exact active-plan
 snapshot and the date-bounded activity, wellness, coverage, completion, and
-publication inputs used by the review. Macro creation performs the analogous
-freshness check for its 12-week context.
+publication inputs used by the review. Assessment review additionally
+re-verifies the owned publication/completion chain and exact canonical result.
+Race-macro creation performs the analogous freshness check for its 12-week
+context and must cite the latest assessment result when one exists.
 
 ## Mutation boundaries
 
@@ -130,13 +135,24 @@ freshness check for its 12-week context.
   source facts decide whether the provider record changed, while the mapping
   version forces deterministic remapping when canonical logic changes.
 - Weekly plans apply only when the current file path and SHA-256 match the
-  recorded approval, macro revision, week skeleton, and previous applied
-  content.
-- Publication resolves a qualified plan/macro/week/workout identity from
-  fresh, macro-approved, applied weekly content; callers cannot publish an
-  arbitrary workout object or reuse an ID across plan lineages.
-- Calendar update or deletion requires deterministic local identity, manifest
-  ownership, and exact remote proof.
+  recorded approval, plan revision, week skeleton, and previous applied
+  content. The API returns local commit and automatic run-synchronization
+  outcomes separately; provider failure never rolls back the local commit.
+- Unapproved proposal discard requires the exact current revision ID, empty
+  plan/weekly approval state, no applied revisions, and no matching publication
+  or completion ownership. Approved plan removal remains impossible here.
+- Weekly application policy requires a typed structured prescription for every
+  run. Publication resolves a qualified plan/revision/week/workout identity
+  from fresh, plan-approved, applied weekly content and ignores all non-running
+  sports. A date-only run projects to provider local midnight while retaining
+  an absent approved start time locally. Callers cannot publish an arbitrary
+  workout or reuse an ID across plan lineages.
+- Calendar reconciliation holds the publication lock before the plan lock,
+  derives desired state from the exact active applied week, and requires
+  deterministic identity, manifest ownership, unchanged remote fingerprint,
+  and semantic readback. Explicit restore-local drift resolution is separately
+  athlete-confirmed and audited. Garmin-forwarding eligibility remains
+  unverified delivery until the athlete confirms receipt.
 
 See the [Intervals.icu integration reference](intervals-icu-integration.md) for
 the external boundary and [agent workflow](../guides/development/agent-workflow.md)

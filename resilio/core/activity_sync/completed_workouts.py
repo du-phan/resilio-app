@@ -81,7 +81,10 @@ def reconcile_workout_completion(
             activity.sport
         ):
             continue
-        start_delta = _start_delta_seconds(activity, item.start_date_local)
+        start_delta = _start_delta_seconds(
+            activity,
+            item.provider_start_date_local,
+        )
         if start_delta is not None and start_delta <= 10_800:
             candidates.append((item, start_delta))
     if len(candidates) != 1:

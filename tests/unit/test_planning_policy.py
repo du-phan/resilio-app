@@ -9,9 +9,9 @@ from resilio.core.planning.policy import (
     validate_populated_week,
 )
 from resilio.schemas.plan import (
-    MasterPlan,
     OtherSportPlanningConstraint,
     PlanningConstraintsSnapshot,
+    RaceMacroPlan,
     WeekPlan,
     WorkoutPrescription,
 )
@@ -30,6 +30,21 @@ def _workout(
     start_time_local: time = time(7),
 ) -> WorkoutPrescription:
     low = duration_seconds - high_seconds if low_seconds is None else low_seconds
+    structured_workout = (
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": duration_seconds},
+                    "intensity": "active",
+                    "cue": "Follow the approved session intent.",
+                }
+            ],
+        }
+        if sport == "run"
+        else None
+    )
     return WorkoutPrescription(
         id=workout_id,
         date=date(2026, 7, day),
@@ -43,6 +58,7 @@ def _workout(
         planned_high_intensity_duration_seconds=high_seconds,
         target_rpe_1_to_10=3,
         purpose="Provide a deterministic policy-test session.",
+        structured_workout=structured_workout,
     )
 
 
@@ -113,10 +129,10 @@ def _plan(
     *,
     constraints: PlanningConstraintsSnapshot | None = None,
     methodology: str = "daniels",
-) -> MasterPlan:
-    return MasterPlan(
+) -> RaceMacroPlan:
+    return RaceMacroPlan(
         id="plan_policy",
-        macro_revision_id="macro_revision_0123456789abcdef",
+        plan_revision_id="plan_revision_0123456789abcdef",
         vdot_approval_id="vdot_approval_0123456789abcdef",
         planning_context_reference={
             "artifact_type": "macro_planning_context",
@@ -198,6 +214,17 @@ def test_valid_week_satisfies_frequency_quality_and_long_run_policy() -> None:
     populated = _week(workouts=_valid_runs())
 
     validate_populated_week(plan, populated)
+
+
+def test_policy_rejects_an_unstructured_running_workout() -> None:
+    skeleton = _week()
+    plan = _plan(skeleton)
+    runs = _valid_runs()
+    runs[0] = runs[0].model_copy(update={"structured_workout": None})
+    populated = _week(workouts=runs)
+
+    with pytest.raises(WeekPolicyError, match="run_structured_workout_missing"):
+        validate_populated_week(plan, populated)
 
 
 def test_policy_reports_stable_availability_duration_and_quality_violations() -> None:

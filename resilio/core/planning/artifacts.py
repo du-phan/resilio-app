@@ -10,9 +10,9 @@ from typing import Any, Literal, TypeVar
 from pydantic import BaseModel
 
 from resilio.core.repository import RepositoryIO
-from resilio.schemas.approvals import ClosedPlanCycle
+from resilio.schemas.approvals import ClosedPlanArchive
 from resilio.schemas.plan_history import (
-    ClosedPlanCycleReference,
+    ClosedPlanReference,
     EvidenceArtifactReference,
 )
 from resilio.schemas.repository import RepoError
@@ -84,32 +84,32 @@ def archive_path(plan_id: str) -> str:
     return f"{ARCHIVE_DIRECTORY}/{plan_id}.json"
 
 
-def save_closed_plan_cycle(
+def save_closed_plan_archive(
     repo: RepositoryIO,
-    cycle: ClosedPlanCycle,
-) -> ClosedPlanCycleReference:
-    validated = ClosedPlanCycle.model_validate(cycle.model_dump(mode="python"))
+    archive: ClosedPlanArchive,
+) -> ClosedPlanReference:
+    validated = ClosedPlanArchive.model_validate(archive.model_dump(mode="python"))
     digest = model_sha256(validated)
     _write_immutable_bytes(
         repo,
         archive_path(validated.active_plan_snapshot.plan.id),
         canonical_json_bytes(validated),
     )
-    return ClosedPlanCycleReference(
+    return ClosedPlanReference(
         plan_id=validated.active_plan_snapshot.plan.id,
-        macro_revision_id=validated.active_plan_snapshot.plan.macro_revision_id,
+        plan_revision_id=validated.active_plan_snapshot.plan.plan_revision_id,
         archive_sha256=digest,
         closed_at_utc=validated.closure.closed_at_utc,
     )
 
 
-def load_closed_plan_cycle(
+def load_closed_plan_archive(
     repo: RepositoryIO,
-    reference: ClosedPlanCycleReference,
-) -> ClosedPlanCycle:
+    reference: ClosedPlanReference,
+) -> ClosedPlanArchive:
     result = repo.read_json(
         archive_path(reference.plan_id),
-        ClosedPlanCycle,
+        ClosedPlanArchive,
     )
     if result is None:
         raise PlanningArtifactError(f"Closed plan archive is missing: {reference.plan_id}")
@@ -117,20 +117,20 @@ def load_closed_plan_cycle(
         raise PlanningArtifactError(f"Closed plan archive is invalid: {result}")
     if result.active_plan_snapshot.plan.id != reference.plan_id:
         raise PlanningArtifactError("Closed plan archive ID does not match its reference")
-    if result.active_plan_snapshot.plan.macro_revision_id != reference.macro_revision_id:
+    if result.active_plan_snapshot.plan.plan_revision_id != reference.plan_revision_id:
         raise PlanningArtifactError(
-            "Closed plan archive macro revision does not match its reference"
+            "Closed plan archive revision does not match its reference"
         )
     if model_sha256(result) != reference.archive_sha256:
         raise PlanningArtifactError("Closed plan archive bytes changed after closure")
     return result
 
 
-def load_all_closed_plan_cycles(
+def load_all_closed_plan_archives(
     repo: RepositoryIO,
-    references: list[ClosedPlanCycleReference],
-) -> list[ClosedPlanCycle]:
-    return [load_closed_plan_cycle(repo, reference) for reference in references]
+    references: list[ClosedPlanReference],
+) -> list[ClosedPlanArchive]:
+    return [load_closed_plan_archive(repo, reference) for reference in references]
 
 
 def evidence_path(reference: EvidenceArtifactReference) -> str:
@@ -141,9 +141,19 @@ def import_evidence_artifact(
     repo: RepositoryIO,
     model: BaseModel,
     *,
-    artifact_type: Literal["cycle_review", "macro_planning_context"],
+    artifact_type: Literal[
+        "cycle_review",
+        "macro_planning_context",
+        "assessment_planning_context",
+        "assessment_review",
+    ],
 ) -> EvidenceArtifactReference:
-    if artifact_type not in {"cycle_review", "macro_planning_context"}:
+    if artifact_type not in {
+        "cycle_review",
+        "macro_planning_context",
+        "assessment_planning_context",
+        "assessment_review",
+    }:
         raise ValueError(f"Unsupported evidence artifact type: {artifact_type}")
     digest = model_sha256(model)
     reference = EvidenceArtifactReference(

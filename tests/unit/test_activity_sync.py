@@ -1,7 +1,7 @@
 """Window completeness and idempotent completed-activity sync tests."""
 
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 from pathlib import Path
 
 import pytest
@@ -459,7 +459,7 @@ def _publication(
     return PublishedWorkout(
         workout_identity=PlanWorkoutIdentity(
             plan_id="plan_test",
-            macro_revision_id="macro_revision_1111111111111111",
+            plan_revision_id="plan_revision_1111111111111111",
             week_number=1,
             local_workout_id=workout_id,
         ),
@@ -470,9 +470,12 @@ def _publication(
         publication_fingerprint_sha256="a" * 64,
         rendered_workout_sha256="b" * 64,
         sport_settings_version_sha256="c" * 64,
+        provider_event_fingerprint_sha256="d" * 64,
         sport=sport,
         occurrence_date=date(2026, 7, 28),
-        start_date_local="2026-07-28T07:00:00",
+        approved_start_time_local=time(7),
+        provider_start_date_local="2026-07-28T07:00:00",
+        garmin_forwarding_status="eligible_unverified",
         verified_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
     )
 
@@ -846,7 +849,7 @@ def test_sync_state_failure_restores_workout_completion_manifest(
         local_activity_id="act_h_0123456789abcdef01234567",
         workout_identity=PlanWorkoutIdentity(
             plan_id="plan_old",
-            macro_revision_id="macro_revision_2222222222222222",
+            plan_revision_id="plan_revision_2222222222222222",
             week_number=1,
             local_workout_id="older-workout",
         ),
@@ -885,7 +888,7 @@ def test_completion_save_revalidates_mutated_mapping(
         local_activity_id="act_h_0123456789abcdef01234567",
         workout_identity=PlanWorkoutIdentity(
             plan_id="plan_test",
-            macro_revision_id="macro_revision_1111111111111111",
+            plan_revision_id="plan_revision_1111111111111111",
             week_number=1,
             local_workout_id="planned-run",
         ),

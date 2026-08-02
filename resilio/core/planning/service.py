@@ -23,7 +23,10 @@ from resilio.core.planning.artifacts import (
     PlanningArtifactError,
     canonical_data_sha256,
     load_evidence_artifact,
-    save_closed_plan_cycle,
+    save_closed_plan_archive,
+)
+from resilio.core.planning.assessment_plan_service import (
+    create_assessment_plan as create_assessment_plan,
 )
 from resilio.core.planning.audit import (
     new_planning_id as _new_id,
@@ -42,9 +45,12 @@ from resilio.core.planning.freshness import (
     require_verified_vdot_approval as _verify_vdot_approval,
 )
 from resilio.core.planning.integrity import (
-    macro_skeleton_sha256,
+    plan_skeleton_sha256,
     planning_constraints_snapshot,
     planning_profile_sha256,
+)
+from resilio.core.planning.plan_proposal import (
+    discard_unapproved_current_plan as discard_unapproved_current_plan,
 )
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.source_state import (
@@ -82,24 +88,29 @@ from resilio.core.planning.workout_evidence import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.vdot import parse_time_string
+from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.approvals import (
     ActivePlanState,
-    ClosedPlanCycle,
-    MacroApproval,
+    ClosedPlanArchive,
+    PlanApproval,
     PlanningState,
     VDOTApproval,
 )
+from resilio.schemas.macro_plan_draft import MacroPlanDraft
 from resilio.schemas.plan import (
-    MacroPlanDraft,
-    MasterPlan,
+    RaceMacroPlan,
+    TrainingPlan,
 )
 from resilio.schemas.plan_history import (
     EvidenceArtifactReference,
     PlanClosure,
     PlanClosureDisposition,
 )
-from resilio.schemas.planning_evidence import MacroPlanningContext, PlanCycleReview
+from resilio.schemas.planning_evidence import (
+    MacroPlanningContext,
+    PlanCycleReview,
+)
 from resilio.schemas.profile import AthleteProfile
 
 
@@ -107,7 +118,7 @@ def load_current_plan(
     repo: RepositoryIO,
     *,
     allow_missing: bool = False,
-) -> MasterPlan | None:
+) -> TrainingPlan | None:
     state = load_planning_aggregate(repo, allow_missing=allow_missing)
     if state is None or state.active_plan is None:
         if allow_missing:
@@ -162,8 +173,12 @@ def _load_validated_macro_context(
         raise PlanOperationError("Macro-planning training evidence changed after context creation")
     if min(week.start_date for week in draft.weeks) != context.intended_plan_start_date:
         raise PlanOperationError("Macro draft does not start on its evidence-bound intended Monday")
-    archived_plan_ids = {reference.plan_id for reference in state.closed_plan_cycle_references}
-    context_plan_ids = {summary.plan_id for summary in context.historical_plan_summaries}
+    archived_plan_ids = {reference.plan_id for reference in state.closed_plan_references}
+    context_plan_ids = {
+        summary.plan_id for summary in context.historical_plan_summaries
+    } | {
+        summary.plan_id for summary in context.historical_assessment_summaries
+    }
     if context_plan_ids != archived_plan_ids:
         raise PlanOperationError(
             "Macro-planning context does not cover the complete closed-plan history"
@@ -199,6 +214,17 @@ def _load_validated_macro_context(
                 f"closed_plan.{latest_plan.plan_id}.summary",
                 f"goal_outcome.{latest_plan.plan_id}",
             }
+        )
+    if context.historical_assessment_summaries:
+        latest_assessment = max(
+            context.historical_assessment_summaries,
+            key=lambda summary: (
+                summary.result.performance_date,
+                summary.plan_id,
+            ),
+        )
+        required_evidence_ids.add(
+            f"assessment_result.{latest_assessment.plan_id}"
         )
     missing_required_ids = required_evidence_ids - cited_evidence_ids
     if missing_required_ids:
@@ -261,6 +287,10 @@ def _validate_plan_closure(
     closure: PlanClosure,
 ) -> None:
     plan = active_plan.plan
+    if not isinstance(plan, RaceMacroPlan):
+        raise PlanOperationError(
+            "Race-cycle closure cannot close a baseline-assessment plan"
+        )
     evidence_reference = EvidenceArtifactReference(
         artifact_type="cycle_review",
         artifact_sha256=closure.cycle_review_artifact_sha256,
@@ -273,7 +303,7 @@ def _validate_plan_closure(
         )
     except PlanningArtifactError as exc:
         raise PlanOperationError(str(exc)) from exc
-    if review.plan_id != plan.id or review.macro_revision_id != plan.macro_revision_id:
+    if review.plan_id != plan.id or review.plan_revision_id != plan.plan_revision_id:
         raise PlanOperationError("Cycle review references another active plan revision")
     if review.active_plan_sha256 != canonical_data_sha256(active_plan):
         raise PlanOperationError("Active plan changed after cycle review")
@@ -338,15 +368,15 @@ def close_current_plan(
     closure: PlanClosure,
 ) -> PlanningState:
     """Archive the active plan only after exact retrospective evidence exists."""
-    with coordinated_plan_lock(repo, "close_current_plan"):
+    with coordinated_publication_plan_lock(repo, "close_current_plan"):
         state = _required_state(repo)
         if state.active_plan is None:
             raise PlanOperationError("No current plan is available to retire")
         _validate_plan_closure(repo, state.active_plan, closure)
         try:
-            reference = save_closed_plan_cycle(
+            reference = save_closed_plan_archive(
                 repo,
-                ClosedPlanCycle(
+                ClosedPlanArchive(
                     active_plan_snapshot=state.active_plan,
                     closure=closure,
                 ),
@@ -358,8 +388,8 @@ def close_current_plan(
             state.model_copy(
                 update={
                     "active_plan": None,
-                    "closed_plan_cycle_references": [
-                        *state.closed_plan_cycle_references,
+                    "closed_plan_references": [
+                        *state.closed_plan_references,
                         reference,
                     ],
                 }
@@ -404,7 +434,7 @@ def create_macro_plan(
     draft: MacroPlanDraft,
     *,
     created_at_utc: datetime | None = None,
-) -> MasterPlan:
+) -> RaceMacroPlan:
     """Create a fresh macro revision from the active VDOT approval and profile."""
     with coordinated_plan_lock(repo, "create_macro_plan"):
         state = _required_state(repo)
@@ -438,9 +468,9 @@ def create_macro_plan(
             raise PlanOperationError("Macro plan creation cannot predate its VDOT approval")
         if creation_timestamp < context.generated_at_utc:
             raise PlanOperationError("Macro plan creation cannot predate its planning context")
-        plan = MasterPlan(
+        plan = RaceMacroPlan(
             id=_new_id("plan"),
-            macro_revision_id=_new_id("macro_revision"),
+            plan_revision_id=_new_id("plan_revision"),
             vdot_approval_id=vdot_approval.approval_id,
             planning_context_reference=draft.planning_context_reference,
             planning_profile_sha256=profile_hash,
@@ -459,30 +489,32 @@ def create_macro_plan(
         return plan
 
 
-def approve_current_macro_plan(
+def approve_current_plan(
     repo: RepositoryIO,
     *,
     approved_at_utc: datetime | None = None,
 ) -> PlanningState:
-    """Bind athlete approval to the current immutable macro skeleton."""
-    with coordinated_plan_lock(repo, "approve_current_macro_plan"):
+    """Bind athlete approval to the current immutable plan skeleton."""
+    with coordinated_plan_lock(repo, "approve_current_plan"):
         state = _required_state(repo)
         plan = _require_fresh_plan(repo, state)
-        assert state.active_vdot_approval is not None
         approval_timestamp = _now_utc(approved_at_utc)
         if approval_timestamp < plan.created_at_utc:
-            raise PlanOperationError("Macro approval cannot predate plan creation")
-        approval = MacroApproval(
-            approval_id=_new_id("macro_approval"),
+            raise PlanOperationError("Plan approval cannot predate plan creation")
+        approval = PlanApproval(
+            approval_id=_new_id("plan_approval"),
+            plan_kind=plan.kind,
             plan_id=plan.id,
-            macro_revision_id=plan.macro_revision_id,
-            macro_skeleton_sha256=macro_skeleton_sha256(plan),
-            vdot_approval_id=state.active_vdot_approval.approval_id,
+            plan_revision_id=plan.plan_revision_id,
+            plan_skeleton_sha256=plan_skeleton_sha256(plan),
+            vdot_approval_id=(
+                plan.vdot_approval_id if isinstance(plan, RaceMacroPlan) else None
+            ),
             planning_profile_sha256=plan.planning_profile_sha256,
             approved_at_utc=approval_timestamp,
         )
         assert state.active_plan is not None
-        active_plan = state.active_plan.model_copy(update={"macro_approval": approval})
+        active_plan = state.active_plan.model_copy(update={"plan_approval": approval})
         return _persist(
             state=state.model_copy(update={"active_plan": active_plan}),
             repo=repo,

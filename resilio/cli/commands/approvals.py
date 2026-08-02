@@ -15,7 +15,7 @@ from resilio.cli.output import (
 )
 from resilio.core.planning.service import (
     PlanOperationError,
-    approve_current_macro_plan,
+    approve_current_plan,
     approve_vdot_proposal,
     approve_week_application,
     load_planning_aggregate,
@@ -68,12 +68,12 @@ def approve_vdot_command(
     )
 
 
-@app.command("approve-macro")
-def approve_macro_command() -> None:
+@app.command("approve-plan")
+def approve_plan_command() -> None:
     repo = RepositoryIO()
     _run_transition(
-        lambda: approve_current_macro_plan(repo),
-        "Current macro revision approved",
+        lambda: approve_current_plan(repo),
+        "Current plan revision approved",
     )
 
 

@@ -1,6 +1,6 @@
 ---
 name: first-session
-description: Onboard a new athlete through Intervals.icu authentication, coordinated activity and wellness sync, athlete-confirmed profile creation, goal capture, VDOT approval, methodology-explicit macro planning, and the first approved weekly plan. Use for first-time setup or a new athlete profile.
+description: Onboard a new athlete through authentication, coordinated sync, athlete-confirmed profile and goal capture, then route to either qualifying VDOT evidence and race planning or a non-injury baseline-assessment plan. Use for first-time setup or a new athlete profile.
 ---
 
 # First session
@@ -80,7 +80,32 @@ names, or local paths. Use one Poetry environment throughout.
    date. Capture the goal type, target date, and optional target finish time.
    Discuss feasibility from current evidence and the available plan horizon.
 
-7. Complete the approval chain in order:
+   Ask whether approved running workouts should be synchronized automatically to
+   Intervals.icu after each weekly application. If confirmed, record the exact
+   confirmation and configure:
+
+   ```bash
+   poetry run resilio workout configure \
+     --run-mode after_weekly_apply \
+     --confirmation-reference "<ATHLETE_CONFIRMATION>"
+   poetry run resilio workout capabilities --sport run
+   ```
+
+   Explain that Intervals synchronization and Garmin forwarding are reported
+   separately. `eligible_unverified` never proves watch receipt, and bouldering
+   is never published by this flow.
+
+7. Choose the evidence path without filling gaps:
+
+   - If a qualifying exact race, confirmed personal best, or explicit manual
+     value supports baseline VDOT, run the baseline VDOT proposal procedure.
+   - If baseline evidence is missing, disputed, conflicting, or stale after
+     inactivity, and the athlete is not in medical rehabilitation, run the
+     baseline-assessment-plan procedure. Do not invent VDOT to unlock a macro
+     plan. Complete the assessment review and VDOT approval before race macro
+     planning.
+
+8. For the direct VDOT path, complete the approval chain in order:
 
    - run the baseline VDOT proposal procedure and retain its exact JSON file;
    - after explicit approval, bind that exact file with
@@ -89,14 +114,14 @@ names, or local paths. Use one Poetry environment throughout.
      immutable evidence gate with `resilio plan create-macro-context
      --evidence-as-of <DATE> --start <MONDAY>`;
    - run the macro-plan procedure and present its methodology rationale;
-   - after explicit approval, record `resilio approvals approve-macro`;
+   - after explicit approval, record `resilio approvals approve-plan`;
    - generate the first exact weekly proposal file;
    - after explicit approval, bind it with
      `resilio approvals approve-week --file <WEEK_JSON>`;
    - apply that unchanged file and verify persistence.
 
-   The VDOT approval history, active plan, immutable macro context, macro
-   approval, weekly approval, applied-week audit, and closed-cycle references
+   The VDOT approval history, active plan, immutable planning context, plan
+   approval, weekly approval, applied-week audit, and closed-plan references
    are one coordinated planning aggregate. Never repair or replace an approved
    file or content-addressed evidence artifact in place.
 
@@ -104,5 +129,6 @@ names, or local paths. Use one Poetry environment throughout.
 
 Finish only when authentication works, coordinated sync state is accurately
 reported, the profile contains only confirmed durable facts, constraints and
-other sports are complete, the goal is recorded, and the VDOT, macro plan, and
-first week have each passed their separate approval boundary.
+other sports are complete, the goal is recorded, and either (a) VDOT, race
+macro plan, and first week or (b) baseline-assessment plan and its first week
+have each passed their separate approval boundary.

@@ -1,6 +1,7 @@
 """VDOT race calculations and exact-evidence lookup."""
 
 from datetime import date
+from pathlib import Path
 from typing import Optional
 
 import typer
@@ -10,13 +11,37 @@ from resilio.api.vdot import (
     calculate_vdot_from_race,
     estimate_current_vdot,
     predict_race_times,
+    propose_vdot_from_assessment,
 )
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
-from resilio.cli.output import output_json
+from resilio.cli.output import create_success_envelope, output_json
 from resilio.schemas.vdot import VDOTResult
 
 # Create subcommand app
 app = typer.Typer(help="VDOT race-performance calculations")
+
+
+@app.command(name="create-proposal-from-assessment")
+def create_proposal_from_assessment_command(
+    review_sha256: str = typer.Option(..., "--review-sha256"),
+    output_path: Path = typer.Option(..., "--out"),
+) -> None:
+    """Write exact VDOT proposal bytes from a closed assessment review."""
+    result = propose_vdot_from_assessment(review_sha256)
+    if isinstance(result, VDOTError):
+        envelope = api_result_to_envelope(
+            result,
+            success_message="Assessment VDOT proposal",
+        )
+    else:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(result.model_dump_json(indent=2) + "\n")
+        envelope = create_success_envelope(
+            message="Assessment VDOT proposal created",
+            data={"path": str(output_path.resolve()), "proposal": result},
+        )
+    output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
 @app.command(name="calculate")

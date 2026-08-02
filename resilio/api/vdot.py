@@ -12,6 +12,9 @@ from resilio.core.planning.approval_evidence import (
     ApprovalEvidenceError,
     load_vdot_approval_evidence_unlocked,
 )
+from resilio.core.planning.assessment_vdot import (
+    create_vdot_proposal_from_assessment,
+)
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.state_repository import (
@@ -252,6 +255,19 @@ def estimate_current_vdot(
         return VDOTError(
             "temporarily_unavailable",
             "VDOT evidence is temporarily unavailable during a state transition",
+        )
+    except (OSError, ValueError, PlanOperationError) as exc:
+        return VDOTError("invalid_state", str(exc))
+
+
+def propose_vdot_from_assessment(
+    review_sha256: str,
+) -> VDOTProposal | VDOTError:
+    """Return an exact proposal payload from one closed assessment review."""
+    try:
+        return create_vdot_proposal_from_assessment(
+            RepositoryIO(),
+            review_sha256=review_sha256,
         )
     except (OSError, ValueError, PlanOperationError) as exc:
         return VDOTError("invalid_state", str(exc))
