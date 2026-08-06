@@ -307,7 +307,7 @@ def _linked_activity_decision(
     if linked:
         current = linked[0]
         if (
-            current.audit.external_fingerprint_sha256 == external.audit.external_fingerprint_sha256
+            current.audit.provider_snapshot_sha256 == external.audit.provider_snapshot_sha256
             and current.audit.canonical_mapping_version == external.audit.canonical_mapping_version
         ):
             return ReconciliationDecision(

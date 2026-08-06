@@ -5,7 +5,9 @@ from __future__ import annotations
 from resilio.schemas.activity import (
     ActivityAudit,
     ActivityDevice,
+    ActivityFeedback,
     ActivityOrigin,
+    ActivitySegment,
     CanonicalActivity,
     DataCompleteness,
     RecordingProvider,
@@ -77,7 +79,8 @@ def _merged_audit(
         imported_at_utc=existing.audit.imported_at_utc,
         external_created_at_utc=external.audit.external_created_at_utc,
         external_sync_at_utc=external.audit.external_sync_at_utc,
-        external_fingerprint_sha256=external.audit.external_fingerprint_sha256,
+        provider_snapshot_sha256=external.audit.provider_snapshot_sha256,
+        performance_evidence_sha256=external.audit.performance_evidence_sha256,
         canonical_mapping_version=external.audit.canonical_mapping_version,
     )
 
@@ -124,7 +127,8 @@ def _merged_historical(
             "heart_rate": existing.heart_rate or external.heart_rate,
             "power": existing.power or external.power,
             "cadence": existing.cadence or external.cadence,
-            "subjective_effort": _merged_subjective_effort(
+            "execution_summary": external.execution_summary,
+            "feedback": _merged_feedback(
                 existing,
                 external,
                 preserve_existing_when_provider_missing=True,
@@ -137,7 +141,7 @@ def _merged_historical(
             "data_completeness": external.data_completeness,
             "device": device,
             "classification": classification,
-            "segments": existing.segments or external.segments,
+            "segments": _merged_historical_segments(existing, external),
             "origin": origin,
             "audit": audit,
         }
@@ -179,11 +183,35 @@ def _merged_historical_backfill(
             "native_analysis_applicability": (external.native_analysis_applicability),
             "analysis_thresholds": external.analysis_thresholds,
             "zone_time_distributions": external.zone_time_distributions,
+            "execution_summary": external.execution_summary,
+            "feedback": _merged_feedback(
+                existing,
+                external,
+                preserve_existing_when_provider_missing=True,
+            ),
+            "segments": _merged_historical_segments(existing, external),
             "data_completeness": external.data_completeness,
             "classification": classification,
         }
     )
     return _with_canonical_completeness(merged)
+
+
+def _merged_historical_segments(
+    existing: CanonicalActivity,
+    external: CanonicalActivity,
+) -> list[ActivitySegment]:
+    """Retain authored laps and refresh the provider-owned interval partition."""
+    if not external.segments:
+        return existing.segments
+    historical_segments = [
+        segment for segment in existing.segments if segment.origin_kind == "historical_segment"
+    ]
+    combined = [*historical_segments, *external.segments]
+    return [
+        segment.model_copy(update={"index": index})
+        for index, segment in enumerate(combined, start=1)
+    ]
 
 
 def _merged_provider_activity(
@@ -206,7 +234,8 @@ def _merged_provider_activity(
             "heart_rate": external.heart_rate or existing.heart_rate,
             "power": external.power or existing.power,
             "cadence": external.cadence or existing.cadence,
-            "subjective_effort": _merged_subjective_effort(
+            "execution_summary": external.execution_summary,
+            "feedback": _merged_feedback(
                 existing,
                 external,
                 preserve_existing_when_provider_missing=False,
@@ -247,14 +276,31 @@ def _with_canonical_completeness(
     )
 
 
-def _merged_subjective_effort(
+def _merged_feedback(
     existing: CanonicalActivity,
     external: CanonicalActivity,
     *,
     preserve_existing_when_provider_missing: bool,
-) -> SubjectiveSessionEffort | None:
-    if existing.subjective_effort is not None and existing.subjective_effort.is_athlete_confirmed:
-        return existing.subjective_effort
-    if preserve_existing_when_provider_missing:
-        return external.subjective_effort or existing.subjective_effort
-    return external.subjective_effort
+) -> ActivityFeedback:
+    existing_effort = existing.feedback.subjective_effort
+    external_effort = external.feedback.subjective_effort
+    if existing_effort is not None and existing_effort.is_athlete_confirmed:
+        subjective_effort: SubjectiveSessionEffort | None = existing_effort
+    elif preserve_existing_when_provider_missing:
+        subjective_effort = external_effort or existing_effort
+    else:
+        subjective_effort = external_effort
+    return ActivityFeedback(
+        provider_description=(
+            external.feedback.provider_description
+            if not preserve_existing_when_provider_missing
+            else (external.feedback.provider_description or existing.feedback.provider_description)
+        ),
+        local_private_note=existing.feedback.local_private_note,
+        subjective_effort=subjective_effort,
+        feel=(
+            external.feedback.feel
+            if not preserve_existing_when_provider_missing
+            else external.feedback.feel or existing.feedback.feel
+        ),
+    )

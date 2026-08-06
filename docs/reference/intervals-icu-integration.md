@@ -23,8 +23,8 @@ Non-secret transport settings live under `intervals_icu` in
 settings into a staged coordinated transaction.
 
 ```text
-activity DTO -> canonical activity v4
-wellness DTO -> WellnessDay
+activity DTO -> canonical activity v5
+wellness DTO -> WellnessDay v2
 sport settings DTO -> SportSettingsSnapshot
                   |
                   v
@@ -55,18 +55,26 @@ representations have distinct reasons. A reviewed duplicate is bound to both
 the local canonical activity identity and the exact sanitized review
 fingerprint. A later provider or candidate change invalidates that decision.
 
-The external fingerprint hashes mapped provider facts only. Canonical mapping
-version 7 is stored separately, so a mapper release remaps unchanged provider
-records without pretending their source facts changed.
+Every mapped activity has two hashes and canonical mapping version 9. The
+provider-snapshot hash covers all mapped provider facts, including description,
+RPE, Feel, session-RPE, and intervals. The performance-evidence hash covers
+measured execution facts and provider intervals but excludes mutable feedback
+and derived local analysis. Planning, VDOT, and assessment evidence bind to the
+performance hash; synchronization drift uses the provider snapshot. A mapper
+release therefore remaps unchanged records without pretending their source
+facts changed.
 
 Both provider `Bouldering` and `RockClimbing` map to canonical `climb`.
-Athlete RPE is read with explicit provenance. A provider RPE without confirmed
+Provider description, RPE, Feel, and session-RPE are read with explicit
+provenance. Description remains provider-owned text and never overwrites the
+separate local private note. Intervals.icu Feel is retained with its exact
+`1 = strongest, 5 = weakest` direction. A provider RPE without confirmed
 duration-based session-RPE remains distinct from athlete-confirmed subjective
-effort.
+effort. Activity messages and comments are not an activity-feedback source.
 
 ## Native analyzed values
 
-Canonical activity v4 may preserve:
+Canonical activity v5 may preserve:
 
 - aerobic load points and calculation method;
 - relative intensity, aerobic decoupling, polarization index, and TRIMP when
@@ -78,7 +86,13 @@ Canonical activity v4 may preserve:
   velocity, or pace analysis was ignored;
 - heart rate, power, cadence, pace, elevation, device, and source fields with
   explicit units;
-- provider intervals as typed activity segments;
+- execution facts including average and maximum speed, grade-adjusted speed,
+  stride, calories, carbohydrate observations, compliance, temperature, and
+  analysis weight;
+- provider intervals as typed activity segments, including duration, distance,
+  HR, cadence, power, speed, gradient, altitude, stride, zone, work, load, and
+  decoupling when supplied. The provider's `0/0` sample-index sentinel is
+  retained in the source hash but mapped to absent canonical stream bounds;
 - native power-zone time as provider-ID/duration-second objects; provider IDs
   are preserved and linked to captured names and bounds only by an exact,
   unambiguous name match; fingerprinting is independent of provider response
@@ -95,13 +109,36 @@ Polarization is preserved as a signed, finite provider value. Provider sensor
 spikes such as extreme maximum speed remain source evidence rather than
 causing the entire activity to disappear.
 
-Wellness preserves provider fitness, fatigue, ramp, contribution values,
-recovery observations, provider readiness, VO2 max, and the upstream
-hydration-volume value without asserting an undocumented physical unit. Sport
-settings
-preserve sport-scoped FTP, LTHR, maximum heart rate, threshold speed in meters
-per second, the separate pace display preference, named zones,
+Wellness v2 preserves dated provider fitness, fatigue, ramp, contribution
+values; sleep duration, score, quality, resting HR, average sleeping HR, RMSSD
+and SDNN HRV; subjective soreness, fatigue, stress, mood, motivation, injury,
+and hydration; steps and athlete comments; temporary weight and resting-HR
+flags; VO2 max, SpO2, provider-defined respiration, Baevsky index, readiness;
+and sport-scoped performance estimates. Every observation retains missingness,
+provider update time, and a snapshot hash. Clinical measurements, menstrual
+data, nutrition, and body composition are validated at the external boundary
+but excluded from persisted coaching state pending explicit consent. Sport
+settings preserve sport-scoped FTP, LTHR, maximum heart rate, threshold speed
+in meters per second, the separate pace display preference, named zones,
 load/time-in-zone/workout priorities, and a source fingerprint.
+
+## Provider-field and exact-review policy
+
+The activity, interval, wellness, and activity-endpoint inventory is pinned to
+the reviewed Intervals.icu v1.0.0 OpenAPI document by review date and SHA-256 in
+the integration field-policy registry. Every documented field has an explicit
+disposition: persisted coaching evidence, persisted provenance, on-demand exact
+review, sensitive exclusion, raw/location exclusion, communication exclusion,
+or reviewed-not-integrated.
+
+An exact activity review embeds the complete canonical activity, its
+performance-evidence hash, exact completion match when one exists, recovery
+and training state as of the activity date, explicit same-day causality limits,
+and the athlete-text trust boundary. HR duration curves are fetched read-only
+only for the selected activity. Best efforts and bounded histogram/curve
+endpoints remain eligible for later exact-review extensions. Raw streams,
+coordinates, FIT/GPX/original files, provider messages, and the excluded
+sensitive wellness categories never enter LLM coaching context.
 
 Resilio does not recompute a missing native analyzed value. Missingness is a
 first-class state.
@@ -128,10 +165,11 @@ required before changing athlete-owned profile facts.
 ## VDOT evidence provenance
 
 A VDOT race proposal may reference synchronized evidence only through the
-canonical local activity ID and the exact Intervals.icu source fingerprint.
+canonical local activity ID and the exact performance-evidence hash.
 Approval and every later use reverify that the activity remains active,
 running, and identical in local date, elapsed seconds, timezone, and source
-fingerprint. Personal-best proposals instead reverify exact distance, date,
+hash. Feedback-only edits therefore do not invalidate performance evidence.
+Personal-best proposals instead reverify exact distance, date,
 and elapsed seconds against the athlete-confirmed profile. Proposal and
 approval dates are evaluated in the declared performance or athlete training
 timezone, never the host machine’s date.

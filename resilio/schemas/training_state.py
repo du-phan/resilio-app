@@ -4,17 +4,39 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class WellnessSource(str, Enum):
     INTERVALS_ICU = "intervals_icu"
 
 
+class SportPerformanceEstimate(BaseModel):
+    source_sport_type: str = Field(min_length=1, max_length=120)
+    estimated_ftp_watts: Optional[float] = Field(
+        default=None, gt=0, allow_inf_nan=False
+    )
+    estimated_w_prime_joules: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+    estimated_pmax_watts: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class WellnessDay(BaseModel):
+    schema_version: Literal[2] = 2
     local_date: date
+    provider_updated_at_utc: Optional[datetime] = None
+    provider_snapshot_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    mapping_version: Literal[2] = 2
     fitness_load_points: Optional[float] = Field(
         default=None,
         ge=0,
@@ -58,7 +80,7 @@ class WellnessDay(BaseModel):
     motivation: Optional[int] = Field(default=None, ge=1, le=4)
     injury: Optional[int] = Field(default=None, ge=1, le=4)
     hydration: Optional[int] = Field(default=None, ge=1, le=4)
-    provider_hydration_volume_value: Optional[float] = Field(
+    hydration_volume_liters: Optional[float] = Field(
         default=None,
         ge=0,
         allow_inf_nan=False,
@@ -73,10 +95,53 @@ class WellnessDay(BaseModel):
         le=100,
         allow_inf_nan=False,
     )
+    step_count: Optional[int] = Field(default=None, ge=0)
+    weight_kilograms: Optional[float] = Field(
+        default=None,
+        gt=0,
+        allow_inf_nan=False,
+    )
+    weight_is_temporary: bool = False
+    oxygen_saturation_percent: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=100,
+        allow_inf_nan=False,
+    )
+    provider_respiration_value: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    provider_baevsky_stress_index: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    athlete_comments: Optional[str] = None
+    sport_performance_estimates: list[SportPerformanceEstimate] = Field(
+        default_factory=list
+    )
     resting_hr_is_temporary: bool = False
     source: WellnessSource = WellnessSource.INTERVALS_ICU
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
+
+    @field_validator("provider_updated_at_utc")
+    @classmethod
+    def provider_update_is_aware(cls, value: Optional[datetime]) -> Optional[datetime]:
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise ValueError("provider_updated_at_utc must be timezone-aware")
+        return value
+
+    @model_validator(mode="after")
+    def sport_performance_estimate_scopes_are_unique(self) -> "WellnessDay":
+        sport_types = [item.source_sport_type for item in self.sport_performance_estimates]
+        if len(set(sport_types)) != len(sport_types):
+            raise ValueError("duplicate sport performance estimate scope")
+        if sport_types != sorted(sport_types):
+            raise ValueError("sport performance estimates must use canonical sport order")
+        return self
 
     @property
     def form_load_points(self) -> Optional[float]:

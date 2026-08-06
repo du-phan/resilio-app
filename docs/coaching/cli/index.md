@@ -13,9 +13,15 @@ authority. Commands return JSON envelopes.
 - `resilio status` — current synchronized coaching context.
 - `resilio activity list|search` — inspect canonical completed activities;
   list output includes exact elapsed seconds, activity timezone, canonical
-  identity, and source fingerprint for evidence binding.
+  identity, provider-snapshot hash, performance-evidence hash, provider
+  description, and the separately owned private note.
+- `resilio activity evidence <LOCAL_ID> [--include-provider-hr-curve]` — build
+  the bounded exact-activity coaching packet; the optional curve is read-only
+  and raw streams, coordinates, messages, and sensitive wellness are excluded.
 - `resilio activity-review ...` — review conservative match, quarantine, and
   deletion candidates.
+- `resilio migrate evidence-v5 [--apply]` — dry-run or apply the one-shot,
+  backed-up activity-v5/wellness-v2 coordinated state cutover.
 
 ## Typed coaching context
 

@@ -53,11 +53,7 @@ class OwnedCompletionGoalEvidence(BaseModel):
     local_activity_id: str = Field(
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
     )
-    canonical_activity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    provider_activity_fingerprint_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[0-9a-f]{64}$",
-    )
+    performance_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     model_config = ConfigDict(extra="forbid")
 
@@ -69,11 +65,7 @@ class AthleteConfirmedGoalActivityEvidence(BaseModel):
     local_activity_id: str = Field(
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
     )
-    canonical_activity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    provider_activity_fingerprint_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[0-9a-f]{64}$",
-    )
+    performance_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     athlete_confirmation_reference: str = Field(min_length=10, max_length=1_000)
 
     model_config = ConfigDict(extra="forbid")
@@ -180,11 +172,7 @@ class BaselineAssessmentResultBase(BaseModel):
     local_activity_id: str = Field(
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
     )
-    canonical_activity_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    provider_activity_fingerprint_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[0-9a-f]{64}$",
-    )
+    performance_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     race_distance: RaceDistance
     performance_date: date
     performance_timezone: str = Field(min_length=1)

@@ -1,5 +1,9 @@
 """Stable presentation-neutral API surface."""
 
+from resilio.api.activity_evidence import (
+    ActivityEvidenceError,
+    get_exact_activity_coaching_evidence,
+)
 from resilio.api.coaching_context import (
     CoachingContextError,
     get_weekly_coach_context,
@@ -55,6 +59,7 @@ from resilio.api.week_application import (
 from resilio.core.repository import RepositoryIO
 
 __all__ = [
+    "ActivityEvidenceError",
     "ActivityReviewError",
     "CoachingContextError",
     "PlanError",
@@ -79,6 +84,7 @@ __all__ = [
     "create_profile",
     "close_plan_cycle",
     "get_current_plan",
+    "get_exact_activity_coaching_evidence",
     "get_error_message",
     "get_plan_status",
     "get_plan_week",

@@ -96,7 +96,7 @@ def quarantine_failure_fingerprint(payload: dict[str, Any]) -> str:
         "rule": payload["rule"],
         "error_type": payload["error_type"],
         "validation_issues": payload.get("validation_issues", []),
-        "external_source_fingerprint_sha256": payload["external_source_fingerprint_sha256"],
+        "provider_snapshot_sha256": payload["provider_snapshot_sha256"],
     }
     encoded = json.dumps(
         material,
@@ -138,7 +138,7 @@ def _candidate_review_projection(
             else None
         ),
         "original_file_sha256": activity.origin.original_file_sha256,
-        "external_fingerprint_sha256": (activity.audit.external_fingerprint_sha256),
+        "provider_snapshot_sha256": (activity.audit.provider_snapshot_sha256),
         "canonical_mapping_version": (activity.audit.canonical_mapping_version),
     }
 
@@ -153,7 +153,7 @@ def reconciliation_review_fingerprint(
         "action": payload.get("action"),
         "rule": payload.get("rule"),
         "external_activity_id_sha256": payload.get("external_activity_id_sha256"),
-        "external_source_fingerprint_sha256": payload.get("external_source_fingerprint_sha256"),
+        "provider_snapshot_sha256": payload.get("provider_snapshot_sha256"),
         "candidate_local_ids": candidate_local_ids,
         "candidate_state": [
             (
@@ -176,7 +176,7 @@ def reconciliation_review_fingerprint(
 def build_mapping_quarantine_decision(
     *,
     external_activity_id_sha256: str,
-    external_source_fingerprint_sha256: str,
+    provider_snapshot_sha256: str,
     error: Exception,
 ) -> dict[str, Any]:
     validation_issues = []
@@ -198,7 +198,7 @@ def build_mapping_quarantine_decision(
         "action": "quarantine",
         "rule": "canonical_mapping_failed",
         "external_activity_id_sha256": external_activity_id_sha256,
-        "external_source_fingerprint_sha256": (external_source_fingerprint_sha256),
+        "provider_snapshot_sha256": provider_snapshot_sha256,
         "error_type": type(error).__name__,
         "validation_issues": validation_issues,
         "acknowledgeable": isinstance(error, UnsupportedSportError),

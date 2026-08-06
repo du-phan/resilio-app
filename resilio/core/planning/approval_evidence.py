@@ -179,8 +179,8 @@ def _verify_race_activity_source(
             "The source race activity does not match the performance timezone"
         )
     if (
-        activity.audit.external_fingerprint_sha256
-        != evidence.source_external_fingerprint_sha256
+        activity.audit.performance_evidence_sha256
+        != evidence.source_performance_evidence_sha256
     ):
         raise ApprovalEvidenceError(
             "The source race activity fingerprint no longer matches the proposal"

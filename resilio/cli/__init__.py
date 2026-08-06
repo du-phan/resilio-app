@@ -27,6 +27,7 @@ from resilio.cli.commands import (
     dates,
     goal,
     memory,
+    migrate,
     plan,
     profile,
     vdot,
@@ -90,6 +91,7 @@ app.add_typer(goal.app, name="goal", help="Manage race goals")
 app.add_typer(vdot.app, name="vdot", help="Race-performance equivalence calculations")
 app.add_typer(weather.app, name="weather", help="Weather forecast for planning context")
 app.add_typer(memory.app, name="memory", help="Manage athlete memories and insights")
+app.add_typer(migrate.app, name="migrate", help="Validate or apply athlete-state migrations")
 app.add_typer(activity.app, name="activity", help="List and search activities")
 app.add_typer(
     activity_review.app,

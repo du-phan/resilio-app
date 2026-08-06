@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from typing import Annotated, Any, Literal, Optional
 
 from pydantic import (
@@ -12,6 +12,11 @@ from pydantic import (
     Field,
     field_validator,
     model_validator,
+)
+
+from resilio.integrations.intervals_icu.wellness_dto import WellnessDTO as WellnessDTO
+from resilio.integrations.intervals_icu.wellness_dto import (
+    WellnessSportInfoDTO as WellnessSportInfoDTO,
 )
 
 
@@ -142,19 +147,25 @@ class IntervalDTO(ExternalDTO):
     id: int
     type: Optional[str] = None
     start_time: int = Field(ge=0)
+    end_time: Optional[int] = Field(default=None, ge=0)
+    start_index: Optional[int] = Field(default=None, ge=0)
+    end_index: Optional[int] = Field(default=None, ge=0)
     elapsed_time: int = Field(gt=0)
     moving_time: Optional[int] = Field(default=None, ge=0)
     distance: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     label: Optional[str] = None
     average_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    min_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     average_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
+    min_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
     max_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
     total_elevation_gain: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     average_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     weighted_average_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     average_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    min_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     max_cadence: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     intensity: Optional[float] = Field(
         default=None,
@@ -173,11 +184,24 @@ class IntervalDTO(ExternalDTO):
         le=1_000,
         allow_inf_nan=False,
     )
+    average_gradient: Optional[float] = Field(default=None, allow_inf_nan=False)
+    min_altitude: Optional[float] = Field(default=None, allow_inf_nan=False)
+    max_altitude: Optional[float] = Field(default=None, allow_inf_nan=False)
+    average_stride: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    zone: Optional[int] = Field(default=None, ge=0)
+    joules: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    joules_above_ftp: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def moving_not_longer_than_elapsed(self) -> "IntervalDTO":
         if self.moving_time is not None and self.moving_time > self.elapsed_time:
             raise ValueError("interval moving_time cannot exceed elapsed_time")
+        if self.end_time is not None and self.end_time < self.start_time:
+            raise ValueError("interval end_time cannot precede start_time")
+        if self.start_index is not None and self.end_index is not None:
+            is_no_stream_sentinel = self.start_index == 0 and self.end_index == 0
+            if not is_no_stream_sentinel and self.end_index <= self.start_index:
+                raise ValueError("interval end_index must be greater than start_index")
         return self
 
 
@@ -207,6 +231,16 @@ class ActivityDTO(ExternalDTO):
     description: Optional[str] = None
     distance: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
     total_elevation_gain: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    average_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    max_speed: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    gap: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    average_stride: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    calories: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    carbs_ingested: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    carbs_used: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    compliance: Optional[float] = Field(default=None, allow_inf_nan=False)
+    average_temp: Optional[float] = Field(default=None, allow_inf_nan=False)
+    icu_weight: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
     average_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
     max_heartrate: Optional[float] = Field(default=None, ge=20, le=260, allow_inf_nan=False)
     has_heartrate: Optional[bool] = None
@@ -284,6 +318,7 @@ class ActivityDTO(ExternalDTO):
     ignore_pace: Optional[bool] = None
     perceived_exertion: Optional[float] = Field(default=None, ge=0, le=10, allow_inf_nan=False)
     icu_rpe: Optional[int] = Field(default=None, ge=1, le=10)
+    feel: Optional[int] = Field(default=None, ge=1, le=5)
     device_name: Optional[str] = None
     external_id: Optional[str] = None
     file_type: Optional[str] = None
@@ -437,89 +472,32 @@ class EventDTO(ExternalDTO):
         return [] if value is None else value
 
 
-class WellnessDTO(ExternalDTO):
-    id: date
-    ctl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    atl: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    ramp_rate: Optional[float] = Field(
-        default=None,
-        validation_alias="rampRate",
-        allow_inf_nan=False,
-    )
-    ctl_load: Optional[float] = Field(
-        default=None,
-        validation_alias="ctlLoad",
-        ge=0,
-        allow_inf_nan=False,
-    )
-    atl_load: Optional[float] = Field(
-        default=None,
-        validation_alias="atlLoad",
-        ge=0,
-        allow_inf_nan=False,
-    )
-    resting_hr: Optional[int] = Field(
-        default=None,
-        validation_alias="restingHR",
-        ge=20,
-        le=260,
-    )
-    hrv: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
-    hrv_sdnn: Optional[float] = Field(
-        default=None,
-        validation_alias="hrvSDNN",
-        ge=0,
-        allow_inf_nan=False,
-    )
-    sleep_seconds: Optional[int] = Field(
-        default=None,
-        validation_alias="sleepSecs",
-        ge=0,
-        le=172_800,
-    )
-    sleep_score: Optional[float] = Field(
-        default=None,
-        validation_alias="sleepScore",
-        ge=0,
-        allow_inf_nan=False,
-    )
-    sleep_quality: Optional[int] = Field(
-        default=None,
-        validation_alias="sleepQuality",
-        ge=1,
-        le=4,
-    )
-    average_sleeping_hr: Optional[float] = Field(
-        default=None,
-        validation_alias="avgSleepingHR",
-        ge=20,
-        le=260,
-        allow_inf_nan=False,
-    )
-    soreness: Optional[int] = Field(default=None, ge=0, le=4)
-    fatigue: Optional[int] = Field(default=None, ge=0, le=4)
-    stress: Optional[int] = Field(default=None, ge=0, le=4)
-    mood: Optional[int] = Field(default=None, ge=1, le=4)
-    motivation: Optional[int] = Field(default=None, ge=1, le=4)
-    injury: Optional[int] = Field(default=None, ge=1, le=4)
-    hydration: Optional[int] = Field(default=None, ge=1, le=4)
-    hydration_volume: Optional[float] = Field(
-        default=None,
-        validation_alias="hydrationVolume",
-        ge=0,
-        allow_inf_nan=False,
-    )
-    readiness: Optional[float] = Field(default=None, allow_inf_nan=False)
-    vo2max: Optional[float] = Field(
-        default=None,
-        gt=0,
-        le=100,
-        allow_inf_nan=False,
-    )
-    temporary_resting_hr: bool = Field(
-        default=False,
-        validation_alias="tempRestingHR",
-    )
+class HeartRateCurveDTO(ExternalDTO):
+    """Duration-to-heart-rate curve returned for one exact activity."""
+
+    id: str
+    secs: list[int] = Field(default_factory=list, max_length=1_000)
+    values: list[int] = Field(default_factory=list, max_length=1_000)
+
+    @model_validator(mode="after")
+    def parallel_arrays_have_equal_length(self) -> "HeartRateCurveDTO":
+        if len(self.secs) != len(self.values):
+            raise ValueError(
+                "HR curve duration and value arrays must have the same number of items"
+            )
+        if any(duration_seconds <= 0 for duration_seconds in self.secs):
+            raise ValueError("HR curve durations must be positive seconds")
+        if any(
+            later_duration_seconds <= earlier_duration_seconds
+            for earlier_duration_seconds, later_duration_seconds in zip(
+                self.secs,
+                self.secs[1:],
+            )
+        ):
+            raise ValueError("HR curve durations must be strictly increasing")
+        if any(heart_rate_bpm < 20 or heart_rate_bpm > 260 for heart_rate_bpm in self.values):
+            raise ValueError("HR curve heart rates must be between 20 and 260 bpm")
+        return self
 
 
 class EventWriteDTO(BaseModel):

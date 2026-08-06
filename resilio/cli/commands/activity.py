@@ -10,7 +10,9 @@ from typing import Any, Optional
 
 import typer
 
+from resilio.api.activity_evidence import get_exact_activity_coaching_evidence
 from resilio.cli.activity_laps import activity_laps_command
+from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from resilio.cli.output import (
     create_error_envelope,
     create_success_envelope,
@@ -101,8 +103,8 @@ def _load_activities_in_range(
                 continue
 
             # Get notes
-            description = activity.notes.description or ""
-            private_note = activity.notes.private_note or ""
+            description = activity.feedback.provider_description or ""
+            private_note = activity.feedback.local_private_note or ""
 
             # Filter by has_notes
             if has_notes and not (description.strip() or private_note.strip()):
@@ -119,12 +121,8 @@ def _load_activities_in_range(
                     "activity_timezone": activity.occurrence.timezone,
                     "sport": str(activity.sport),
                     "name": activity.name,
-                    "elapsed_duration_seconds": (
-                        activity.duration.elapsed_seconds
-                    ),
-                    "moving_duration_seconds": (
-                        activity.duration.moving_seconds
-                    ),
+                    "elapsed_duration_seconds": (activity.duration.elapsed_seconds),
+                    "moving_duration_seconds": (activity.duration.moving_seconds),
                     "distance_kilometers": (
                         activity.distance_meters / 1_000
                         if activity.distance_meters is not None
@@ -135,12 +133,9 @@ def _load_activities_in_range(
                         if activity.heart_rate is not None
                         else None
                     ),
-                    "source_external_fingerprint_sha256": (
-                        activity.audit.external_fingerprint_sha256
-                    ),
-                    "canonical_mapping_version": (
-                        activity.audit.canonical_mapping_version
-                    ),
+                    "provider_snapshot_sha256": (activity.audit.provider_snapshot_sha256),
+                    "performance_evidence_sha256": (activity.audit.performance_evidence_sha256),
+                    "canonical_mapping_version": (activity.audit.canonical_mapping_version),
                     "description": description,
                     "private_note": private_note,
                     "attribution": attribution,
@@ -221,12 +216,9 @@ def _search_activities(
                     "activity_timezone": activity["activity_timezone"],
                     "sport": activity["sport"],
                     "name": activity["name"],
-                    "elapsed_duration_seconds": (
-                        activity["elapsed_duration_seconds"]
-                    ),
-                    "source_external_fingerprint_sha256": (
-                        activity["source_external_fingerprint_sha256"]
-                    ),
+                    "elapsed_duration_seconds": (activity["elapsed_duration_seconds"]),
+                    "provider_snapshot_sha256": activity["provider_snapshot_sha256"],
+                    "performance_evidence_sha256": (activity["performance_evidence_sha256"]),
                     "matched_field": matched_field,
                     "matched_keywords": list(set(matched_keywords)),
                     "matched_text": snippet,
@@ -408,7 +400,31 @@ def activity_search_command(
     raise typer.Exit(code=0)
 
 
+def activity_evidence_command(
+    activity_id: str = typer.Argument(..., help="Canonical local activity ID"),
+    include_provider_heart_rate_curve: bool = typer.Option(
+        False,
+        "--include-provider-hr-curve",
+        help="Fetch the exact activity HR curve without retrieving raw streams",
+    ),
+) -> None:
+    """Return bounded activity, interval, feedback, and recovery evidence."""
+    result = get_exact_activity_coaching_evidence(
+        local_activity_id=activity_id,
+        include_provider_heart_rate_curve=include_provider_heart_rate_curve,
+    )
+    envelope = api_result_to_envelope(
+        result,
+        success_message=f"Exact coaching evidence for {activity_id}",
+    )
+    output_json(envelope)
+    raise typer.Exit(code=get_exit_code_from_envelope(envelope))
+
+
 # Register commands
 app.command(name="list", help="List activities in a date range")(activity_list_command)
 app.command(name="search", help="Search activities by text content")(activity_search_command)
 app.command(name="laps", help="Display lap-by-lap breakdown for a workout")(activity_laps_command)
+app.command(name="evidence", help="Build bounded exact-activity coaching evidence")(
+    activity_evidence_command
+)

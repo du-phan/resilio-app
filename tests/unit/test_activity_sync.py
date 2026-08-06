@@ -443,8 +443,9 @@ def _linked_historical(activity_id: str = "external-1"):
             ),
             "audit": ActivityAudit(
                 imported_at_utc=activity.audit.imported_at_utc,
-                external_fingerprint_sha256="0" * 64,
-                canonical_mapping_version=7,
+                provider_snapshot_sha256="0" * 64,
+                performance_evidence_sha256="1" * 64,
+                canonical_mapping_version=9,
             ),
         }
     )

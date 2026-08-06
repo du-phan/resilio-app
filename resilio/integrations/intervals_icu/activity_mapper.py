@@ -9,8 +9,9 @@ from zoneinfo import ZoneInfo
 
 from resilio.integrations.intervals_icu.activity_fingerprint import (
     CANONICAL_MAPPING_VERSION,
-    external_fingerprint,
     ordered_intervals,
+    performance_evidence_fingerprint,
+    provider_snapshot_fingerprint,
 )
 from resilio.integrations.intervals_icu.dto import (
     ActivityDTO,
@@ -30,7 +31,9 @@ from resilio.schemas.activity import (
     ActivityClassification,
     ActivityDevice,
     ActivityDuration,
-    ActivityNotes,
+    ActivityExecutionSummary,
+    ActivityFeedback,
+    ActivityFeelObservation,
     ActivityOccurrence,
     ActivityOrigin,
     ActivityOriginKind,
@@ -115,9 +118,7 @@ DIRECT_MAPPING = {
     "Wheelchair": SportType.WHEELCHAIR,
     "Golf": SportType.GOLF,
     "Crossfit": SportType.CROSSFIT,
-    "HighIntensityIntervalTraining": (
-        SportType.HIGH_INTENSITY_INTERVAL_TRAINING
-    ),
+    "HighIntensityIntervalTraining": (SportType.HIGH_INTENSITY_INTERVAL_TRAINING),
     "Pilates": SportType.PILATES,
     "Skateboard": SportType.SKATEBOARD,
     "Transition": SportType.TRANSITION,
@@ -163,10 +164,12 @@ def _recording_provider(source: Optional[str]) -> RecordingProvider:
 def _heart_rate(
     average: Optional[float],
     maximum: Optional[float],
+    minimum: Optional[float] = None,
 ) -> Optional[HeartRateMeasurements]:
-    if average is None and maximum is None:
+    if average is None and maximum is None and minimum is None:
         return None
     return HeartRateMeasurements(
+        minimum_beats_per_minute=minimum,
         average_beats_per_minute=average,
         maximum_beats_per_minute=maximum,
     )
@@ -189,12 +192,14 @@ def _power(
 def _cadence(
     average: Optional[float],
     maximum: Optional[float],
+    minimum: Optional[float] = None,
 ) -> Optional[CadenceMeasurements]:
-    if average is None and maximum is None:
+    if average is None and maximum is None and minimum is None:
         return None
     return CadenceMeasurements(
-        average_revolutions_per_minute=average,
-        maximum_revolutions_per_minute=maximum,
+        minimum_cadence_per_minute=minimum,
+        average_cadence_per_minute=average,
+        maximum_cadence_per_minute=maximum,
     )
 
 
@@ -217,6 +222,7 @@ def _map_segment(
     segment_start_utc = local_start.astimezone(timezone.utc) + timedelta(
         seconds=interval.start_time
     )
+    source_start_index, source_end_index_exclusive = _sample_index_range(interval)
     return ActivitySegment(
         index=index,
         name=interval.label,
@@ -226,16 +232,35 @@ def _map_segment(
         distance_meters=interval.distance,
         start_time_utc=segment_start_utc,
         start_time_local=segment_start_utc.astimezone(local_start.tzinfo),
+        source_start_index=source_start_index,
+        source_end_index_exclusive=source_end_index_exclusive,
+        end_offset_seconds=interval.end_time,
+        minimum_speed_meters_per_second=interval.min_speed,
         average_speed_meters_per_second=interval.average_speed,
         maximum_speed_meters_per_second=interval.max_speed,
-        heart_rate=_heart_rate(interval.average_heartrate, interval.max_heartrate),
+        heart_rate=_heart_rate(
+            interval.average_heartrate,
+            interval.max_heartrate,
+            interval.min_heartrate,
+        ),
         elevation_gain_meters=interval.total_elevation_gain,
         power=_power(
             interval.average_watts,
             interval.max_watts,
             interval.weighted_average_watts,
         ),
-        cadence=_cadence(interval.average_cadence, interval.max_cadence),
+        cadence=_cadence(
+            interval.average_cadence,
+            interval.max_cadence,
+            interval.min_cadence,
+        ),
+        average_gradient_percent=interval.average_gradient,
+        minimum_altitude_meters=interval.min_altitude,
+        maximum_altitude_meters=interval.max_altitude,
+        average_stride_meters=interval.average_stride,
+        provider_zone_index=interval.zone,
+        work_joules=interval.joules,
+        work_above_ftp_joules=interval.joules_above_ftp,
         interval_kind=_interval_kind(interval.type),
         relative_intensity_percent=interval.intensity,
         aerobic_load_points=interval.training_load,
@@ -248,6 +273,13 @@ def _map_segment(
             else None
         ),
     )
+
+
+def _sample_index_range(interval: IntervalDTO) -> tuple[Optional[int], Optional[int]]:
+    """Normalize Intervals' 0/0 sentinel without inventing a sample range."""
+    if interval.start_index == 0 and interval.end_index == 0:
+        return None, None
+    return interval.start_index, interval.end_index
 
 
 def _interval_kind(value: Optional[str]) -> IntervalKind:
@@ -322,6 +354,57 @@ def _has_location_stream(activity: ActivityDTO) -> bool:
         normalized.intersection(
             {"latlng", "latitude", "longitude", "lat", "lng"},
         )
+    )
+
+
+def _execution_summary(activity: ActivityDTO) -> ActivityExecutionSummary:
+    compliance_percent = activity.compliance
+    if compliance_percent is not None and compliance_percent < 0:
+        compliance_percent = None
+    return ActivityExecutionSummary(
+        average_speed_meters_per_second=activity.average_speed,
+        maximum_speed_meters_per_second=activity.max_speed,
+        gradient_adjusted_speed_meters_per_second=activity.gap,
+        average_stride_meters=activity.average_stride,
+        calories_kilocalories=activity.calories,
+        carbohydrates_ingested_grams=activity.carbs_ingested,
+        provider_estimated_carbohydrates_used_grams=activity.carbs_used,
+        provider_compliance_percent=compliance_percent,
+        average_temperature_celsius=activity.average_temp,
+        analysis_weight_kilograms=activity.icu_weight,
+    )
+
+
+def _feedback(activity: ActivityDTO) -> ActivityFeedback:
+    feel = (
+        ActivityFeelObservation(value_1_to_5=activity.feel) if activity.feel is not None else None
+    )
+    return ActivityFeedback(
+        provider_description=activity.description,
+        subjective_effort=_subjective_effort(activity),
+        feel=feel,
+    )
+
+
+def _activity_audit(
+    activity: ActivityDTO,
+    *,
+    imported_at_utc: datetime,
+    default_timezone: Optional[str],
+) -> ActivityAudit:
+    return ActivityAudit(
+        imported_at_utc=imported_at_utc,
+        external_created_at_utc=activity.created,
+        external_sync_at_utc=activity.icu_sync_date,
+        provider_snapshot_sha256=provider_snapshot_fingerprint(
+            activity,
+            default_timezone,
+        ),
+        performance_evidence_sha256=performance_evidence_fingerprint(
+            activity,
+            default_timezone,
+        ),
+        canonical_mapping_version=CANONICAL_MAPPING_VERSION,
     )
 
 
@@ -402,11 +485,11 @@ def map_activity(
             activity.icu_weighted_avg_watts,
         ),
         cadence=_cadence(activity.average_cadence, activity.max_cadence),
-        notes=ActivityNotes(description=activity.description),
+        execution_summary=_execution_summary(activity),
+        feedback=_feedback(activity),
         aerobic_load=aerobic_load,
         native_analysis=native_analysis,
         native_analysis_applicability=(map_native_analysis_applicability(activity)),
-        subjective_effort=_subjective_effort(activity),
         analysis_thresholds=map_analysis_thresholds(activity),
         zone_time_distributions=zone_distributions,
         data_completeness=DataCompleteness(
@@ -443,14 +526,9 @@ def map_activity(
             intervals_icu_activity_id=activity.id,
             upstream_external_id=activity.external_id,
         ),
-        audit=ActivityAudit(
+        audit=_activity_audit(
+            activity,
             imported_at_utc=imported_at,
-            external_created_at_utc=activity.created,
-            external_sync_at_utc=activity.icu_sync_date,
-            external_fingerprint_sha256=external_fingerprint(
-                activity,
-                default_timezone,
-            ),
-            canonical_mapping_version=CANONICAL_MAPPING_VERSION,
+            default_timezone=default_timezone,
         ),
     )

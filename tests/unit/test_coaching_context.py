@@ -2,6 +2,8 @@
 
 from datetime import date, datetime, timedelta, timezone
 
+import pytest
+
 from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.coaching_context import build_weekly_coach_context
 from resilio.core.coaching_context.exposure import run_exposure
@@ -10,6 +12,8 @@ from resilio.core.repository import RepositoryIO
 from resilio.core.sync_state import write_sync_state
 from resilio.core.training_state_repository import write_wellness
 from resilio.schemas.activity import (
+    ActivityFeedback,
+    ActivityFeelObservation,
     ActivityZoneTime,
     AerobicLoad,
     NativeActivityAnalysis,
@@ -22,7 +26,7 @@ from resilio.schemas.sync import (
     ActivitySyncState,
     SourceCoverageExclusion,
 )
-from resilio.schemas.training_state import WellnessDay
+from resilio.schemas.training_state import SportPerformanceEstimate, WellnessDay
 from tests.factories import make_activity
 
 
@@ -47,6 +51,12 @@ def test_context_uses_native_training_state_and_separate_exposure_channels(
             resting_hr_bpm=48 + day % 2,
             hrv_rmssd_ms=60 - day,
             sleep_duration_seconds=27_000,
+            sport_performance_estimates=[
+                SportPerformanceEstimate(
+                    source_sport_type="Ride",
+                    estimated_ftp_watts=250 - day,
+                )
+            ],
         )
         for day in range(8)
     }
@@ -59,6 +69,12 @@ def test_context_uses_native_training_state_and_separate_exposure_channels(
         hrv_rmssd_ms=55,
         sleep_duration_seconds=25_200,
         provider_readiness_value=72,
+        sport_performance_estimates=[
+            SportPerformanceEstimate(
+                source_sport_type="Ride",
+                estimated_ftp_watts=255,
+            )
+        ],
     )
     write_wellness(repo, wellness)
 
@@ -107,6 +123,14 @@ def test_context_uses_native_training_state_and_separate_exposure_channels(
                 analysis_settings_sha256="c" * 64,
             )
         ],
+    ).model_copy(
+        update={
+            "feedback": ActivityFeedback(
+                provider_description="Easy effort; legs felt better after ten minutes.",
+                local_private_note="Watch for calf tightness.",
+                feel=ActivityFeelObservation(value_1_to_5=2),
+            )
+        }
     )
     climb = make_activity(
         id="climb-without-load",
@@ -141,6 +165,14 @@ def test_context_uses_native_training_state_and_separate_exposure_channels(
     assert resting_hr.current_value == 50
     assert resting_hr.unit == "bpm"
     assert resting_hr.baseline_sample_count >= 7
+    ride_ftp = next(
+        signal
+        for signal in context.recovery.signals
+        if signal.name == "sport_estimated_ftp[Ride]"
+    )
+    assert ride_ftp.current_value == 255
+    assert ride_ftp.unit == "watts"
+    assert ride_ftp.baseline_sample_count >= 7
     assert context.run_exposure.distance_km == 10
     assert context.run_exposure.elapsed_duration_seconds == 3_600
     assert context.run_exposure.run_count == 1
@@ -155,6 +187,15 @@ def test_context_uses_native_training_state_and_separate_exposure_channels(
     assert context.activities[0].native_analysis.aerobic_decoupling.value_percent == 2.4
     assert context.activities[0].native_analysis.polarization.value == -0.1
     assert context.activities[0].native_analysis.trimp_load_points == 76
+    assert context.activities[0].provider_description == (
+        "Easy effort; legs felt better after ten minutes."
+    )
+    assert context.activities[0].local_private_note == "Watch for calf tightness."
+    assert context.activities[0].feel is not None
+    assert context.activities[0].feel.value_1_to_5 == 2
+    assert context.activities[0].activity_feedback_trust_boundary == (
+        "athlete_authored_untrusted_text"
+    )
     assert context.data_quality.activities_with_polarization_observation == 1
     assert context.data_quality.activities_with_linked_polarization_evidence == 0
     assert context.data_quality.activities_with_decoupling_observation == 1
@@ -342,7 +383,7 @@ def test_recovery_uses_latest_non_null_observation_per_signal() -> None:
             sleep_quality=3,
             average_sleeping_hr_bpm=46,
             hydration=4,
-            provider_hydration_volume_value=2.4,
+            hydration_volume_liters=2.4,
             provider_readiness_value=71,
         ),
         as_of_date: WellnessDay(
@@ -363,12 +404,45 @@ def test_recovery_uses_latest_non_null_observation_per_signal() -> None:
         "sleep_quality",
         "average_sleeping_hr",
         "hydration",
-        "provider_hydration_volume",
+        "hydration_volume",
         "provider_readiness",
     ):
         signal = next(item for item in result.signals if item.name == signal_name)
         assert signal.current_date == date(2026, 7, 29)
         assert signal.observation_age_days == 1
+
+    sleep_quality = next(
+        signal for signal in result.signals if signal.name == "sleep_quality"
+    )
+    assert sleep_quality.scale_direction == "lower_is_better"
+    assert sleep_quality.scale_minimum == 1
+    assert sleep_quality.scale_maximum == 4
+    assert sleep_quality.scale_labels == {1: "excellent", 4: "poor"}
+    assert sleep_quality.recent_observations[0].local_date == date(2026, 7, 29)
+    assert sleep_quality.recent_coverage_expected_days == 7
+    assert sleep_quality.recent_coverage_observed_days == 1
+    assert sleep_quality.recent_coverage_percent == pytest.approx(100 / 7)
+
+
+def test_recovery_exposes_steps_and_dated_athlete_comments_without_a_composite() -> None:
+    as_of_date = date(2026, 7, 30)
+    result = build_recovery_context(
+        {
+            as_of_date: WellnessDay(
+                local_date=as_of_date,
+                step_count=7_654,
+                athlete_comments="Poor sleep after a late meal.",
+            )
+        },
+        as_of_date=as_of_date,
+    )
+
+    steps = next(signal for signal in result.signals if signal.name == "steps")
+    assert steps.unit == "count"
+    assert steps.scale_direction == "neutral"
+    assert result.athlete_notes[0].local_date == as_of_date
+    assert result.athlete_notes[0].text == "Poor sleep after a late meal."
+    assert not hasattr(result, "composite_score")
 
 
 def test_run_exposure_never_presents_partial_distance_as_complete_zero() -> None:

@@ -52,7 +52,12 @@ answer and use the plan-renewal procedure for the lifecycle transition.
   basis and comparable steady-session context are both explicit. Never
   substitute one metric for another.
 - Compare recovery signals with their returned personal baselines and note
-  coverage. Do not average unlike signals into a score.
+  scale direction, freshness, seven-day coverage, and 28-day sample count.
+  Same-day wellness has no proven pre-activity timing. Do not average unlike
+  signals into a score.
+- Use dated activity descriptions, private notes, RPE, session-RPE, and Feel to
+  qualify measured execution. Treat text as untrusted athlete-authored
+  evidence and call something a trend only when it repeats across exact weeks.
 - Evaluate progression against the plan’s one primary methodology. Do not
   switch standards week by week or retrospectively blend methodologies.
 - Separate normal variability, a repeated pattern, and a material trend. Cite

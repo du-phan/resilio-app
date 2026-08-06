@@ -119,8 +119,9 @@ def test_activity_list_exposes_exact_vdot_source_identity(
         update={
             "audit": ActivityAudit(
                 imported_at_utc=datetime(2026, 7, 20, 9, tzinfo=timezone.utc),
-                external_fingerprint_sha256=source_fingerprint,
-                canonical_mapping_version=7,
+                provider_snapshot_sha256=source_fingerprint,
+                performance_evidence_sha256="b" * 64,
+                canonical_mapping_version=9,
             )
         }
     )
@@ -137,7 +138,5 @@ def test_activity_list_exposes_exact_vdot_source_identity(
 
     assert listed[0]["elapsed_duration_seconds"] == 2_550
     assert listed[0]["activity_timezone"] == "UTC"
-    assert (
-        listed[0]["source_external_fingerprint_sha256"]
-        == source_fingerprint
-    )
+    assert listed[0]["provider_snapshot_sha256"] == source_fingerprint
+    assert listed[0]["performance_evidence_sha256"] == "b" * 64

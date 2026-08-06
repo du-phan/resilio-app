@@ -35,8 +35,32 @@ from resilio.schemas.activity_analysis import (
 from resilio.schemas.activity_analysis import (
     ZoneTimeDistribution as ZoneTimeDistribution,
 )
+from resilio.schemas.activity_feedback import ActivityFeedback as ActivityFeedback
+from resilio.schemas.activity_feedback import (
+    ActivityFeelObservation as ActivityFeelObservation,
+)
+from resilio.schemas.activity_feedback import (
+    SubjectiveEffortProvenance as SubjectiveEffortProvenance,
+)
+from resilio.schemas.activity_feedback import (
+    SubjectiveSessionEffort as SubjectiveSessionEffort,
+)
+from resilio.schemas.activity_measurements import (
+    ActivityDuration as ActivityDuration,
+)
+from resilio.schemas.activity_measurements import (
+    ActivityExecutionSummary as ActivityExecutionSummary,
+)
+from resilio.schemas.activity_measurements import (
+    CadenceMeasurements as CadenceMeasurements,
+)
+from resilio.schemas.activity_measurements import (
+    HeartRateMeasurements as HeartRateMeasurements,
+)
+from resilio.schemas.activity_measurements import PowerMeasurements as PowerMeasurements
 
 NonNegativeFloat = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+ACTIVITY_CANONICAL_MAPPING_VERSION: Literal[9] = 9
 
 
 class SportType(str, Enum):
@@ -134,14 +158,14 @@ class SegmentOriginKind(str, Enum):
 
 class SchemaDescriptor(BaseModel):
     name: str = Field(default="resilio.activity", frozen=True)
-    version: int = Field(default=4, frozen=True)
+    version: int = Field(default=5, frozen=True)
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def require_activity_v4(self) -> "SchemaDescriptor":
-        if self.name != "resilio.activity" or self.version != 4:
-            raise ValueError("activity archive requires _schema name=resilio.activity version=4")
+    def require_activity_v5(self) -> "SchemaDescriptor":
+        if self.name != "resilio.activity" or self.version != 5:
+            raise ValueError("activity archive requires _schema name=resilio.activity version=5")
         return self
 
 
@@ -178,82 +202,6 @@ class ActivityOccurrence(BaseModel):
         return self
 
 
-class ActivityDuration(BaseModel):
-    elapsed_seconds: int = Field(gt=0, le=2_678_400)
-    moving_seconds: int = Field(ge=0, le=2_678_400)
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="after")
-    def moving_not_longer_than_elapsed(self) -> "ActivityDuration":
-        if self.moving_seconds > self.elapsed_seconds:
-            raise ValueError("moving_seconds cannot exceed elapsed_seconds")
-        return self
-
-
-class HeartRateMeasurements(BaseModel):
-    average_beats_per_minute: Optional[float] = Field(
-        default=None, ge=20, le=260, allow_inf_nan=False
-    )
-    maximum_beats_per_minute: Optional[float] = Field(
-        default=None, ge=20, le=260, allow_inf_nan=False
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="after")
-    def average_not_above_maximum(self) -> "HeartRateMeasurements":
-        if (
-            self.average_beats_per_minute is not None
-            and self.maximum_beats_per_minute is not None
-            and self.average_beats_per_minute > self.maximum_beats_per_minute
-        ):
-            raise ValueError("average heart rate cannot exceed maximum heart rate")
-        return self
-
-
-class PowerMeasurements(BaseModel):
-    average_watts: Optional[float] = Field(
-        default=None,
-        ge=0,
-        allow_inf_nan=False,
-    )
-    maximum_watts: Optional[float] = Field(
-        default=None,
-        ge=0,
-        allow_inf_nan=False,
-    )
-    weighted_average_watts: Optional[float] = Field(
-        default=None,
-        ge=0,
-        allow_inf_nan=False,
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class CadenceMeasurements(BaseModel):
-    average_revolutions_per_minute: Optional[float] = Field(
-        default=None,
-        ge=0,
-        allow_inf_nan=False,
-    )
-    maximum_revolutions_per_minute: Optional[float] = Field(
-        default=None,
-        ge=0,
-        allow_inf_nan=False,
-    )
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class ActivityNotes(BaseModel):
-    description: Optional[str] = None
-    private_note: Optional[str] = None
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class AerobicLoadCalculationMethod(str, Enum):
     POWER = "power"
     HEART_RATE = "heart_rate"
@@ -282,29 +230,6 @@ class AerobicLoad(BaseModel):
     source: str = Field(default="intervals_icu", frozen=True)
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
-
-
-class SubjectiveEffortProvenance(str, Enum):
-    INTERVALS_ACTIVITY_FIELD = "intervals_activity_field"
-    RESILIO_ATHLETE_INPUT = "resilio_athlete_input"
-
-
-class SubjectiveSessionEffort(BaseModel):
-    """Subjective effort kept separate from provider aerobic load points."""
-
-    rpe_1_to_10: float = Field(ge=1, le=10, allow_inf_nan=False)
-    session_rpe_load_au: Optional[NonNegativeFloat] = None
-    session_rpe_duration_basis: Optional[Literal["provider_defined", "elapsed_time"]] = None
-    provenance: SubjectiveEffortProvenance
-    is_athlete_confirmed: bool
-
-    model_config = ConfigDict(extra="forbid", use_enum_values=True)
-
-    @model_validator(mode="after")
-    def load_requires_duration_basis(self) -> "SubjectiveSessionEffort":
-        if (self.session_rpe_load_au is None) != (self.session_rpe_duration_basis is None):
-            raise ValueError("session RPE load and duration basis must be provided together")
-        return self
 
 
 class DataCompleteness(BaseModel):
@@ -350,6 +275,12 @@ class ActivitySegment(BaseModel):
     distance_meters: Optional[NonNegativeFloat] = None
     start_time_utc: Optional[datetime] = None
     start_time_local: Optional[datetime] = None
+    source_start_index: Optional[int] = Field(default=None, ge=0)
+    source_end_index_exclusive: Optional[int] = Field(default=None, ge=1)
+    end_offset_seconds: Optional[int] = Field(default=None, ge=0)
+    minimum_speed_meters_per_second: Optional[float] = Field(
+        default=None, ge=0, allow_inf_nan=False
+    )
     average_speed_meters_per_second: Optional[float] = Field(
         default=None, ge=0, allow_inf_nan=False
     )
@@ -360,6 +291,22 @@ class ActivitySegment(BaseModel):
     elevation_gain_meters: Optional[NonNegativeFloat] = None
     power: Optional[PowerMeasurements] = None
     cadence: Optional[CadenceMeasurements] = None
+    average_gradient_percent: Optional[float] = Field(
+        default=None,
+        allow_inf_nan=False,
+    )
+    minimum_altitude_meters: Optional[float] = Field(
+        default=None,
+        allow_inf_nan=False,
+    )
+    maximum_altitude_meters: Optional[float] = Field(
+        default=None,
+        allow_inf_nan=False,
+    )
+    average_stride_meters: Optional[NonNegativeFloat] = None
+    provider_zone_index: Optional[int] = Field(default=None, ge=0)
+    work_joules: Optional[NonNegativeFloat] = None
+    work_above_ftp_joules: Optional[NonNegativeFloat] = None
     interval_kind: IntervalKind = IntervalKind.OTHER
     relative_intensity_percent: Optional[float] = Field(
         default=None,
@@ -376,6 +323,18 @@ class ActivitySegment(BaseModel):
     def validate_duration(self) -> "ActivitySegment":
         if self.moving_seconds is not None and self.moving_seconds > self.elapsed_seconds:
             raise ValueError("segment moving_seconds cannot exceed elapsed_seconds")
+        if (
+            self.source_start_index is not None
+            and self.source_end_index_exclusive is not None
+            and self.source_end_index_exclusive <= self.source_start_index
+        ):
+            raise ValueError("segment source index range must be ascending")
+        if (
+            self.minimum_altitude_meters is not None
+            and self.maximum_altitude_meters is not None
+            and self.minimum_altitude_meters > self.maximum_altitude_meters
+        ):
+            raise ValueError("segment minimum altitude cannot exceed maximum altitude")
         return self
 
 
@@ -403,8 +362,9 @@ class ActivityAudit(BaseModel):
     imported_at_utc: datetime
     external_created_at_utc: Optional[datetime] = None
     external_sync_at_utc: Optional[datetime] = None
-    external_fingerprint_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    canonical_mapping_version: Optional[Literal[7]] = None
+    provider_snapshot_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    performance_evidence_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    canonical_mapping_version: Optional[Literal[9]] = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -416,11 +376,18 @@ class ActivityAudit(BaseModel):
         return value.astimezone(timezone.utc) if value is not None else None
 
     @model_validator(mode="after")
-    def mapping_version_matches_external_fingerprint(self) -> "ActivityAudit":
-        if (self.external_fingerprint_sha256 is None) != (self.canonical_mapping_version is None):
+    def mapping_version_matches_fingerprints(self) -> "ActivityAudit":
+        fingerprints_present = (
+            self.provider_snapshot_sha256 is not None
+            and self.performance_evidence_sha256 is not None
+        )
+        if fingerprints_present != (self.canonical_mapping_version is not None):
             raise ValueError(
-                "external fingerprint and canonical mapping version must " "be present together"
+                "provider/performance fingerprints and canonical mapping version must "
+                "be present together"
             )
+        if (self.provider_snapshot_sha256 is None) != (self.performance_evidence_sha256 is None):
+            raise ValueError("provider and performance fingerprints must be present together")
         return self
 
 
@@ -453,11 +420,11 @@ class CanonicalActivity(BaseModel):
     heart_rate: Optional[HeartRateMeasurements] = None
     power: Optional[PowerMeasurements] = None
     cadence: Optional[CadenceMeasurements] = None
-    notes: ActivityNotes = Field(default_factory=ActivityNotes)
+    execution_summary: ActivityExecutionSummary = Field(default_factory=ActivityExecutionSummary)
+    feedback: ActivityFeedback = Field(default_factory=ActivityFeedback)
     aerobic_load: Optional[AerobicLoad] = None
     native_analysis: Optional[NativeActivityAnalysis] = None
     native_analysis_applicability: Optional[NativeAnalysisApplicability] = None
-    subjective_effort: Optional[SubjectiveSessionEffort] = None
     analysis_thresholds: Optional[ActivityAnalysisThresholds] = None
     zone_time_distributions: list[ZoneTimeDistribution] = Field(default_factory=list)
     data_completeness: DataCompleteness = Field(default_factory=DataCompleteness)
@@ -476,17 +443,17 @@ class CanonicalActivity(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_non_v4_persisted_records(cls, value: Any) -> Any:
+    def reject_non_v5_persisted_records(cls, value: Any) -> Any:
         if not isinstance(value, dict):
             return value
         if "schema_metadata" in value:
-            raise ValueError("legacy activity schema is not readable as CanonicalActivity v4")
+            raise ValueError("legacy activity schema is not readable as CanonicalActivity v5")
         schema = value.get("_schema")
         if schema is not None:
             if not isinstance(schema, dict) or schema.get("name") != "resilio.activity":
                 raise ValueError("invalid activity _schema name")
-            if schema.get("version") != 4:
-                raise ValueError("activity archive requires schema version 4")
+            if schema.get("version") != 5:
+                raise ValueError("activity archive requires schema version 5")
         return value
 
     @model_validator(mode="after")

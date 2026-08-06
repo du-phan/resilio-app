@@ -6,6 +6,9 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from resilio.core.activity_sync.archive import ActivityArchive
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.core.coaching_context.exposure import activity_context
 from resilio.core.coaching_context.service import build_coach_history
 from resilio.core.planning.artifacts import (
@@ -90,15 +93,9 @@ def _validate_goal_outcome(
     ):
         return None
     activity = _activity_by_id(repo, evidence.local_activity_id)
-    if canonical_data_sha256(activity) != evidence.canonical_activity_sha256:
-        raise PlanOperationError("Goal activity changed after athlete confirmation")
-    provider_fingerprint = evidence.provider_activity_fingerprint_sha256
-    if (
-        provider_fingerprint is not None
-        and activity.audit.external_fingerprint_sha256 != provider_fingerprint
-    ):
+    if activity_performance_evidence_sha256(activity) != evidence.performance_evidence_sha256:
         raise PlanOperationError(
-            "Goal activity provider fingerprint does not match canonical evidence"
+            "Goal activity performance evidence changed after athlete confirmation"
         )
     if isinstance(evidence, OwnedCompletionGoalEvidence):
         completion = load_completion_manifest(repo).matches.get(evidence.local_activity_id)
@@ -136,20 +133,17 @@ def confirmed_goal_outcome(
             }
         )
     activity = _activity_by_id(repo, local_activity_id)
-    activity_sha256 = canonical_data_sha256(activity)
     completion = load_completion_manifest(repo).matches.get(local_activity_id)
     evidence = (
         OwnedCompletionGoalEvidence(
             workout_identity=completion.workout_identity,
             local_activity_id=local_activity_id,
-            canonical_activity_sha256=activity_sha256,
-            provider_activity_fingerprint_sha256=(activity.audit.external_fingerprint_sha256),
+            performance_evidence_sha256=activity_performance_evidence_sha256(activity),
         )
         if completion is not None
         else AthleteConfirmedGoalActivityEvidence(
             local_activity_id=local_activity_id,
-            canonical_activity_sha256=activity_sha256,
-            provider_activity_fingerprint_sha256=(activity.audit.external_fingerprint_sha256),
+            performance_evidence_sha256=activity_performance_evidence_sha256(activity),
             athlete_confirmation_reference=(athlete_confirmation_reference),
         )
     )

@@ -20,6 +20,7 @@ from resilio.integrations.intervals_icu.dto import (
     ConnectionsDTO,
     EventDTO,
     EventWriteDTO,
+    HeartRateCurveDTO,
     HiddenActivityDTO,
     SportSettingsDTO,
     WellnessDTO,
@@ -340,6 +341,16 @@ class IntervalsIcuClient:
             params={"intervals": str(intervals).lower()},
         )
         return self._validated(response, ActivityDTO, operation)
+
+    def get_activity_heart_rate_curve(self, activity_id: str) -> HeartRateCurveDTO:
+        """Fetch duration-to-HR evidence for one exact activity without streams."""
+        operation = "get_activity_heart_rate_curve"
+        response = self._request(
+            "GET",
+            f"/activity/{activity_id}/hr-curve.json",
+            operation=operation,
+        )
+        return self._validated(response, HeartRateCurveDTO, operation)
 
     def get_activities(
         self,

@@ -52,7 +52,7 @@ class RacePerformanceVDOTEvidence(PerformanceVDOTEvidence):
 
     evidence_type: Literal["race_performance"]
     source_local_activity_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
-    source_external_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    source_performance_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     measured_distance_meters: float = Field(gt=0, allow_inf_nan=False)
     official_distance_confirmation_reference: str = Field(
         min_length=10,

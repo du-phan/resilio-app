@@ -34,7 +34,7 @@ class ActivityArchive:
                 activity = CanonicalActivity.model_validate(raw)
             except Exception as exc:
                 raise ActivityArchiveError(
-                    f"Active archive contains a non-v4 or invalid record: {path}"
+                    f"Active archive contains a non-v5 or invalid record: {path}"
                 ) from exc
             if activity.local_activity_id in seen_local:
                 raise ActivityArchiveError(
@@ -66,7 +66,7 @@ class ActivityArchive:
             activity = CanonicalActivity.model_validate(raw)
         except Exception as exc:
             raise ActivityArchiveError(
-                f"Active archive contains a non-v4 or invalid record: {path}"
+                f"Active archive contains a non-v5 or invalid record: {path}"
             ) from exc
         expected = self.path_for(activity)
         if activity.local_activity_id != local_activity_id or path != expected:

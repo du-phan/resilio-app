@@ -34,7 +34,7 @@ from resilio.schemas.profile import (
 from tests.factories import make_activity
 
 SOURCE_LOCAL_ACTIVITY_ID = "act_i_vdot_source"
-SOURCE_EXTERNAL_FINGERPRINT_SHA256 = "a" * 64
+SOURCE_PERFORMANCE_EVIDENCE_SHA256 = "a" * 64
 
 
 @pytest.fixture
@@ -81,8 +81,9 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
             ),
             "audit": ActivityAudit(
                 imported_at_utc=datetime(2026, 7, 20, 9, tzinfo=timezone.utc),
-                external_fingerprint_sha256=(SOURCE_EXTERNAL_FINGERPRINT_SHA256),
-                canonical_mapping_version=7,
+                provider_snapshot_sha256="b" * 64,
+                performance_evidence_sha256=(SOURCE_PERFORMANCE_EVIDENCE_SHA256),
+                canonical_mapping_version=9,
             ),
         }
     )
@@ -93,7 +94,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
 def _write_race_proposal(
     path: Path,
     *,
-    source_external_fingerprint_sha256: str = (SOURCE_EXTERNAL_FINGERPRINT_SHA256),
+    source_performance_evidence_sha256: str = (SOURCE_PERFORMANCE_EVIDENCE_SHA256),
 ) -> Path:
     path.write_text(
         json.dumps(
@@ -107,7 +108,7 @@ def _write_race_proposal(
                     "performance_date": "2026-07-20",
                     "performance_timezone": "Europe/Paris",
                     "source_local_activity_id": SOURCE_LOCAL_ACTIVITY_ID,
-                    "source_external_fingerprint_sha256": (source_external_fingerprint_sha256),
+                    "source_performance_evidence_sha256": (source_performance_evidence_sha256),
                     "measured_distance_meters": 10_000,
                     "official_distance_confirmation_reference": (
                         "Athlete confirmed this synchronized effort as an official 10K."
@@ -141,7 +142,7 @@ def test_race_proposal_rejects_a_changed_source_fingerprint(
 ) -> None:
     proposal = _write_race_proposal(
         tmp_path / "race-vdot.json",
-        source_external_fingerprint_sha256="b" * 64,
+        source_performance_evidence_sha256="b" * 64,
     )
 
     with pytest.raises(PlanOperationError, match="fingerprint"):
@@ -290,7 +291,7 @@ def test_race_proposal_date_is_compared_in_its_declared_timezone() -> None:
             "performance_date": "2026-07-30",
             "performance_timezone": "Europe/Paris",
             "source_local_activity_id": SOURCE_LOCAL_ACTIVITY_ID,
-            "source_external_fingerprint_sha256": (SOURCE_EXTERNAL_FINGERPRINT_SHA256),
+            "source_performance_evidence_sha256": (SOURCE_PERFORMANCE_EVIDENCE_SHA256),
             "measured_distance_meters": 10_000,
             "official_distance_confirmation_reference": (
                 "Athlete confirmed this synchronized effort as an official 10K."

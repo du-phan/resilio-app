@@ -30,7 +30,10 @@ def activity_context(activity: CanonicalActivity) -> ActivityContext:
         aerobic_load=activity.aerobic_load,
         native_analysis=activity.native_analysis,
         native_analysis_applicability=(activity.native_analysis_applicability),
-        subjective_effort=activity.subjective_effort,
+        subjective_effort=activity.feedback.subjective_effort,
+        provider_description=activity.feedback.provider_description,
+        local_private_note=activity.feedback.local_private_note,
+        feel=activity.feedback.feel,
         analysis_thresholds=activity.analysis_thresholds,
     )
 

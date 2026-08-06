@@ -7,16 +7,17 @@ import pytest
 from pydantic import ValidationError
 
 from resilio.integrations.intervals_icu.activity_mapper import (
-    external_fingerprint,
     map_activity,
+    provider_snapshot_fingerprint,
 )
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
-from resilio.integrations.intervals_icu.dto import ActivityDTO
+from resilio.integrations.intervals_icu.dto import ActivityDTO, WellnessDTO
 from resilio.integrations.intervals_icu.training_state_mapper import (
     map_sport_settings,
     map_wellness,
 )
 from resilio.schemas.activity import ActivityZoneTime, ZoneTimeDistribution
+from resilio.schemas.training_state import SportPerformanceEstimate, WellnessDay
 from tests.unit.test_intervals_icu_client import _config
 
 
@@ -100,12 +101,12 @@ def test_native_aerobic_load_and_execution_evidence_survive_mapping() -> None:
     assert activity.aerobic_load.heart_rate_load_points == 82
     assert activity.aerobic_load.pace_load_points == 79
     assert activity.aerobic_load.relative_intensity_percent == 91.5
-    assert activity.subjective_effort is not None
-    assert activity.subjective_effort.rpe_1_to_10 == 7
-    assert activity.subjective_effort.session_rpe_load_au == 420
-    assert activity.subjective_effort.session_rpe_duration_basis == "provider_defined"
-    assert activity.subjective_effort.provenance == "intervals_activity_field"
-    assert activity.subjective_effort.is_athlete_confirmed is False
+    assert activity.feedback.subjective_effort is not None
+    assert activity.feedback.subjective_effort.rpe_1_to_10 == 7
+    assert activity.feedback.subjective_effort.session_rpe_load_au == 420
+    assert activity.feedback.subjective_effort.session_rpe_duration_basis == "provider_defined"
+    assert activity.feedback.subjective_effort.provenance == "intervals_activity_field"
+    assert activity.feedback.subjective_effort.is_athlete_confirmed is False
     assert activity.analysis_thresholds is not None
     assert activity.analysis_thresholds.functional_threshold_power_watts == 300
     assert activity.analysis_thresholds.lactate_threshold_hr_bpm == 171
@@ -261,7 +262,7 @@ def test_power_zone_object_order_does_not_change_fingerprint_or_mapping() -> Non
         icu_zone_times=list(reversed(zone_times)),
     )
 
-    assert external_fingerprint(first) == external_fingerprint(second)
+    assert provider_snapshot_fingerprint(first) == provider_snapshot_fingerprint(second)
     first_distribution = map_activity(
         first,
         imported_at_utc=datetime(2026, 7, 28, tzinfo=timezone.utc),
@@ -423,8 +424,8 @@ def test_finite_nonnegative_provider_outliers_remain_source_evidence() -> None:
     assert activity.power.weighted_average_watts == 3002
     assert activity.power.maximum_watts == 5001
     assert activity.cadence is not None
-    assert activity.cadence.average_revolutions_per_minute == 301
-    assert activity.cadence.maximum_revolutions_per_minute == 401
+    assert activity.cadence.average_cadence_per_minute == 301
+    assert activity.cadence.maximum_cadence_per_minute == 401
 
 
 def test_missing_interval_measurements_remain_missing() -> None:
@@ -494,22 +495,24 @@ def test_component_disagreement_is_not_mislabeled() -> None:
     assert activity.aerobic_load.calculation_method == "provider_unknown"
 
 
-def test_provider_reanalysis_fields_change_external_fingerprint() -> None:
+def test_provider_reanalysis_fields_change_provider_snapshot() -> None:
     baseline = _native_activity()
 
-    assert external_fingerprint(baseline) != external_fingerprint(
+    assert provider_snapshot_fingerprint(baseline) != provider_snapshot_fingerprint(
         _native_activity(icu_training_load=83)
     )
-    assert external_fingerprint(baseline) != external_fingerprint(
+    assert provider_snapshot_fingerprint(baseline) != provider_snapshot_fingerprint(
         _native_activity(icu_intensity=92.0)
     )
-    assert external_fingerprint(baseline) != external_fingerprint(
+    assert provider_snapshot_fingerprint(baseline) != provider_snapshot_fingerprint(
         _native_activity(icu_hr_zone_times=[500, 0, 0, 1900, 0, 0, 0])
     )
-    assert external_fingerprint(baseline) != external_fingerprint(
+    assert provider_snapshot_fingerprint(baseline) != provider_snapshot_fingerprint(
         _native_activity(use_gap_zone_times=True)
     )
-    assert external_fingerprint(baseline) != external_fingerprint(_native_activity(max_cadence=190))
+    assert provider_snapshot_fingerprint(baseline) != provider_snapshot_fingerprint(
+        _native_activity(max_cadence=190)
+    )
 
 
 def test_wellness_endpoint_preserves_native_units_and_missing_values() -> None:
@@ -531,9 +534,31 @@ def test_wellness_endpoint_preserves_native_units_and_missing_values() -> None:
                     "hrv": 62.4,
                     "hrvSDNN": 71.8,
                     "sleepSecs": 27_000,
+                    "sleepScore": 79,
+                    "sleepQuality": 3,
+                    "avgSleepingHR": 44.5,
                     "readiness": 73,
                     "vo2max": 52.3,
                     "fatigue": 2,
+                    "steps": 8_432,
+                    "weight": 63.2,
+                    "tempWeight": False,
+                    "spO2": 97.5,
+                    "respiration": 13.2,
+                    "baevskySI": 8.4,
+                    "hydrationVolume": 2.1,
+                    "comments": "Late dinner; sleep felt fragmented.",
+                    "updated": "2026-07-28T06:15:00Z",
+                    "sportInfo": [
+                        {
+                            "type": "Run",
+                            "eftp": 302,
+                            "wPrime": 12_500,
+                            "pMax": 780,
+                        }
+                    ],
+                    "bloodGlucose": 5.2,
+                    "systolic": 120,
                     "tempRestingHR": False,
                 }
             ],
@@ -557,9 +582,87 @@ def test_wellness_endpoint_preserves_native_units_and_missing_values() -> None:
     assert day.hrv_rmssd_ms == 62.4
     assert day.hrv_sdnn_ms == 71.8
     assert day.sleep_duration_seconds == 27_000
+    assert day.sleep_score == 79
+    assert day.sleep_quality == 3
+    assert day.average_sleeping_hr_bpm == 44.5
+    assert day.step_count == 8_432
+    assert day.weight_kilograms == 63.2
+    assert day.oxygen_saturation_percent == 97.5
+    assert day.provider_respiration_value == 13.2
+    assert day.provider_baevsky_stress_index == 8.4
+    assert day.hydration_volume_liters == 2.1
+    assert day.athlete_comments == "Late dinner; sleep felt fragmented."
+    assert day.provider_updated_at_utc == datetime(
+        2026, 7, 28, 6, 15, tzinfo=timezone.utc
+    )
+    assert day.sport_performance_estimates[0].source_sport_type == "Run"
+    assert day.sport_performance_estimates[0].estimated_ftp_watts == 302
+    assert day.sport_performance_estimates[0].estimated_w_prime_joules == 12_500
+    assert day.sport_performance_estimates[0].estimated_pmax_watts == 780
+    assert day.provider_snapshot_sha256
+    assert day.mapping_version == 2
+    assert not hasattr(day, "blood_glucose_mmol_per_liter")
+    assert not hasattr(day, "systolic_blood_pressure_mmhg")
     assert day.provider_readiness_value == 73
     assert day.vo2_max_ml_per_kg_per_min == 52.3
     assert day.soreness is None
+
+
+def test_wellness_fingerprint_changes_for_coaching_fields_not_excluded_health_fields() -> None:
+    baseline = WellnessDTO.model_validate(
+        {"id": "2026-07-28", "sleepSecs": 27_000, "steps": 8_000}
+    )
+    changed_steps = WellnessDTO.model_validate(
+        {"id": "2026-07-28", "sleepSecs": 27_000, "steps": 8_001}
+    )
+    excluded_clinical_change = WellnessDTO.model_validate(
+        {
+            "id": "2026-07-28",
+            "sleepSecs": 27_000,
+            "steps": 8_000,
+            "bloodGlucose": 6.5,
+        }
+    )
+
+    assert map_wellness(baseline).provider_snapshot_sha256 != (
+        map_wellness(changed_steps).provider_snapshot_sha256
+    )
+    assert map_wellness(baseline).provider_snapshot_sha256 == (
+        map_wellness(excluded_clinical_change).provider_snapshot_sha256
+    )
+
+
+def test_wellness_sport_estimate_order_does_not_change_canonical_state() -> None:
+    values = {
+        "id": "2026-07-28",
+        "sportInfo": [
+            {"type": "Run", "eftp": 300},
+            {"type": "Ride", "eftp": 250},
+        ],
+    }
+    first = map_wellness(WellnessDTO.model_validate(values))
+    second = map_wellness(
+        WellnessDTO.model_validate(
+            {**values, "sportInfo": list(reversed(values["sportInfo"]))}
+        )
+    )
+
+    assert first == second
+    assert [item.source_sport_type for item in first.sport_performance_estimates] == [
+        "Ride",
+        "Run",
+    ]
+
+
+def test_wellness_rejects_duplicate_sport_estimate_scope() -> None:
+    with pytest.raises(ValidationError, match="duplicate sport performance estimate"):
+        WellnessDay(
+            local_date=date(2026, 7, 28),
+            sport_performance_estimates=[
+                SportPerformanceEstimate(source_sport_type="Run"),
+                SportPerformanceEstimate(source_sport_type="Run"),
+            ],
+        )
 
 
 def test_sport_settings_snapshot_is_deterministic_and_complete() -> None:

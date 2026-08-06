@@ -239,7 +239,7 @@ def test_estimate_current_vdot_rejects_unverifiable_approval(
                     "performance_date": "2026-07-20",
                     "performance_timezone": "UTC",
                     "source_local_activity_id": "act_i_test",
-                    "source_external_fingerprint_sha256": "a" * 64,
+                    "source_performance_evidence_sha256": "a" * 64,
                     "measured_distance_meters": 10_000,
                     "official_distance_confirmation_reference": (
                         "Athlete confirmed this synchronized effort as an official 10K."

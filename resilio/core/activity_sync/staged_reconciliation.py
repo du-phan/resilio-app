@@ -31,7 +31,7 @@ from resilio.core.workout_publication.completions import (
 )
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.integrations.intervals_icu.activity_fingerprint import (
-    external_fingerprint,
+    provider_snapshot_fingerprint,
 )
 from resilio.integrations.intervals_icu.activity_mapper import map_activity
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
@@ -159,7 +159,7 @@ class StagedActivityReconciler:
             self.decisions.append(
                 _sanitized_decision(
                     decision,
-                    external_source_fingerprint_sha256=(mapped.audit.external_fingerprint_sha256),
+                    provider_snapshot_sha256=mapped.audit.provider_snapshot_sha256,
                 )
             )
             return
@@ -180,7 +180,7 @@ class StagedActivityReconciler:
             external_hash = _external_id_sha256(external_id)
             quarantine = build_mapping_quarantine_decision(
                 external_activity_id_sha256=external_hash,
-                external_source_fingerprint_sha256=external_fingerprint(
+                provider_snapshot_sha256=provider_snapshot_fingerprint(
                     detail,
                     self.athlete_timezone,
                 ),
@@ -213,7 +213,7 @@ class StagedActivityReconciler:
         external_hash = _external_id_sha256(external_id)
         sanitized = _sanitized_decision(
             decision,
-            external_source_fingerprint_sha256=(mapped.audit.external_fingerprint_sha256),
+            provider_snapshot_sha256=mapped.audit.provider_snapshot_sha256,
         )
         exclusion = self.override_ledger.exclusions.get(external_hash)
         if exclusion is not None and self._exclusion_is_current(
@@ -453,11 +453,11 @@ def _external_id_sha256(external_id: str) -> str:
 def _sanitized_decision(
     decision: ReconciliationDecision,
     *,
-    external_source_fingerprint_sha256: str | None = None,
+    provider_snapshot_sha256: str | None = None,
 ) -> dict[str, Any]:
     payload = decision.model_dump(mode="json", exclude={"activity"})
     external_id = payload.pop("external_activity_id")
     payload["external_activity_id_sha256"] = _external_id_sha256(external_id)
-    if external_source_fingerprint_sha256 is not None:
-        payload["external_source_fingerprint_sha256"] = external_source_fingerprint_sha256
+    if provider_snapshot_sha256 is not None:
+        payload["provider_snapshot_sha256"] = provider_snapshot_sha256
     return payload

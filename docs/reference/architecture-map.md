@@ -42,7 +42,7 @@ mirror.
 
 | State | Authority |
 | --- | --- |
-| Canonical completed activity v4 | Synchronized provider facts, native analysis, zone-setting identity, and retained historical provenance |
+| Canonical completed activity v5 | Synchronized provider facts, interval measurements, provider feedback, native analysis, zone-setting identity, and retained historical provenance |
 | Activity aerobic load, decoupling, polarization, TRIMP, heart-rate recovery, applicability flags, and zone time | Intervals.icu analysis; missing values remain missing |
 | Wellness and training state | Intervals.icu daily wellness |
 | Thresholds, zones, and priorities | Intervals.icu sport settings |
@@ -71,12 +71,15 @@ them.
 
 ## Coaching-context boundary
 
-`resilio/core/coaching_context/` builds a typed weekly read model:
+`resilio/core/coaching_context/` builds typed weekly and exact-activity read
+models:
 
 - `service.py` coordinates repositories and the as-of boundary;
 - `exposure.py` separates run and other-sport exposure and preserves zone
   coverage;
 - `recovery.py` creates individual baseline comparisons;
+- `exact_activity.py` binds one complete canonical activity to its completion,
+  as-of recovery, training-state, and optional provider curve evidence;
 - `adherence.py` accepts only exact owned completion matches.
 
 It deliberately does not compute a composite readiness score, injury
@@ -84,7 +87,10 @@ probability, local performance-management chart, or cross-sport multiplier.
 Context durations and planned intensity exposure remain exact seconds.
 Multi-week history explicitly separates the target week from the evidence
 window, and sparse wellness signals retain observation date, age, temporary
-status, personal median, sample count, and missingness.
+status, scale direction, seven-day observations and coverage, personal median
+from up to 28 prior days, sample count, freshness, and missingness. A baseline
+requires at least seven prior observations. Calendar-day wellness never proves
+that an observation preceded an activity on the same date.
 
 Coaching evidence coverage is date-scoped and reads only strict sync-state v3
 coverage windows. Complete source windows, unresolved source gaps, and
@@ -131,9 +137,12 @@ context and must cite the latest assessment result when one exists.
 - Ambiguous mappings and canonical mapping failures are sanitized and
   quarantined without raw payload persistence. A malformed external DTO
   collection rejects that sync boundary before canonical mutation.
-- External-source fingerprints and canonical mapping versions are independent:
-  source facts decide whether the provider record changed, while the mapping
-  version forces deterministic remapping when canonical logic changes.
+- Provider-snapshot hashes, performance-evidence hashes, and canonical mapping
+  versions have separate authority. The provider snapshot detects any mapped
+  provider change, including feedback. Performance evidence binds immutable
+  planning and assessment decisions only to measured execution facts. Mapping
+  version changes force deterministic remapping without pretending that the
+  provider changed.
 - Weekly plans apply only when the current file path and SHA-256 match the
   recorded approval, plan revision, week skeleton, and previous applied
   content. The API returns local commit and automatic run-synchronization

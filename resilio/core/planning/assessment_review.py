@@ -6,6 +6,9 @@ from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 from resilio.core.activity_sync.archive import ActivityArchive
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
     canonical_data_sha256,
@@ -83,9 +86,7 @@ def _paired_activity(
     repo: RepositoryIO,
     benchmark_identity: PlanWorkoutIdentity,
 ) -> CanonicalActivity:
-    publication = load_manifest(repo).workouts.get(
-        benchmark_identity.local_workout_id
-    )
+    publication = load_manifest(repo).workouts.get(benchmark_identity.local_workout_id)
     if publication is None or publication.workout_identity != benchmark_identity:
         raise PlanOperationError(
             "Benchmark completion lacks its ownership-proven publication record"
@@ -99,9 +100,7 @@ def _paired_activity(
         raise PlanOperationError(
             "Benchmark result requires one ownership-paired completion activity"
         )
-    activity = ActivityArchive(repo.resolve_path("data/activities")).load(
-        matching_activity_ids[0]
-    )
+    activity = ActivityArchive(repo.resolve_path("data/activities")).load(matching_activity_ids[0])
     if activity is None or activity.status != ActivityStatus.ACTIVE:
         raise PlanOperationError("Paired benchmark activity is absent or inactive")
     if not is_running_sport(activity.sport):
@@ -129,7 +128,6 @@ def _list_assessment_result_candidates_unlocked(
     plan = _active_assessment_plan(state)
     identity = _benchmark_identity(repo, state)
     activity = _paired_activity(repo, identity)
-    activity_sha256 = canonical_data_sha256(activity)
     performance_timezone = activity.occurrence.timezone
     assert performance_timezone is not None
     candidates: list[AssessmentResultCandidate] = []
@@ -143,10 +141,7 @@ def _list_assessment_result_candidates_unlocked(
                 elapsed_time_seconds=activity.duration.elapsed_seconds,
                 workout_identity=identity,
                 local_activity_id=activity.local_activity_id,
-                canonical_activity_sha256=activity_sha256,
-                provider_activity_fingerprint_sha256=(
-                    activity.audit.external_fingerprint_sha256
-                ),
+                performance_evidence_sha256=(activity_performance_evidence_sha256(activity)),
                 race_distance=plan.benchmark_intent.race_distance,
                 performance_timezone=performance_timezone,
             )
@@ -171,10 +166,7 @@ def _list_assessment_result_candidates_unlocked(
                 segment_start_time_local=segment.start_time_local,
                 workout_identity=identity,
                 local_activity_id=activity.local_activity_id,
-                canonical_activity_sha256=activity_sha256,
-                provider_activity_fingerprint_sha256=(
-                    activity.audit.external_fingerprint_sha256
-                ),
+                performance_evidence_sha256=(activity_performance_evidence_sha256(activity)),
                 race_distance=plan.benchmark_intent.race_distance,
                 performance_timezone=performance_timezone,
             )
@@ -202,9 +194,7 @@ def _confirmed_result(
                 "segment_start_time_local",
             },
         ),
-        "official_distance_confirmation_reference": (
-            official_distance_confirmation_reference
-        ),
+        "official_distance_confirmation_reference": (official_distance_confirmation_reference),
         "athlete_confirmation_reference": athlete_confirmation_reference,
     }
     if candidate.result_kind == "dedicated_activity":
@@ -240,9 +230,7 @@ def create_assessment_review(
         candidate = matching[0]
         result = _confirmed_result(
             candidate,
-            official_distance_confirmation_reference=(
-                official_distance_confirmation_reference
-            ),
+            official_distance_confirmation_reference=(official_distance_confirmation_reference),
             athlete_confirmation_reference=athlete_confirmation_reference,
         )
         generation_timestamp = _validated_timestamp(generated_at_utc)
@@ -345,9 +333,7 @@ def close_assessment_from_review(
             effective_end_date=review.result.performance_date,
             reason=reason,
             athlete_confirmation_reference=athlete_confirmation_reference,
-            assessment_review_artifact_sha256=(
-                assessment_review_reference.artifact_sha256
-            ),
+            assessment_review_artifact_sha256=(assessment_review_reference.artifact_sha256),
             closed_at_utc=closure_timestamp,
         )
         try:

@@ -9,6 +9,7 @@ from typing import Iterable
 from resilio.integrations.intervals_icu.dto import SportSettingsDTO, WellnessDTO
 from resilio.schemas.training_state import (
     LoadMeasurementMethod,
+    SportPerformanceEstimate,
     SportSettings,
     SportSettingsSnapshot,
     WellnessDay,
@@ -32,10 +33,10 @@ def _priority(value: str | None) -> list[LoadMeasurementMethod]:
     return result
 
 
-def map_wellness(source: WellnessDTO) -> WellnessDay:
-    """Map one provider day without filling or normalizing missing values."""
+def _wellness_without_fingerprint(source: WellnessDTO) -> WellnessDay:
     return WellnessDay(
         local_date=source.id,
+        provider_updated_at_utc=source.updated,
         fitness_load_points=source.ctl,
         fatigue_load_points=source.atl,
         ramp_load_points_per_week=source.ramp_rate,
@@ -55,10 +56,49 @@ def map_wellness(source: WellnessDTO) -> WellnessDay:
         motivation=source.motivation,
         injury=source.injury,
         hydration=source.hydration,
-        provider_hydration_volume_value=source.hydration_volume,
+        hydration_volume_liters=source.hydration_volume,
         provider_readiness_value=source.readiness,
         vo2_max_ml_per_kg_per_min=source.vo2max,
+        step_count=source.steps,
+        weight_kilograms=source.weight,
+        weight_is_temporary=source.temporary_weight,
+        oxygen_saturation_percent=source.oxygen_saturation_percent,
+        provider_respiration_value=source.respiration,
+        provider_baevsky_stress_index=source.baevsky_stress_index,
+        athlete_comments=source.comments,
+        sport_performance_estimates=sorted(
+            (
+                SportPerformanceEstimate(
+                    source_sport_type=item.type,
+                    estimated_ftp_watts=item.estimated_ftp_watts,
+                    estimated_w_prime_joules=item.estimated_w_prime_joules,
+                    estimated_pmax_watts=item.estimated_pmax_watts,
+                )
+                for item in source.sport_info
+            ),
+            key=lambda item: item.source_sport_type,
+        ),
         resting_hr_is_temporary=source.temporary_resting_hr,
+    )
+
+
+def map_wellness(source: WellnessDTO) -> WellnessDay:
+    """Map one provider day without filling or normalizing missing values."""
+    mapped = _wellness_without_fingerprint(source)
+    fingerprint_payload = mapped.model_dump(
+        mode="json",
+        exclude={
+            "schema_version",
+            "mapping_version",
+            "provider_snapshot_sha256",
+            "source",
+        },
+    )
+    canonical = json.dumps(fingerprint_payload, sort_keys=True, separators=(",", ":"))
+    return mapped.model_copy(
+        update={
+            "provider_snapshot_sha256": hashlib.sha256(canonical.encode()).hexdigest(),
+        }
     )
 
 

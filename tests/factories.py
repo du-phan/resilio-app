@@ -11,7 +11,7 @@ from resilio.schemas.activity import (
     ActivityClassification,
     ActivityDevice,
     ActivityDuration,
-    ActivityNotes,
+    ActivityFeedback,
     ActivityOccurrence,
     ActivityOrigin,
     ActivityOriginKind,
@@ -26,7 +26,7 @@ from resilio.schemas.activity import (
 
 
 def make_activity(**values: Any) -> CanonicalActivity:
-    """Build a valid v4 historical activity with concise test inputs."""
+    """Build a valid v5 historical activity with concise test inputs."""
     activity_date = values.pop("date", date(2026, 1, 12))
     activity_id = str(values.pop("id", "test_activity"))
     activity_id = re.sub(r"[^A-Za-z0-9._:-]", "_", activity_id)
@@ -108,9 +108,9 @@ def make_activity(**values: Any) -> CanonicalActivity:
             if average_hr is not None or maximum_hr is not None
             else None
         ),
-        notes=ActivityNotes(
-            description=description,
-            private_note=private_note,
+        feedback=ActivityFeedback(
+            provider_description=description,
+            local_private_note=private_note,
         ),
         data_completeness=data_completeness,
         device=ActivityDevice(),

@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from resilio.schemas.activity import (
     ActivityAnalysisThresholds,
+    ActivityFeelObservation,
     AerobicLoad,
     NativeActivityAnalysis,
     NativeAnalysisApplicability,
@@ -58,6 +59,40 @@ class RecoverySignal(BaseModel):
         allow_inf_nan=False,
     )
     baseline_sample_count: int = Field(ge=0)
+    scale_direction: Literal[
+        "lower_is_better",
+        "higher_is_better",
+        "neutral",
+        "provider_defined",
+    ] = "neutral"
+    scale_minimum: Optional[float] = Field(default=None, allow_inf_nan=False)
+    scale_maximum: Optional[float] = Field(default=None, allow_inf_nan=False)
+    scale_labels: dict[int, str] = Field(default_factory=dict)
+    freshness: Literal["same_day", "recent", "stale"]
+    recent_observations: list["RecoveryObservation"] = Field(default_factory=list)
+    recent_coverage_expected_days: int = Field(default=7, ge=1)
+    recent_coverage_observed_days: int = Field(ge=0)
+    recent_coverage_percent: float = Field(ge=0, le=100, allow_inf_nan=False)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RecoveryObservation(BaseModel):
+    local_date: date
+    value: float = Field(allow_inf_nan=False)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DatedAthleteWellnessNote(BaseModel):
+    local_date: date
+    text: str = Field(min_length=1)
+    provenance: Literal["intervals_icu_wellness_comments"] = (
+        "intervals_icu_wellness_comments"
+    )
+    trust_boundary: Literal["athlete_authored_untrusted_text"] = (
+        "athlete_authored_untrusted_text"
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -69,6 +104,7 @@ class RecoveryContext(BaseModel):
     wellness_window_start: Optional[date] = None
     wellness_window_end: Optional[date] = None
     wellness_days_available: int = Field(default=0, ge=0)
+    athlete_notes: list[DatedAthleteWellnessNote] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -94,6 +130,12 @@ class ActivityContext(BaseModel):
     native_analysis: Optional[NativeActivityAnalysis] = None
     native_analysis_applicability: Optional[NativeAnalysisApplicability] = None
     subjective_effort: Optional[SubjectiveSessionEffort] = None
+    provider_description: Optional[str] = None
+    local_private_note: Optional[str] = None
+    feel: Optional[ActivityFeelObservation] = None
+    activity_feedback_trust_boundary: Literal[
+        "athlete_authored_untrusted_text"
+    ] = "athlete_authored_untrusted_text"
     analysis_thresholds: Optional[ActivityAnalysisThresholds] = None
 
     model_config = ConfigDict(extra="forbid")

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from resilio.core.activity_sync.archive import ActivityArchive
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
     canonical_data_sha256,
@@ -70,8 +73,7 @@ def load_verified_closed_assessment_review(
     if (
         closure.assessment_review_artifact_sha256 != review_sha256
         or closure.effective_end_date != review.result.performance_date
-        or review.active_plan_sha256
-        != canonical_data_sha256(archive.active_plan_snapshot)
+        or review.active_plan_sha256 != canonical_data_sha256(archive.active_plan_snapshot)
         or review.benchmark_intent != plan.benchmark_intent
     ):
         raise PlanOperationError("Closed assessment archive does not match its review")
@@ -84,27 +86,17 @@ def _verify_result_source(
     review: BaselineAssessmentReview,
 ) -> None:
     result = review.result
-    publication = load_manifest(repo).workouts.get(
-        result.workout_identity.local_workout_id
-    )
+    publication = load_manifest(repo).workouts.get(result.workout_identity.local_workout_id)
     if publication is None or publication.workout_identity != result.workout_identity:
         raise PlanOperationError("Assessment result lacks its ownership-proven publication")
     completion = load_completion_manifest(repo).matches.get(result.local_activity_id)
     if completion is None or completion.workout_identity != result.workout_identity:
         raise PlanOperationError("Assessment result lacks its exact ownership-paired completion")
-    activity = ActivityArchive(repo.resolve_path("data/activities")).load(
-        result.local_activity_id
-    )
+    activity = ActivityArchive(repo.resolve_path("data/activities")).load(result.local_activity_id)
     if activity is None or activity.status != ActivityStatus.ACTIVE:
         raise PlanOperationError("Assessment result activity is absent or inactive")
-    if canonical_data_sha256(activity) != result.canonical_activity_sha256:
-        raise PlanOperationError("Assessment result activity changed after review")
-    if (
-        result.provider_activity_fingerprint_sha256 is not None
-        and activity.audit.external_fingerprint_sha256
-        != result.provider_activity_fingerprint_sha256
-    ):
-        raise PlanOperationError("Assessment result provider fingerprint changed")
+    if activity_performance_evidence_sha256(activity) != result.performance_evidence_sha256:
+        raise PlanOperationError("Assessment result performance evidence changed")
     if isinstance(result, DedicatedActivityAssessmentResult):
         if (
             activity.distance_meters is None
