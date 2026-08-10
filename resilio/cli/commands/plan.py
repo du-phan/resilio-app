@@ -32,7 +32,6 @@ from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelo
 from resilio.cli.output import create_success_envelope, output_json
 from resilio.schemas.assessment import (
     AssessmentReason,
-    TemporaryOtherSportCommitmentOverride,
     TemporaryScheduleConstraint,
 )
 from resilio.schemas.plan_history import PlanClosureDisposition
@@ -41,9 +40,6 @@ app = typer.Typer(help="Create, inspect, and apply approved training plans")
 SCHEDULE_CONSTRAINTS_ADAPTER: TypeAdapter[list[TemporaryScheduleConstraint]] = TypeAdapter(
     list[TemporaryScheduleConstraint]
 )
-SPORT_OVERRIDES_ADAPTER: TypeAdapter[
-    list[TemporaryOtherSportCommitmentOverride]
-] = TypeAdapter(list[TemporaryOtherSportCommitmentOverride])
 
 
 def _emit_result(result: object, message: str) -> None:
@@ -153,15 +149,11 @@ def create_assessment_context_command(
     evidence_as_of_date: str = typer.Option(..., "--evidence-as-of"),
     intended_plan_start_date: str = typer.Option(..., "--start"),
     assessment_reasons: list[AssessmentReason] = typer.Option(..., "--reason"),
-    schedule_constraints_file: Path | None = typer.Option(
+    schedule_constraints_file: Path
+    | None = typer.Option(
         None,
         "--constraints-file",
         help="JSON array of athlete-confirmed unavailable date ranges.",
-    ),
-    other_sport_file: Path | None = typer.Option(
-        None,
-        "--other-sport-file",
-        help="JSON array of coach-proposed weekly other-sport counts.",
     ),
 ) -> None:
     """Create bounded evidence for a non-rehabilitation assessment block."""
@@ -186,26 +178,12 @@ def create_assessment_context_command(
             PlanError("validation", f"Schedule constraints file is invalid: {exc}"),
             "Assessment-planning context",
         )
-    try:
-        sport_overrides = (
-            SPORT_OVERRIDES_ADAPTER.validate_python(
-                json.loads(other_sport_file.read_text())
-            )
-            if other_sport_file is not None
-            else []
-        )
-    except (OSError, json.JSONDecodeError, ValidationError) as exc:
-        _emit_result(
-            PlanError("validation", f"Sport overrides file is invalid: {exc}"),
-            "Assessment-planning context",
-        )
     _emit_result(
         create_assessment_context_evidence(
             evidence_as_of_date=parsed_evidence_as_of,
             intended_plan_start_date=parsed_plan_start,
             assessment_reasons=assessment_reasons,
             temporary_schedule_constraints=schedule_constraints,
-            temporary_other_sport_commitment_overrides=sport_overrides,
         ),
         "Immutable assessment-planning evidence context created",
     )
@@ -244,9 +222,7 @@ def create_assessment_review_command(
         create_assessment_review_evidence(
             candidate_id=candidate_id,
             evidence_as_of_date=parsed_evidence_as_of,
-            official_distance_confirmation_reference=(
-                official_distance_confirmation_reference
-            ),
+            official_distance_confirmation_reference=(official_distance_confirmation_reference),
             athlete_confirmation_reference=athlete_confirmation_reference,
             review_summary=review_summary,
         ),
@@ -282,7 +258,8 @@ def create_cycle_review_command(
         ...,
         "--athlete-confirmation",
     ),
-    goal_activity_id: str | None = typer.Option(
+    goal_activity_id: str
+    | None = typer.Option(
         None,
         "--goal-activity-id",
     ),

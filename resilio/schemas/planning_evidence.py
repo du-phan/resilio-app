@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from typing import Literal
+from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from resilio.schemas.assessment import (
     AssessmentReason,
-    TemporaryOtherSportCommitmentOverride,
     TemporaryScheduleConstraint,
     TimedBenchmarkIntent,
 )
@@ -17,10 +17,6 @@ from resilio.schemas.coaching import (
     ActivityContext,
     SportExposure,
     WeeklyCoachContext,
-)
-from resilio.schemas.plan import (
-    PlanGoal,
-    PlanningConstraintsSnapshot,
 )
 from resilio.schemas.plan_history import (
     AthleteConfirmedGoalActivityEvidence,
@@ -31,6 +27,8 @@ from resilio.schemas.plan_history import (
     PlanClosureDisposition,
     PlanWorkoutIdentity,
 )
+from resilio.schemas.planning.constraints import PlanningConstraintsSnapshot
+from resilio.schemas.planning.plans import PlanGoal
 from resilio.schemas.profile import Goal as AthleteGoal
 from resilio.schemas.vdot import RaceDistance
 
@@ -218,20 +216,15 @@ class HistoricalPlanSummary(BaseModel):
 class AssessmentPlanningContext(BaseModel):
     """Immutable evidence gate for a short baseline-assessment plan."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     evidence_as_of_date: date
     intended_plan_start_date: date
     generated_at_utc: datetime
-    planning_profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    planning_inputs_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     current_goal: AthleteGoal
     current_constraints: PlanningConstraintsSnapshot
     assessment_reasons: list[AssessmentReason] = Field(min_length=1)
-    temporary_schedule_constraints: list[TemporaryScheduleConstraint] = Field(
-        default_factory=list
-    )
-    temporary_other_sport_commitment_overrides: list[
-        TemporaryOtherSportCommitmentOverride
-    ] = Field(default_factory=list)
+    temporary_schedule_constraints: list[TemporaryScheduleConstraint] = Field(default_factory=list)
     recent_detailed_weeks: list[WeeklyCoachContext] = Field(min_length=1, max_length=12)
     evidence_index: list["PlanningEvidencePointer"] = Field(min_length=2)
     source_context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -248,6 +241,11 @@ class AssessmentPlanningContext(BaseModel):
 
     @model_validator(mode="after")
     def context_window_and_evidence_are_coherent(self) -> "AssessmentPlanningContext":
+        generation_local_date = self.generated_at_utc.astimezone(
+            ZoneInfo(self.current_constraints.training_timezone)
+        ).date()
+        if self.evidence_as_of_date > generation_local_date:
+            raise ValueError("assessment evidence date cannot postdate context generation")
         if self.intended_plan_start_date.weekday() != 0:
             raise ValueError("intended assessment start date must be a Monday")
         if self.intended_plan_start_date <= self.evidence_as_of_date:
@@ -257,39 +255,11 @@ class AssessmentPlanningContext(BaseModel):
         evidence_ids = [pointer.evidence_id for pointer in self.evidence_index]
         if len(evidence_ids) != len(set(evidence_ids)):
             raise ValueError("assessment context evidence IDs must be unique")
-        schedule_evidence_present = (
-            "assessment.temporary_schedule_constraints" in evidence_ids
-        )
+        schedule_evidence_present = "assessment.temporary_schedule_constraints" in evidence_ids
         if schedule_evidence_present != bool(self.temporary_schedule_constraints):
             raise ValueError(
                 "assessment schedule evidence pointer must match temporary constraints"
             )
-        sport_override_evidence_present = (
-            "assessment.temporary_other_sport_commitment_overrides" in evidence_ids
-        )
-        if sport_override_evidence_present != bool(
-            self.temporary_other_sport_commitment_overrides
-        ):
-            raise ValueError(
-                "assessment sport-override evidence pointer must match temporary overrides"
-            )
-        override_keys = [
-            (override.week_start_date, override.sport_name)
-            for override in self.temporary_other_sport_commitment_overrides
-        ]
-        if len(override_keys) != len(set(override_keys)):
-            raise ValueError(
-                "assessment sport overrides must be unique by week and sport"
-            )
-        active_sport_names = {
-            commitment.sport_name
-            for commitment in self.current_constraints.active_other_sports
-        }
-        for override in self.temporary_other_sport_commitment_overrides:
-            if override.sport_name not in active_sport_names:
-                raise ValueError("assessment override references an inactive other sport")
-            if override.week_start_date < self.intended_plan_start_date:
-                raise ValueError("assessment sport override predates the intended plan")
         return self
 
 
@@ -407,11 +377,11 @@ class PlanningEvidencePointer(BaseModel):
 class MacroPlanningContext(BaseModel):
     """Bounded, immutable evidence package required for a new macro plan."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     evidence_as_of_date: date
     intended_plan_start_date: date
     generated_at_utc: datetime
-    planning_profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    planning_inputs_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     current_goal: AthleteGoal
     current_constraints: PlanningConstraintsSnapshot
     active_vdot_approval_id: str = Field(
@@ -438,6 +408,11 @@ class MacroPlanningContext(BaseModel):
     def future_plan_and_evidence_index_are_coherent(
         self,
     ) -> "MacroPlanningContext":
+        generation_local_date = self.generated_at_utc.astimezone(
+            ZoneInfo(self.current_constraints.training_timezone)
+        ).date()
+        if self.evidence_as_of_date > generation_local_date:
+            raise ValueError("macro-planning evidence date cannot postdate context generation")
         if self.intended_plan_start_date.weekday() != 0:
             raise ValueError("intended plan start date must be a Monday")
         if self.intended_plan_start_date <= self.evidence_as_of_date:

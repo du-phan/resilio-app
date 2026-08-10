@@ -23,8 +23,8 @@ from resilio.core.workout_publication.preferences import (
 )
 from resilio.core.workout_publication.week_service import RunWeekSynchronizationService
 from resilio.integrations.intervals_icu.errors import IntervalsTransportError
-from resilio.schemas.plan import WorkoutPrescription
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.publication import (
     RunWeekSynchronizationReport,
     RunWorkoutSynchronizationPreferences,
@@ -32,7 +32,7 @@ from resilio.schemas.publication import (
 from tests.unit.test_workout_publication import FakeClient
 
 
-def _authoritative(workout: WorkoutPrescription) -> AuthoritativeWorkout:
+def _authoritative(workout: RunningWorkoutPrescription) -> AuthoritativeWorkout:
     return AuthoritativeWorkout(
         identity=PlanWorkoutIdentity(
             plan_id="plan_publication_test",
@@ -44,8 +44,8 @@ def _authoritative(workout: WorkoutPrescription) -> AuthoritativeWorkout:
     )
 
 
-def _targetless_run(workout_id: str, occurrence: date) -> WorkoutPrescription:
-    return WorkoutPrescription.model_validate(
+def _targetless_run(workout_id: str, occurrence: date) -> RunningWorkoutPrescription:
+    return RunningWorkoutPrescription.model_validate(
         {
             "id": workout_id,
             "date": occurrence,
@@ -73,24 +73,10 @@ def _targetless_run(workout_id: str, occurrence: date) -> WorkoutPrescription:
     )
 
 
-def _climb(workout_id: str, occurrence: date) -> WorkoutPrescription:
-    return WorkoutPrescription.model_validate(
-        {
-            "id": workout_id,
-            "date": occurrence,
-            "sport": "climb",
-            "workout_type": "easy",
-            "planned_duration_seconds": 3_600,
-            "planned_low_intensity_duration_seconds": 600,
-            "planned_moderate_intensity_duration_seconds": 2_400,
-            "planned_high_intensity_duration_seconds": 600,
-            "target_rpe_1_to_10": 5,
-            "purpose": "Preserve the normal bouldering commitment.",
-        }
-    )
-
-
-def _pace_targeted_run(workout_id: str, occurrence: date) -> WorkoutPrescription:
+def _pace_targeted_run(
+    workout_id: str,
+    occurrence: date,
+) -> RunningWorkoutPrescription:
     payload = _targetless_run(workout_id, occurrence).model_dump(mode="json")
     payload["structured_workout"] = {
         "sport": "run",
@@ -108,7 +94,7 @@ def _pace_targeted_run(workout_id: str, occurrence: date) -> WorkoutPrescription
             }
         ],
     }
-    return WorkoutPrescription.model_validate(payload)
+    return RunningWorkoutPrescription.model_validate(payload)
 
 
 class HarnessRunWeekSynchronizationService(RunWeekSynchronizationService):
@@ -132,10 +118,7 @@ def test_missing_preferences_are_safely_disabled_and_enabled_state_round_trips(
     monkeypatch.chdir(tmp_path)
     repo = RepositoryIO()
 
-    assert (
-        load_run_synchronization_preferences(repo).run_synchronization_mode
-        == "disabled"
-    )
+    assert load_run_synchronization_preferences(repo).run_synchronization_mode == "disabled"
 
     preferences = RunWorkoutSynchronizationPreferences(
         run_synchronization_mode="after_weekly_apply",
@@ -175,7 +158,7 @@ def test_apply_week_automatically_reconciles_enabled_run_synchronization(
     )
     monkeypatch.setattr(
         week_application_api,
-        "applied_workout_sha256",
+        "applied_running_workouts_sha256",
         lambda _week: "a" * 64,
     )
     monkeypatch.setattr(
@@ -220,7 +203,7 @@ def test_apply_week_reports_sync_failure_without_hiding_local_commit(monkeypatch
     )
     monkeypatch.setattr(
         week_application_api,
-        "applied_workout_sha256",
+        "applied_running_workouts_sha256",
         lambda _week: "a" * 64,
     )
     monkeypatch.setattr(
@@ -260,7 +243,7 @@ def test_apply_week_does_not_contact_provider_when_synchronization_is_disabled(
     )
     monkeypatch.setattr(
         week_application_api,
-        "applied_workout_sha256",
+        "applied_running_workouts_sha256",
         lambda _week: "a" * 64,
     )
     monkeypatch.setattr(
@@ -314,32 +297,6 @@ def test_capabilities_report_exact_heart_rate_target_dependencies() -> None:
     assert not capabilities.percent_max_heart_rate_targets_ready
     assert "run_lactate_threshold_heart_rate_missing" in capabilities.limitations
     assert "run_maximum_heart_rate_missing" in capabilities.limitations
-
-
-def test_week_status_and_reconciliation_ignore_non_running_workouts(
-    tmp_path,
-    monkeypatch,
-) -> None:
-    (tmp_path / ".git").mkdir()
-    monkeypatch.chdir(tmp_path)
-    repo = RepositoryIO()
-    client = FakeClient()
-    workouts = [
-        _authoritative(_targetless_run("run-1", date(2026, 8, 6))),
-        _authoritative(_climb("climb-1", date(2026, 8, 5))),
-    ]
-    service = HarnessRunWeekSynchronizationService(repo, client, workouts)
-
-    status = service.status_week(1, as_of_date=date(2026, 8, 2))
-    reconciled = service.reconcile_week(1, as_of_date=date(2026, 8, 2))
-
-    assert status.reconciliation_safe
-    assert status.run_workouts_considered == 1
-    assert status.ignored_non_run_workouts == 1
-    assert [item.status for item in status.items] == ["ready"]
-    assert [item.status for item in reconciled.items] == ["created"]
-    assert len(client.events) == 1
-    assert next(iter(client.events.values())).type == "Run"
 
 
 def test_week_publication_holds_exact_plan_authority_during_remote_mutation(
@@ -419,9 +376,7 @@ def test_replacement_week_deletes_only_stale_future_owned_run(
     first = service.reconcile_week(1, as_of_date=date(2026, 8, 2))
     old_event_id = first.items[0].event_id
 
-    service.workouts = [
-        _authoritative(_targetless_run("replacement-run", date(2026, 8, 6)))
-    ]
+    service.workouts = [_authoritative(_targetless_run("replacement-run", date(2026, 8, 6)))]
     replacement = service.reconcile_week(1, as_of_date=date(2026, 8, 2))
 
     assert [item.status for item in replacement.items] == ["created", "deleted"]
@@ -439,14 +394,16 @@ def test_replacement_deletes_a_stale_future_run_when_current_runs_are_past(
     client = FakeClient()
     old = _authoritative(_targetless_run("old-future-run", date(2026, 8, 8)))
     service = HarnessRunWeekSynchronizationService(repo, client, [old])
-    old_event_id = service.reconcile_week(
-        1,
-        as_of_date=date(2026, 8, 2),
-    ).items[0].event_id
+    old_event_id = (
+        service.reconcile_week(
+            1,
+            as_of_date=date(2026, 8, 2),
+        )
+        .items[0]
+        .event_id
+    )
 
-    service.workouts = [
-        _authoritative(_targetless_run("current-past-run", date(2026, 8, 3)))
-    ]
+    service.workouts = [_authoritative(_targetless_run("current-past-run", date(2026, 8, 3)))]
     replacement = service.reconcile_week(1, as_of_date=date(2026, 8, 6))
 
     assert [item.status for item in replacement.items] == ["skipped_past", "deleted"]
@@ -468,9 +425,7 @@ def test_stale_remote_drift_blocks_every_replacement_mutation(
     client.events[old_event_id] = client.events[old_event_id].model_copy(
         update={"description": "Athlete edited this event in Intervals.icu"}
     )
-    service.workouts = [
-        _authoritative(_targetless_run("replacement-run", date(2026, 8, 8)))
-    ]
+    service.workouts = [_authoritative(_targetless_run("replacement-run", date(2026, 8, 8)))]
 
     blocked = service.reconcile_week(1, as_of_date=date(2026, 8, 2))
 
@@ -506,9 +461,7 @@ def test_stale_delete_failure_returns_a_typed_partial_report(
     service = HarnessRunWeekSynchronizationService(repo, client, [old])
     service.reconcile_week(1, as_of_date=date(2026, 8, 2))
     client.fail_deletes = True
-    service.workouts = [
-        _authoritative(_targetless_run("replacement-run", date(2026, 8, 8)))
-    ]
+    service.workouts = [_authoritative(_targetless_run("replacement-run", date(2026, 8, 8)))]
 
     report = service.reconcile_week(1, as_of_date=date(2026, 8, 2))
 
@@ -528,9 +481,7 @@ def test_replacement_preserves_a_completed_owned_run_on_the_current_date(
     completed = _authoritative(_targetless_run("completed-run", date(2026, 8, 6)))
     service = HarnessRunWeekSynchronizationService(repo, client, [completed])
     event_id = service.reconcile_week(1, as_of_date=date(2026, 8, 2)).items[0].event_id
-    service.workouts = [
-        _authoritative(_targetless_run("replacement-run", date(2026, 8, 8)))
-    ]
+    service.workouts = [_authoritative(_targetless_run("replacement-run", date(2026, 8, 8)))]
     service._completed_workout_identities = lambda: {
         (
             completed.identity.plan_id,
@@ -597,8 +548,7 @@ def test_remote_drift_in_one_run_blocks_every_week_mutation(
     assert not blocked.reconciliation_safe
     assert client.upserts == 1
     assert all(
-        event.external_id != "resilio:v1:workout:new-run"
-        for event in client.events.values()
+        event.external_id != "resilio:v1:workout:new-run" for event in client.events.values()
     )
 
 

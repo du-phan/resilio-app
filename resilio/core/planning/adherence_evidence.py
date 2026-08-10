@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Literal
 
 from resilio.core.planning.integrity import (
-    applied_workout_sha256,
+    applied_running_workouts_sha256,
     plan_skeleton_sha256,
     target_week_skeleton_sha256,
 )
@@ -21,8 +21,9 @@ from resilio.schemas.approvals import (
     PlanApproval,
     PlanningState,
 )
-from resilio.schemas.plan import RaceMacroPlan, TrainingPlan, WorkoutPrescription
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,7 @@ class AuthoritativeWorkout:
     """An exact prescription bound to the plan revision that authorized it."""
 
     identity: PlanWorkoutIdentity
-    prescription: WorkoutPrescription
+    prescription: RunningWorkoutPrescription
 
 
 @dataclass(frozen=True)
@@ -107,7 +108,8 @@ def _collect_authoritative_workouts(
         if (
             applied_revision.plan_id != plan.id
             or applied_revision.plan_revision_id != plan.plan_revision_id
-            or applied_revision.applied_workout_sha256 != applied_workout_sha256(week)
+            or applied_revision.applied_running_workouts_sha256
+            != applied_running_workouts_sha256(week)
         ):
             return _RevisionResolution(
                 True,
@@ -115,7 +117,7 @@ def _collect_authoritative_workouts(
                 invalid_reason=(f"week_{applied_revision.week_number}_changed_after_application"),
             )
         authority_id = f"{plan.id}:{plan.plan_revision_id}:" f"{applied_revision.approval_id}"
-        for workout in week.workouts:
+        for workout in week.running_workouts:
             if not window_start <= workout.date <= window_end:
                 continue
             if workout.date > revision.effective_end_date:
@@ -177,7 +179,7 @@ def _resolve_revision(
     overlapping_populated_weeks = [
         week
         for week in plan.weeks
-        if week.workouts and week.end_date >= window_start and week.start_date <= window_end
+        if week.running_workouts and week.end_date >= window_start and week.start_date <= window_end
     ]
     overlapping_applied_revisions = [
         applied_revision

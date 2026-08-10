@@ -27,7 +27,7 @@ def test_assessment_template_command_writes_agent_editable_contract(tmp_path) ->
     assert len(payload["weeks"]) == 3
     assert payload["benchmark_intent"]["race_distance"] == "5k"
     assert payload["temporary_schedule_constraints"] == []
-    assert payload["temporary_other_sport_commitment_overrides"] == []
+    assert "temporary_other_sport_commitment_overrides" not in payload
     assert payload["medical_rehabilitation_excluded"] is True
 
 
@@ -45,7 +45,7 @@ def test_plan_neutral_approval_and_assessment_commands_are_exposed() -> None:
     )
     assert context_help.exit_code == 0
     assert "--constraints-file" in context_help.stdout
-    assert "--other-sport-file" in context_help.stdout
+    assert "--other-sport-file" not in context_help.stdout
     assert "assessment-candidates" in plan_help.stdout
     assert "close-assessment" in plan_help.stdout
     assert "discard-unapproved" in plan_help.stdout

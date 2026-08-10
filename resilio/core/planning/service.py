@@ -47,7 +47,7 @@ from resilio.core.planning.freshness import (
 from resilio.core.planning.integrity import (
     plan_skeleton_sha256,
     planning_constraints_snapshot,
-    planning_profile_sha256,
+    planning_inputs_sha256,
 )
 from resilio.core.planning.plan_proposal import (
     discard_unapproved_current_plan as discard_unapproved_current_plan,
@@ -98,15 +98,12 @@ from resilio.schemas.approvals import (
     VDOTApproval,
 )
 from resilio.schemas.macro_plan_draft import MacroPlanDraft
-from resilio.schemas.plan import (
-    RaceMacroPlan,
-    TrainingPlan,
-)
 from resilio.schemas.plan_history import (
     EvidenceArtifactReference,
     PlanClosure,
     PlanClosureDisposition,
 )
+from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
 from resilio.schemas.planning_evidence import (
     MacroPlanningContext,
     PlanCycleReview,
@@ -156,9 +153,9 @@ def _load_validated_macro_context(
         )
     except PlanningArtifactError as exc:
         raise PlanOperationError(str(exc)) from exc
-    if context.planning_profile_sha256 != planning_profile_sha256(profile):
+    if context.planning_inputs_sha256 != planning_inputs_sha256(profile):
         raise PlanOperationError(
-            "Macro-planning context does not match the current athlete profile"
+            "Macro-planning context does not match the current planning inputs"
         )
     if context.current_constraints != planning_constraints_snapshot(profile):
         raise PlanOperationError(
@@ -174,9 +171,7 @@ def _load_validated_macro_context(
     if min(week.start_date for week in draft.weeks) != context.intended_plan_start_date:
         raise PlanOperationError("Macro draft does not start on its evidence-bound intended Monday")
     archived_plan_ids = {reference.plan_id for reference in state.closed_plan_references}
-    context_plan_ids = {
-        summary.plan_id for summary in context.historical_plan_summaries
-    } | {
+    context_plan_ids = {summary.plan_id for summary in context.historical_plan_summaries} | {
         summary.plan_id for summary in context.historical_assessment_summaries
     }
     if context_plan_ids != archived_plan_ids:
@@ -223,9 +218,7 @@ def _load_validated_macro_context(
                 summary.plan_id,
             ),
         )
-        required_evidence_ids.add(
-            f"assessment_result.{latest_assessment.plan_id}"
-        )
+        required_evidence_ids.add(f"assessment_result.{latest_assessment.plan_id}")
     missing_required_ids = required_evidence_ids - cited_evidence_ids
     if missing_required_ids:
         raise PlanOperationError(
@@ -288,9 +281,7 @@ def _validate_plan_closure(
 ) -> None:
     plan = active_plan.plan
     if not isinstance(plan, RaceMacroPlan):
-        raise PlanOperationError(
-            "Race-cycle closure cannot close a baseline-assessment plan"
-        )
+        raise PlanOperationError("Race-cycle closure cannot close a baseline-assessment plan")
     evidence_reference = EvidenceArtifactReference(
         artifact_type="cycle_review",
         artifact_sha256=closure.cycle_review_artifact_sha256,
@@ -454,7 +445,7 @@ def create_macro_plan(
             draft,
             profile,
         )
-        profile_hash = planning_profile_sha256(profile)
+        profile_hash = planning_inputs_sha256(profile)
         try:
             methodology = resolve_methodology_choice(
                 repo.repo_root,
@@ -473,7 +464,7 @@ def create_macro_plan(
             plan_revision_id=_new_id("plan_revision"),
             vdot_approval_id=vdot_approval.approval_id,
             planning_context_reference=draft.planning_context_reference,
-            planning_profile_sha256=profile_hash,
+            planning_inputs_sha256=profile_hash,
             created_at_utc=creation_timestamp,
             planning_rationale=draft.planning_rationale,
             adaptation_decisions=draft.adaptation_decisions,
@@ -482,7 +473,6 @@ def create_macro_plan(
             weeks=draft.weeks,
             baseline_vdot=vdot_approval.approved_vdot,
             constraints_snapshot=planning_constraints_snapshot(profile),
-            conflict_policy=profile.conflict_policy,
         )
         updated = state.model_copy(update={"active_plan": ActivePlanState(plan=plan)})
         _persist(repo, updated)
@@ -507,10 +497,8 @@ def approve_current_plan(
             plan_id=plan.id,
             plan_revision_id=plan.plan_revision_id,
             plan_skeleton_sha256=plan_skeleton_sha256(plan),
-            vdot_approval_id=(
-                plan.vdot_approval_id if isinstance(plan, RaceMacroPlan) else None
-            ),
-            planning_profile_sha256=plan.planning_profile_sha256,
+            vdot_approval_id=(plan.vdot_approval_id if isinstance(plan, RaceMacroPlan) else None),
+            planning_inputs_sha256=plan.planning_inputs_sha256,
             approved_at_utc=approval_timestamp,
         )
         assert state.active_plan is not None

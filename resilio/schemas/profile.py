@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -25,18 +25,6 @@ class Weekday(str, Enum):
     FRIDAY = "friday"
     SATURDAY = "saturday"
     SUNDAY = "sunday"
-
-
-class RunningPriority(str, Enum):
-    PRIMARY = "primary"
-    SECONDARY = "secondary"
-    EQUAL = "equal"
-
-
-class ConflictPolicy(str, Enum):
-    PRIMARY_SPORT_WINS = "primary_sport_wins"
-    RUNNING_GOAL_WINS = "running_goal_wins"
-    ASK_EACH_TIME = "ask_each_time"
 
 
 class GoalType(str, Enum):
@@ -112,21 +100,58 @@ class TrainingConstraints(BaseModel):
         return self
 
 
-class OtherSport(BaseModel):
-    sport_name: str = Field(min_length=1)
-    sessions_per_week: int = Field(ge=1, le=7)
-    unavailable_days: list[Weekday] = Field(default_factory=list)
-    typical_session_duration_minutes: int = Field(default=60, gt=0)
-    typical_intensity: TypicalIntensity = TypicalIntensity.MODERATE
-    active: bool = True
-    pause_reason: PauseReason | None = None
-    paused_on: date | None = None
-    notes: str | None = None
+class RunSameDayPermission(str, Enum):
+    ALLOWED = "allowed"
+    PROHIBITED = "prohibited"
+
+
+class FlexibleWeeklyParticipation(BaseModel):
+    """Non-binding weekly expectation whose exact dates remain athlete-owned."""
+
+    kind: Literal["flexible_weekly"] = "flexible_weekly"
+    expected_sessions_per_week: int = Field(ge=1, le=7)
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class RecurringWeeklyParticipation(BaseModel):
+    """Athlete-owned sessions on durable weekdays used as run constraints."""
+
+    kind: Literal["recurring_weekly"] = "recurring_weekly"
+    weekdays: list[Weekday] = Field(min_length=1, max_length=7)
+    run_same_day_permission: RunSameDayPermission
 
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def validate_pause_state(self) -> "OtherSport":
+    def weekdays_are_unique(self) -> "RecurringWeeklyParticipation":
+        if len(self.weekdays) != len(set(self.weekdays)):
+            raise ValueError("recurring athlete-managed sport weekdays must be unique")
+        return self
+
+
+AthleteManagedParticipation = Annotated[
+    FlexibleWeeklyParticipation | RecurringWeeklyParticipation,
+    Field(discriminator="kind"),
+]
+
+
+class AthleteManagedSport(BaseModel):
+    """Future participation context whose scheduling and execution belong to the athlete."""
+
+    sport_name: str = Field(min_length=1)
+    participation_pattern: AthleteManagedParticipation
+    typical_session_duration_minutes: int = Field(default=60, gt=0)
+    athlete_reported_typical_intensity: TypicalIntensity = TypicalIntensity.MODERATE
+    active: bool = True
+    pause_reason: PauseReason | None = None
+    paused_on: date | None = None
+    athlete_context_note: str | None = Field(default=None, max_length=2_000)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_pause_state(self) -> "AthleteManagedSport":
         cleaned_name = self.sport_name.strip()
         if not cleaned_name:
             raise ValueError("sport_name cannot be blank")
@@ -135,16 +160,53 @@ class OtherSport(BaseModel):
         except ValueError as exc:
             raise ValueError("sport_name must be a canonical Resilio sport type") from exc
         if is_running_sport(canonical_sport):
-            raise ValueError("running variants are not an other-sport commitment")
+            raise ValueError("running variants cannot be athlete-managed sports")
         self.sport_name = canonical_sport.value
-        if len(set(self.unavailable_days)) != len(self.unavailable_days):
-            raise ValueError("unavailable_days cannot contain duplicates")
-        if self.active:
-            self.pause_reason = None
-            self.paused_on = None
-        elif self.pause_reason is None:
-            raise ValueError("inactive sport commitments require a pause_reason")
+        has_pause_reason = self.pause_reason is not None
+        has_pause_date = self.paused_on is not None
+        if self.active and (has_pause_reason or has_pause_date):
+            raise ValueError("active athlete-managed sport cannot carry pause metadata")
+        if not self.active and not has_pause_reason:
+            raise ValueError("inactive athlete-managed sports require a pause_reason")
+        if not self.active and not has_pause_date:
+            raise ValueError("inactive athlete-managed sports require a paused_on date")
         return self
+
+
+class RunningFirstTrainingPriority(BaseModel):
+    kind: Literal["running_first"] = "running_first"
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BalancedTrainingPriority(BaseModel):
+    kind: Literal["balanced"] = "balanced"
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class AthleteManagedSportFirstPriority(BaseModel):
+    kind: Literal["athlete_managed_sport_first"] = "athlete_managed_sport_first"
+    sport_name: str = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("sport_name")
+    @classmethod
+    def sport_name_is_canonical_non_run(cls, value: str) -> str:
+        try:
+            sport = SportType(value.strip().casefold())
+        except ValueError as exc:
+            raise ValueError("priority sport_name must be a canonical Resilio sport type") from exc
+        if is_running_sport(sport):
+            raise ValueError("athlete-managed sport priority cannot reference running")
+        return sport.value
+
+
+TrainingPriority = Annotated[
+    RunningFirstTrainingPriority | BalancedTrainingPriority | AthleteManagedSportFirstPriority,
+    Field(discriminator="kind"),
+]
 
 
 class CommunicationPreferences(BaseModel):
@@ -167,7 +229,7 @@ class PBEntry(BaseModel):
 
 
 class AthleteProfile(BaseModel):
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     athlete_name: str = Field(min_length=1)
     created_on: date
     training_timezone: str = Field(min_length=1)
@@ -175,10 +237,8 @@ class AthleteProfile(BaseModel):
     running_experience_years: float | None = Field(default=None, ge=0)
     personal_bests_by_distance: dict[str, PBEntry] = Field(default_factory=dict)
     constraints: TrainingConstraints
-    other_sport_commitments: list[OtherSport] = Field(default_factory=list)
-    running_priority: RunningPriority
-    primary_sport_name: str | None = None
-    conflict_policy: ConflictPolicy
+    athlete_managed_sports: list[AthleteManagedSport] = Field(default_factory=list)
+    training_priority: TrainingPriority = Field(default_factory=BalancedTrainingPriority)
     goal: Goal = Field(default_factory=lambda: Goal(type=GoalType.GENERAL_FITNESS))
     preferences: CommunicationPreferences = Field(default_factory=CommunicationPreferences)
     weather_preferences: WeatherPreferences | None = None
@@ -200,20 +260,18 @@ class AthleteProfile(BaseModel):
         if not cleaned_name:
             raise ValueError("athlete_name cannot be blank")
         self.athlete_name = cleaned_name
-        if self.primary_sport_name is not None:
-            try:
-                self.primary_sport_name = SportType(
-                    self.primary_sport_name.strip().casefold()
-                ).value
-            except ValueError as exc:
-                raise ValueError(
-                    "primary_sport_name must be a canonical Resilio sport type"
-                ) from exc
-        normalized_sports = [
-            commitment.sport_name.casefold() for commitment in self.other_sport_commitments
-        ]
+        normalized_sports = [sport.sport_name.casefold() for sport in self.athlete_managed_sports]
         if len(set(normalized_sports)) != len(normalized_sports):
-            raise ValueError("other sport commitments must have unique sport names")
+            raise ValueError("athlete-managed sports must have unique sport names")
+        if isinstance(self.training_priority, AthleteManagedSportFirstPriority):
+            active_sports = {
+                sport.sport_name for sport in self.athlete_managed_sports if sport.active
+            }
+            if self.training_priority.sport_name not in active_sports:
+                raise ValueError(
+                    "athlete-managed sport priority must reference an active "
+                    "athlete-managed sport"
+                )
         return self
 
     @property

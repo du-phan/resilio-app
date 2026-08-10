@@ -11,6 +11,24 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from resilio.schemas.vdot import RaceDistance
 
+EvidenceArtifactType = Literal[
+    "cycle_review",
+    "macro_planning_context",
+    "assessment_planning_context",
+    "week_planning_context",
+    "assessment_review",
+]
+
+EVIDENCE_ARTIFACT_TYPES: frozenset[EvidenceArtifactType] = frozenset(
+    {
+        "cycle_review",
+        "macro_planning_context",
+        "assessment_planning_context",
+        "week_planning_context",
+        "assessment_review",
+    }
+)
+
 
 class PlanWorkoutIdentity(BaseModel):
     """A workout identity qualified by the immutable plan lineage that owns it."""
@@ -28,12 +46,7 @@ class PlanWorkoutIdentity(BaseModel):
 class EvidenceArtifactReference(BaseModel):
     """Reference to immutable, managed JSON bytes."""
 
-    artifact_type: Literal[
-        "cycle_review",
-        "macro_planning_context",
-        "assessment_planning_context",
-        "assessment_review",
-    ]
+    artifact_type: EvidenceArtifactType
     artifact_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     model_config = ConfigDict(extra="forbid")
@@ -273,7 +286,7 @@ class PlanAdaptationDecisionType(str, Enum):
     LONG_RUN = "long_run"
     RECOVERY_STRUCTURE = "recovery_structure"
     TAPER = "taper"
-    MULTISPORT_SCHEDULING = "multisport_scheduling"
+    ATHLETE_MANAGED_SPORT_ACCOMMODATION = "athlete_managed_sport_accommodation"
     BENCHMARK_SCHEDULING = "benchmark_scheduling"
 
 

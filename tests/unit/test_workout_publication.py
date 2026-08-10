@@ -42,14 +42,13 @@ from resilio.integrations.intervals_icu.errors import (
     IntervalsNotFoundError,
     IntervalsTransportError,
 )
-from resilio.schemas.plan import WorkoutPrescription, WorkoutType
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription, WorkoutType
 from resilio.schemas.publication import PublicationManifest
 from resilio.schemas.structured_workout import StructuredWorkout
 
 
 def _structure(
-    sport: str = "run",
     *,
     mixed: bool = False,
     lap_press: bool = False,
@@ -59,10 +58,10 @@ def _structure(
             "kind": "steady",
             "duration": {"unit": "seconds", "value": 600},
             "target": {
-                "mode": "pace" if sport == "run" else "power",
-                "unit": ("seconds_per_kilometer" if sport == "run" else "percent_ftp"),
-                "minimum": 300 if sport == "run" else 85,
-                "maximum": 330 if sport == "run" else 95,
+                "mode": "pace",
+                "unit": "seconds_per_kilometer",
+                "minimum": 300,
+                "maximum": 330,
             },
             "intensity": "warmup",
         },
@@ -78,10 +77,10 @@ def _structure(
                         "nominal_seconds": 255,
                     },
                     "target": {
-                        "mode": "pace" if sport == "run" else "power",
-                        "unit": ("seconds_per_kilometer" if sport == "run" else "percent_ftp"),
-                        "minimum": 250 if sport == "run" else 105,
-                        "maximum": 260 if sport == "run" else 110,
+                        "mode": "pace",
+                        "unit": "seconds_per_kilometer",
+                        "minimum": 250,
+                        "maximum": 260,
                     },
                     "intensity": "interval",
                     "cue": "Smooth and controlled",
@@ -108,35 +107,29 @@ def _structure(
             ],
         },
     ]
-    return StructuredWorkout.model_validate({"sport": sport, "steps": steps})
+    return StructuredWorkout.model_validate({"sport": "run", "steps": steps})
 
 
 def _workout(
     *,
     workout_id: str = "workout-1",
     occurrence: date = date(2026, 10, 25),
-    sport: str = "run",
     mixed: bool = False,
     lap_press: bool = False,
-) -> WorkoutPrescription:
-    return WorkoutPrescription(
+) -> RunningWorkoutPrescription:
+    return RunningWorkoutPrescription(
         id=workout_id,
         date=occurrence,
         start_time_local=time(7),
-        sport=sport,
         workout_type=WorkoutType.INTERVALS,
         planned_duration_seconds=1_725,
-        planned_distance_meters=9_000 if sport == "run" else None,
+        planned_distance_meters=9_000,
         planned_low_intensity_duration_seconds=960,
         planned_moderate_intensity_duration_seconds=0,
         planned_high_intensity_duration_seconds=765,
         target_rpe_1_to_10=8,
         purpose="Three controlled repetitions",
-        structured_workout=_structure(
-            sport,
-            mixed=mixed,
-            lap_press=lap_press,
-        ),
+        structured_workout=_structure(mixed=mixed, lap_press=lap_press),
     )
 
 
@@ -144,8 +137,8 @@ def _targetless_workout(
     *,
     workout_id: str = "targetless",
     planned_distance_meters: float = 1_500,
-) -> WorkoutPrescription:
-    return WorkoutPrescription.model_validate(
+) -> RunningWorkoutPrescription:
+    return RunningWorkoutPrescription.model_validate(
         {
             "id": workout_id,
             "date": date(2026, 10, 25),
@@ -200,10 +193,10 @@ def test_structured_workout_allows_date_only_approval_and_requires_nominal_durat
         "structured_workout": structure,
     }
 
-    date_only = WorkoutPrescription(**common)
+    date_only = RunningWorkoutPrescription(**common)
     assert date_only.start_time_local is None
     with pytest.raises(ValidationError, match="nominal duration"):
-        WorkoutPrescription(
+        RunningWorkoutPrescription(
             **{
                 **common,
                 "start_time_local": time(7),
@@ -415,10 +408,7 @@ def test_recursive_native_text_render_is_deterministic() -> None:
 
     assert first == second
     assert "Repeat 3x" in first
-    assert (
-        "- Smooth and controlled 1000mtr 4:10-4:20/km "
-        "intensity=interval"
-    ) in first
+    assert ("- Smooth and controlled 1000mtr 4:10-4:20/km " "intensity=interval") in first
     assert "- 10m 5:00-5:30/km intensity=warmup" in first
     assert first.endswith("\n")
 
@@ -428,23 +418,18 @@ def test_provider_names_are_date_independent_and_reuse_identical_structures() ->
     moved = _targetless_workout(
         workout_id="b",
         planned_distance_meters=4_000,
-    ).model_copy(
-        update={"date": date(2026, 11, 1)}
-    )
+    ).model_copy(update={"date": date(2026, 11, 1)})
 
     names = provider_workout_names([moved, first])
 
     assert provider_workout_name(first) == "Easy4K"
     assert provider_workout_name(moved) == "Easy4K"
     assert names == {"a": "Easy4K", "b": "Easy4K"}
-    assert all(
-        len(name) <= MAX_PROVIDER_WORKOUT_NAME_CHARACTERS
-        for name in names.values()
-    )
+    assert all(len(name) <= MAX_PROVIDER_WORKOUT_NAME_CHARACTERS for name in names.values())
 
 
 def test_provider_name_describes_the_primary_repeat_structure() -> None:
-    workout = WorkoutPrescription.model_validate(
+    workout = RunningWorkoutPrescription.model_validate(
         {
             "id": "tempo-2x7",
             "date": date(2026, 10, 25),
@@ -515,7 +500,7 @@ def test_provider_name_uses_the_complete_interval_label() -> None:
 
 
 def test_provider_name_describes_a_timed_distance_benchmark() -> None:
-    workout = WorkoutPrescription.model_validate(
+    workout = RunningWorkoutPrescription.model_validate(
         {
             "id": "benchmark-5k",
             "date": date(2026, 10, 25),
@@ -559,7 +544,7 @@ def test_provider_names_disambiguate_different_structures_with_same_summary() ->
             "intensity": "active",
         },
     ]
-    second = WorkoutPrescription.model_validate(payload)
+    second = RunningWorkoutPrescription.model_validate(payload)
 
     names = provider_workout_names([second, first])
 
@@ -925,6 +910,12 @@ def test_publication_manifest_rejects_cross_workout_identity_collisions(
         save_manifest(repo, mutated)
 
 
+def test_run_only_publication_manifest_uses_schema_version_six() -> None:
+    assert PublicationManifest().schema_version == 6
+    with pytest.raises(ValidationError):
+        PublicationManifest.model_validate({"schema_version": 5})
+
+
 def test_publication_uses_exact_approved_local_start_time(repo) -> None:
     client = FakeClient()
     client.settings[0] = client.settings[0].model_copy(update={"default_workout_time": None})
@@ -947,13 +938,6 @@ def test_date_only_publication_uses_provider_midnight_and_preserves_approval(rep
     assert client.events[result.event_id].start_date_local == "2026-10-25T00:00:00"
     assert record.approved_start_time_local is None
     assert record.provider_start_date_local == "2026-10-25T00:00:00"
-
-
-def test_calendar_publication_rejects_non_running_workouts(repo) -> None:
-    with pytest.raises(PublicationSafetyError, match="Only running workouts"):
-        WorkoutPublicationService(repo, FakeClient()).publish(
-            _workout(workout_id="cycle-workout", sport="cycle")
-        )
 
 
 def test_remote_drift_blocks_same_fingerprint_noop(repo) -> None:
@@ -1217,9 +1201,7 @@ def test_target_settings_fail_closed_without_applying_wahoo_constraints(repo) ->
         ).publish(_workout())
 
     assert (
-        WorkoutPublicationService(repo, FakeClient(wahoo=True))
-        .publish(_workout())
-        .action
+        WorkoutPublicationService(repo, FakeClient(wahoo=True)).publish(_workout()).action
         == "created"
     )
 

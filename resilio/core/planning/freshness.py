@@ -9,11 +9,11 @@ from resilio.core.planning.approval_evidence import (
     verify_vdot_approval_unlocked,
 )
 from resilio.core.planning.errors import PlanOperationError
-from resilio.core.planning.integrity import planning_profile_sha256
+from resilio.core.planning.integrity import planning_inputs_sha256
 from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.approvals import PlanningState, VDOTApproval
-from resilio.schemas.plan import RaceMacroPlan, TrainingPlan
+from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
 from resilio.schemas.profile import AthleteProfile
 
 
@@ -52,12 +52,9 @@ def require_fresh_plan(
             verify_methodology_selection(repo.repo_root, plan.methodology)
         except MethodologyRegistryError as exc:
             raise PlanOperationError(str(exc)) from exc
-    if (
-        planning_profile_sha256(load_planning_profile_unlocked(repo))
-        != plan.planning_profile_sha256
-    ):
+    if planning_inputs_sha256(load_planning_profile_unlocked(repo)) != plan.planning_inputs_sha256:
         raise PlanOperationError(
-            "The planning profile changed after this plan revision was created"
+            "The athlete-confirmed planning inputs changed after this plan revision was created"
         )
     if active_plan.invalidated_at_utc is not None:
         raise PlanOperationError(

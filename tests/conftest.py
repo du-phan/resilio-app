@@ -43,9 +43,10 @@ def sample_profile():
         "_schema": {"format_version": "1.0.0", "schema_type": "profile"},
         "name": "Test Athlete",
         "created_at": "2026-01-12",
-        "running_priority": "secondary",
-        "primary_sport": "bouldering",
-        "conflict_policy": "ask_each_time",
+        "training_priority": {
+            "kind": "athlete_managed_sport_first",
+            "sport_name": "climb",
+        },
         "constraints": {
             "unavailable_run_days": ["monday", "wednesday", "thursday", "friday", "sunday"],
             "min_run_days_per_week": 2,

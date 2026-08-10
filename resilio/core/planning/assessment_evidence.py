@@ -19,13 +19,13 @@ from resilio.core.workout_publication.completions import load_completion_manifes
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.activity import ActivityStatus
 from resilio.schemas.approvals import OwnedBaselineAssessmentVDOTEvidence
-from resilio.schemas.plan import BaselineAssessmentPlan
 from resilio.schemas.plan_history import (
     AssessmentClosure,
     DedicatedActivityAssessmentResult,
     EvidenceArtifactReference,
     ExactSegmentAssessmentResult,
 )
+from resilio.schemas.planning.plans import BaselineAssessmentPlan
 from resilio.schemas.planning_evidence import BaselineAssessmentReview
 
 

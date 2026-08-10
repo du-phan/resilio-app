@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from resilio.api.publication import PublicationError, reconcile_week_run_workouts
-from resilio.core.planning.integrity import applied_workout_sha256
+from resilio.core.planning.integrity import applied_running_workouts_sha256
 from resilio.core.planning.service import (
     PlanOperationError,
     apply_approved_week,
@@ -17,7 +17,7 @@ from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.preferences import (
     load_run_synchronization_preferences,
 )
-from resilio.schemas.week_application import (
+from resilio.schemas.planning.applications import (
     AppliedWeekResult,
     RunSynchronizationError,
     WeekApplication,
@@ -49,15 +49,13 @@ def apply_week_file(path: Path) -> AppliedWeekResult | WeekApplicationError:
     except PlanOperationError as exc:
         return WeekApplicationError("validation", str(exc))
     week = next(
-        candidate
-        for candidate in plan.weeks
-        if candidate.week_number == application.week_number
+        candidate for candidate in plan.weeks if candidate.week_number == application.week_number
     )
     common = {
         "plan_id": plan.id,
         "plan_revision_id": plan.plan_revision_id,
         "week_number": application.week_number,
-        "applied_workout_sha256": applied_workout_sha256(week),
+        "applied_running_workouts_sha256": applied_running_workouts_sha256(week),
     }
     try:
         preferences = load_run_synchronization_preferences(repo)
@@ -96,6 +94,7 @@ def apply_week_file(path: Path) -> AppliedWeekResult | WeekApplicationError:
             "run_synchronization_report": sync_result,
         }
     )
+
 
 def _failed_result(
     common: dict[str, object],

@@ -20,8 +20,8 @@ from resilio.integrations.intervals_icu.dto import (
     EventWriteDTO,
     SportSettingsDTO,
 )
-from resilio.schemas.plan import WorkoutPrescription
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.publication import (
     GarminForwardingStatus,
     PendingWorkoutPublication,
@@ -74,9 +74,7 @@ def publication_settings_version(
         "target_units": sorted(target_units),
     }
     if TargetMode.PACE in target_modes:
-        payload["threshold_speed_meters_per_second"] = (
-            settings.threshold_speed_meters_per_second
-        )
+        payload["threshold_speed_meters_per_second"] = settings.threshold_speed_meters_per_second
         payload["pace_zones"] = settings.pace_zones
     if "percent_lthr" in target_units:
         payload["lactate_threshold_heart_rate_beats_per_minute"] = settings.lthr
@@ -206,9 +204,7 @@ def assert_remote_matches(
     try:
         assert_workout_semantics_match(expected_step_semantics, remote.workout_doc)
     except WorkoutSemanticsError as exc:
-        raise ProviderSemanticsMismatchError(
-            f"Provider workout semantics mismatch: {exc}"
-        ) from exc
+        raise ProviderSemanticsMismatchError(f"Provider workout semantics mismatch: {exc}") from exc
 
 
 def garmin_filter_allows(
@@ -318,7 +314,7 @@ def pending_matches(
 
 def published_record(
     *,
-    workout: WorkoutPrescription,
+    workout: RunningWorkoutPrescription,
     workout_identity: PlanWorkoutIdentity,
     event_id: int,
     requested_uid: str,
@@ -342,7 +338,7 @@ def published_record(
         rendered_workout_sha256=rendered_hash,
         sport_settings_version_sha256=settings_version,
         provider_event_fingerprint_sha256=provider_event_fingerprint(remote),
-        sport=str(workout.sport),
+        sport="run",
         occurrence_date=workout.date,
         approved_start_time_local=workout.start_time_local,
         provider_start_date_local=provider_start_local,

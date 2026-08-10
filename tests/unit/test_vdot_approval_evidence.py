@@ -27,8 +27,7 @@ from resilio.schemas.activity import (
 from resilio.schemas.approvals import VDOTProposal
 from resilio.schemas.profile import (
     AthleteProfile,
-    ConflictPolicy,
-    RunningPriority,
+    RunningFirstTrainingPriority,
     TrainingConstraints,
 )
 from tests.factories import make_activity
@@ -51,8 +50,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
                 minimum_run_days_per_week=2,
                 maximum_run_days_per_week=4,
             ),
-            running_priority=RunningPriority.PRIMARY,
-            conflict_policy=ConflictPolicy.ASK_EACH_TIME,
+            training_priority=RunningFirstTrainingPriority(),
         )
     )
     activity = make_activity(

@@ -35,7 +35,7 @@ class PublishedWorkout(BaseModel):
     rendered_workout_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     sport_settings_version_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     provider_event_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    sport: str
+    sport: Literal["run"]
     occurrence_date: date
     approved_start_time_local: Optional[time] = None
     provider_start_date_local: str
@@ -76,7 +76,7 @@ class PendingWorkoutPublication(BaseModel):
     publication_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     rendered_workout_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     sport_settings_version_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    sport: str
+    sport: Literal["run"]
     occurrence_date: date
     approved_start_time_local: Optional[time] = None
     provider_start_date_local: str
@@ -106,7 +106,7 @@ class PublicationDriftResolution(BaseModel):
 
 
 class PublicationManifest(BaseModel):
-    schema_version: Literal[5] = 5
+    schema_version: Literal[6] = 6
     workouts: dict[str, PublishedWorkout] = Field(default_factory=dict)
     pending: dict[str, PendingWorkoutPublication] = Field(default_factory=dict)
     drift_resolutions: list[PublicationDriftResolution] = Field(default_factory=list)
@@ -281,7 +281,6 @@ class RunWeekSynchronizationReport(BaseModel):
     reconciliation_safe: bool
     run_workouts_considered: int = Field(ge=0)
     desired_future_run_workouts: int = Field(ge=0)
-    ignored_non_run_workouts: int = Field(ge=0)
     partial: bool = False
     capabilities: RunSynchronizationCapabilities
     items: list[WeekSynchronizationItem] = Field(default_factory=list)

@@ -1,10 +1,11 @@
 """End-to-end baseline-assessment planning, review, and VDOT evidence."""
 
 import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.planning.artifacts import load_evidence_artifact
@@ -30,27 +31,25 @@ from resilio.core.planning.service import (
     load_approved_workouts_for_date_range,
     load_planning_aggregate,
 )
+from resilio.core.planning.weekly_context import create_week_planning_context
 from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.completions import save_completion_manifest
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
-from resilio.schemas.assessment import (
-    TemporaryOtherSportCommitmentOverride,
-    TemporaryScheduleConstraint,
-)
-from resilio.schemas.plan import AssessmentPlanDraft
+from resilio.schemas.assessment import TemporaryScheduleConstraint
+from resilio.schemas.planning.drafts import AssessmentPlanDraft
 from resilio.schemas.planning_evidence import (
     AssessmentPlanningContext,
     BaselineAssessmentReview,
     MacroPlanningContext,
 )
 from resilio.schemas.profile import (
+    AthleteManagedSport,
+    AthleteManagedSportFirstPriority,
     AthleteProfile,
-    ConflictPolicy,
+    FlexibleWeeklyParticipation,
     Goal,
     GoalType,
-    OtherSport,
-    RunningPriority,
     TrainingConstraints,
 )
 from resilio.schemas.publication import (
@@ -77,17 +76,17 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
                 minimum_run_days_per_week=2,
                 maximum_run_days_per_week=3,
             ),
-            running_priority=RunningPriority.SECONDARY,
-            primary_sport_name="climb",
-            other_sport_commitments=[
-                OtherSport(
+            athlete_managed_sports=[
+                AthleteManagedSport(
                     sport_name="climb",
-                    sessions_per_week=3,
+                    participation_pattern=FlexibleWeeklyParticipation(
+                        expected_sessions_per_week=3,
+                    ),
                     typical_session_duration_minutes=90,
-                    typical_intensity="moderate_to_hard",
+                    athlete_reported_typical_intensity="moderate_to_hard",
                 )
             ],
-            conflict_policy=ConflictPolicy.ASK_EACH_TIME,
+            training_priority=AthleteManagedSportFirstPriority(sport_name="climb"),
             goal=Goal(
                 type=GoalType.HALF_MARATHON,
                 target_date=date(2026, 11, 14),
@@ -127,18 +126,17 @@ def _assessment_draft(
                     "affected_week_numbers": [1, 2, 3],
                 },
                 {
-                    "decision_type": "multisport_scheduling",
+                    "decision_type": "athlete_managed_sport_accommodation",
                     "evidence_ids": [
                         "profile.current_constraints",
-                        "assessment.temporary_other_sport_commitment_overrides",
                     ],
                     "observed_facts": (
                         "The holiday shortens the benchmark week while climbing "
                         "remains the athlete's primary sport."
                     ),
                     "planning_change": (
-                        "Use the explicit weekly climbing override instead of "
-                        "compressing the durable commitment before the benchmark."
+                        "Leave climbing athlete-managed and preserve enough run "
+                        "recovery space for its expected weekly exposure."
                     ),
                     "affected_week_numbers": [3],
                 },
@@ -170,10 +168,6 @@ def _assessment_draft(
                 constraint.model_dump(mode="json")
                 for constraint in context.temporary_schedule_constraints
             ],
-            "temporary_other_sport_commitment_overrides": [
-                override.model_dump(mode="json")
-                for override in context.temporary_other_sport_commitment_overrides
-            ],
             "weeks": [
                 {
                     "week_number": number,
@@ -189,7 +183,7 @@ def _assessment_draft(
                         "long_run": None,
                         "intensity_distribution": None,
                     },
-                    "workouts": [],
+                    "running_workouts": [],
                 }
                 for number, start, end, volume in (
                     (1, "2026-08-03", "2026-08-09", 8_000),
@@ -203,12 +197,13 @@ def _assessment_draft(
 
 def _benchmark_week(*, start_time_local: time | None) -> dict[str, object]:
     return {
+        "schema_version": 2,
         "week_number": 3,
         "adjustment_rationale": (
             "Keep one easy aerobic run before the benchmark and leave the holiday "
             "period completely free of planned sessions."
         ),
-        "workouts": [
+        "running_workouts": [
             {
                 "id": "w_assessment_easy",
                 "date": "2026-08-18",
@@ -283,7 +278,33 @@ def _apply_week(
     approved_at_utc: datetime,
     applied_at_utc: datetime,
 ) -> None:
-    path.write_text(json.dumps(payload))
+    context_reference = create_week_planning_context(
+        repo,
+        week_number=3,
+        evidence_as_of_date=approved_at_utc.date(),
+        history_week_count=2,
+        generated_at_utc=approved_at_utc - timedelta(minutes=1),
+        current_local_date=approved_at_utc.date(),
+    )
+    bound_payload = {
+        **payload,
+        "planning_context_reference": context_reference.model_dump(mode="json"),
+        "other_sport_considerations": [
+            {
+                "sport_name": "climb",
+                "recent_activity_ids": [],
+                "effects_on_running_plan": ["recovery_spacing"],
+                "rationale": (
+                    "Expected athlete-managed climbing exposure requires recovery "
+                    "space around the exact running sessions."
+                ),
+                "uncertainty_or_limitation": (
+                    "Climbing days remain self-scheduled and are not yet observed."
+                ),
+            }
+        ],
+    }
+    path.write_text(json.dumps(bound_payload))
     approve_week_application(repo, path, approved_at_utc=approved_at_utc)
     apply_approved_week(repo, path, applied_at_utc=applied_at_utc)
 
@@ -295,7 +316,7 @@ def _record_owned_completion(
     benchmark = next(
         workout
         for week in plan.weeks
-        for workout in week.workouts
+        for workout in week.running_workouts
         if workout.id == "w_assessment_5k"
     )
     identity = {
@@ -364,6 +385,25 @@ def _record_owned_completion(
     )
 
 
+def test_assessment_context_contract_rejects_evidence_from_after_generation(
+    repo: RepositoryIO,
+) -> None:
+    reference = create_assessment_planning_context(
+        repo,
+        evidence_as_of_date=date(2026, 8, 2),
+        intended_plan_start_date=date(2026, 8, 3),
+        assessment_reasons=["post_inactivity_baseline"],
+        generated_at_utc=datetime(2026, 8, 2, 8, tzinfo=timezone.utc),
+        current_local_date=date(2026, 8, 2),
+    )
+    context = load_evidence_artifact(repo, reference, AssessmentPlanningContext)
+    payload = context.model_dump(mode="json")
+    payload["generated_at_utc"] = "2026-08-01T08:00:00Z"
+
+    with pytest.raises(ValidationError, match="postdate context generation"):
+        AssessmentPlanningContext.model_validate(payload)
+
+
 def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot(
     repo: RepositoryIO,
     tmp_path: Path,
@@ -383,18 +423,6 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
                 ),
             )
         ],
-        temporary_other_sport_commitment_overrides=[
-            TemporaryOtherSportCommitmentOverride(
-                week_start_date=date(2026, 8, 17),
-                sport_name="climb",
-                sessions_per_week=0,
-                reason="The athlete's holiday removes climbing from assessment week.",
-                planning_rationale=(
-                    "Temporarily waive climbing because the holiday shortens the "
-                    "assessment week after the benchmark."
-                ),
-            )
-        ],
         generated_at_utc=datetime(2026, 8, 2, 8, tzinfo=timezone.utc),
         current_local_date=date(2026, 8, 2),
     )
@@ -403,19 +431,11 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
         context_reference,
         AssessmentPlanningContext,
     )
-    assert context.temporary_schedule_constraints[0].unavailable_end_date == date(
-        2026, 8, 24
-    )
+    assert context.temporary_schedule_constraints[0].unavailable_end_date == date(2026, 8, 24)
     assert any(
         pointer.evidence_id == "assessment.temporary_schedule_constraints"
         for pointer in context.evidence_index
     )
-    assert any(
-        pointer.evidence_id
-        == "assessment.temporary_other_sport_commitment_overrides"
-        for pointer in context.evidence_index
-    )
-    assert context.temporary_other_sport_commitment_overrides[0].sessions_per_week == 0
     plan = create_assessment_plan(
         repo,
         _assessment_draft(context, context_reference.artifact_sha256),
@@ -438,7 +458,7 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
     assert state is not None and state.active_plan is not None
     date_only = next(
         workout
-        for workout in state.active_plan.plan.weeks[2].workouts
+        for workout in state.active_plan.plan.weeks[2].running_workouts
         if workout.id == "w_assessment_5k"
     )
     assert date_only.start_time_local is None
@@ -517,9 +537,7 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
         close_assessment_from_review(
             repo,
             assessment_review_reference=review_reference,
-            reason=(
-                "The athlete completed and confirmed the planned baseline benchmark."
-            ),
+            reason=("The athlete completed and confirmed the planned baseline benchmark."),
             athlete_confirmation_reference=(
                 "Athlete approved closing the completed baseline assessment."
             ),
@@ -531,9 +549,7 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
     closed_state = close_assessment_from_review(
         repo,
         assessment_review_reference=review_reference,
-        reason=(
-            "The athlete completed and confirmed the planned baseline benchmark."
-        ),
+        reason=("The athlete completed and confirmed the planned baseline benchmark."),
         athlete_confirmation_reference=(
             "Athlete approved closing the completed baseline assessment."
         ),
@@ -575,29 +591,3 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
         pointer.evidence_id.startswith("assessment_result.")
         for pointer in macro_context.evidence_index
     )
-
-
-def test_assessment_context_rejects_override_for_inactive_other_sport(
-    repo: RepositoryIO,
-) -> None:
-    with pytest.raises(PlanOperationError, match="inactive other sport"):
-        create_assessment_planning_context(
-            repo,
-            evidence_as_of_date=date(2026, 8, 1),
-            intended_plan_start_date=date(2026, 8, 3),
-            assessment_reasons=["post_inactivity_baseline"],
-            temporary_other_sport_commitment_overrides=[
-                TemporaryOtherSportCommitmentOverride(
-                    week_start_date=date(2026, 8, 17),
-                    sport_name="cycle",
-                    sessions_per_week=0,
-                    reason="The holiday removes cycling from the shortened week.",
-                    planning_rationale=(
-                        "Do not add or waive a sport that is absent from the "
-                        "athlete-confirmed profile commitments."
-                    ),
-                )
-            ],
-            generated_at_utc=datetime(2026, 8, 1, 8, tzinfo=timezone.utc),
-            current_local_date=date(2026, 8, 1),
-        )

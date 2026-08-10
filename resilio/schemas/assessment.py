@@ -35,24 +35,6 @@ class TemporaryScheduleConstraint(BaseModel):
         return self.unavailable_start_date <= candidate_date <= self.unavailable_end_date
 
 
-class TemporaryOtherSportCommitmentOverride(BaseModel):
-    """Coach-proposed session count for one sport in one assessment week."""
-
-    week_start_date: date
-    sport_name: str = Field(min_length=1)
-    sessions_per_week: int = Field(ge=0, le=7)
-    reason: str = Field(min_length=20, max_length=1_000)
-    planning_rationale: str = Field(min_length=40, max_length=2_000)
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="after")
-    def week_starts_on_monday(self) -> "TemporaryOtherSportCommitmentOverride":
-        if self.week_start_date.weekday() != 0:
-            raise ValueError("temporary other-sport override week must start on Monday")
-        return self
-
-
 class TimedBenchmarkIntent(BaseModel):
     """Athlete-approved distance and bounded scheduling discretion for one test."""
 

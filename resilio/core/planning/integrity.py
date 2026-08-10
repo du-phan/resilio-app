@@ -9,12 +9,12 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from resilio.schemas.plan import (
-    OtherSportPlanningConstraint,
+from resilio.schemas.planning.constraints import (
+    AthleteManagedSportExpectation,
     PlanningConstraintsSnapshot,
-    TrainingPlan,
-    WeekPlan,
 )
+from resilio.schemas.planning.plans import TrainingPlan
+from resilio.schemas.planning.weeks import WeekPlan
 from resilio.schemas.profile import AthleteProfile
 
 
@@ -40,17 +40,17 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def planning_profile_sha256(profile: AthleteProfile) -> str:
+def planning_inputs_sha256(profile: AthleteProfile) -> str:
     """Fingerprint only athlete-confirmed fields that constrain planning."""
     payload = {
         "goal": profile.goal.model_dump(mode="json"),
         "constraints": profile.constraints.model_dump(mode="json"),
-        "other_sport_commitments": [
-            commitment.model_dump(mode="json") for commitment in profile.other_sport_commitments
+        "athlete_managed_sports": [
+            sport.model_dump(mode="json")
+            for sport in profile.athlete_managed_sports
+            if sport.active
         ],
-        "running_priority": profile.running_priority,
-        "primary_sport_name": profile.primary_sport_name,
-        "conflict_policy": profile.conflict_policy,
+        "training_priority": profile.training_priority.model_dump(mode="json"),
         "training_timezone": profile.training_timezone,
     }
     return _canonical_sha256(payload)
@@ -62,25 +62,24 @@ def planning_constraints_snapshot(
     """Capture the exact profile constraints used to create a plan revision."""
     maximum_duration_minutes = profile.constraints.maximum_session_duration_minutes
     return PlanningConstraintsSnapshot(
-        unavailable_run_days=[day.value for day in profile.constraints.unavailable_run_days],
+        unavailable_run_days=list(profile.constraints.unavailable_run_days),
         minimum_run_days_per_week=(profile.constraints.minimum_run_days_per_week),
         maximum_run_days_per_week=(profile.constraints.maximum_run_days_per_week),
         maximum_session_duration_seconds=(
             maximum_duration_minutes * 60 if maximum_duration_minutes is not None else None
         ),
-        active_other_sports=[
-            OtherSportPlanningConstraint(
-                sport_name=commitment.sport_name,
-                sessions_per_week=commitment.sessions_per_week,
-                unavailable_days=[day.value for day in commitment.unavailable_days],
-                typical_session_duration_seconds=(commitment.typical_session_duration_minutes * 60),
-                typical_intensity=commitment.typical_intensity.value,
+        athlete_managed_sport_expectations=[
+            AthleteManagedSportExpectation(
+                sport_name=sport.sport_name,
+                participation_pattern=sport.participation_pattern,
+                typical_session_duration_seconds=(sport.typical_session_duration_minutes * 60),
+                athlete_reported_typical_intensity=(sport.athlete_reported_typical_intensity),
+                athlete_context_note=sport.athlete_context_note,
             )
-            for commitment in profile.other_sport_commitments
-            if commitment.active
+            for sport in profile.athlete_managed_sports
+            if sport.active
         ],
-        running_priority=profile.running_priority.value,
-        primary_sport_name=profile.primary_sport_name,
+        training_priority=profile.training_priority,
         training_timezone=profile.training_timezone,
     )
 
@@ -91,7 +90,7 @@ def plan_skeleton_sha256(plan: TrainingPlan) -> str:
     payload["weeks"] = [
         {
             **week,
-            "workouts": [],
+            "running_workouts": [],
             "notes": None,
         }
         for week in payload["weeks"]
@@ -102,11 +101,11 @@ def plan_skeleton_sha256(plan: TrainingPlan) -> str:
 def target_week_skeleton_sha256(week: WeekPlan) -> str:
     """Hash the exact macro-week skeleton that weekly content will populate."""
     payload = week.model_dump(mode="json")
-    payload["workouts"] = []
+    payload["running_workouts"] = []
     payload["notes"] = None
     return _canonical_sha256(payload)
 
 
-def applied_workout_sha256(week: WeekPlan) -> str:
-    """Hash the ordered exact workouts applied to a macro week."""
-    return _canonical_sha256([workout.model_dump(mode="json") for workout in week.workouts])
+def applied_running_workouts_sha256(week: WeekPlan) -> str:
+    """Hash the ordered exact running workouts applied to a macro week."""
+    return _canonical_sha256([workout.model_dump(mode="json") for workout in week.running_workouts])

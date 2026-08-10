@@ -60,7 +60,10 @@ names, or local paths. Use one Poetry environment throughout.
    - athlete name, age, and running experience;
    - minimum and maximum run days, unavailable days, and maximum session
      duration in minutes;
-   - running priority, other-sport commitments, and conflict policy;
+   - athlete-managed sports, each as either a flexible weekly expectation or a
+     recurring weekday pattern, with typical session duration and intensity;
+   - whether running, balanced training, or one active athlete-managed sport
+     has priority when recovery constraints require a tradeoff;
    - the IANA timezone used for training schedules;
    - usual training location for local weather planning.
 
@@ -71,6 +74,11 @@ names, or local paths. Use one Poetry environment throughout.
    Use synchronized history to avoid asking questions that the data already
    answers, but do not store computed recent volume, typical workout patterns,
    provider vital signs, or provider thresholds in the profile.
+
+   Flexible expectations never acquire coach-selected dates. Recurring
+   patterns retain athlete-confirmed weekdays and an explicit same-day running
+   permission. In both modes the athlete schedules and executes the non-run
+   sessions; the coach uses them only to shape the running program.
 
 5. Review each provider candidate with its unit, sport scope, observation date,
    provider record identity, and temporary flag. Ask for confirmation before
@@ -92,8 +100,8 @@ names, or local paths. Use one Poetry environment throughout.
    ```
 
    Explain that Intervals synchronization and Garmin forwarding are reported
-   separately. `eligible_unverified` never proves watch receipt, and bouldering
-   is never published by this flow.
+   separately. `eligible_unverified` never proves watch receipt. Athlete-managed
+   sports are never prescribed or published by this flow.
 
 7. Choose the evidence path without filling gaps:
 
@@ -128,7 +136,7 @@ names, or local paths. Use one Poetry environment throughout.
 ## Completion
 
 Finish only when authentication works, coordinated sync state is accurately
-reported, the profile contains only confirmed durable facts, constraints and
-other sports are complete, the goal is recorded, and either (a) VDOT, race
+reported, the profile contains only confirmed durable facts, running constraints
+and athlete-managed sport expectations are complete, the goal is recorded, and either (a) VDOT, race
 macro plan, and first week or (b) baseline-assessment plan and its first week
 have each passed their separate approval boundary.

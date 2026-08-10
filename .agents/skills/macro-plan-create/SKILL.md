@@ -80,7 +80,8 @@ and labels the authority `coach_designed_conceptually_informed`.
    date. For every week specify phase, `target_run_volume_meters`,
    recovery-week status, typed quality-session hints, and either typed long-run
    hints or explicit null when that week prescribes no long run. Leave
-   `workouts` empty. For `fitzgerald_80_20`, every week must also contain
+   `running_workouts` empty. Athlete-managed sports remain in the constraint
+   snapshot and never become plan workouts. For `fitzgerald_80_20`, every week must also contain
    `intensity_distribution.methodology: fitzgerald_80_20` and a
    `minimum_low_intensity_time_percent`; every other methodology must leave
    `intensity_distribution` null.
@@ -99,7 +100,7 @@ and labels the authority `coach_designed_conceptually_informed`.
    - uncertainty or evidence limitations.
 
    Add decisions for frequency, volume progression, quality structure, long
-   run, recovery, taper, or multisport scheduling only when that choice is
+   run, recovery, taper, or athlete-managed-sport accommodation only when that choice is
    material. Do not cite a plan average when underlying coverage is
    incomplete.
 
@@ -126,5 +127,5 @@ intent, the exact profile-derived constraint snapshot, the historical context
 reference, evidence-cited adaptation decisions, evidence limitations, and one
 approval prompt. The main coach records approval separately with
 `poetry run resilio approvals approve-plan`. Approval binds the current plan
-kind, plan ID, plan revision, VDOT approval, planning-profile fingerprint, and
+kind, plan ID, plan revision, VDOT approval, planning-input fingerprint, and
 plan-skeleton SHA-256.

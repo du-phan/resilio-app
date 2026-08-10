@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from resilio.schemas.activity import (
     ActivityAnalysisThresholds,
@@ -17,16 +18,13 @@ from resilio.schemas.activity import (
 )
 from resilio.schemas.assessment import (
     AssessmentReason,
-    TemporaryOtherSportCommitmentOverride,
     TemporaryScheduleConstraint,
     TimedBenchmarkIntent,
 )
 from resilio.schemas.methodology import MethodologySelection
-from resilio.schemas.plan import (
-    PlanningConstraintsSnapshot,
-    WorkoutStructureHints,
-)
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.constraints import PlanningConstraintsSnapshot
+from resilio.schemas.planning.weeks import WorkoutStructureHints
 from resilio.schemas.sync import SourceCoverageExclusion, SourceCoverageGap
 
 
@@ -87,12 +85,8 @@ class RecoveryObservation(BaseModel):
 class DatedAthleteWellnessNote(BaseModel):
     local_date: date
     text: str = Field(min_length=1)
-    provenance: Literal["intervals_icu_wellness_comments"] = (
-        "intervals_icu_wellness_comments"
-    )
-    trust_boundary: Literal["athlete_authored_untrusted_text"] = (
-        "athlete_authored_untrusted_text"
-    )
+    provenance: Literal["intervals_icu_wellness_comments"] = "intervals_icu_wellness_comments"
+    trust_boundary: Literal["athlete_authored_untrusted_text"] = "athlete_authored_untrusted_text"
 
     model_config = ConfigDict(extra="forbid")
 
@@ -363,6 +357,9 @@ class ApprovedVDOTContext(BaseModel):
 class WeekPlanningContext(BaseModel):
     """Future-target skeleton plus evidence ending on a separate as-of date."""
 
+    schema_version: Literal[1] = 1
+    generated_at_utc: datetime
+    source_state_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_as_of_date: date
     target_week: TargetWeekSkeletonContext
     recent_history: CoachHistoryContext
@@ -370,18 +367,27 @@ class WeekPlanningContext(BaseModel):
     methodology: MethodologySelection | None = None
     assessment_reasons: list[AssessmentReason] = Field(default_factory=list)
     benchmark_intent: TimedBenchmarkIntent | None = None
-    temporary_schedule_constraints: list[TemporaryScheduleConstraint] = Field(
-        default_factory=list
-    )
-    temporary_other_sport_commitment_overrides: list[
-        TemporaryOtherSportCommitmentOverride
-    ] = Field(default_factory=list)
+    temporary_schedule_constraints: list[TemporaryScheduleConstraint] = Field(default_factory=list)
     constraints: PlanningConstraintsSnapshot
 
     model_config = ConfigDict(extra="forbid")
 
+    @field_validator("generated_at_utc")
+    @classmethod
+    def generation_time_is_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("generated_at_utc must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
     @model_validator(mode="after")
     def plan_specific_context_is_complete(self) -> "WeekPlanningContext":
+        generation_local_date = self.generated_at_utc.astimezone(
+            ZoneInfo(self.constraints.training_timezone)
+        ).date()
+        if self.evidence_as_of_date > generation_local_date:
+            raise ValueError("evidence_as_of_date cannot postdate context generation")
+        if self.recent_history.as_of_date != self.evidence_as_of_date:
+            raise ValueError("recent history must end on the context evidence date")
         is_race_plan = self.target_week.plan_kind == "race_macro"
         if is_race_plan != (self.approved_vdot is not None and self.methodology is not None):
             raise ValueError("race planning context requires approved VDOT and methodology")
@@ -389,11 +395,8 @@ class WeekPlanningContext(BaseModel):
             self.assessment_reasons
             or self.benchmark_intent is not None
             or self.temporary_schedule_constraints
-            or self.temporary_other_sport_commitment_overrides
         ):
             raise ValueError("race planning context cannot contain assessment intent")
-        if not is_race_plan and (
-            not self.assessment_reasons or self.benchmark_intent is None
-        ):
+        if not is_race_plan and (not self.assessment_reasons or self.benchmark_intent is None):
             raise ValueError("assessment planning context requires reasons and benchmark intent")
         return self

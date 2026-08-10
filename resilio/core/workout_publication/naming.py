@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from resilio.schemas.plan import WorkoutPrescription, WorkoutType
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription, WorkoutType
 from resilio.schemas.structured_workout import (
     RampStep,
     RepeatStep,
@@ -16,7 +16,7 @@ from resilio.schemas.structured_workout import (
 MAX_PROVIDER_WORKOUT_NAME_CHARACTERS = 15
 
 
-def provider_workout_name(workout: WorkoutPrescription) -> str:
+def provider_workout_name(workout: RunningWorkoutPrescription) -> str:
     """Describe reusable workout content without binding the name to its date."""
     workout_type_label = {
         WorkoutType.EASY: "Easy",
@@ -39,15 +39,15 @@ def provider_workout_name(workout: WorkoutPrescription) -> str:
 
 
 def provider_workout_names(
-    workouts: list[WorkoutPrescription],
+    workouts: list[RunningWorkoutPrescription],
 ) -> dict[str, str]:
     """Reuse names for equal structures and disambiguate only true variants."""
-    grouped: dict[str, list[WorkoutPrescription]] = {}
+    grouped: dict[str, list[RunningWorkoutPrescription]] = {}
     for workout in workouts:
         grouped.setdefault(provider_workout_name(workout), []).append(workout)
     names: dict[str, str] = {}
     for base_name, matches in grouped.items():
-        variants: dict[str, list[WorkoutPrescription]] = {}
+        variants: dict[str, list[RunningWorkoutPrescription]] = {}
         for workout in matches:
             variants.setdefault(_structure_signature(workout), []).append(workout)
         if len(variants) == 1:
@@ -57,15 +57,14 @@ def provider_workout_names(
         for index, (_, variant_workouts) in enumerate(sorted(variants.items()), start=1):
             suffix = f"-{index}"
             variant_name = (
-                f"{base_name[: MAX_PROVIDER_WORKOUT_NAME_CHARACTERS - len(suffix)]}"
-                f"{suffix}"
+                f"{base_name[: MAX_PROVIDER_WORKOUT_NAME_CHARACTERS - len(suffix)]}" f"{suffix}"
             )
             for workout in variant_workouts:
                 names[workout.id] = variant_name
     return names
 
 
-def _benchmark_content_label(workout: WorkoutPrescription) -> str:
+def _benchmark_content_label(workout: RunningWorkoutPrescription) -> str:
     structure = workout.structured_workout
     if structure is None:
         return _distance_label(workout.planned_distance_meters)
@@ -75,7 +74,7 @@ def _benchmark_content_label(workout: WorkoutPrescription) -> str:
     return _distance_label(timed_steps[0].distance_meters)
 
 
-def _primary_repeat_label(workout: WorkoutPrescription) -> str:
+def _primary_repeat_label(workout: RunningWorkoutPrescription) -> str:
     structure = workout.structured_workout
     if structure is None:
         return ""
@@ -156,7 +155,7 @@ def _compact_number(value: float) -> str:
     return f"{value:.4g}"
 
 
-def _structure_signature(workout: WorkoutPrescription) -> str:
+def _structure_signature(workout: RunningWorkoutPrescription) -> str:
     structure = workout.structured_workout
     if structure is not None:
         return structure.model_dump_json(exclude_none=False)

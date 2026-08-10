@@ -46,13 +46,13 @@ mirror.
 | Activity aerobic load, decoupling, polarization, TRIMP, heart-rate recovery, applicability flags, and zone time | Intervals.icu analysis; missing values remain missing |
 | Wellness and training state | Intervals.icu daily wellness |
 | Thresholds, zones, and priorities | Intervals.icu sport settings |
-| Athlete profile v2 | Athlete-confirmed durable facts |
+| Athlete profile v3 | Athlete-confirmed durable facts, run constraints, flexible or recurring athlete-managed sport expectations, and one training priority |
 | Provider profile candidates | Read-only projections from settings and wellness |
 | VDOT approval | Recomputable performance plus a verified canonical activity/fingerprint, exact profile personal best, owned closed assessment review, or explicit athlete-confirmed manual value; every approval also binds the proposal path and byte SHA-256 |
-| Plan lifecycle and approvals | Compact planning-state v5 with a discriminated race-macro or baseline-assessment active plan, generic plan revision/approval identity, and immutable content-addressed archives and evidence artifacts |
+| Plan lifecycle and approvals | Compact planning-state v6 with a discriminated race-macro or baseline-assessment active plan, generic plan revision/approval identity, and immutable content-addressed archives and evidence artifacts |
 | Race-plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed race summaries and assessment results, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
 | Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, exact publication/completion pairing, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
-| Weekly application | Exact proposal path, byte SHA-256, target-week hash, and prior applied-workout hash |
+| Weekly application | Exact run-only proposal path, byte SHA-256, target-week hash, prior applied-running-workouts hash, immutable weekly context, and complete configured/observed other-sport considerations |
 | Completed-workout adherence | Exact owned-event pairing manifest |
 | Run synchronization preferences | Athlete-confirmed automation mode, calendar-day policy, and requested Garmin destination |
 | External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, semantic parsed-workout readback, drift-resolution audit, and push-error evidence |
@@ -119,8 +119,9 @@ journal under that lock. Recovery rolls back a prepared or partially written
 pair and rolls forward a committed pair, so readers never accept mismatched
 profile and plan state after an abrupt process stop. Profile, planning, VDOT
 file, and VDOT-source reads use that same coordinated boundary. Proposal,
-VDOT approval, planning-context creation, plan creation, plan approval, weekly
-approval, weekly application, invalidation, and closure timestamps must be
+VDOT approval, macro- or assessment-context creation, plan creation, plan
+approval, weekly-context creation, weekly approval, weekly application,
+invalidation, and closure timestamps must be
 chronological. Persisted-state validation rejects an impossible sequence even
 if a service was bypassed. Cycle closure also re-verifies the exact active-plan
 snapshot and the date-bounded activity, wellness, coverage, completion, and
@@ -144,16 +145,20 @@ context and must cite the latest assessment result when one exists.
   version changes force deterministic remapping without pretending that the
   provider changed.
 - Weekly plans apply only when the current file path and SHA-256 match the
-  recorded approval, plan revision, week skeleton, and previous applied
-  content. The API returns local commit and automatic run-synchronization
+  recorded approval, plan revision, week skeleton, previous applied running
+  content, immutable week-planning context, and unchanged synchronized
+  evidence. The proposal must consider every configured athlete-managed sport
+  and every non-running sport observed in that context by exact activity ID.
+  The API returns local commit and automatic run-synchronization
   outcomes separately; provider failure never rolls back the local commit.
 - Unapproved proposal discard requires the exact current revision ID, empty
   plan/weekly approval state, no applied revisions, and no matching publication
   or completion ownership. Approved plan removal remains impossible here.
-- Weekly application policy requires a typed structured prescription for every
-  run. Publication resolves a qualified plan/revision/week/workout identity
-  from fresh, plan-approved, applied weekly content and ignores all non-running
-  sports. A date-only run projects to provider local midnight while retaining
+- Weekly application policy accepts only running workouts and requires a typed
+  structured prescription for each one. Publication resolves a qualified
+  plan/revision/week/workout identity from fresh, plan-approved, applied weekly
+  content; non-running prescriptions cannot enter this lifecycle. A date-only
+  run projects to provider local midnight while retaining
   an absent approved start time locally. Callers cannot publish an arbitrary
   workout or reuse an ID across plan lineages.
 - Calendar reconciliation holds the publication lock before the plan lock,

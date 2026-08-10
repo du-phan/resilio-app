@@ -9,13 +9,15 @@ import typer
 
 from resilio.api.profile import (
     ProfileError,
-    add_sport_to_profile,
     create_profile,
     get_profile,
     get_provider_profile_candidates,
-    remove_sport_from_profile,
+    remove_athlete_managed_sport,
+    set_flexible_athlete_managed_sport,
     set_personal_best,
+    set_recurring_athlete_managed_sport,
     set_sport_active_state,
+    set_training_priority,
     update_profile,
 )
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
@@ -46,15 +48,11 @@ def profile_create_command(
     training_timezone: str = typer.Option(..., "--training-timezone"),
     age_years: int | None = typer.Option(None, "--age-years"),
     running_experience_years: float | None = typer.Option(None, "--running-experience-years"),
-    running_priority: str = typer.Option("equal", "--running-priority"),
-    primary_sport_name: str | None = typer.Option(None, "--primary-sport-name"),
-    conflict_policy: str = typer.Option("ask_each_time", "--conflict-policy"),
     minimum_run_days_per_week: int = typer.Option(2, "--minimum-run-days-per-week"),
     maximum_run_days_per_week: int = typer.Option(4, "--maximum-run-days-per-week"),
     unavailable_run_days: str | None = typer.Option(None, "--unavailable-run-days"),
-    maximum_session_duration_minutes: int | None = typer.Option(
-        90, "--maximum-session-duration-minutes"
-    ),
+    maximum_session_duration_minutes: int
+    | None = typer.Option(90, "--maximum-session-duration-minutes"),
     weather_location: str | None = typer.Option(None, "--weather-location"),
 ) -> None:
     _emit(
@@ -63,9 +61,6 @@ def profile_create_command(
             training_timezone=training_timezone,
             age_years=age_years,
             running_experience_years=running_experience_years,
-            running_priority=running_priority,
-            primary_sport_name=primary_sport_name,
-            conflict_policy=conflict_policy,
             minimum_run_days_per_week=minimum_run_days_per_week,
             maximum_run_days_per_week=maximum_run_days_per_week,
             unavailable_run_days=_weekdays(unavailable_run_days),
@@ -87,15 +82,11 @@ def profile_set_command(
     training_timezone: str | None = typer.Option(None, "--training-timezone"),
     age_years: int | None = typer.Option(None, "--age-years"),
     running_experience_years: float | None = typer.Option(None, "--running-experience-years"),
-    running_priority: str | None = typer.Option(None, "--running-priority"),
-    primary_sport_name: str | None = typer.Option(None, "--primary-sport-name"),
-    conflict_policy: str | None = typer.Option(None, "--conflict-policy"),
     minimum_run_days_per_week: int | None = typer.Option(None, "--minimum-run-days-per-week"),
     maximum_run_days_per_week: int | None = typer.Option(None, "--maximum-run-days-per-week"),
     unavailable_run_days: str | None = typer.Option(None, "--unavailable-run-days"),
-    maximum_session_duration_minutes: int | None = typer.Option(
-        None, "--maximum-session-duration-minutes"
-    ),
+    maximum_session_duration_minutes: int
+    | None = typer.Option(None, "--maximum-session-duration-minutes"),
     weather_location: str | None = typer.Option(None, "--weather-location"),
 ) -> None:
     profile = get_profile()
@@ -107,9 +98,6 @@ def profile_set_command(
         ("training_timezone", training_timezone),
         ("age_years", age_years),
         ("running_experience_years", running_experience_years),
-        ("running_priority", running_priority),
-        ("primary_sport_name", primary_sport_name),
-        ("conflict_policy", conflict_policy),
     ]:
         if value is not None:
             fields[name] = value
@@ -173,33 +161,67 @@ def profile_set_personal_best_command(
     )
 
 
-@app.command(name="add-sport")
-def profile_add_sport_command(
+@app.command(name="set-flexible-sport")
+def profile_set_flexible_sport_command(
     sport_name: str = typer.Option(..., "--sport-name"),
-    sessions_per_week: int = typer.Option(..., "--sessions-per-week"),
+    expected_sessions_per_week: int = typer.Option(..., "--expected-sessions-per-week"),
     typical_session_duration_minutes: int = typer.Option(60, "--typical-session-duration-minutes"),
     typical_intensity: str = typer.Option("moderate", "--typical-intensity"),
-    unavailable_days: str | None = typer.Option(None, "--unavailable-days"),
-    notes: str | None = typer.Option(None, "--notes"),
+    athlete_context_note: str | None = typer.Option(None, "--athlete-context-note"),
 ) -> None:
     _emit(
-        add_sport_to_profile(
+        set_flexible_athlete_managed_sport(
             sport_name=sport_name,
-            sessions_per_week=sessions_per_week,
+            expected_sessions_per_week=expected_sessions_per_week,
             typical_session_duration_minutes=typical_session_duration_minutes,
             typical_intensity=typical_intensity,
-            unavailable_days=_weekdays(unavailable_days),
-            notes=notes,
+            athlete_context_note=athlete_context_note,
         ),
-        "Sport commitment added",
+        "Flexible athlete-managed sport saved",
     )
 
 
-@app.command(name="remove-sport")
-def profile_remove_sport_command(
+@app.command(name="set-recurring-sport")
+def profile_set_recurring_sport_command(
+    sport_name: str = typer.Option(..., "--sport-name"),
+    weekdays: str = typer.Option(..., "--weekdays"),
+    run_same_day_permission: str = typer.Option(..., "--run-same-day-permission"),
+    typical_session_duration_minutes: int = typer.Option(60, "--typical-session-duration-minutes"),
+    typical_intensity: str = typer.Option("moderate", "--typical-intensity"),
+    athlete_context_note: str | None = typer.Option(None, "--athlete-context-note"),
+) -> None:
+    _emit(
+        set_recurring_athlete_managed_sport(
+            sport_name=sport_name,
+            weekdays=_weekdays(weekdays),
+            run_same_day_permission=run_same_day_permission,
+            typical_session_duration_minutes=typical_session_duration_minutes,
+            typical_intensity=typical_intensity,
+            athlete_context_note=athlete_context_note,
+        ),
+        "Recurring athlete-managed sport saved",
+    )
+
+
+@app.command(name="set-training-priority")
+def profile_set_training_priority_command(
+    kind: str = typer.Option(..., "--kind"),
+    priority_sport_name: str | None = typer.Option(None, "--priority-sport-name"),
+) -> None:
+    _emit(
+        set_training_priority(
+            kind=kind,
+            priority_sport_name=priority_sport_name,
+        ),
+        "Training priority saved",
+    )
+
+
+@app.command(name="remove-athlete-managed-sport")
+def profile_remove_athlete_managed_sport_command(
     sport_name: str = typer.Option(..., "--sport-name"),
 ) -> None:
-    _emit(remove_sport_from_profile(sport_name), "Sport commitment removed")
+    _emit(remove_athlete_managed_sport(sport_name), "Athlete-managed sport removed")
 
 
 @app.command(name="pause-sport")
@@ -209,7 +231,7 @@ def profile_pause_sport_command(
     paused_on: str | None = typer.Option(None, "--paused-on"),
 ) -> None:
     try:
-        parsed_date = date.fromisoformat(paused_on) if paused_on else date.today()
+        parsed_date = date.fromisoformat(paused_on) if paused_on else None
     except ValueError as exc:
         raise typer.BadParameter("--paused-on must use YYYY-MM-DD") from exc
     _emit(
@@ -219,7 +241,7 @@ def profile_pause_sport_command(
             pause_reason=reason,
             paused_on=parsed_date,
         ),
-        "Sport commitment paused",
+        "Athlete-managed sport paused",
     )
 
 
@@ -229,5 +251,5 @@ def profile_resume_sport_command(
 ) -> None:
     _emit(
         set_sport_active_state(sport_name=sport_name, active=True),
-        "Sport commitment resumed",
+        "Athlete-managed sport resumed",
     )

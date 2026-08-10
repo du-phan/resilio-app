@@ -21,7 +21,7 @@ from resilio.core.planning.freshness import (
     require_fresh_plan,
 )
 from resilio.core.planning.integrity import (
-    applied_workout_sha256,
+    applied_running_workouts_sha256,
     plan_skeleton_sha256,
     sha256_file,
     target_week_skeleton_sha256,
@@ -35,6 +35,7 @@ from resilio.core.planning.state_repository import (
     persist_planning_state,
     required_planning_state_unlocked,
 )
+from resilio.core.planning.weekly_evidence import validate_week_planning_evidence
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
@@ -42,11 +43,9 @@ from resilio.schemas.approvals import (
     WeeklyApplicationAction,
     WeeklyApproval,
 )
-from resilio.schemas.plan import (
-    TrainingPlan,
-    WeekPlan,
-)
-from resilio.schemas.week_application import WeekApplication
+from resilio.schemas.planning.applications import WeekApplication
+from resilio.schemas.planning.plans import TrainingPlan
+from resilio.schemas.planning.weeks import WeekPlan
 
 TRAINING_PLAN_ADAPTER: TypeAdapter[TrainingPlan] = TypeAdapter(TrainingPlan)
 
@@ -80,7 +79,7 @@ def _populate_and_validate_week(
             end_date=target_week.end_date,
             target_run_volume_meters=target_week.target_run_volume_meters,
             workout_structure_hints=target_week.workout_structure_hints,
-            workouts=application.workouts,
+            running_workouts=application.running_workouts,
             is_recovery_week=target_week.is_recovery_week,
             notes=application.adjustment_rationale,
         )
@@ -109,7 +108,7 @@ def _validate_workout_ids_are_globally_unique(
     for cycle in closed_cycles:
         plan = cycle.active_plan_snapshot.plan
         for week in plan.weeks:
-            for workout in week.workouts:
+            for workout in week.running_workouts:
                 owners_by_workout_id[workout.id] = (
                     plan.id,
                     week.week_number,
@@ -117,12 +116,12 @@ def _validate_workout_ids_are_globally_unique(
     for week in active_plan.weeks:
         if week.week_number == populated_week.week_number:
             continue
-        for workout in week.workouts:
+        for workout in week.running_workouts:
             owners_by_workout_id[workout.id] = (
                 active_plan.id,
                 week.week_number,
             )
-    for workout in populated_week.workouts:
+    for workout in populated_week.running_workouts:
         if workout.id in owners_by_workout_id:
             raise PlanOperationError(
                 "Workout ID is already owned by another plan or week: " f"{workout.id}"
@@ -141,6 +140,12 @@ def validate_week_application(
         if state.active_plan is None or state.active_plan.plan_approval is None:
             raise PlanOperationError("The current plan is not approved")
         target_week = _find_week(plan, application.week_number)
+        validate_week_planning_evidence(
+            repo,
+            plan=plan,
+            target_week=target_week,
+            application=application,
+        )
         populated_week = _populate_and_validate_week(
             plan,
             target_week,
@@ -172,18 +177,26 @@ def approve_week_application(
             raise PlanOperationError("The current plan is not approved")
         if plan_approval.plan_skeleton_sha256 != plan_skeleton_sha256(plan):
             raise PlanOperationError("The approved plan skeleton has changed")
+        approval_timestamp = validated_utc_timestamp(approved_at_utc)
+        if approval_timestamp < plan_approval.approved_at_utc:
+            raise PlanOperationError("Weekly approval cannot predate plan approval")
         week = _find_week(plan, application.week_number)
+        planning_context = validate_week_planning_evidence(
+            repo,
+            plan=plan,
+            target_week=week,
+            application=application,
+        )
         populated_week = _populate_and_validate_week(plan, week, application)
         _validate_workout_ids_are_globally_unique(repo, state, populated_week)
-        existing_hash = applied_workout_sha256(week) if week.workouts else None
+        existing_hash = applied_running_workouts_sha256(week) if week.running_workouts else None
         action = (
             WeeklyApplicationAction.REPLACE
             if existing_hash is not None
             else WeeklyApplicationAction.INITIAL
         )
-        approval_timestamp = validated_utc_timestamp(approved_at_utc)
-        if approval_timestamp < plan_approval.approved_at_utc:
-            raise PlanOperationError("Weekly approval cannot predate plan approval")
+        if approval_timestamp < planning_context.generated_at_utc:
+            raise PlanOperationError("Weekly approval cannot predate its week-planning context")
         approval = WeeklyApproval(
             approval_id=new_planning_id("week_approval"),
             plan_id=plan.id,
@@ -192,7 +205,7 @@ def approve_week_application(
             week_number=application.week_number,
             target_week_skeleton_sha256=target_week_skeleton_sha256(week),
             action=action,
-            previous_applied_workout_sha256=existing_hash,
+            previous_applied_running_workouts_sha256=existing_hash,
             approved_at_utc=approval_timestamp,
             approved_file=str(resolved_file),
             approved_file_sha256=sha256_file(resolved_file),
@@ -250,9 +263,15 @@ def apply_approved_week(
         week = _find_week(plan, application.week_number)
         if target_week_skeleton_sha256(week) != approval.target_week_skeleton_sha256:
             raise PlanOperationError("Target plan week changed after approval")
-        current_hash = applied_workout_sha256(week) if week.workouts else None
-        if current_hash != approval.previous_applied_workout_sha256:
+        current_hash = applied_running_workouts_sha256(week) if week.running_workouts else None
+        if current_hash != approval.previous_applied_running_workouts_sha256:
             raise PlanOperationError("Previously applied weekly content changed")
+        validate_week_planning_evidence(
+            repo,
+            plan=plan,
+            target_week=week,
+            application=application,
+        )
         populated_week = _populate_and_validate_week(plan, week, application)
         _validate_workout_ids_are_globally_unique(repo, state, populated_week)
         timestamp = validated_utc_timestamp(applied_at_utc)
@@ -288,7 +307,8 @@ def apply_approved_week(
                 plan_revision_id=plan.plan_revision_id,
                 week_number=application.week_number,
                 approved_file_sha256=approval.approved_file_sha256,
-                applied_workout_sha256=applied_workout_sha256(populated_week),
+                planning_context_reference=application.planning_context_reference,
+                applied_running_workouts_sha256=(applied_running_workouts_sha256(populated_week)),
                 applied_week_snapshot=populated_week,
                 schedule_timezone=profile.training_timezone,
                 weekly_approved_at_utc=approval.approved_at_utc,

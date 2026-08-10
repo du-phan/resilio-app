@@ -32,8 +32,9 @@ from resilio.integrations.intervals_icu.dto import (
     EventWriteDTO,
     SportSettingsDTO,
 )
-from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.activity import SportType
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.publication import PublishedWorkout
 from resilio.schemas.structured_workout import TargetMode, TargetUnit
 
@@ -42,7 +43,7 @@ from resilio.schemas.structured_workout import TargetMode, TargetUnit
 class PreparedPublication:
     """All immutable inputs required to reconcile one remote event."""
 
-    workout: WorkoutPrescription
+    workout: RunningWorkoutPrescription
     workout_identity: PlanWorkoutIdentity
     athlete_id: str
     event: EventWriteDTO
@@ -69,7 +70,7 @@ def prepare_publication(
         raise PublicationSafetyError("Published workout ID belongs to a different plan lineage")
     if workout.structured_workout is None:
         raise PublicationSafetyError("Publishing requires a typed structured_workout")
-    if str(workout.structured_workout.sport) != str(workout.sport):
+    if SportType(workout.structured_workout.sport) != SportType(workout.sport):
         raise PublicationSafetyError("Workout sport does not match its structure")
 
     athlete = client.get_athlete()
@@ -97,9 +98,7 @@ def prepare_publication(
     purpose = " ".join((workout.purpose or "").split())
     rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
     try:
-        expected_semantics = expected_workout_semantics(
-            workout.structured_workout.steps
-        )
+        expected_semantics = expected_workout_semantics(workout.structured_workout.steps)
     except WorkoutSemanticsError as exc:
         raise PublicationSafetyError(str(exc)) from exc
     external_id = external_id_for(workout.id)
@@ -118,9 +117,7 @@ def prepare_publication(
         start_date_local=start_local,
         target=event_target_for_modes(modes),
     )
-    target_units = {
-        str(target.unit) for target in workout.structured_workout.targets()
-    }
+    target_units = {str(target.unit) for target in workout.structured_workout.targets()}
     settings_version_sha256 = publication_settings_version(
         settings,
         target_modes=modes,
@@ -162,17 +159,13 @@ def _validate_target_settings(
     *,
     modes: set[str],
     settings: SportSettingsDTO,
-    workout: WorkoutPrescription,
+    workout: RunningWorkoutPrescription,
 ) -> None:
     """Enforce sport-setting requirements that preserve prescribed targets."""
     assert workout.structured_workout is not None
-    target_units = {
-        str(target.unit) for target in workout.structured_workout.targets()
-    }
+    target_units = {str(target.unit) for target in workout.structured_workout.targets()}
     if len(modes) > 1:
-        raise PublicationSafetyError(
-            "A published running workout must use at most one target mode"
-        )
+        raise PublicationSafetyError("A published running workout must use at most one target mode")
     if TargetMode.PACE in modes and (
         settings.threshold_speed_meters_per_second is None or not settings.pace_zones
     ):
@@ -187,10 +180,7 @@ def _validate_target_settings(
         raise PublicationSafetyError(
             "Percent-LTHR publication requires lactate-threshold heart rate"
         )
-    if (
-        TargetUnit.PERCENT_MAX_HEART_RATE in target_units
-        and settings.max_hr is None
-    ):
+    if TargetUnit.PERCENT_MAX_HEART_RATE in target_units and settings.max_hr is None:
         raise PublicationSafetyError(
             "Percent-max-heart-rate publication requires maximum heart rate"
         )

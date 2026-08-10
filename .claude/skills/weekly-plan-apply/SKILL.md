@@ -17,9 +17,10 @@ poetry run resilio approvals status
 ```
 
 The recorded plan kind, plan ID, plan revision, plan-skeleton SHA-256, week number,
-target-week-skeleton SHA-256, action, prior applied-workout SHA-256, absolute
-path, and file SHA-256 must correspond to the current aggregate and supplied
-file. If not, stop with a blocking checklist.
+target-week-skeleton SHA-256, action, prior applied-running-workouts SHA-256,
+absolute path, file SHA-256, and immutable week-planning-context reference must
+correspond to the current aggregate and supplied file. The context must still
+match current synchronized evidence. If not, stop with a blocking checklist.
 
 ## Apply
 
@@ -31,9 +32,9 @@ poetry run resilio approvals status
 ```
 
 Do not repair a failing file. Return the exact validation or application error
-to the main coach. Success requires non-empty persisted workouts and consumed
+to the main coach. Success requires non-empty persisted running workouts and consumed
 weekly approval state. It also requires a new active applied-week audit whose
-workout SHA-256 matches the current week. A replacement must invalidate the
+running-workouts SHA-256 and context reference match the current week. A replacement must invalidate the
 previous active audit for that week.
 
 The `apply-week` result is the authoritative combined outcome. It always

@@ -24,14 +24,15 @@ it, or overwrite a previously presented proposal.
 
    ```bash
    poetry run resilio dates week-boundaries --start <WEEK_MONDAY>
-   poetry run resilio coach planning-context \
+   poetry run resilio coach create-planning-context \
      --week <WEEK_NUMBER> \
      --evidence-as-of <YYYY-MM-DD> \
      --history-weeks <COUNT>
    ```
 
-   Keep `target_week` separate from `recent_history`. Never request a future
-   weekly review or treat a future target week as completed evidence.
+   Retain the returned immutable `reference` for the proposal. Keep
+   `target_week` separate from `recent_history`. Never request a future weekly
+   review or treat a future target week as completed evidence.
 
 ### Weather Context & Adjustments
 
@@ -43,8 +44,8 @@ it, or overwrite a previously presented proposal.
 
    If the weather lookup fails or weather data unavailable is reported,
    continue with the training-logic decision and state the uncertainty. Do not
-   use web weather. For a multi-sport week, consider the same day’s conditions
-   for every outdoor sport rather than treating weather as run-only context.
+   use web weather. Weather informs only the running sessions prescribed by
+   this workflow.
 
 ## Coaching decisions
 
@@ -80,15 +81,17 @@ it, or overwrite a previously presented proposal.
 - Keep aerobic load points, session-RPE arbitrary units, run exposure,
   other-sport exposure, and wellness separate.
 - Respect exact run-day availability, maximum session duration in minutes,
-  other-sport commitments, and the conflict policy.
+  athlete-managed sport expectations, and training priority. A flexible weekly
+  expectation has no coach-owned dates. A recurring pattern prohibits running
+  on its weekdays only when its explicit same-day permission is `prohibited`.
 - Progress one material stressor at a time when possible. Do not compensate for
   missed work by cramming sessions or making a single run absorb the deficit.
 - Separate demanding sessions according to the primary methodology and the
   athlete’s actual recovery evidence.
-- Prescribe every session with `planned_duration_seconds`, exact low-,
+- Prescribe every running session with `planned_duration_seconds`, exact low-,
   moderate-, and high-intensity duration seconds that sum to it,
   `target_rpe_1_to_10`, and a purpose. Every run also requires positive
-  `planned_distance_meters`; other sports may be duration-only. An exact
+  `planned_distance_meters`. An exact
   `start_time_local` is optional at weekly approval. A date-only session stays
   due on its approved local date and publishes as an untimed calendar-day
   workout; never invent or imply an athlete-approved midnight start. Use
@@ -97,8 +100,7 @@ it, or overwrite a previously presented proposal.
 - Represent every running session under the typed `"structured_workout"`
   field, including targetless easy runs. Use recursive warm-up, work,
   recovery, repetition, and cool-down step contracts rather than an untyped
-  interval list. Leave other sports unstructured unless their own workflow
-  requires otherwise.
+  interval list. Do not emit a non-running workout.
 - Schedule rest as rest; do not create filler workouts to satisfy a count.
 
 ### Baseline-assessment benchmark
@@ -112,8 +114,9 @@ When the target week belongs to a baseline assessment:
   through Monday 24 August, for example, excludes all four dates rather than
   only the weekend; enforce the typed `temporary_schedule_constraints` returned
   by the planning context;
-- preserve all active bouldering or other-sport commitments as their own
-  sessions and respect the profile conflict policy;
+- account for configured and recently observed athlete-managed sports when
+  choosing run volume, intensity, day placement, and recovery spacing, without
+  creating their sessions;
 - require exactly one `benchmark` workout and one `timed_distance` step whose
   `distance_meters` equals the approved benchmark distance. Include explicit
   warm-up and cool-down steps in the workout totals;
@@ -128,14 +131,20 @@ When the target week belongs to a baseline assessment:
 
 Write a `WeekApplication` JSON containing only:
 
+- `schema_version: 2`;
 - `week_number`;
-- `workouts`;
+- the exact `planning_context_reference` returned above;
+- `running_workouts`;
+- `other_sport_considerations`;
 - a specific `adjustment_rationale` of at least 40 characters.
 
 The sum of run `planned_distance_meters` must equal
-the immutable target in `target_week.target_run_volume_meters`. Include every
-active other-sport commitment exactly as captured by the planning context.
-Do not emit a synthetic rest workout; an
+the immutable target in `target_week.target_run_volume_meters`. Include exactly
+one typed consideration for every configured athlete-managed sport and every
+non-running sport observed in `recent_history`. Each consideration must name
+the exact recent activity IDs for that sport, at least one effect on the run
+plan (or `no_adjustment` alone), a precise rationale, and any uncertainty. This
+is evidence of consideration, never a prescription. Do not emit a synthetic rest workout; an
 unscheduled day is rest.
 
 Then run:

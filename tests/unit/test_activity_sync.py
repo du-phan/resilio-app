@@ -455,7 +455,6 @@ def _publication(
     *,
     event_id: int = 42,
     workout_id: str = "planned-run",
-    sport: str = "run",
 ) -> PublishedWorkout:
     return PublishedWorkout(
         workout_identity=PlanWorkoutIdentity(
@@ -472,7 +471,7 @@ def _publication(
         rendered_workout_sha256="b" * 64,
         sport_settings_version_sha256="c" * 64,
         provider_event_fingerprint_sha256="d" * 64,
-        sport=sport,
+        sport="run",
         occurrence_date=date(2026, 7, 28),
         approved_start_time_local=time(7),
         provider_start_date_local="2026-07-28T07:00:00",
@@ -583,10 +582,15 @@ def test_paired_event_sport_mismatch_fails_safe_without_completion_link(
     (tmp_path / "data" / "activities").mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
     repo = RepositoryIO()
-    publication = _publication(sport="cycle")
+    publication = _publication()
     _save_publication(repo, publication)
     client = SyncClient()
-    client.row = client.row.model_copy(update={"paired_event_id": publication.event_id})
+    client.row = client.row.model_copy(
+        update={
+            "type": "Ride",
+            "paired_event_id": publication.event_id,
+        }
+    )
 
     report = ActivitySyncService(repo, _config(), client).run(today=date(2026, 7, 28))
 

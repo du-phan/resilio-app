@@ -8,12 +8,19 @@ from resilio.core.planning.policy import (
     WeekPolicyError,
     validate_populated_week,
 )
-from resilio.schemas.plan import (
-    OtherSportPlanningConstraint,
+from resilio.schemas.planning.constraints import (
+    AthleteManagedSportExpectation,
     PlanningConstraintsSnapshot,
-    RaceMacroPlan,
-    WeekPlan,
-    WorkoutPrescription,
+)
+from resilio.schemas.planning.plans import RaceMacroPlan
+from resilio.schemas.planning.weeks import WeekPlan
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
+from resilio.schemas.profile import (
+    BalancedTrainingPriority,
+    FlexibleWeeklyParticipation,
+    RecurringWeeklyParticipation,
+    RunSameDayPermission,
+    Weekday,
 )
 
 
@@ -24,32 +31,26 @@ def _workout(
     distance_meters: float | None,
     duration_seconds: int,
     workout_type: str = "easy",
-    sport: str = "run",
     low_seconds: int | None = None,
     high_seconds: int = 0,
     start_time_local: time = time(7),
-) -> WorkoutPrescription:
+) -> RunningWorkoutPrescription:
     low = duration_seconds - high_seconds if low_seconds is None else low_seconds
-    structured_workout = (
-        {
-            "sport": "run",
-            "steps": [
-                {
-                    "kind": "steady",
-                    "duration": {"unit": "seconds", "value": duration_seconds},
-                    "intensity": "active",
-                    "cue": "Follow the approved session intent.",
-                }
-            ],
-        }
-        if sport == "run"
-        else None
-    )
-    return WorkoutPrescription(
+    structured_workout = {
+        "sport": "run",
+        "steps": [
+            {
+                "kind": "steady",
+                "duration": {"unit": "seconds", "value": duration_seconds},
+                "intensity": "active",
+                "cue": "Follow the approved session intent.",
+            }
+        ],
+    }
+    return RunningWorkoutPrescription(
         id=workout_id,
         date=date(2026, 7, day),
         start_time_local=start_time_local,
-        sport=sport,
         workout_type=workout_type,
         planned_duration_seconds=duration_seconds,
         planned_distance_meters=distance_meters,
@@ -64,7 +65,7 @@ def _workout(
 
 def _week(
     *,
-    workouts: list[WorkoutPrescription] | None = None,
+    workouts: list[RunningWorkoutPrescription] | None = None,
     fitzgerald: bool = False,
 ) -> WeekPlan:
     return WeekPlan(
@@ -93,11 +94,11 @@ def _week(
                 else None
             ),
         },
-        workouts=workouts or [],
+        running_workouts=workouts or [],
     )
 
 
-def _valid_runs() -> list[WorkoutPrescription]:
+def _valid_runs() -> list[RunningWorkoutPrescription]:
     return [
         _workout(
             "w_easy_a",
@@ -138,7 +139,7 @@ def _plan(
             "artifact_type": "macro_planning_context",
             "artifact_sha256": "c" * 64,
         },
-        planning_profile_sha256="a" * 64,
+        planning_inputs_sha256="a" * 64,
         created_at_utc=datetime(2026, 7, 25, tzinfo=timezone.utc),
         planning_rationale=(
             "The policy fixture binds its macro choices to explicit athlete "
@@ -201,10 +202,9 @@ def _plan(
             minimum_run_days_per_week=2,
             maximum_run_days_per_week=4,
             maximum_session_duration_seconds=5_400,
-            running_priority="primary",
+            training_priority=BalancedTrainingPriority(),
             training_timezone="Europe/Paris",
         ),
-        conflict_policy="ask_each_time",
     )
 
 
@@ -216,17 +216,6 @@ def test_valid_week_satisfies_frequency_quality_and_long_run_policy() -> None:
     validate_populated_week(plan, populated)
 
 
-def test_policy_rejects_an_unstructured_running_workout() -> None:
-    skeleton = _week()
-    plan = _plan(skeleton)
-    runs = _valid_runs()
-    runs[0] = runs[0].model_copy(update={"structured_workout": None})
-    populated = _week(workouts=runs)
-
-    with pytest.raises(WeekPolicyError, match="run_structured_workout_missing"):
-        validate_populated_week(plan, populated)
-
-
 def test_policy_reports_stable_availability_duration_and_quality_violations() -> None:
     skeleton = _week()
     plan = _plan(
@@ -236,7 +225,7 @@ def test_policy_reports_stable_availability_duration_and_quality_violations() ->
             minimum_run_days_per_week=2,
             maximum_run_days_per_week=4,
             maximum_session_duration_seconds=1_500,
-            running_priority="primary",
+            training_priority=BalancedTrainingPriority(),
             training_timezone="Europe/Paris",
         ),
     )
@@ -276,40 +265,58 @@ def test_fitzgerald_policy_rejects_all_high_week() -> None:
         validate_populated_week(plan, populated)
 
 
-def test_other_sport_commitment_is_exact_and_respects_unavailable_days() -> None:
+def test_recurring_athlete_managed_sport_can_prohibit_same_day_running() -> None:
     constraints = PlanningConstraintsSnapshot(
         minimum_run_days_per_week=2,
         maximum_run_days_per_week=4,
         maximum_session_duration_seconds=5_400,
-        active_other_sports=[
-            OtherSportPlanningConstraint(
-                sport_name="cycle",
-                sessions_per_week=1,
-                unavailable_days=["monday", "tuesday"],
+        athlete_managed_sport_expectations=[
+            AthleteManagedSportExpectation(
+                sport_name="crossfit",
+                participation_pattern=RecurringWeeklyParticipation(
+                    weekdays=[Weekday.TUESDAY],
+                    run_same_day_permission=RunSameDayPermission.PROHIBITED,
+                ),
                 typical_session_duration_seconds=3_600,
-                typical_intensity="moderate",
+                athlete_reported_typical_intensity="moderate",
             )
         ],
-        running_priority="secondary",
-        primary_sport_name="cycle",
+        training_priority=BalancedTrainingPriority(),
         training_timezone="Europe/Paris",
     )
     skeleton = _week()
     plan = _plan(skeleton, constraints=constraints)
-    cycle = _workout(
-        "w_cycle",
-        day=28,
-        distance_meters=None,
-        duration_seconds=3_600,
-        sport="cycle",
-    )
-    populated = _week(workouts=[*_valid_runs(), cycle])
+    populated = _week(workouts=_valid_runs())
 
     with pytest.raises(
         WeekPolicyError,
-        match="other_sport_scheduled_on_unavailable_day",
+        match="run_on_prohibited_recurring_sport_day",
     ):
         validate_populated_week(plan, populated)
+
+
+def test_flexible_athlete_managed_sport_does_not_invent_run_blackout_days() -> None:
+    constraints = PlanningConstraintsSnapshot(
+        minimum_run_days_per_week=2,
+        maximum_run_days_per_week=4,
+        maximum_session_duration_seconds=5_400,
+        athlete_managed_sport_expectations=[
+            AthleteManagedSportExpectation(
+                sport_name="climb",
+                participation_pattern=FlexibleWeeklyParticipation(
+                    expected_sessions_per_week=3,
+                ),
+                typical_session_duration_seconds=5_400,
+                athlete_reported_typical_intensity="moderate_to_hard",
+            )
+        ],
+        training_priority=BalancedTrainingPriority(),
+        training_timezone="Europe/Paris",
+    )
+    skeleton = _week()
+    plan = _plan(skeleton, constraints=constraints)
+
+    validate_populated_week(plan, _week(workouts=_valid_runs()))
 
 
 def test_race_week_can_explicitly_omit_a_long_run() -> None:
@@ -324,12 +331,12 @@ def test_race_week_can_explicitly_omit_a_long_run() -> None:
     race_week.workout_structure_hints.long_run = None
     race_week.workout_structure_hints.quality.types = ["race_pace"]
     plan = _plan(
-        race_week.model_copy(update={"workouts": []}),
+        race_week.model_copy(update={"running_workouts": []}),
         constraints=PlanningConstraintsSnapshot(
             minimum_run_days_per_week=1,
             maximum_run_days_per_week=4,
             maximum_session_duration_seconds=5_400,
-            running_priority="primary",
+            training_priority=BalancedTrainingPriority(),
             training_timezone="Europe/Paris",
         ),
     )
@@ -352,7 +359,7 @@ def test_policy_rejects_sessions_that_overlap_across_midnight() -> None:
         }
     )
     populated = _week(workouts=runs)
-    plan = _plan(populated.model_copy(update={"workouts": []}))
+    plan = _plan(populated.model_copy(update={"running_workouts": []}))
 
     with pytest.raises(WeekPolicyError, match="sessions_overlap"):
         validate_populated_week(plan, populated)

@@ -5,24 +5,35 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from pydantic import BaseModel, ConfigDict
+
 from resilio.core.coaching_context import (
     build_coach_history,
-    build_week_planning_context,
     build_weekly_coach_context,
 )
+from resilio.core.planning.artifacts import load_evidence_artifact
 from resilio.core.planning.service import PlanOperationError
+from resilio.core.planning.weekly_context import create_week_planning_context
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.coaching import (
     CoachHistoryContext,
     WeeklyCoachContext,
     WeekPlanningContext,
 )
+from resilio.schemas.plan_history import EvidenceArtifactReference
 
 
 @dataclass(frozen=True)
 class CoachingContextError:
     error_type: str
     message: str
+
+
+class WeekPlanningContextEvidenceResult(BaseModel):
+    reference: EvidenceArtifactReference
+    context: WeekPlanningContext
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def get_weekly_coach_context(
@@ -64,18 +75,23 @@ def get_coach_history(
         return CoachingContextError("validation", str(exc))
 
 
-def get_week_planning_context(
+def create_week_planning_context_evidence(
     *,
     week_number: int,
     evidence_as_of_date: date,
     history_week_count: int,
-) -> WeekPlanningContext | CoachingContextError:
+) -> WeekPlanningContextEvidenceResult | CoachingContextError:
+    repo = RepositoryIO()
     try:
-        return build_week_planning_context(
-            RepositoryIO(),
+        reference = create_week_planning_context(
+            repo,
             week_number=week_number,
             evidence_as_of_date=evidence_as_of_date,
             history_week_count=history_week_count,
         )
-    except (OSError, ValueError) as exc:
+        return WeekPlanningContextEvidenceResult(
+            reference=reference,
+            context=load_evidence_artifact(repo, reference, WeekPlanningContext),
+        )
+    except (OSError, ValueError, PlanOperationError) as exc:
         return CoachingContextError("validation", str(exc))

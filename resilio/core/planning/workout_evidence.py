@@ -14,7 +14,7 @@ from resilio.core.planning.artifacts import (
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.freshness import require_fresh_plan
 from resilio.core.planning.integrity import (
-    applied_workout_sha256,
+    applied_running_workouts_sha256,
     plan_skeleton_sha256,
 )
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
@@ -49,14 +49,14 @@ def load_publishable_workouts_unlocked(
     }
     workouts: list[AuthoritativeWorkout] = []
     for week in plan.weeks:
-        if not week.workouts:
+        if not week.running_workouts:
             continue
         approval = active_by_week.get(week.week_number)
         if approval is None:
             raise PlanOperationError(
                 f"Week {week.week_number} has workouts without an active approval"
             )
-        if approval.applied_workout_sha256 != applied_workout_sha256(week):
+        if approval.applied_running_workouts_sha256 != applied_running_workouts_sha256(week):
             raise PlanOperationError(
                 f"Week {week.week_number} changed after its approval was applied"
             )
@@ -70,7 +70,7 @@ def load_publishable_workouts_unlocked(
                 ),
                 prescription=workout,
             )
-            for workout in week.workouts
+            for workout in week.running_workouts
         )
     return workouts
 

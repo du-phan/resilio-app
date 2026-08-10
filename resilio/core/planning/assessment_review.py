@@ -30,7 +30,6 @@ from resilio.core.workout_publication.locking import coordinated_publication_pla
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.activity import ActivityStatus, CanonicalActivity, is_running_sport
 from resilio.schemas.approvals import ClosedPlanArchive, PlanningState
-from resilio.schemas.plan import BaselineAssessmentPlan, WorkoutType
 from resilio.schemas.plan_history import (
     AssessmentClosure,
     DedicatedActivityAssessmentResult,
@@ -38,6 +37,8 @@ from resilio.schemas.plan_history import (
     ExactSegmentAssessmentResult,
     PlanWorkoutIdentity,
 )
+from resilio.schemas.planning.plans import BaselineAssessmentPlan
+from resilio.schemas.planning.workouts import WorkoutType
 from resilio.schemas.planning_evidence import (
     AssessmentResultCandidate,
     BaselineAssessmentReview,

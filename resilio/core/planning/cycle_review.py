@@ -30,13 +30,13 @@ from resilio.schemas.activity import (
     CanonicalActivity,
 )
 from resilio.schemas.coaching import WeeklyCoachContext
-from resilio.schemas.plan import RaceMacroPlan
 from resilio.schemas.plan_history import (
     AthleteConfirmedGoalActivityEvidence,
     EvidenceArtifactReference,
     GoalOutcome,
     OwnedCompletionGoalEvidence,
 )
+from resilio.schemas.planning.plans import RaceMacroPlan
 from resilio.schemas.planning_evidence import (
     CompactTrainingWeek,
     PlanCycleReview,

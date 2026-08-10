@@ -5,15 +5,17 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Literal, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.approvals import ClosedPlanArchive
 from resilio.schemas.plan_history import (
+    EVIDENCE_ARTIFACT_TYPES,
     ClosedPlanReference,
     EvidenceArtifactReference,
+    EvidenceArtifactType,
 )
 from resilio.schemas.repository import RepoError
 
@@ -118,9 +120,7 @@ def load_closed_plan_archive(
     if result.active_plan_snapshot.plan.id != reference.plan_id:
         raise PlanningArtifactError("Closed plan archive ID does not match its reference")
     if result.active_plan_snapshot.plan.plan_revision_id != reference.plan_revision_id:
-        raise PlanningArtifactError(
-            "Closed plan archive revision does not match its reference"
-        )
+        raise PlanningArtifactError("Closed plan archive revision does not match its reference")
     if model_sha256(result) != reference.archive_sha256:
         raise PlanningArtifactError("Closed plan archive bytes changed after closure")
     return result
@@ -141,19 +141,9 @@ def import_evidence_artifact(
     repo: RepositoryIO,
     model: BaseModel,
     *,
-    artifact_type: Literal[
-        "cycle_review",
-        "macro_planning_context",
-        "assessment_planning_context",
-        "assessment_review",
-    ],
+    artifact_type: EvidenceArtifactType,
 ) -> EvidenceArtifactReference:
-    if artifact_type not in {
-        "cycle_review",
-        "macro_planning_context",
-        "assessment_planning_context",
-        "assessment_review",
-    }:
+    if artifact_type not in EVIDENCE_ARTIFACT_TYPES:
         raise ValueError(f"Unsupported evidence artifact type: {artifact_type}")
     digest = model_sha256(model)
     reference = EvidenceArtifactReference(

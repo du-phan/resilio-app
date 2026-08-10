@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from resilio.schemas.plan import WorkoutPrescription
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 
 
 class WorkoutScheduleError(ValueError):
@@ -13,7 +13,7 @@ class WorkoutScheduleError(ValueError):
 
 
 def scheduled_start_utc(
-    workout: WorkoutPrescription,
+    workout: RunningWorkoutPrescription,
     *,
     training_timezone: str,
 ) -> datetime:
@@ -46,7 +46,7 @@ def scheduled_start_utc(
 
 
 def schedule_authority_deadline_utc(
-    workout: WorkoutPrescription,
+    workout: RunningWorkoutPrescription,
     *,
     training_timezone: str,
 ) -> datetime:

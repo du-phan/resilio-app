@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.coaching_context.adherence import build_adherence_context
@@ -28,6 +28,7 @@ from resilio.core.planning.service import (
     load_planning_aggregate,
     load_publishable_workouts,
 )
+from resilio.core.planning.source_state import coaching_evidence_source_sha256
 from resilio.core.repository import RepositoryIO
 from resilio.core.training_state_repository import load_wellness
 from resilio.core.workout_publication.completions import load_completion_manifest
@@ -41,7 +42,7 @@ from resilio.schemas.coaching import (
     WeeklyCoachContext,
     WeekPlanningContext,
 )
-from resilio.schemas.plan import BaselineAssessmentPlan, RaceMacroPlan
+from resilio.schemas.planning.plans import BaselineAssessmentPlan, RaceMacroPlan
 
 
 def _planned_workouts_for_week(
@@ -223,25 +224,36 @@ def build_week_planning_context(
     evidence_as_of_date: date,
     history_week_count: int,
     current_local_date: date | None = None,
+    generated_at_utc: datetime | None = None,
 ) -> WeekPlanningContext:
     """Build future planning inputs without pretending the target week occurred."""
     today = current_local_date or date.today()
     if evidence_as_of_date > today:
         raise ValueError("evidence_as_of_date cannot be in the future")
+    generation_timestamp = generated_at_utc or datetime.now(timezone.utc)
+    if generation_timestamp.tzinfo is None or generation_timestamp.utcoffset() is None:
+        raise ValueError("generated_at_utc must be timezone-aware")
+    generation_timestamp = generation_timestamp.astimezone(timezone.utc)
+    evidence_window_start = (
+        evidence_as_of_date - timedelta(days=evidence_as_of_date.weekday())
+    ) - timedelta(weeks=history_week_count - 1)
+    source_state_sha256 = coaching_evidence_source_sha256(
+        repo,
+        evidence_as_of_date=evidence_as_of_date,
+        evidence_window_start=evidence_window_start,
+    )
     load_publishable_workouts(repo)
     state = load_planning_aggregate(repo)
-    if (
-        state is None
-        or state.active_plan is None
-        or state.active_plan.plan_approval is None
-    ):
+    if state is None or state.active_plan is None or state.active_plan.plan_approval is None:
         raise ValueError("An approved current plan is required")
     matching = [week for week in state.active_plan.plan.weeks if week.week_number == week_number]
     if len(matching) != 1:
         raise ValueError(f"Week {week_number} does not exist in the current plan")
     target = matching[0]
     plan = state.active_plan.plan
-    return WeekPlanningContext(
+    context = WeekPlanningContext(
+        generated_at_utc=generation_timestamp,
+        source_state_sha256=source_state_sha256,
         evidence_as_of_date=evidence_as_of_date,
         target_week=TargetWeekSkeletonContext(
             plan_kind=plan.kind,
@@ -268,30 +280,30 @@ def build_week_planning_context(
                 approved_vdot=state.active_vdot_approval.approved_vdot,
                 evidence_type=str(state.active_vdot_approval.evidence_type),
             )
-            if isinstance(plan, RaceMacroPlan)
-            and state.active_vdot_approval is not None
+            if isinstance(plan, RaceMacroPlan) and state.active_vdot_approval is not None
             else None
         ),
         methodology=(plan.methodology if isinstance(plan, RaceMacroPlan) else None),
         assessment_reasons=(
-            plan.assessment_reasons
-            if isinstance(plan, BaselineAssessmentPlan)
-            else []
+            plan.assessment_reasons if isinstance(plan, BaselineAssessmentPlan) else []
         ),
         benchmark_intent=(
-            plan.benchmark_intent
-            if isinstance(plan, BaselineAssessmentPlan)
-            else None
+            plan.benchmark_intent if isinstance(plan, BaselineAssessmentPlan) else None
         ),
         temporary_schedule_constraints=(
-            plan.temporary_schedule_constraints
-            if isinstance(plan, BaselineAssessmentPlan)
-            else []
-        ),
-        temporary_other_sport_commitment_overrides=(
-            plan.temporary_other_sport_commitment_overrides
-            if isinstance(plan, BaselineAssessmentPlan)
-            else []
+            plan.temporary_schedule_constraints if isinstance(plan, BaselineAssessmentPlan) else []
         ),
         constraints=plan.constraints_snapshot,
     )
+    if (
+        coaching_evidence_source_sha256(
+            repo,
+            evidence_as_of_date=evidence_as_of_date,
+            evidence_window_start=evidence_window_start,
+        )
+        != source_state_sha256
+    ):
+        raise ValueError("Training evidence changed while weekly context was built")
+    if load_planning_aggregate(repo) != state:
+        raise ValueError("Planning state changed while weekly context was built")
+    return context

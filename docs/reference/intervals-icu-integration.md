@@ -237,8 +237,8 @@ remains a report-only candidate.
 
 Only a qualified plan/revision/week/workout identity resolved from the active
 planning-state aggregate may be published. The aggregate must have a fresh
-planning-profile fingerprint, an approved plan skeleton, an active
-applied-week approval, and an unchanged applied-workout SHA-256. Publication
+planning-input fingerprint, an approved plan skeleton, an active
+applied-week approval, and an unchanged applied-running-workouts SHA-256. Publication
 and completion manifests retain that full lineage.
 
 Historical adherence is revision-aware: content-addressed closed-plan archives

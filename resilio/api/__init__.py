@@ -6,6 +6,7 @@ from resilio.api.activity_evidence import (
 )
 from resilio.api.coaching_context import (
     CoachingContextError,
+    create_week_planning_context_evidence,
     get_weekly_coach_context,
 )
 from resilio.api.helpers import get_error_message, handle_error, is_error
@@ -81,6 +82,7 @@ __all__ = [
     "create_macro_plan_from_file",
     "create_cycle_review_evidence",
     "create_macro_context_evidence",
+    "create_week_planning_context_evidence",
     "create_profile",
     "close_plan_cycle",
     "get_current_plan",

@@ -17,7 +17,7 @@ from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.freshness import require_verified_vdot_approval
 from resilio.core.planning.integrity import (
     planning_constraints_snapshot,
-    planning_profile_sha256,
+    planning_inputs_sha256,
 )
 from resilio.core.planning.source_state import (
     coaching_evidence_source_sha256,
@@ -27,12 +27,12 @@ from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.approvals import ClosedPlanArchive, PlanningState, VDOTApproval
 from resilio.schemas.coaching import WeeklyCoachContext
-from resilio.schemas.plan import BaselineAssessmentPlan, RaceMacroPlan
 from resilio.schemas.plan_history import (
     AssessmentClosure,
     EvidenceArtifactReference,
     PlanClosure,
 )
+from resilio.schemas.planning.plans import BaselineAssessmentPlan, RaceMacroPlan
 from resilio.schemas.planning_evidence import (
     BaselineAssessmentReview,
     CompactTrainingWeek,
@@ -317,8 +317,8 @@ def create_macro_planning_context(
             evidence_id="profile.current_constraints",
             category="profile",
             description=(
-                "Athlete-confirmed current goal, availability, multisport "
-                "commitments, and scheduling constraints."
+                "Athlete-confirmed current goal, run availability, athlete-managed "
+                "sport expectations, and scheduling constraints."
             ),
         ),
         PlanningEvidencePointer(
@@ -351,7 +351,7 @@ def create_macro_planning_context(
         evidence_as_of_date=evidence_as_of_date,
         intended_plan_start_date=intended_plan_start_date,
         generated_at_utc=generation_timestamp,
-        planning_profile_sha256=planning_profile_sha256(profile),
+        planning_inputs_sha256=planning_inputs_sha256(profile),
         current_goal=profile.goal,
         current_constraints=planning_constraints_snapshot(profile),
         active_vdot_approval_id=approval.approval_id,

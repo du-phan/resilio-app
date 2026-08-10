@@ -21,10 +21,12 @@ Git history is the archive.
 - [Intervals.icu integration](reference/intervals-icu-integration.md)
 - [Agent workflow](guides/development/agent-workflow.md)
 - [Coaching CLI index](coaching/cli/index.md)
+- [Athlete-managed sports](coaching/athlete-managed-sports.md)
 
 ## Coaching
 
 - [CLI command index](coaching/cli/index.md)
+- [Athlete-managed sports](coaching/athlete-managed-sports.md)
 - [Methodology](coaching/methodology.md)
 - [Training-book summaries](training_books/)
 

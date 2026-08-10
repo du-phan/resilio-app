@@ -3,20 +3,24 @@ from datetime import date, datetime, timezone
 import pytest
 from pydantic import ValidationError
 
+import resilio.api.profile as profile_api
 from resilio.api.profile import (
     ProfileError,
     create_profile,
     get_profile,
+    set_flexible_athlete_managed_sport,
     set_personal_best,
+    set_sport_active_state,
     update_profile,
 )
 from resilio.core.profile.candidates import build_provider_profile_candidates
 from resilio.schemas.profile import (
+    AthleteManagedSport,
     AthleteProfile,
-    ConflictPolicy,
+    BalancedTrainingPriority,
+    FlexibleWeeklyParticipation,
     Goal,
     GoalType,
-    RunningPriority,
     TrainingConstraints,
 )
 from resilio.schemas.training_state import (
@@ -30,15 +34,15 @@ def test_profile_rejects_derived_and_provider_owned_legacy_fields() -> None:
     with pytest.raises(ValidationError):
         AthleteProfile.model_validate(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "athlete_name": "Alex",
                 "created_on": "2026-07-30",
+                "training_timezone": "Europe/Paris",
                 "constraints": {
                     "minimum_run_days_per_week": 2,
                     "maximum_run_days_per_week": 4,
                 },
-                "running_priority": "equal",
-                "conflict_policy": "ask_each_time",
+                "training_priority": {"kind": "balanced"},
                 "goal": {"type": "general_fitness"},
                 "current_weekly_run_km": 42,
                 "vital_signs": {"max_hr": 190},
@@ -59,10 +63,10 @@ def test_constraints_reject_minimum_above_actual_availability() -> None:
     "run_sport_name",
     ["run", "trail_run", "treadmill_run", "track_run"],
 )
-def test_other_sport_commitments_reject_all_run_variants(
+def test_athlete_managed_sports_reject_all_run_variants(
     run_sport_name: str,
 ) -> None:
-    with pytest.raises(ValidationError, match="not an other-sport"):
+    with pytest.raises(ValidationError, match="cannot be athlete-managed"):
         AthleteProfile(
             athlete_name="Alex",
             created_on=date(2026, 7, 30),
@@ -71,14 +75,15 @@ def test_other_sport_commitments_reject_all_run_variants(
                 minimum_run_days_per_week=2,
                 maximum_run_days_per_week=4,
             ),
-            other_sport_commitments=[
-                {
-                    "sport_name": run_sport_name,
-                    "sessions_per_week": 1,
-                }
+            athlete_managed_sports=[
+                AthleteManagedSport(
+                    sport_name=run_sport_name,
+                    participation_pattern=FlexibleWeeklyParticipation(
+                        expected_sessions_per_week=1,
+                    ),
+                )
             ],
-            running_priority=RunningPriority.PRIMARY,
-            conflict_policy=ConflictPolicy.ASK_EACH_TIME,
+            training_priority=BalancedTrainingPriority(),
         )
 
 
@@ -151,15 +156,14 @@ def test_clean_profile_contract_round_trips() -> None:
             minimum_run_days_per_week=3,
             maximum_run_days_per_week=5,
         ),
-        running_priority=RunningPriority.PRIMARY,
-        conflict_policy=ConflictPolicy.ASK_EACH_TIME,
+        training_priority=BalancedTrainingPriority(),
         goal=Goal(type=GoalType.TEN_K, target_date=date(2026, 10, 4)),
     )
 
-    assert AthleteProfile.model_validate(profile.model_dump()).schema_version == 2
+    assert AthleteProfile.model_validate(profile.model_dump()).schema_version == 3
 
 
-def test_profile_api_persists_only_v2_contract(tmp_path, monkeypatch) -> None:
+def test_profile_api_persists_only_v3_contract(tmp_path, monkeypatch) -> None:
     (tmp_path / ".git").mkdir()
     monkeypatch.chdir(tmp_path)
 
@@ -205,3 +209,84 @@ def test_personal_best_stores_seconds_date_and_calculated_vdot(
     assert personal_best.elapsed_time_seconds == 2_550
     assert personal_best.performance_date == date(2026, 7, 1)
     assert 30 <= personal_best.vdot <= 85
+
+
+def test_updating_flexible_participation_does_not_resume_paused_sport(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    assert isinstance(
+        create_profile(
+            athlete_name="Alex",
+            training_timezone="Europe/Paris",
+        ),
+        AthleteProfile,
+    )
+    assert isinstance(
+        set_flexible_athlete_managed_sport(
+            sport_name="yoga",
+            expected_sessions_per_week=1,
+        ),
+        AthleteProfile,
+    )
+    assert isinstance(
+        set_sport_active_state(
+            sport_name="yoga",
+            active=False,
+            pause_reason="other",
+            paused_on=date(2026, 8, 1),
+        ),
+        AthleteProfile,
+    )
+
+    updated = set_flexible_athlete_managed_sport(
+        sport_name="yoga",
+        expected_sessions_per_week=2,
+        typical_session_duration_minutes=45,
+    )
+
+    assert isinstance(updated, AthleteProfile)
+    yoga = updated.athlete_managed_sports[0]
+    assert yoga.active is False
+    assert yoga.pause_reason == "other"
+    assert yoga.paused_on == date(2026, 8, 1)
+    assert yoga.participation_pattern.expected_sessions_per_week == 2
+
+
+def test_pausing_sport_defaults_to_athlete_local_date_and_normalizes_lookup(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        profile_api,
+        "athlete_local_date",
+        lambda _training_timezone: date(2026, 8, 10),
+    )
+    profile = create_profile(
+        athlete_name="Alex",
+        training_timezone="Pacific/Auckland",
+    )
+    assert isinstance(profile, AthleteProfile)
+    assert profile.created_on == date(2026, 8, 10)
+    assert isinstance(
+        set_flexible_athlete_managed_sport(
+            sport_name="climb",
+            expected_sessions_per_week=2,
+        ),
+        AthleteProfile,
+    )
+
+    updated = set_sport_active_state(
+        sport_name=" CLIMB ",
+        active=False,
+        pause_reason="off_season",
+    )
+
+    assert isinstance(updated, AthleteProfile)
+    climb = updated.athlete_managed_sports[0]
+    assert climb.active is False
+    assert climb.paused_on == date(2026, 8, 10)

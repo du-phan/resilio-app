@@ -30,9 +30,9 @@ authority. Commands return JSON envelopes.
   training state, signal-first recovery, and coverage.
 - `resilio coach history --as-of <DATE> --weeks <COUNT>` — typed multi-week
   evidence with explicit target-week and evidence-window boundaries.
-- `resilio coach planning-context --week <NUMBER> --evidence-as-of <DATE>
-  --history-weeks <COUNT>` — approved future plan skeleton plus history that
-  ends on a separate, non-future evidence date.
+- `resilio coach create-planning-context --week <NUMBER> --evidence-as-of
+  <DATE> --history-weeks <COUNT>` — persist the approved future run-plan
+  skeleton plus date-bounded history as immutable weekly-proposal evidence.
 - `resilio today [--date <DATE>]` — date-scoped planned and completed facts.
 - `resilio week` — current weekly facts.
 - `resilio dates ...` — authoritative date calculations.
@@ -40,14 +40,18 @@ authority. Commands return JSON envelopes.
 
 ## Athlete-owned facts
 
-- `resilio profile create|get|set` — strict athlete profile v2; create requires
+- `resilio profile create|get|set` — strict athlete profile v3; create requires
   the IANA training timezone used to resolve scheduled local times.
 - `resilio profile candidates [--as-of-date <DATE>]` — read-only provider
   threshold heart-rate, threshold-speed, power, and VO2-max candidates with
   provenance and explicit units.
 - `resilio profile set-personal-best` — exact distance, elapsed time, and date.
-- `resilio profile add-sport|remove-sport|pause-sport|resume-sport` —
-  other-sport commitments.
+- `resilio profile set-flexible-sport|set-recurring-sport` — athlete-managed
+  future sport expectations without coach-owned sessions.
+- `resilio profile set-training-priority` — running-first, balanced, or one
+  active athlete-managed sport first.
+- `resilio profile remove-athlete-managed-sport|pause-sport|resume-sport` —
+  maintain athlete-managed participation context.
 - `resilio goal ...` — athlete goal.
 - `resilio memory ...` — athlete-confirmed durable context.
 - `resilio vdot calculate|predict|estimate-current` — athlete-local
@@ -60,9 +64,8 @@ authority. Commands return JSON envelopes.
 - `resilio plan create-assessment-context|template-assessment|create-assessment`
   — immutable evidence gate and short return-to-running skeleton with one
   athlete-approved benchmark intent and optional typed temporary scheduling
-  constraints and week-specific other-sport count proposals; no VDOT or race
-  methodology is required. Context creation accepts `--constraints-file` and
-  `--other-sport-file` as separate typed JSON arrays.
+  constraints; no VDOT or race methodology is required. Context creation
+  accepts `--constraints-file` for those cycle-specific date ranges.
 - `resilio plan discard-unapproved --plan-revision <ID>` — remove only the
   exact unapproved, unapplied proposal after proving it has no publication or
   completion ownership; approved plans remain closure-only.
@@ -81,7 +84,9 @@ authority. Commands return JSON envelopes.
   skeleton creation bound to one exact macro-planning context and
   evidence-cited adaptation decisions; the latest recent week and, for
   renewals, the latest cycle summary and goal outcome are mandatory evidence.
-- `resilio plan validate-week|apply-week` — exact weekly proposal boundary.
+- `resilio plan validate-week|apply-week` — run-only weekly proposal boundary
+  bound to immutable context and exact configured/observed other-sport
+  considerations.
 - `resilio vdot create-proposal-from-assessment --review-sha256 --out` — create
   an independently approvable VDOT proposal from one immutable closed review.
 - `resilio approvals status|approve-vdot --file|approve-plan|approve-week
@@ -98,7 +103,7 @@ authority. Commands return JSON envelopes.
   capabilities reported as limitations rather than global blockers.
 - `resilio workout status|reconcile --week-number <N>` — inspect without
   mutation or converge one exact applied week's running-workout desired state;
-  all non-running sports are ignored by contract.
+  non-running prescriptions are invalid upstream and never reach publication.
 - `resilio workout resolve-drift --week-number <N> --restore-local
   --confirmation-reference <TEXT>` — replace exact owned remote drift only
   after explicit athlete confirmation. There is no automatic remote adoption.

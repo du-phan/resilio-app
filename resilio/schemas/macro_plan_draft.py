@@ -3,12 +3,13 @@
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from resilio.schemas.methodology import MethodologyChoice
-from resilio.schemas.plan import PlanGoal, WeekPlan
 from resilio.schemas.plan_history import (
     EvidenceArtifactReference,
     PlanAdaptationDecision,
     PlanAdaptationDecisionType,
 )
+from resilio.schemas.planning.plans import PlanGoal
+from resilio.schemas.planning.weeks import WeekPlan
 
 
 class MacroPlanDraft(BaseModel):
@@ -26,7 +27,7 @@ class MacroPlanDraft(BaseModel):
 
     @model_validator(mode="after")
     def macro_weeks_are_unpopulated(self) -> "MacroPlanDraft":
-        if any(week.workouts for week in self.weeks):
+        if any(week.running_workouts for week in self.weeks):
             raise ValueError("macro plan weeks must not contain exact workouts")
         if self.planning_context_reference.artifact_type != "macro_planning_context":
             raise ValueError("macro draft requires macro-planning context evidence")

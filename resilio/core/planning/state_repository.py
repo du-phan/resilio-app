@@ -12,7 +12,7 @@ from resilio.core.planning.profile_plan_transaction import (
 from resilio.core.repository import RepositoryIO
 from resilio.core.state import load_planning_state, save_planning_state
 from resilio.schemas.approvals import PlanningState
-from resilio.schemas.plan import RaceMacroPlan
+from resilio.schemas.planning.plans import RaceMacroPlan
 from resilio.schemas.repository import RepoError
 
 

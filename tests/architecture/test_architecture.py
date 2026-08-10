@@ -140,10 +140,9 @@ def test_skill_mirror_matches_authoritative_tree():
             collect(child, f"{prefix}{name}/")
 
     collect(comparison)
-    assert not failures, (
-        ".agents/skills is authoritative; mechanically mirror changed files:\n"
-        + "\n".join(failures)
-    )
+    assert (
+        not failures
+    ), ".agents/skills is authoritative; mechanically mirror changed files:\n" + "\n".join(failures)
 
 
 def test_weekly_plan_skill_uses_typed_structured_workouts():
@@ -158,6 +157,39 @@ def test_weekly_plan_skill_uses_typed_structured_workouts():
         "weekly-plan-generate still teaches the removed untyped intervals key; "
         "express quality work as recursive structured_workout steps"
     )
+
+
+def test_weekly_planning_is_run_only_and_athlete_managed_sports_are_context():
+    retired_schema_paths = [
+        PACKAGE_ROOT / "schemas" / "plan.py",
+        PACKAGE_ROOT / "schemas" / "week_application.py",
+    ]
+    assert not [path for path in retired_schema_paths if path.exists()]
+
+    production = "\n".join(path.read_text() for path in _python_modules())
+    retired_vocabulary = [
+        "TemporaryOtherSportCommitmentOverride",
+        "temporary_other_sport_commitment_overrides",
+        "active_other_sports",
+        "other_sport_commitments",
+        "conflict_policy",
+        "planning_profile_sha256",
+        "applied_workout_sha256",
+        "ignored_non_run_workouts",
+    ]
+    present = [term for term in retired_vocabulary if term in production]
+    assert not present, f"Retired planning vocabulary remains in production: {present}"
+
+    weekly_skill = (REPO_ROOT / ".agents/skills/weekly-plan-generate/SKILL.md").read_text()
+    for required in (
+        "coach create-planning-context",
+        "`running_workouts`",
+        "`other_sport_considerations`",
+        "Do not emit a non-running workout",
+    ):
+        assert required in weekly_skill
+    assert "--other-sport-file" not in weekly_skill
+    assert "conflict policy" not in weekly_skill.casefold()
 
 
 def test_documentation_authority_and_current_reference_links_exist():

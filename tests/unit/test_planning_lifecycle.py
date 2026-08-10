@@ -1,4 +1,4 @@
-"""Planning-state v4 lifecycle, evidence, and revision-bound behavior."""
+"""Planning lifecycle, evidence, and revision-bound behavior."""
 
 import json
 from datetime import date, datetime, timezone
@@ -19,7 +19,7 @@ from resilio.core.planning.cycle_review import (
     confirmed_goal_outcome,
     create_cycle_review,
 )
-from resilio.core.planning.integrity import applied_workout_sha256, sha256_file
+from resilio.core.planning.integrity import sha256_file
 from resilio.core.planning.macro_context import create_macro_planning_context
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.service import (
@@ -36,6 +36,7 @@ from resilio.core.planning.service import (
     load_planning_aggregate,
     load_publishable_workout,
 )
+from resilio.core.planning.weekly_context import create_week_planning_context
 from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.core.state import save_planning_state
@@ -48,14 +49,13 @@ from resilio.schemas.approvals import (
 )
 from resilio.schemas.macro_plan_draft import MacroPlanDraft
 from resilio.schemas.plan_history import GoalOutcome, PlanClosureDisposition
-from resilio.schemas.planning_evidence import PlanCycleReview
+from resilio.schemas.planning_evidence import MacroPlanningContext, PlanCycleReview
 from resilio.schemas.profile import (
     AthleteProfile,
-    ConflictPolicy,
+    BalancedTrainingPriority,
     Goal,
     GoalType,
     PBEntry,
-    RunningPriority,
     TrainingConstraints,
 )
 from resilio.schemas.publication import WorkoutCompletionManifest, WorkoutCompletionMatch
@@ -127,7 +127,7 @@ def _draft(vdot_approval_id: str) -> MacroPlanDraft:
                     "end_date": "2026-08-02",
                     "target_run_volume_meters": 10_000,
                     "workout_structure_hints": _hints(),
-                    "workouts": [],
+                    "running_workouts": [],
                 }
             ],
             "vdot_approval_id": vdot_approval_id,
@@ -203,8 +203,7 @@ def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
                 minimum_run_days_per_week=2,
                 maximum_run_days_per_week=4,
             ),
-            running_priority=RunningPriority.PRIMARY,
-            conflict_policy=ConflictPolicy.ASK_EACH_TIME,
+            training_priority=BalancedTrainingPriority(),
             goal=Goal(
                 type=GoalType.TEN_K,
                 target_date=date(2026, 8, 2),
@@ -306,7 +305,25 @@ def test_macro_context_cannot_claim_evidence_from_after_generation(
         )
 
 
-def _write_application(path: Path, *, purpose: str = "Aerobic support") -> None:
+def test_macro_context_contract_rejects_evidence_from_after_generation(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _approve_vdot(repo, tmp_path)
+    context_path = next(Path("data/plans/evidence/macro_planning_context").glob("*.json"))
+    payload = json.loads(context_path.read_text())
+    payload["generated_at_utc"] = "2026-07-25T10:00:00Z"
+
+    with pytest.raises(ValidationError, match="postdate context generation"):
+        MacroPlanningContext.model_validate(payload)
+
+
+def _write_application(
+    path: Path,
+    *,
+    repo: RepositoryIO | None = None,
+    purpose: str = "Aerobic support",
+) -> None:
     def targetless_structure(duration_seconds: int) -> dict[str, object]:
         return {
             "sport": "run",
@@ -320,15 +337,31 @@ def _write_application(path: Path, *, purpose: str = "Aerobic support") -> None:
             ],
         }
 
+    context_sha256 = "f" * 64
+    if repo is not None:
+        context_sha256 = create_week_planning_context(
+            repo,
+            week_number=1,
+            evidence_as_of_date=date(2026, 7, 26),
+            history_week_count=2,
+            generated_at_utc=datetime(2026, 7, 26, 12, 30, tzinfo=timezone.utc),
+            current_local_date=date(2026, 7, 26),
+        ).artifact_sha256
     path.write_text(
         json.dumps(
             {
+                "schema_version": 2,
                 "week_number": 1,
+                "planning_context_reference": {
+                    "artifact_type": "week_planning_context",
+                    "artifact_sha256": context_sha256,
+                },
+                "other_sport_considerations": [],
                 "adjustment_rationale": (
                     "The opening week preserves three distinct run days while "
                     "keeping every prescribed minute deliberately low intensity."
                 ),
-                "workouts": [
+                "running_workouts": [
                     {
                         "id": "w_easy_1",
                         "date": "2026-07-28",
@@ -399,7 +432,7 @@ def _create_approved_macro(
 def _apply_test_week(repo: RepositoryIO, tmp_path: Path) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(
         repo,
         payload_path,
@@ -732,7 +765,7 @@ def test_week_approval_cannot_predate_plan_approval(
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "backdated-week-approval.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
 
     with pytest.raises(PlanOperationError, match="predate.*plan approval"):
         approve_week_application(
@@ -748,7 +781,7 @@ def test_week_application_cannot_predate_week_approval(
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "backdated-week-application.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(
         repo,
         payload_path,
@@ -763,7 +796,7 @@ def test_week_application_cannot_predate_week_approval(
         )
 
 
-def test_create_macro_plan_persists_v5_aggregate(
+def test_create_macro_plan_persists_v6_state_with_v5_plan(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
@@ -781,8 +814,8 @@ def test_create_macro_plan_persists_v5_aggregate(
     assert state is not None
     assert state.active_plan is not None
     assert state.active_plan.plan == created
-    assert state.schema_version == 5
-    assert loaded.schema_info.version == 4
+    assert state.schema_version == 6
+    assert loaded.schema_info.version == 5
     assert loaded.vdot_approval_id == approval_id
     assert loaded.baseline_vdot == 45
 
@@ -1075,7 +1108,7 @@ def test_planning_relevant_profile_update_durably_invalidates_plan(
     assert state is not None
     assert state.active_plan is not None
     assert state.active_plan.invalidated_at_utc is not None
-    assert "constraints" in (state.active_plan.invalidation_reason or "")
+    assert "planning inputs" in (state.active_plan.invalidation_reason or "")
 
 
 def test_profile_update_rolls_back_when_plan_invalidation_cannot_persist(
@@ -1171,7 +1204,7 @@ def test_week_approval_cannot_cross_macro_plan_revisions(
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(
         repo,
         payload_path,
@@ -1212,9 +1245,9 @@ def test_week_application_rejects_post_approval_mutation(
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(repo, payload_path)
-    _write_application(payload_path, purpose="Changed after approval")
+    _write_application(payload_path, repo=repo, purpose="Changed after approval")
 
     with pytest.raises(PlanOperationError, match="changed after approval"):
         apply_approved_week(repo, payload_path)
@@ -1226,7 +1259,7 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(
         repo,
         payload_path,
@@ -1239,7 +1272,7 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
         applied_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
     )
 
-    assert [workout.id for workout in plan.weeks[0].workouts] == [
+    assert [workout.id for workout in plan.weeks[0].running_workouts] == [
         "w_easy_1",
         "w_easy_2",
         "w_long_1",
@@ -1249,6 +1282,10 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
     assert state.active_plan.pending_weekly_approval is None
     assert len(state.active_plan.applied_week_revisions) == 1
     assert state.active_plan.applied_week_revisions[0].active is True
+    assert (
+        state.active_plan.applied_week_revisions[0].planning_context_reference.artifact_type
+        == "week_planning_context"
+    )
 
     evidence = load_approved_workouts_for_date_range(
         repo,
@@ -1261,6 +1298,65 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
         "w_easy_2",
         "w_long_1",
     ]
+
+
+def test_week_application_must_consider_every_observed_other_sport(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    climb = make_activity(
+        id="recent-climb",
+        date=date(2026, 7, 25),
+        sport="climb",
+    )
+    ActivityArchive(repo.resolve_path("data/activities")).write(climb)
+    payload_path = tmp_path / "week-with-climb-context.json"
+    _write_application(payload_path, repo=repo)
+
+    with pytest.raises(PlanOperationError, match=r"missing=\['climb'\]"):
+        approve_week_application(repo, payload_path)
+
+    payload = json.loads(payload_path.read_text())
+    payload["other_sport_considerations"] = [
+        {
+            "sport_name": "climb",
+            "recent_activity_ids": [climb.local_activity_id],
+            "effects_on_running_plan": ["recovery_spacing"],
+            "rationale": (
+                "The recent climbing session requires deliberate recovery spacing "
+                "between the proposed running sessions."
+            ),
+        }
+    ]
+    payload_path.write_text(json.dumps(payload))
+
+    state = approve_week_application(repo, payload_path)
+
+    assert state.active_plan is not None
+    assert state.active_plan.pending_weekly_approval is not None
+
+
+def test_week_application_rejects_training_evidence_drift_after_context(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _create_approved_macro(repo, tmp_path)
+    payload_path = tmp_path / "week-before-new-activity.json"
+    _write_application(payload_path, repo=repo)
+    ActivityArchive(repo.resolve_path("data/activities")).write(
+        make_activity(
+            id="late-synced-climb",
+            date=date(2026, 7, 25),
+            sport="climb",
+        )
+    )
+
+    with pytest.raises(
+        PlanOperationError,
+        match="Training evidence changed after the week-planning context",
+    ):
+        approve_week_application(repo, payload_path)
 
 
 def test_closed_revision_remains_authoritative_for_historical_adherence(
@@ -1365,7 +1461,7 @@ def test_week_replacement_preserves_original_historical_authority(
 ) -> None:
     _apply_test_week(repo, tmp_path)
     replacement_path = tmp_path / "week-replacement.json"
-    _write_application(replacement_path, purpose="Replacement purpose")
+    _write_application(replacement_path, repo=repo, purpose="Replacement purpose")
     approve_week_application(
         repo,
         replacement_path,
@@ -1398,7 +1494,7 @@ def test_application_after_scheduled_instant_is_not_retroactive(
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "late-week.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(
         repo,
         payload_path,
@@ -1444,6 +1540,16 @@ def test_future_week_planning_context_separates_target_from_evidence(
     assert context.recent_history.target_week_end == date(2026, 7, 26)
     assert context.target_week.target_week_skeleton_sha256
 
+    with pytest.raises(ValueError, match="postdate context generation"):
+        build_week_planning_context(
+            repo,
+            week_number=1,
+            evidence_as_of_date=date(2026, 7, 26),
+            history_week_count=2,
+            current_local_date=date(2026, 7, 30),
+            generated_at_utc=datetime(2026, 7, 25, 8, tzinfo=timezone.utc),
+        )
+
     with pytest.raises(ValueError, match="cannot be in the future"):
         build_week_planning_context(
             repo,
@@ -1472,56 +1578,13 @@ def test_planning_context_supports_an_exact_applied_week_revision(
     assert context.target_week.target_run_volume_meters == 10_000
 
 
-def test_exact_applied_workouts_remain_readable_after_policy_evolves(
-    repo: RepositoryIO,
-    tmp_path: Path,
-) -> None:
-    _apply_test_week(repo, tmp_path)
-    state = load_planning_aggregate(repo)
-    assert state is not None and state.active_plan is not None
-
-    active_plan = state.active_plan
-    current_week = active_plan.plan.weeks[0]
-    earlier_week = current_week.model_copy(
-        update={
-            "workouts": [
-                workout.model_copy(update={"structured_workout": None})
-                for workout in current_week.workouts
-            ]
-        }
-    )
-    active_revision = active_plan.applied_week_revisions[0].model_copy(
-        update={
-            "applied_workout_sha256": applied_workout_sha256(earlier_week),
-            "applied_week_snapshot": earlier_week,
-        }
-    )
-    earlier_plan = active_plan.plan.model_copy(update={"weeks": [earlier_week]})
-    error = save_planning_state(
-        state.model_copy(
-            update={
-                "active_plan": active_plan.model_copy(
-                    update={
-                        "plan": earlier_plan,
-                        "applied_week_revisions": [active_revision],
-                    }
-                )
-            }
-        ),
-        repo,
-    )
-    assert error is None
-
-    assert load_publishable_workout(repo, "w_easy_1").prescription.id == "w_easy_1"
-
-
 def test_publication_requires_unchanged_applied_workout_bytes(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
-    _write_application(payload_path)
+    _write_application(payload_path, repo=repo)
     approve_week_application(repo, payload_path)
 
     with pytest.raises(PlanOperationError, match="does not identify"):
@@ -1539,14 +1602,14 @@ def test_publication_requires_unchanged_applied_workout_bytes(
     state = load_planning_aggregate(repo)
     assert state is not None and state.active_plan is not None
     current_week = state.active_plan.plan.weeks[0]
-    changed_workout = current_week.workouts[0].model_copy(
+    changed_workout = current_week.running_workouts[0].model_copy(
         update={"purpose": "Changed after application"}
     )
     changed_week = current_week.model_copy(
         update={
-            "workouts": [
+            "running_workouts": [
                 changed_workout,
-                *current_week.workouts[1:],
+                *current_week.running_workouts[1:],
             ]
         }
     )

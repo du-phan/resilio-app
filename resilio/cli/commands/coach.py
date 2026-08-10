@@ -1,4 +1,4 @@
-"""Read-only typed coaching context commands."""
+"""Typed coaching-context inspection and evidence creation commands."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import typer
 
 from resilio.api.coaching_context import (
     CoachingContextError,
+    create_week_planning_context_evidence,
     get_coach_history,
-    get_week_planning_context,
     get_weekly_coach_context,
 )
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
@@ -84,8 +84,8 @@ def history_command(
     raise typer.Exit(code=get_exit_code_from_envelope(envelope))
 
 
-@app.command("planning-context")
-def planning_context_command(
+@app.command("create-planning-context")
+def create_planning_context_command(
     week_number: int = typer.Option(..., "--week", min=1),
     evidence_as_of_date: str = typer.Option(..., "--evidence-as-of"),
     history_week_count: int = typer.Option(
@@ -95,7 +95,7 @@ def planning_context_command(
         max=52,
     ),
 ) -> None:
-    """Return a future target skeleton with history ending at the as-of date."""
+    """Persist the exact future-week evidence used to author a proposal."""
     try:
         parsed_evidence_as_of_date = date.fromisoformat(evidence_as_of_date)
     except ValueError as exc:
@@ -104,7 +104,7 @@ def planning_context_command(
             message=f"Dates must use YYYY-MM-DD format: {exc}",
         )
     else:
-        result = get_week_planning_context(
+        result = create_week_planning_context_evidence(
             week_number=week_number,
             evidence_as_of_date=parsed_evidence_as_of_date,
             history_week_count=history_week_count,

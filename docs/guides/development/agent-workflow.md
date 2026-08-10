@@ -25,6 +25,14 @@ session-RPE arbitrary units, run exposure, other-sport exposure, and wellness
 separate. Interpret recovery signal by signal; do not compute a composite
 readiness score or injury probability.
 
+Running is the only prescribed weekly-plan content. Other physical activities
+remain athlete-managed: synchronized completions are factual observed
+exposure, while profile entries are athlete-confirmed future expectations.
+Flexible expectations never acquire dates; recurring expectations constrain
+run placement only through their confirmed weekdays and same-day permission.
+Every weekly proposal must show how all configured and recently observed
+non-running sports affected—or did not affect—the running program.
+
 Use the matching skill for onboarding, baseline-assessment planning and review,
 weekly analysis, multi-week review, plan renewal, VDOT proposal, race-macro
 planning, weekly generation, and weekly application. The main coach owns
@@ -96,11 +104,8 @@ separate athlete-confirmation reference and never implies Garmin watch delivery.
 Cycle-specific holidays and other unavailable date ranges belong in typed
 assessment scheduling constraints with an athlete-confirmation reference, not
 inferred from weekday availability or silently written into the durable profile.
-When that shortened week makes a durable other-sport commitment infeasible,
-the coach may propose a week-and-sport-specific session-count override with an
-explicit rationale. It becomes binding only with whole-plan approval; do not
-mislabel the proposal as a prior athlete confirmation or cram the normal count
-into the remaining days.
+They constrain running only. The coach never creates temporary session-count
+overrides for athlete-managed sports or crams running into the remaining days.
 
 An unapproved, unapplied plan proposal may be discarded for revision only by
 its exact plan revision ID and only after local publication and completion

@@ -36,23 +36,19 @@ from resilio.core.planning.service import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.approvals import PlanningState
-from resilio.schemas.assessment import (
-    AssessmentReason,
-    TemporaryOtherSportCommitmentOverride,
-    TemporaryScheduleConstraint,
-)
+from resilio.schemas.assessment import AssessmentReason, TemporaryScheduleConstraint
 from resilio.schemas.macro_plan_draft import MacroPlanDraft
-from resilio.schemas.plan import (
-    AssessmentPlanDraft,
-    BaselineAssessmentPlan,
-    RaceMacroPlan,
-    TrainingPlan,
-    WeekPlan,
-)
 from resilio.schemas.plan_history import (
     EvidenceArtifactReference,
     PlanClosureDisposition,
 )
+from resilio.schemas.planning.drafts import AssessmentPlanDraft
+from resilio.schemas.planning.plans import (
+    BaselineAssessmentPlan,
+    RaceMacroPlan,
+    TrainingPlan,
+)
+from resilio.schemas.planning.weeks import WeekPlan
 from resilio.schemas.planning_evidence import (
     AssessmentPlanningContext,
     AssessmentResultCandidate,
@@ -235,9 +231,6 @@ def create_assessment_context_evidence(
     intended_plan_start_date: date,
     assessment_reasons: list[AssessmentReason],
     temporary_schedule_constraints: list[TemporaryScheduleConstraint] | None = None,
-    temporary_other_sport_commitment_overrides: list[
-        TemporaryOtherSportCommitmentOverride
-    ] | None = None,
 ) -> AssessmentContextEvidenceResult | PlanError:
     try:
         repo = _repository()
@@ -247,9 +240,6 @@ def create_assessment_context_evidence(
             intended_plan_start_date=intended_plan_start_date,
             assessment_reasons=assessment_reasons,
             temporary_schedule_constraints=temporary_schedule_constraints or [],
-            temporary_other_sport_commitment_overrides=(
-                temporary_other_sport_commitment_overrides or []
-            ),
         )
         return AssessmentContextEvidenceResult(
             reference=reference,
@@ -284,9 +274,7 @@ def create_assessment_review_evidence(
             repo,
             candidate_id=candidate_id,
             evidence_as_of_date=evidence_as_of_date,
-            official_distance_confirmation_reference=(
-                official_distance_confirmation_reference
-            ),
+            official_distance_confirmation_reference=(official_distance_confirmation_reference),
             athlete_confirmation_reference=athlete_confirmation_reference,
             review_summary=review_summary,
         )
@@ -361,18 +349,16 @@ def get_plan_status() -> PlanStatus | PlanError:
     plan = get_current_plan()
     if isinstance(plan, PlanError):
         return plan
-    populated = sorted(week.week_number for week in plan.weeks if week.workouts)
+    populated = sorted(week.week_number for week in plan.weeks if week.running_workouts)
     next_unpopulated = next(
-        (week.week_number for week in plan.weeks if not week.workouts),
+        (week.week_number for week in plan.weeks if not week.running_workouts),
         None,
     )
     return PlanStatus(
         plan_kind=plan.kind,
         plan_id=plan.id,
         methodology=(
-            plan.methodology.identifier.value
-            if isinstance(plan, RaceMacroPlan)
-            else None
+            plan.methodology.identifier.value if isinstance(plan, RaceMacroPlan) else None
         ),
         benchmark_distance=(
             str(plan.benchmark_intent.race_distance)
@@ -418,7 +404,7 @@ def build_macro_template(total_weeks: int) -> dict[str, object] | PlanError:
                     },
                     "intensity_distribution": None,
                 },
-                "workouts": [],
+                "running_workouts": [],
                 "is_recovery_week": False,
                 "notes": None,
             }
@@ -470,7 +456,7 @@ def build_assessment_template(total_weeks: int) -> dict[str, object] | PlanError
                     "long_run": None,
                     "intensity_distribution": None,
                 },
-                "workouts": [],
+                "running_workouts": [],
                 "is_recovery_week": False,
                 "notes": None,
             }
@@ -507,6 +493,5 @@ def build_assessment_template(total_weeks: int) -> dict[str, object] | PlanError
             "fallback_window_end": None,
         },
         "temporary_schedule_constraints": [],
-        "temporary_other_sport_commitment_overrides": [],
         "medical_rehabilitation_excluded": True,
     }

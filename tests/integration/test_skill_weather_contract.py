@@ -98,16 +98,15 @@ def test_weekly_plan_skill_weather_trees_are_in_sync():
     )
 
 
-def test_weekly_plan_skill_mentions_multi_sport_weather():
-    """Skill must acknowledge weather affects all sports on affected days, not just running."""
+def test_weekly_plan_skill_scopes_weather_to_prescribed_running():
+    """Weather decisions must not turn athlete-managed sports into prescriptions."""
     for path in [
         ".agents/skills/weekly-plan-generate/SKILL.md",
         ".claude/skills/weekly-plan-generate/SKILL.md",
     ]:
         content = _read(path)
-        assert (
-            "Multi-sport" in content or "multi-sport" in content
-        ), f"{path}: must address multi-sport weather impact"
+        assert "Weather informs only the running sessions prescribed" in content
+        assert "Do not emit a non-running workout" in content
 
 
 def test_first_session_skill_explains_why_location_matters_to_athlete():

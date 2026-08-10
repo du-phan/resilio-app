@@ -16,15 +16,20 @@ from resilio.core.repository import RepositoryIO
 from resilio.core.training_state_repository import load_sport_settings, load_wellness
 from resilio.core.vdot import parse_time_string
 from resilio.schemas.profile import (
+    AthleteManagedSport,
+    AthleteManagedSportFirstPriority,
     AthleteProfile,
-    ConflictPolicy,
+    BalancedTrainingPriority,
+    FlexibleWeeklyParticipation,
     Goal,
     GoalType,
-    OtherSport,
     PauseReason,
     PBEntry,
-    RunningPriority,
+    RecurringWeeklyParticipation,
+    RunningFirstTrainingPriority,
+    RunSameDayPermission,
     TrainingConstraints,
+    TrainingPriority,
     TypicalIntensity,
     Weekday,
 )
@@ -46,15 +51,16 @@ def _profile_failure(exc: Exception) -> ProfileError:
     return ProfileError("validation", str(exc))
 
 
+def _sport_lookup_key(sport_name: str) -> str:
+    return sport_name.strip().casefold()
+
+
 def create_profile(
     *,
     athlete_name: str,
     training_timezone: str,
     age_years: int | None = None,
     running_experience_years: float | None = None,
-    running_priority: str = RunningPriority.EQUAL.value,
-    primary_sport_name: str | None = None,
-    conflict_policy: str = ConflictPolicy.ASK_EACH_TIME.value,
     minimum_run_days_per_week: int = 2,
     maximum_run_days_per_week: int = 4,
     unavailable_run_days: list[Weekday] | None = None,
@@ -71,7 +77,7 @@ def create_profile(
             weather_preferences = WeatherLocation(location_query=weather_location.strip())
         profile = AthleteProfile(
             athlete_name=athlete_name,
-            created_on=date.today(),
+            created_on=athlete_local_date(training_timezone),
             training_timezone=training_timezone,
             age_years=age_years,
             running_experience_years=running_experience_years,
@@ -81,9 +87,7 @@ def create_profile(
                 maximum_run_days_per_week=maximum_run_days_per_week,
                 maximum_session_duration_minutes=maximum_session_duration_minutes,
             ),
-            running_priority=RunningPriority(running_priority),
-            primary_sport_name=primary_sport_name,
-            conflict_policy=ConflictPolicy(conflict_policy),
+            training_priority=BalancedTrainingPriority(),
             weather_preferences=weather_preferences,
         )
         return repository.create(profile)
@@ -104,7 +108,7 @@ def get_profile() -> AthleteProfile | ProfileError:
 
 
 def update_profile(**fields: Any) -> AthleteProfile | ProfileError:
-    """Update explicit v2 fields; unknown and legacy fields are rejected."""
+    """Update explicit current-schema fields; unknown fields are rejected."""
     if not fields:
         return ProfileError("validation", "At least one field is required")
     try:
@@ -168,48 +172,140 @@ def set_goal(
     return result if isinstance(result, ProfileError) else result.goal
 
 
-def add_sport_to_profile(
+def _training_priority(
+    kind: str,
+    *,
+    priority_sport_name: str | None,
+) -> TrainingPriority:
+    if kind == "running_first":
+        if priority_sport_name is not None:
+            raise ValueError("running-first priority cannot name another sport")
+        return RunningFirstTrainingPriority()
+    if kind == "balanced":
+        if priority_sport_name is not None:
+            raise ValueError("balanced priority cannot name another sport")
+        return BalancedTrainingPriority()
+    if kind == "athlete_managed_sport_first":
+        if priority_sport_name is None:
+            raise ValueError("athlete-managed-sport-first priority requires a sport name")
+        return AthleteManagedSportFirstPriority(sport_name=priority_sport_name)
+    raise ValueError(f"Unsupported training priority kind: {kind}")
+
+
+def set_training_priority(
+    *,
+    kind: str,
+    priority_sport_name: str | None = None,
+) -> AthleteProfile | ProfileError:
+    try:
+        priority = _training_priority(
+            kind,
+            priority_sport_name=priority_sport_name,
+        )
+    except (ValueError, ValidationError) as exc:
+        return _profile_failure(exc)
+    return update_profile(training_priority=priority.model_dump(mode="json"))
+
+
+def _upsert_athlete_managed_sport(
+    profile: AthleteProfile,
+    sport: AthleteManagedSport,
+) -> AthleteProfile | ProfileError:
+    target = _sport_lookup_key(sport.sport_name)
+    existing = next(
+        (
+            item
+            for item in profile.athlete_managed_sports
+            if _sport_lookup_key(item.sport_name) == target
+        ),
+        None,
+    )
+    if existing is not None:
+        payload = sport.model_dump(mode="json")
+        payload.update(
+            {
+                "active": existing.active,
+                "pause_reason": existing.pause_reason,
+                "paused_on": existing.paused_on,
+            }
+        )
+        sport = AthleteManagedSport.model_validate(payload)
+    sports = [
+        item
+        for item in profile.athlete_managed_sports
+        if _sport_lookup_key(item.sport_name) != target
+    ]
+    sports.append(sport)
+    return update_profile(athlete_managed_sports=[item.model_dump(mode="json") for item in sports])
+
+
+def set_flexible_athlete_managed_sport(
     *,
     sport_name: str,
-    sessions_per_week: int,
+    expected_sessions_per_week: int,
     typical_session_duration_minutes: int = 60,
     typical_intensity: str = "moderate",
-    unavailable_days: list[Weekday] | None = None,
-    notes: str | None = None,
+    athlete_context_note: str | None = None,
 ) -> AthleteProfile | ProfileError:
     profile = get_profile()
     if isinstance(profile, ProfileError):
         return profile
     try:
-        commitment = OtherSport(
+        sport = AthleteManagedSport(
             sport_name=sport_name,
-            sessions_per_week=sessions_per_week,
+            participation_pattern=FlexibleWeeklyParticipation(
+                expected_sessions_per_week=expected_sessions_per_week,
+            ),
             typical_session_duration_minutes=typical_session_duration_minutes,
-            typical_intensity=TypicalIntensity(typical_intensity),
-            unavailable_days=unavailable_days or [],
-            notes=notes,
+            athlete_reported_typical_intensity=TypicalIntensity(typical_intensity),
+            athlete_context_note=athlete_context_note,
         )
-        commitments = [*profile.other_sport_commitments, commitment]
-        return update_profile(
-            other_sport_commitments=[item.model_dump(mode="json") for item in commitments]
-        )
+        return _upsert_athlete_managed_sport(profile, sport)
     except (ValueError, ValidationError) as exc:
         return _profile_failure(exc)
 
 
-def remove_sport_from_profile(sport_name: str) -> AthleteProfile | ProfileError:
+def set_recurring_athlete_managed_sport(
+    *,
+    sport_name: str,
+    weekdays: list[Weekday],
+    run_same_day_permission: str,
+    typical_session_duration_minutes: int = 60,
+    typical_intensity: str = "moderate",
+    athlete_context_note: str | None = None,
+) -> AthleteProfile | ProfileError:
     profile = get_profile()
     if isinstance(profile, ProfileError):
         return profile
-    target = sport_name.casefold()
-    commitments = [
-        item for item in profile.other_sport_commitments if item.sport_name.casefold() != target
+    try:
+        sport = AthleteManagedSport(
+            sport_name=sport_name,
+            participation_pattern=RecurringWeeklyParticipation(
+                weekdays=weekdays,
+                run_same_day_permission=RunSameDayPermission(run_same_day_permission),
+            ),
+            typical_session_duration_minutes=typical_session_duration_minutes,
+            athlete_reported_typical_intensity=TypicalIntensity(typical_intensity),
+            athlete_context_note=athlete_context_note,
+        )
+        return _upsert_athlete_managed_sport(profile, sport)
+    except (ValueError, ValidationError) as exc:
+        return _profile_failure(exc)
+
+
+def remove_athlete_managed_sport(sport_name: str) -> AthleteProfile | ProfileError:
+    profile = get_profile()
+    if isinstance(profile, ProfileError):
+        return profile
+    target = _sport_lookup_key(sport_name)
+    sports = [
+        item
+        for item in profile.athlete_managed_sports
+        if _sport_lookup_key(item.sport_name) != target
     ]
-    if len(commitments) == len(profile.other_sport_commitments):
-        return ProfileError("not_found", f"No sport commitment named {sport_name!r}")
-    return update_profile(
-        other_sport_commitments=[item.model_dump(mode="json") for item in commitments]
-    )
+    if len(sports) == len(profile.athlete_managed_sports):
+        return ProfileError("not_found", f"No athlete-managed sport named {sport_name!r}")
+    return update_profile(athlete_managed_sports=[item.model_dump(mode="json") for item in sports])
 
 
 def set_sport_active_state(
@@ -222,13 +318,13 @@ def set_sport_active_state(
     profile = get_profile()
     if isinstance(profile, ProfileError):
         return profile
-    target = sport_name.casefold()
+    target = _sport_lookup_key(sport_name)
     found = False
-    commitments: list[OtherSport] = []
+    sports: list[AthleteManagedSport] = []
     try:
-        for item in profile.other_sport_commitments:
-            if item.sport_name.casefold() != target:
-                commitments.append(item)
+        for item in profile.athlete_managed_sports:
+            if _sport_lookup_key(item.sport_name) != target:
+                sports.append(item)
                 continue
             found = True
             payload = item.model_dump(mode="json")
@@ -236,17 +332,19 @@ def set_sport_active_state(
                 {
                     "active": active,
                     "pause_reason": (None if active else PauseReason(pause_reason or "").value),
-                    "paused_on": None if active else (paused_on or date.today()),
+                    "paused_on": (
+                        None
+                        if active
+                        else (paused_on or athlete_local_date(profile.training_timezone))
+                    ),
                 }
             )
-            commitments.append(OtherSport.model_validate(payload))
+            sports.append(AthleteManagedSport.model_validate(payload))
     except (ValueError, ValidationError) as exc:
         return _profile_failure(exc)
     if not found:
-        return ProfileError("not_found", f"No sport commitment named {sport_name!r}")
-    return update_profile(
-        other_sport_commitments=[item.model_dump(mode="json") for item in commitments]
-    )
+        return ProfileError("not_found", f"No athlete-managed sport named {sport_name!r}")
+    return update_profile(athlete_managed_sports=[item.model_dump(mode="json") for item in sports])
 
 
 def get_provider_profile_candidates(

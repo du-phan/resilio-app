@@ -25,7 +25,8 @@ unapproved plan, but it must not approve the plan or any exact week.
 ## Preconditions
 
 Require a confirmed profile, goal, training timezone, run availability,
-other-sport commitments, and conflict policy. Require no approved active plan.
+athlete-managed sport expectations, and training priority. Require no approved
+active plan.
 An obsolete unapproved proposal may be discarded only by its exact revision ID;
 never use proposal discard to bypass evidence-backed closure. Refresh completed
 activities and coverage before using inactivity or recent exposure as facts:
@@ -65,20 +66,12 @@ Classify at least one exact reason: `missing_baseline`, `disputed_baseline`,
    `athlete_confirmation_reference`. Keep these cycle-specific constraints out
    of the durable profile.
 
-   If a shortened week makes the durable other-sport session count unsafe or
-   infeasible, also write a separate JSON array of coach-proposed overrides.
-   Each item requires one Monday `week_start_date`, an active `sport_name`,
-   `sessions_per_week`, a precise `reason`, and `planning_rationale`. Use the
-   smallest defensible change. Do not claim the athlete already approved it:
-   approval of the complete assessment plan is the approval boundary.
-
    ```bash
    poetry run resilio plan create-assessment-context \
      --evidence-as-of <DATE> \
      --start <MONDAY> \
      --reason <ASSESSMENT_REASON> \
-     --constraints-file <CONSTRAINTS_JSON> \
-     --other-sport-file <OTHER_SPORT_OVERRIDES_JSON>
+     --constraints-file <CONSTRAINTS_JSON>
    ```
 
 3. Select one preferred benchmark date and a bounded fallback window contained
@@ -93,22 +86,22 @@ Classify at least one exact reason: `missing_baseline`, `disputed_baseline`,
    date-only, and state that weather/recovery will decide the final day or time
    at the weekly approval boundary.
 
-4. Respect holidays and every other confirmed unavailable date. Preserve
-   bouldering or other primary-sport commitments as their own sessions; never
-   convert them into running distance or sacrifice them silently. Do not cram
-   the normal weekly count into the days before a benchmark or holiday; propose
-   a typed weekly override when the evidence supports a temporary reduction.
+4. Respect holidays and every other confirmed unavailable date. Account for
+   athlete-managed sport expectations when selecting running volume and
+   recovery spacing, but never create, date, reduce, or approve their sessions.
+   Do not cram running into the days before a benchmark or holiday.
 
 ## Build the assessment skeleton
 
-Create contiguous Monday-Sunday weeks with empty `workouts`. Each week requires
+Create contiguous Monday-Sunday weeks with empty `running_workouts`. Each week requires
 an evidence-backed `target_run_volume_meters`, run-frequency-compatible
 structure hints, and recovery intent. The benchmark week must allow exactly one
 `benchmark` quality role. Record:
 
 - the assessment context reference and exact reasons;
 - every temporary athlete-confirmed unavailable date range from the context;
-- every proposed temporary other-sport count from the context;
+- the exact athlete-managed sport expectations and training priority captured
+  by the context, without turning them into plan sessions;
 - a 5K default or the explicitly confirmed alternative distance;
 - preferred date and fallback window;
 - `medical_rehabilitation_excluded: true`;
@@ -129,8 +122,8 @@ poetry run resilio plan show
 ## Approval boundary
 
 Present the reasons, dates, weekly run volumes in meters/kilometers, maximum
-three-run constraint when applicable, other-sport preservation, benchmark
-distance, preferred date, fallback window, each temporary sport-count change,
+three-run constraint when applicable, treatment of athlete-managed sport
+expectations, benchmark distance, preferred date, fallback window,
 uncertainties, and the fact that exact weeks remain separately approvable. Ask
 for one explicit plan approval.
 

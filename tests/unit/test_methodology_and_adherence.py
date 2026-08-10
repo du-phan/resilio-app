@@ -26,8 +26,8 @@ from resilio.schemas.methodology import (
     MethodologyChoice,
     TrainingMethodology,
 )
-from resilio.schemas.plan import WorkoutPrescription, WorkoutType
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription, WorkoutType
 from resilio.schemas.publication import (
     WorkoutCompletionManifest,
     WorkoutCompletionMatch,
@@ -36,7 +36,7 @@ from resilio.schemas.publication import (
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
-def _authoritative(workout: WorkoutPrescription) -> AuthoritativeWorkout:
+def _authoritative(workout: RunningWorkoutPrescription) -> AuthoritativeWorkout:
     return AuthoritativeWorkout(
         identity=PlanWorkoutIdentity(
             plan_id="plan_test",
@@ -52,8 +52,8 @@ def _workout(
     workout_id: str,
     workout_date: date,
     workout_type: WorkoutType,
-) -> WorkoutPrescription:
-    return WorkoutPrescription(
+) -> RunningWorkoutPrescription:
+    return RunningWorkoutPrescription(
         id=workout_id,
         date=workout_date,
         workout_type=workout_type,
@@ -70,6 +70,17 @@ def _workout(
         ),
         target_rpe_1_to_10=5,
         purpose="Test the planned training stimulus.",
+        structured_workout={
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 3_600},
+                    "intensity": "active",
+                    "cue": "Follow the approved session intent.",
+                }
+            ],
+        },
     )
 
 
@@ -161,30 +172,25 @@ def test_run_workout_requires_distance_and_exact_intensity_seconds() -> None:
     ).model_dump(mode="json")
     payload["planned_distance_meters"] = None
     with pytest.raises(ValidationError, match="planned_distance_meters"):
-        WorkoutPrescription.model_validate(payload)
+        RunningWorkoutPrescription.model_validate(payload)
 
     payload["planned_distance_meters"] = 10_000
     payload["planned_low_intensity_duration_seconds"] = 3_599
     with pytest.raises(ValidationError, match="must sum"):
-        WorkoutPrescription.model_validate(payload)
+        RunningWorkoutPrescription.model_validate(payload)
 
 
-def test_cycle_workout_may_be_duration_defined_without_fake_distance() -> None:
-    workout = WorkoutPrescription(
-        id="w_cycle",
-        date=date(2026, 7, 28),
-        sport="cycle",
-        workout_type="easy",
-        planned_duration_seconds=3_600,
-        planned_distance_meters=None,
-        planned_low_intensity_duration_seconds=3_600,
-        planned_moderate_intensity_duration_seconds=0,
-        planned_high_intensity_duration_seconds=0,
-        target_rpe_1_to_10=3,
-        purpose="Preserve aerobic exposure without inventing cycling distance.",
-    )
+def test_weekly_prescription_rejects_non_running_sport() -> None:
+    payload = _workout(
+        "w_run",
+        date(2026, 7, 28),
+        WorkoutType.EASY,
+    ).model_dump(mode="json")
+    payload["sport"] = "cycle"
+    payload["structured_workout"]["sport"] = "cycle"
 
-    assert workout.planned_distance_meters is None
+    with pytest.raises(ValidationError, match="Input should be 'run'"):
+        RunningWorkoutPrescription.model_validate(payload)
     with pytest.raises(ValueError):
         WorkoutType("rest")
 

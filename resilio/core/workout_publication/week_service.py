@@ -80,9 +80,7 @@ class RunWeekSynchronizationService:
             )
         except PlanOperationError as exc:
             raise PublicationSafetyError(str(exc)) from exc
-        selected = [
-            workout for workout in workouts if workout.identity.week_number == week_number
-        ]
+        selected = [workout for workout in workouts if workout.identity.week_number == week_number]
         if not selected:
             raise PublicationSafetyError(
                 f"Week {week_number} has no exact active applied-week authority"
@@ -102,19 +100,16 @@ class RunWeekSynchronizationService:
     ) -> tuple[
         list[AuthoritativeWorkout],
         list[WeekSynchronizationItem],
-        int,
         set[str],
         PlanWorkoutIdentity,
     ]:
         week_identity = workouts[0].identity
         completed = self._completed_workout_identities()
-        run_workouts = [item for item in workouts if str(item.prescription.sport) == "run"]
-        ignored_non_runs = len(workouts) - len(run_workouts)
         selected: list[AuthoritativeWorkout] = []
         skipped: list[WeekSynchronizationItem] = []
-        current_run_ids = {item.identity.local_workout_id for item in run_workouts}
+        current_run_ids = {item.identity.local_workout_id for item in workouts}
         for item in sorted(
-            run_workouts,
+            workouts,
             key=lambda candidate: (
                 candidate.prescription.date,
                 candidate.identity.local_workout_id,
@@ -139,7 +134,7 @@ class RunWeekSynchronizationService:
                 )
             else:
                 selected.append(item)
-        return selected, skipped, ignored_non_runs, current_run_ids, week_identity
+        return selected, skipped, current_run_ids, week_identity
 
     def _stale_future_owned_run_ids(
         self,
@@ -153,10 +148,8 @@ class RunWeekSynchronizationService:
             local_id
             for local_id, record in manifest.workouts.items()
             if record.workout_identity.plan_id == week_identity.plan_id
-            and record.workout_identity.plan_revision_id
-            == week_identity.plan_revision_id
+            and record.workout_identity.plan_revision_id == week_identity.plan_revision_id
             and record.workout_identity.week_number == week_identity.week_number
-            and record.sport == "run"
             and record.occurrence_date >= as_of_date
             and _identity_tuple(record.workout_identity) not in completed
             and local_id not in current_run_ids
@@ -263,7 +256,6 @@ class RunWeekSynchronizationService:
         (
             selected,
             skipped,
-            ignored_non_runs,
             current_run_ids,
             week_identity,
         ) = self._selected_runs(workouts, as_of_date)
@@ -274,13 +266,7 @@ class RunWeekSynchronizationService:
         )
         items = list(skipped)
         passed = True
-        provider_names = provider_workout_names(
-            [
-                item.prescription
-                for item in workouts
-                if str(item.prescription.sport) == "run"
-            ]
-        )
+        provider_names = provider_workout_names([item.prescription for item in workouts])
         for workout in selected:
             try:
                 self._verify_one(
@@ -337,7 +323,6 @@ class RunWeekSynchronizationService:
             reconciliation_safe=passed,
             run_workouts_considered=len(selected) + len(skipped),
             desired_future_run_workouts=len(selected),
-            ignored_non_run_workouts=ignored_non_runs,
             partial=not passed,
             capabilities=capabilities,
             items=items,
@@ -404,9 +389,7 @@ class RunWeekSynchronizationService:
                 workouts=workouts,
             )
             error_types = {
-                item.error_type
-                for item in ordinary_status.items
-                if item.status == "error"
+                item.error_type for item in ordinary_status.items if item.status == "error"
             }
             if not error_types:
                 raise PublicationSafetyError(
@@ -449,14 +432,8 @@ class RunWeekSynchronizationService:
         as_of_date: date,
         restore_local: bool,
     ) -> RunWeekSynchronizationReport:
-        selected, skipped, _, _, _ = self._selected_runs(workouts, as_of_date)
-        provider_names = provider_workout_names(
-            [
-                item.prescription
-                for item in workouts
-                if str(item.prescription.sport) == "run"
-            ]
-        )
+        selected, skipped, _, _ = self._selected_runs(workouts, as_of_date)
+        provider_names = provider_workout_names([item.prescription for item in workouts])
         items = list(skipped)
         partial = False
         for workout in selected:

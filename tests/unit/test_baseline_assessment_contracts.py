@@ -6,8 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from resilio.schemas.approvals import ActivePlanState, PlanningState
-from resilio.schemas.plan import BaselineAssessmentPlan
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.plans import BaselineAssessmentPlan
 from resilio.schemas.structured_workout import StructuredWorkout
 
 
@@ -20,7 +20,7 @@ def _assessment_plan_payload() -> dict[str, object]:
             "artifact_type": "assessment_planning_context",
             "artifact_sha256": "a" * 64,
         },
-        "planning_profile_sha256": "b" * 64,
+        "planning_inputs_sha256": "b" * 64,
         "created_at_utc": "2026-08-01T08:00:00Z",
         "planning_rationale": (
             "A gradual return follows the recorded running interruption before "
@@ -34,9 +34,7 @@ def _assessment_plan_payload() -> dict[str, object]:
                     "Synchronized evidence contains no recent running after the "
                     "recorded interruption in early June."
                 ),
-                "planning_change": (
-                    "Use two progressive return weeks before the benchmark week."
-                ),
+                "planning_change": ("Use two progressive return weeks before the benchmark week."),
                 "affected_week_numbers": [1, 2, 3],
             },
             {
@@ -75,7 +73,7 @@ def _assessment_plan_payload() -> dict[str, object]:
                     "long_run": None,
                     "intensity_distribution": None,
                 },
-                "workouts": [],
+                "running_workouts": [],
                 "is_recovery_week": False,
             }
             for week_number, start_date, end_date, target_run_volume_meters in (
@@ -87,19 +85,23 @@ def _assessment_plan_payload() -> dict[str, object]:
         "constraints_snapshot": {
             "minimum_run_days_per_week": 2,
             "maximum_run_days_per_week": 3,
-            "active_other_sports": [
+            "athlete_managed_sport_expectations": [
                 {
                     "sport_name": "climb",
-                    "sessions_per_week": 3,
+                    "participation_pattern": {
+                        "kind": "flexible_weekly",
+                        "expected_sessions_per_week": 3,
+                    },
                     "typical_session_duration_seconds": 7_200,
-                    "typical_intensity": "moderate",
+                    "athlete_reported_typical_intensity": "moderate",
                 }
             ],
-            "running_priority": "secondary",
-            "primary_sport_name": "climb",
+            "training_priority": {
+                "kind": "athlete_managed_sport_first",
+                "sport_name": "climb",
+            },
             "training_timezone": "Europe/Paris",
         },
-        "conflict_policy": "ask_each_time",
         "medical_rehabilitation_excluded": True,
     }
 
@@ -113,7 +115,7 @@ def test_assessment_plan_has_no_vdot_or_methodology_dependency() -> None:
     assert "methodology" not in BaselineAssessmentPlan.model_fields
 
     state = PlanningState(active_plan=ActivePlanState(plan=plan))
-    assert state.schema_version == 5
+    assert state.schema_version == 6
     assert state.active_vdot_approval is None
 
 
@@ -254,23 +256,9 @@ def test_assessment_skeleton_requires_one_executable_benchmark_week() -> None:
         BaselineAssessmentPlan.model_validate(payload)
 
 
-def test_assessment_plan_can_temporarily_reduce_other_sport_commitments() -> None:
+def test_plan_weeks_must_be_stored_in_week_number_order() -> None:
     payload = _assessment_plan_payload()
-    payload["temporary_other_sport_commitment_overrides"] = [
-        {
-            "week_start_date": "2026-08-17",
-            "sport_name": "climb",
-            "sessions_per_week": 2,
-            "reason": "The four-day holiday shortens the available assessment week.",
-            "planning_rationale": (
-                "Temporarily reduce climbing so the shortened assessment week "
-                "does not cram sessions before the benchmark."
-            ),
-        }
-    ]
+    payload["weeks"] = [payload["weeks"][1], payload["weeks"][0], payload["weeks"][2]]
 
-    plan = BaselineAssessmentPlan.model_validate(payload)
-
-    override = plan.temporary_other_sport_commitment_overrides[0]
-    assert override.sessions_per_week == 2
-    assert override.sport_name == "climb"
+    with pytest.raises(ValidationError, match="stored in week-number order"):
+        BaselineAssessmentPlan.model_validate(payload)

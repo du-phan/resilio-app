@@ -14,7 +14,7 @@ from resilio.core.planning.artifacts import (
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.integrity import (
     planning_constraints_snapshot,
-    planning_profile_sha256,
+    planning_inputs_sha256,
 )
 from resilio.core.planning.source_state import coaching_evidence_source_sha256
 from resilio.core.planning.state_repository import load_planning_aggregate
@@ -22,7 +22,6 @@ from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.assessment import (
     AssessmentReason,
-    TemporaryOtherSportCommitmentOverride,
     TemporaryScheduleConstraint,
 )
 from resilio.schemas.plan_history import EvidenceArtifactReference
@@ -30,7 +29,6 @@ from resilio.schemas.planning_evidence import (
     AssessmentPlanningContext,
     PlanningEvidencePointer,
 )
-from resilio.schemas.profile import AthleteProfile
 
 MAX_RECENT_ASSESSMENT_WEEKS = 12
 
@@ -42,46 +40,18 @@ def _validated_timestamp(value: datetime | None) -> datetime:
     return timestamp.astimezone(timezone.utc)
 
 
-def _validate_sport_overrides(
-    profile: AthleteProfile,
-    overrides: Sequence[TemporaryOtherSportCommitmentOverride],
-    *,
-    intended_plan_start_date: date,
-) -> None:
-    override_keys = [
-        (override.week_start_date, override.sport_name) for override in overrides
-    ]
-    if len(override_keys) != len(set(override_keys)):
-        raise PlanOperationError(
-            "Temporary other-sport overrides must be unique by week and sport"
-        )
-    active_sport_names = {
-        commitment.sport_name
-        for commitment in profile.other_sport_commitments
-        if commitment.active
-    }
-    for override in overrides:
-        if override.sport_name not in active_sport_names:
-            raise PlanOperationError("Temporary override references an inactive other sport")
-        if override.week_start_date < intended_plan_start_date:
-            raise PlanOperationError(
-                "Temporary other-sport override predates the assessment plan"
-            )
-
-
 def _planning_evidence_index(
     recent_week_start_dates: Sequence[date],
     *,
     include_temporary_schedule_constraints: bool,
-    include_temporary_other_sport_overrides: bool,
 ) -> list[PlanningEvidencePointer]:
     pointers = [
         PlanningEvidencePointer(
             evidence_id="profile.current_constraints",
             category="profile",
             description=(
-                "Athlete-confirmed goal, run availability, multisport commitments, "
-                "and durable scheduling constraints."
+                "Athlete-confirmed goal, run availability, athlete-managed sport "
+                "expectations, and durable scheduling constraints."
             ),
         ),
         *[
@@ -107,19 +77,6 @@ def _planning_evidence_index(
                 ),
             )
         )
-    if include_temporary_other_sport_overrides:
-        pointers.append(
-            PlanningEvidencePointer(
-                evidence_id=(
-                    "assessment.temporary_other_sport_commitment_overrides"
-                ),
-                category="schedule_constraint",
-                description=(
-                    "Coach-proposed session counts for exact other sports and "
-                    "assessment weeks, subject to whole-plan approval."
-                ),
-            )
-        )
     return pointers
 
 
@@ -130,9 +87,6 @@ def create_assessment_planning_context(
     intended_plan_start_date: date,
     assessment_reasons: Sequence[AssessmentReason | str],
     temporary_schedule_constraints: Sequence[TemporaryScheduleConstraint] = (),
-    temporary_other_sport_commitment_overrides: Sequence[
-        TemporaryOtherSportCommitmentOverride
-    ] = (),
     generated_at_utc: datetime | None = None,
     current_local_date: date | None = None,
 ) -> EvidenceArtifactReference:
@@ -149,10 +103,6 @@ def create_assessment_planning_context(
         TemporaryScheduleConstraint.model_validate(constraint)
         for constraint in temporary_schedule_constraints
     ]
-    normalized_sport_overrides = [
-        TemporaryOtherSportCommitmentOverride.model_validate(override)
-        for override in temporary_other_sport_commitment_overrides
-    ]
     if not normalized_reasons:
         raise PlanOperationError("At least one assessment reason is required")
     if len(normalized_reasons) != len(set(normalized_reasons)):
@@ -166,11 +116,6 @@ def create_assessment_planning_context(
         raise PlanOperationError(str(exc)) from exc
     if profile is None:
         raise PlanOperationError("Athlete profile does not exist")
-    _validate_sport_overrides(
-        profile,
-        normalized_sport_overrides,
-        intended_plan_start_date=intended_plan_start_date,
-    )
     generation_timestamp = _validated_timestamp(generated_at_utc)
     generation_local_date = generation_timestamp.astimezone(
         ZoneInfo(profile.training_timezone)
@@ -199,17 +144,12 @@ def create_assessment_planning_context(
     evidence_index = _planning_evidence_index(
         [week.week_start for week in recent_weeks],
         include_temporary_schedule_constraints=bool(normalized_schedule_constraints),
-        include_temporary_other_sport_overrides=bool(normalized_sport_overrides),
     )
     source_payload = {
         "profile": profile.model_dump(mode="json"),
         "assessment_reasons": [reason.value for reason in normalized_reasons],
         "temporary_schedule_constraints": [
-            constraint.model_dump(mode="json")
-            for constraint in normalized_schedule_constraints
-        ],
-        "temporary_other_sport_commitment_overrides": [
-            override.model_dump(mode="json") for override in normalized_sport_overrides
+            constraint.model_dump(mode="json") for constraint in normalized_schedule_constraints
         ],
         "recent_detailed_weeks": [week.model_dump(mode="json") for week in recent_weeks],
     }
@@ -217,12 +157,11 @@ def create_assessment_planning_context(
         evidence_as_of_date=evidence_as_of_date,
         intended_plan_start_date=intended_plan_start_date,
         generated_at_utc=generation_timestamp,
-        planning_profile_sha256=planning_profile_sha256(profile),
+        planning_inputs_sha256=planning_inputs_sha256(profile),
         current_goal=profile.goal,
         current_constraints=planning_constraints_snapshot(profile),
         assessment_reasons=normalized_reasons,
         temporary_schedule_constraints=normalized_schedule_constraints,
-        temporary_other_sport_commitment_overrides=normalized_sport_overrides,
         recent_detailed_weeks=recent_weeks,
         evidence_index=evidence_index,
         source_context_sha256=canonical_data_sha256(source_payload),

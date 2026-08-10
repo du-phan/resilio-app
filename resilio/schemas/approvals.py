@@ -9,16 +9,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from resilio.schemas.plan import (
-    RaceMacroPlan,
-    TrainingPlan,
-    WeekPlan,
-)
 from resilio.schemas.plan_history import (
     BaselineAssessmentResult,
     ClosedPlanReference,
+    EvidenceArtifactReference,
     PlanLifecycleClosure,
 )
+from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
+from resilio.schemas.planning.weeks import WeekPlan
 from resilio.schemas.vdot import RaceDistance
 
 
@@ -174,7 +172,7 @@ class PlanApproval(BaseModel):
         default=None,
         pattern=r"^vdot_approval_[a-f0-9]{16}$",
     )
-    planning_profile_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    planning_inputs_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     approved_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -208,7 +206,7 @@ class WeeklyApproval(BaseModel):
     week_number: int = Field(ge=1)
     target_week_skeleton_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     action: WeeklyApplicationAction
-    previous_applied_workout_sha256: str | None = Field(
+    previous_applied_running_workouts_sha256: str | None = Field(
         default=None,
         pattern=r"^[0-9a-f]{64}$",
     )
@@ -227,7 +225,7 @@ class WeeklyApproval(BaseModel):
 
     @model_validator(mode="after")
     def replacement_binding_matches_action(self) -> "WeeklyApproval":
-        has_previous = self.previous_applied_workout_sha256 is not None
+        has_previous = self.previous_applied_running_workouts_sha256 is not None
         if self.action == WeeklyApplicationAction.REPLACE and not has_previous:
             raise ValueError("replacement approval requires the previous workout hash")
         if self.action == WeeklyApplicationAction.INITIAL and has_previous:
@@ -243,7 +241,8 @@ class AppliedWeekRevision(BaseModel):
     plan_revision_id: str
     week_number: int = Field(ge=1)
     approved_file_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    applied_workout_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    planning_context_reference: EvidenceArtifactReference
+    applied_running_workouts_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     applied_week_snapshot: WeekPlan
     schedule_timezone: str = Field(min_length=1)
     weekly_approved_at_utc: datetime
@@ -279,6 +278,8 @@ class AppliedWeekRevision(BaseModel):
 
     @model_validator(mode="after")
     def invalidation_fields_are_coherent(self) -> "AppliedWeekRevision":
+        if self.planning_context_reference.artifact_type != "week_planning_context":
+            raise ValueError("applied week requires week-planning context evidence")
         invalidated = self.invalidated_at_utc is not None
         if self.active == invalidated:
             raise ValueError("active applied approval cannot have invalidation metadata")
@@ -286,8 +287,8 @@ class AppliedWeekRevision(BaseModel):
             raise ValueError("applied approval invalidation requires timestamp and reason")
         if self.applied_week_snapshot.week_number != self.week_number:
             raise ValueError("applied week snapshot has another week number")
-        if not self.applied_week_snapshot.workouts:
-            raise ValueError("applied week snapshot must preserve exact workouts")
+        if not self.applied_week_snapshot.running_workouts:
+            raise ValueError("applied week snapshot must preserve exact running workouts")
         if self.applied_at_utc < self.weekly_approved_at_utc:
             raise ValueError("applied week revision cannot predate its weekly approval")
         if self.invalidated_at_utc is not None and self.invalidated_at_utc <= self.applied_at_utc:
@@ -355,7 +356,7 @@ class ActivePlanState(BaseModel):
             or approval.plan_id != self.plan.id
             or approval.plan_revision_id != self.plan.plan_revision_id
             or approval.vdot_approval_id != expected_vdot_approval_id
-            or approval.planning_profile_sha256 != self.plan.planning_profile_sha256
+            or approval.planning_inputs_sha256 != self.plan.planning_inputs_sha256
         ):
             raise ValueError("plan approval references another planning revision")
         if approval.approved_at_utc < self.plan.created_at_utc:
@@ -376,7 +377,7 @@ class ActivePlanState(BaseModel):
 class ClosedPlanArchive(BaseModel):
     """Immutable archived active-plan state plus confirmed closure facts."""
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     active_plan_snapshot: ActivePlanState
     closure: PlanLifecycleClosure
 
@@ -403,7 +404,7 @@ class ClosedPlanArchive(BaseModel):
 class PlanningState(BaseModel):
     """Compact active state with immutable plan-history references."""
 
-    schema_version: Literal[5] = 5
+    schema_version: Literal[6] = 6
     vdot_approvals: list[VDOTApproval] = Field(default_factory=list)
     active_vdot_approval_id: str | None = None
     active_plan: ActivePlanState | None = None

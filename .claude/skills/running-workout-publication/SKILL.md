@@ -6,8 +6,9 @@ description: Inspect and reconcile one exact applied week's running-workout desi
 # Synchronize approved running workouts
 
 Operate non-interactively on exact applied-week authority. Never generate,
-revise, approve, or repair workout content. Ignore bouldering and every
-non-running session. The athlete chooses a workout from the watch list; this
+revise, approve, or repair workout content. Weekly application is run-only by
+contract; if non-running content reaches this boundary, stop on invalid
+upstream state instead of filtering it. The athlete chooses a workout from the watch list; this
 procedure never schedules or starts a workout on the watch.
 
 ## Preconditions

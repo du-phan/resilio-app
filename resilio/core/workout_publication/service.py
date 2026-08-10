@@ -386,7 +386,7 @@ class WorkoutPublicationService:
             publication_fingerprint_sha256=(prepared.publication_fingerprint_sha256),
             rendered_workout_sha256=prepared.rendered_workout_sha256,
             sport_settings_version_sha256=prepared.settings_version_sha256,
-            sport=str(workout.sport),
+            sport="run",
             occurrence_date=workout.date,
             approved_start_time_local=workout.start_time_local,
             provider_start_date_local=prepared.provider_start_date_local,
