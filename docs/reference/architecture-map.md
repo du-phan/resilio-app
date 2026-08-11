@@ -51,11 +51,11 @@ mirror.
 | VDOT approval | Recomputable performance plus a verified canonical activity/fingerprint, exact profile personal best, owned closed assessment review, or explicit athlete-confirmed manual value; every approval also binds the proposal path and byte SHA-256 |
 | Plan lifecycle and approvals | Compact planning-state v6 with a discriminated race-macro or baseline-assessment active plan, generic plan revision/approval identity, and immutable content-addressed archives and evidence artifacts |
 | Race-plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed race summaries and assessment results, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
-| Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, exact provider-paired fulfillment, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
+| Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, independently provider-observed exact pairing, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
 | Weekly application | Exact run-only proposal path, byte SHA-256, target-week hash, prior applied-running-workouts hash, immutable weekly context, and complete configured/observed other-sport considerations |
-| Workout fulfillment | Exact provider pairing or athlete-confirmed same-week activity/workout association, applied-week hashes, execution date, and schedule offset |
+| Workout fulfillment | Exact provider pairing provenance or athlete-confirmed same-week activity/workout association, applied-week hashes, execution date, schedule offset, and crash-recoverable native pair/unpair operations |
 | Run synchronization preferences | Athlete-confirmed automation mode, calendar-day policy, and requested Garmin destination |
-| External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, semantic parsed-workout readback, drift-resolution audit, and push-error evidence |
+| External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, semantic parsed-workout readback, native activity/event pair evidence, separate drift-resolution audits, and push-error evidence |
 | Raw external response | Ephemeral only |
 
 ## Coordinated state boundary

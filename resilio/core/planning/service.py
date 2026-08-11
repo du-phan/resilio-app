@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -55,6 +55,7 @@ from resilio.core.planning.plan_proposal import (
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.source_state import (
     coaching_evidence_source_sha256,
+    coaching_evidence_source_sha256_unlocked,
 )
 from resilio.core.planning.state_repository import (
     load_planning_aggregate as load_planning_aggregate,
@@ -88,7 +89,13 @@ from resilio.core.planning.workout_evidence import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.vdot import parse_time_string
-from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
+from resilio.core.workout_fulfillment.pair_operation_evidence import (
+    matching_resilio_pair_operation,
+)
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
+from resilio.core.workout_publication.locking import (
+    coordinated_publication_plan_activity_lock,
+)
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.approvals import (
     ActivePlanState,
@@ -274,6 +281,66 @@ def approve_vdot_proposal(
         return _persist(repo, replacement)
 
 
+def _publication_closure_blockers(
+    repo: RepositoryIO,
+    active_plan: ActivePlanState,
+    *,
+    effective_end_date: date,
+) -> list[str]:
+    publication_manifest = load_manifest(repo)
+    fulfillment_manifest = load_fulfillment_manifest(repo)
+    plan = active_plan.plan
+    blockers = [
+        local_workout_id
+        for local_workout_id, pending in publication_manifest.pending.items()
+        if pending.workout_identity.plan_id == plan.id
+        and pending.workout_identity.plan_revision_id == plan.plan_revision_id
+        and pending.occurrence_date > effective_end_date
+    ]
+    for local_workout_id, publication in publication_manifest.workouts.items():
+        if (
+            publication.workout_identity.plan_id != plan.id
+            or publication.workout_identity.plan_revision_id != plan.plan_revision_id
+            or publication.occurrence_date <= effective_end_date
+        ):
+            continue
+        matching_fulfillment = next(
+            (
+                fulfillment
+                for fulfillment in fulfillment_manifest.fulfillments.values()
+                if fulfillment.workout_identity == publication.workout_identity
+                and fulfillment.provider_pair_supports_event(publication.event_id)
+                and fulfillment.local_activity_id
+                not in fulfillment_manifest.unresolved_fulfillment_conflicts
+            ),
+            None,
+        )
+        if matching_fulfillment is None:
+            blockers.append(local_workout_id)
+    for fulfillment in fulfillment_manifest.fulfillments.values():
+        if (
+            fulfillment.workout_identity.plan_id != plan.id
+            or fulfillment.workout_identity.plan_revision_id != plan.plan_revision_id
+        ):
+            continue
+        active_publication = publication_manifest.workouts.get(
+            fulfillment.workout_identity.local_workout_id
+        )
+        if (
+            active_publication is None
+            or active_publication.workout_identity != fulfillment.workout_identity
+        ):
+            continue
+        operation = matching_resilio_pair_operation(
+            fulfillment_manifest,
+            publication=active_publication,
+            fulfillment=fulfillment,
+        )
+        if operation is not None and operation.state != "verified":
+            blockers.append(operation.operation_id)
+    return sorted(blockers)
+
+
 def _validate_plan_closure(
     repo: RepositoryIO,
     active_plan: ActivePlanState,
@@ -313,7 +380,7 @@ def _validate_plan_closure(
         if review.compact_weeks
         else review.evidence_as_of_date
     )
-    if review.source_state_sha256 != coaching_evidence_source_sha256(
+    if review.source_state_sha256 != coaching_evidence_source_sha256_unlocked(
         repo,
         evidence_as_of_date=review_source_as_of_date,
         evidence_window_start=review_source_window_start,
@@ -335,21 +402,15 @@ def _validate_plan_closure(
     is_general_fitness = str(plan.goal.type) == "general_fitness"
     if is_general_fitness != (closure.goal_outcome.status == "not_applicable"):
         raise PlanOperationError("Only general-fitness plans use a not-applicable goal outcome")
-    publication_manifest = load_manifest(repo)
-    future_owned_ids = sorted(
-        local_workout_id
-        for local_workout_id, publication in publication_manifest.workouts.items()
-        if publication.occurrence_date > closure.effective_end_date
+    publication_blockers = _publication_closure_blockers(
+        repo,
+        active_plan,
+        effective_end_date=closure.effective_end_date,
     )
-    future_pending_ids = sorted(
-        local_workout_id
-        for local_workout_id, publication in publication_manifest.pending.items()
-        if publication.occurrence_date > closure.effective_end_date
-    )
-    if future_owned_ids or future_pending_ids:
+    if publication_blockers:
         raise PlanOperationError(
-            "Delete or reconcile future owned workout events before closing "
-            f"the plan: {future_owned_ids + future_pending_ids}"
+            "Reconcile future owned workouts and native pairing operations before "
+            f"closing the plan: {publication_blockers}"
         )
 
 
@@ -359,7 +420,7 @@ def close_current_plan(
     closure: PlanClosure,
 ) -> PlanningState:
     """Archive the active plan only after exact retrospective evidence exists."""
-    with coordinated_publication_plan_lock(repo, "close_current_plan"):
+    with coordinated_publication_plan_activity_lock(repo, "close_current_plan"):
         state = _required_state(repo)
         if state.active_plan is None:
             raise PlanOperationError("No current plan is available to retire")

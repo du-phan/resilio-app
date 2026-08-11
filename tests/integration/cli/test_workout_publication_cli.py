@@ -22,6 +22,7 @@ def test_run_sync_commands_are_bounded_to_capabilities_and_one_week() -> None:
     assert "capabilities" in workout_help.stdout
     assert "status" in workout_help.stdout
     assert "reconcile" in workout_help.stdout
+    assert "reconcile-pairing-operations" in workout_help.stdout
     assert "resolve-drift" in workout_help.stdout
     assert "fulfillment-candidates" in workout_help.stdout
     assert "confirm-fulfillment" in workout_help.stdout
@@ -34,6 +35,23 @@ def test_run_sync_commands_are_bounded_to_capabilities_and_one_week() -> None:
     assert "publish-week" not in workout_help.stdout
     assert "publish" not in workout_help.stdout
     assert "delete" not in workout_help.stdout
+
+
+def test_reconcile_pairing_operations_delegates_to_the_global_drain(
+    monkeypatch,
+) -> None:
+    captured: list[str] = []
+    monkeypatch.setattr(
+        workout_commands,
+        "reconcile_remote_workout_pairing_operations",
+        lambda: captured.append("drained") or "reconciled",
+    )
+    monkeypatch.setattr(workout_commands, "_emit", lambda result, message: None)
+
+    result = CliRunner().invoke(app, ["workout", "reconcile-pairing-operations"])
+
+    assert result.exit_code == 0
+    assert captured == ["drained"]
 
 
 def test_run_capability_command_rejects_non_running_sports_before_network_access() -> None:
@@ -63,7 +81,6 @@ def test_resolve_drift_passes_every_exact_confirmation_token(monkeypatch) -> Non
             "resolve-drift",
             "--week-number",
             "3",
-            "--restore-local",
             "--confirmation-reference",
             "Athlete confirmed these exact remote bytes.",
             "--drift-target-token",
@@ -75,6 +92,41 @@ def test_resolve_drift_passes_every_exact_confirmation_token(monkeypatch) -> Non
 
     assert result.exit_code == 0
     assert captured["confirmed_drift_target_tokens"] == ["a" * 64, "b" * 64]
+
+
+def test_resolve_pairing_drift_passes_every_exact_confirmation_token(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def restore(week_number, **kwargs):
+        captured.update({"week_number": week_number, **kwargs})
+        return "restored"
+
+    monkeypatch.setattr(
+        workout_commands,
+        "resolve_week_run_workout_pairing_drift",
+        restore,
+    )
+    monkeypatch.setattr(workout_commands, "_emit", lambda result, message: None)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "workout",
+            "resolve-pairing-drift",
+            "--week-number",
+            "3",
+            "--confirmation-reference",
+            "Athlete confirmed restoring these exact pairs.",
+            "--pairing-drift-token",
+            "a" * 64,
+            "--pairing-drift-token",
+            "b" * 64,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["week_number"] == 3
+    assert captured["confirmed_pairing_drift_tokens"] == ["a" * 64, "b" * 64]
 
 
 def test_revoke_fulfillment_rejects_unknown_reason_before_api_call(monkeypatch) -> None:
@@ -119,7 +171,7 @@ def test_workout_fulfillment_migration_failure_is_a_json_validation_envelope(
         fail,
     )
 
-    result = CliRunner().invoke(app, ["migrate", "workout-fulfillment-v1"])
+    result = CliRunner().invoke(app, ["migrate", "workout-fulfillment-v2"])
 
     assert result.exit_code == 5
     payload = json.loads(result.stdout)
@@ -139,7 +191,7 @@ def test_workout_fulfillment_migration_lock_failure_is_a_json_envelope(
         ),
     )
 
-    result = CliRunner().invoke(app, ["migrate", "workout-fulfillment-v1"])
+    result = CliRunner().invoke(app, ["migrate", "workout-fulfillment-v2"])
 
     assert result.exit_code == 5
     payload = json.loads(result.stdout)

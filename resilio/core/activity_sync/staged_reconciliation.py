@@ -43,9 +43,11 @@ from resilio.core.planning.workout_evidence import (
     load_approved_workouts_for_date_range,
 )
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_fulfillment.repository import (
-    load_fulfillment_manifest,
+from resilio.core.workout_fulfillment.pair_operation_evidence import (
+    matching_resilio_pair_operation,
+    provider_pair_provenance_for_operation,
 )
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.integrations.intervals_icu.activity_fingerprint import (
     provider_snapshot_fingerprint,
@@ -58,12 +60,33 @@ from resilio.schemas.activity import (
     is_running_sport,
 )
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.publication import PublishedWorkout
 from resilio.schemas.reconciliation import (
     ReconciliationAction,
     ReconciliationDecision,
 )
 from resilio.schemas.sync import SourceCoverageExclusion, SyncReport
-from resilio.schemas.workout_fulfillment import WorkoutFulfillmentManifest
+from resilio.schemas.workout_fulfillment import (
+    ProviderPairProvenance,
+    WorkoutFulfillmentManifest,
+    WorkoutFulfillmentRecord,
+)
+
+
+def _provider_pair_provenance(
+    manifest: WorkoutFulfillmentManifest,
+    *,
+    publication: PublishedWorkout | None,
+    fulfillment: WorkoutFulfillmentRecord | None,
+) -> ProviderPairProvenance:
+    if publication is None or fulfillment is None:
+        return "provider_observed"
+    operation = matching_resilio_pair_operation(
+        manifest,
+        publication=publication,
+        fulfillment=fulfillment,
+    )
+    return provider_pair_provenance_for_operation(operation)
 
 
 @dataclass(frozen=True)
@@ -134,12 +157,6 @@ class StagedActivityReconciler:
             publication.event_id: publication
             for publication in self.publication_manifest.workouts.values()
         }
-        self.published_by_event_id.update(
-            {
-                retirement.publication.event_id: retirement.publication
-                for retirement in self.publication_manifest.retired.values()
-            }
-        )
         self.historical_publications_by_event_id = {
             publication.event_id: publication
             for publication in self.publication_manifest.historical_legacy_workouts.values()
@@ -488,6 +505,11 @@ class StagedActivityReconciler:
             ),
             existing_fulfillment=existing_fulfillment,
             observed_at_utc=observed_at_utc,
+            provider_pair_provenance=_provider_pair_provenance(
+                self.fulfillment_manifest,
+                publication=paired_publication,
+                fulfillment=existing_fulfillment,
+            ),
         )
         apply_provider_fulfillment_reconciliation(
             manifest=self.fulfillment_manifest,

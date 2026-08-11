@@ -96,23 +96,18 @@ def _published_evidence(
         return None
     local_workout_id = authoritative_workout.identity.local_workout_id
     active = manifest.workouts.get(local_workout_id)
-    retired = manifest.retired.get(local_workout_id)
-    candidates = [
-        publication
-        for publication in (
-            active,
-            (
-                retired.publication
-                if retired is not None and retired.reopened_at_utc is None
-                else None
-            ),
-        )
-        if publication is not None
-        and publication.workout_identity == authoritative_workout.identity
-    ]
-    if len(candidates) > 1:
-        raise ValueError("Workout has competing active and retired publication evidence")
-    return candidates[0] if candidates else None
+    if active is not None and active.workout_identity == authoritative_workout.identity:
+        return active
+    return next(
+        (
+            retirement.publication
+            for retirement in reversed(
+                manifest.historical_fulfillment_event_retirements
+            )
+            if retirement.publication.workout_identity == authoritative_workout.identity
+        ),
+        None,
+    )
 
 
 def _unavailable_adherence_context(

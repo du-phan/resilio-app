@@ -10,7 +10,7 @@ from resilio.core.planning.artifacts import (
     model_sha256,
 )
 from resilio.core.planning.integrity import (
-    applied_running_workouts_sha256,
+    assert_applied_week_revision_matches_plan,
     plan_skeleton_sha256,
 )
 from resilio.core.repository import RepositoryIO
@@ -119,15 +119,12 @@ def migrate_active_plan(
             "Approved plan skeleton changed before fulfillment migration"
         )
     for revision in active_plan.applied_week_revisions:
-        if (
-            revision.plan_id != active_plan.plan.id
-            or revision.plan_revision_id != active_plan.plan.plan_revision_id
-            or revision.applied_running_workouts_sha256
-            != applied_running_workouts_sha256(revision.applied_week_snapshot)
-        ):
+        try:
+            assert_applied_week_revision_matches_plan(active_plan.plan, revision)
+        except ValueError as exc:
             raise PlanningEvidenceMigrationError(
                 "Applied-week evidence changed before fulfillment migration"
-            )
+            ) from exc
     migrated_context = graph.migrate(active_plan.plan.planning_context_reference)
     migrated_plan = active_plan.plan.model_copy(
         update={"planning_context_reference": migrated_context}

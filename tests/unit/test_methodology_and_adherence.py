@@ -224,6 +224,7 @@ def test_only_exact_completion_ownership_counts_as_adherence() -> None:
                 execution_local_date=date(2026, 7, 28),
                 schedule_offset_days=0,
                 provider_pair=ProviderPairedFulfillmentEvidence(
+                    provenance="provider_observed",
                     event_id=42,
                     observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
                 ),
@@ -282,6 +283,7 @@ def test_adherence_rejects_fulfillment_after_activity_performance_changes() -> N
         execution_local_date=workout.date,
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=42,
             observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
         ),
@@ -318,6 +320,7 @@ def test_adherence_rejects_fulfillment_with_a_provider_contradiction() -> None:
         execution_local_date=workout.date,
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=42,
             observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
         ),

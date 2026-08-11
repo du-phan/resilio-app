@@ -37,9 +37,6 @@ from resilio.core.workout_publication.preparation import (
     PreparedPublication,
     prepare_publication,
 )
-from resilio.core.workout_publication.retirement_reopening import (
-    reopen_revoked_fulfillment_retirement,
-)
 from resilio.core.workout_publication.retirement_service import (
     WorkoutRetirementService,
 )
@@ -51,7 +48,6 @@ from resilio.schemas.publication import (
     PublicationResult,
     PublishedWorkout,
 )
-from resilio.schemas.workout_fulfillment import WorkoutFulfillmentRecord
 
 
 def _prepared_published_record(
@@ -115,11 +111,6 @@ class WorkoutPublicationService:
     ) -> PublicationResult:
         workout = authoritative_workout.prescription
         manifest = load_manifest(self.repo)
-        manifest = reopen_revoked_fulfillment_retirement(
-            self.repo,
-            manifest,
-            local_workout_id=workout.id,
-        )
         previous = manifest.workouts.get(workout.id)
         prepared = prepare_publication(
             self.client,
@@ -511,25 +502,8 @@ class WorkoutPublicationService:
         local_workout_id: str,
         *,
         restore_local: bool = False,
-        fulfillment: WorkoutFulfillmentRecord | None = None,
     ) -> PublicationResult:
         return WorkoutRetirementService(self.repo, self.client).retire_published(
             local_workout_id,
             restore_local=restore_local,
-            fulfillment=fulfillment,
-        )
-
-    def _retire_pending(
-        self,
-        authoritative_workout: AuthoritativeWorkout,
-        *,
-        fulfillment: WorkoutFulfillmentRecord,
-        restore_local: bool,
-        provider_name: str,
-    ) -> PublicationResult:
-        return WorkoutRetirementService(self.repo, self.client).retire_pending(
-            authoritative_workout,
-            fulfillment=fulfillment,
-            restore_local=restore_local,
-            provider_name=provider_name,
         )

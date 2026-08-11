@@ -7,9 +7,16 @@ from datetime import date, datetime, timezone
 from typing import Literal, Mapping, Optional
 
 from resilio.core.config import ConfigError, load_config
+from resilio.core.locking import OperationLockError
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_fulfillment.remote_unpairing import (
+    reconcile_actionable_unpair_operations,
+)
 from resilio.core.workout_publication.capabilities import (
     get_run_synchronization_capabilities,
+)
+from resilio.core.workout_publication.locking import (
+    coordinated_publication_plan_activity_lock,
 )
 from resilio.core.workout_publication.policy import (
     ProviderSemanticsMismatchError,
@@ -29,6 +36,7 @@ from resilio.schemas.publication import (
     RunWeekSynchronizationReport,
     RunWorkoutSynchronizationPreferences,
 )
+from resilio.schemas.workout_pairing import RemotePairingOperationsReport
 
 
 @dataclass(frozen=True)
@@ -147,23 +155,23 @@ def restore_local_week_run_workouts(
     )
 
 
-def retire_fulfilled_week_run_workouts(
+def resolve_week_run_workout_pairing_drift(
     week_number: int,
     *,
     athlete_confirmation_reference: str,
-    confirmed_drift_target_tokens: list[str],
+    confirmed_pairing_drift_tokens: list[str],
     as_of_date: Optional[date] = None,
     environment: Optional[Mapping[str, str]] = None,
     client: Optional[IntervalsIcuClient] = None,
 ) -> RunWeekSynchronizationReport | PublicationError:
     return _run_week_sync_operation(
         week_number,
-        operation="retire_fulfilled",
+        operation="resolve_pairing_drift",
         as_of_date=as_of_date,
         environment=environment,
         client=client,
         athlete_confirmation_reference=athlete_confirmation_reference,
-        confirmed_drift_target_tokens=confirmed_drift_target_tokens,
+        confirmed_pairing_drift_tokens=confirmed_pairing_drift_tokens,
     )
 
 
@@ -174,13 +182,14 @@ def _run_week_sync_operation(
         "status",
         "reconcile",
         "restore_local",
-        "retire_fulfilled",
+        "resolve_pairing_drift",
     ],
     as_of_date: Optional[date],
     environment: Optional[Mapping[str, str]],
     client: Optional[IntervalsIcuClient],
     athlete_confirmation_reference: Optional[str] = None,
     confirmed_drift_target_tokens: list[str] | None = None,
+    confirmed_pairing_drift_tokens: list[str] | None = None,
 ) -> RunWeekSynchronizationReport | PublicationError:
     result = _with_intervals_client(environment=environment, client=client)
     if isinstance(result, PublicationError):
@@ -203,12 +212,12 @@ def _run_week_sync_operation(
                 athlete_confirmation_reference=athlete_confirmation_reference or "",
                 confirmed_drift_target_tokens=confirmed_drift_target_tokens or [],
             )
-        if operation == "retire_fulfilled":
-            return service.retire_fulfilled_week(
+        if operation == "resolve_pairing_drift":
+            return service.resolve_pairing_drift_week(
                 week_number,
                 as_of_date=resolved_date,
                 athlete_confirmation_reference=athlete_confirmation_reference or "",
-                confirmed_drift_target_tokens=confirmed_drift_target_tokens or [],
+                confirmed_pairing_drift_tokens=confirmed_pairing_drift_tokens or [],
             )
         return service.reconcile_week(week_number, as_of_date=resolved_date)
     except ProviderSemanticsMismatchError as exc:
@@ -247,7 +256,7 @@ def _resolved_as_of_date(
         "status",
         "reconcile",
         "restore_local",
-        "retire_fulfilled",
+        "resolve_pairing_drift",
     ],
 ) -> date:
     current_schedule_date = service.current_schedule_date(week_number)
@@ -259,3 +268,27 @@ def _resolved_as_of_date(
             "captured schedule timezone"
         )
     return current_schedule_date
+
+
+def reconcile_remote_workout_pairing_operations(
+    *,
+    environment: Optional[Mapping[str, str]] = None,
+    client: Optional[IntervalsIcuClient] = None,
+) -> RemotePairingOperationsReport | PublicationError:
+    """Drain durable unpair obligations without requiring an active plan week."""
+    resolved_client = _with_intervals_client(environment=environment, client=client)
+    if isinstance(resolved_client, PublicationError):
+        return resolved_client
+    integration, owned_client = resolved_client
+    repo = RepositoryIO()
+    try:
+        with coordinated_publication_plan_activity_lock(
+            repo,
+            "reconcile_remote_workout_pairing_operations",
+        ):
+            return reconcile_actionable_unpair_operations(repo, integration)
+    except (IntervalsIcuError, OperationLockError, OSError, ValueError) as exc:
+        return PublicationError("remote_pairing_reconciliation", str(exc))
+    finally:
+        if owned_client:
+            integration.close()

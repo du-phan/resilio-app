@@ -46,15 +46,15 @@ def evidence_v5_command(
     raise typer.Exit(code=exit_code)
 
 
-@app.command(name="workout-fulfillment-v1")
-def workout_fulfillment_v1_command(
+@app.command(name="workout-fulfillment-v2")
+def workout_fulfillment_v2_command(
     apply: bool = typer.Option(
         False,
         "--apply",
         help="Apply the backed-up cutover; omission performs a read-only dry run",
     ),
 ) -> None:
-    """Replace completion v3 and publication v6 with fulfillment v1."""
+    """Cut over legacy fulfillment state to native activity/event pairing v2."""
     try:
         report = migrate_workout_fulfillment_state(RepositoryIO(), apply=apply)
         envelope = create_success_envelope(

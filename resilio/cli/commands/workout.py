@@ -10,9 +10,10 @@ from resilio.api.publication import (
     get_run_workout_synchronization_capabilities,
     get_run_workout_synchronization_preferences,
     get_week_run_workout_sync_status,
+    reconcile_remote_workout_pairing_operations,
     reconcile_week_run_workouts,
+    resolve_week_run_workout_pairing_drift,
     restore_local_week_run_workouts,
-    retire_fulfilled_week_run_workouts,
 )
 from resilio.api.workout_fulfillment import (
     confirm_workout_fulfillment,
@@ -113,11 +114,17 @@ def reconcile_command(
     )
 
 
+@app.command(name="reconcile-pairing-operations")
+def reconcile_pairing_operations_command() -> None:
+    _emit(
+        reconcile_remote_workout_pairing_operations(),
+        "Durable native pairing operations reconciled.",
+    )
+
+
 @app.command(name="resolve-drift")
 def resolve_drift_command(
     week_number: int = typer.Option(..., "--week-number", min=1),
-    restore_local: bool = typer.Option(False, "--restore-local"),
-    retire_fulfilled: bool = typer.Option(False, "--retire-fulfilled"),
     confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
     drift_target_tokens: list[str] | None = typer.Option(
         None,
@@ -125,32 +132,36 @@ def resolve_drift_command(
     ),
     as_of_date: str | None = typer.Option(None, "--as-of"),
 ) -> None:
-    if restore_local == retire_fulfilled:
-        raise typer.BadParameter(
-            "Select exactly one of --restore-local or --retire-fulfilled",
-        )
-    operation = (
-        restore_local_week_run_workouts(
-            week_number,
-            athlete_confirmation_reference=confirmation_reference,
-            confirmed_drift_target_tokens=drift_target_tokens or [],
-            as_of_date=_parse_date(as_of_date),
-        )
-        if restore_local
-        else retire_fulfilled_week_run_workouts(
-            week_number,
-            athlete_confirmation_reference=confirmation_reference,
-            confirmed_drift_target_tokens=drift_target_tokens or [],
-            as_of_date=_parse_date(as_of_date),
-        )
+    operation = restore_local_week_run_workouts(
+        week_number,
+        athlete_confirmation_reference=confirmation_reference,
+        confirmed_drift_target_tokens=drift_target_tokens or [],
+        as_of_date=_parse_date(as_of_date),
     )
     _emit(
         operation,
-        (
-            "Owned remote drift replaced from the approved local week."
-            if restore_local
-            else "Drifted fulfilled future workout retired."
+        "Owned remote drift replaced from the approved local week.",
+    )
+
+
+@app.command(name="resolve-pairing-drift")
+def resolve_pairing_drift_command(
+    week_number: int = typer.Option(..., "--week-number", min=1),
+    confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
+    pairing_drift_tokens: list[str] | None = typer.Option(
+        None,
+        "--pairing-drift-token",
+    ),
+    as_of_date: str | None = typer.Option(None, "--as-of"),
+) -> None:
+    _emit(
+        resolve_week_run_workout_pairing_drift(
+            week_number,
+            athlete_confirmation_reference=confirmation_reference,
+            confirmed_pairing_drift_tokens=pairing_drift_tokens or [],
+            as_of_date=_parse_date(as_of_date),
         ),
+        "Confirmed native activity/event pairing drift reconciled.",
     )
 
 

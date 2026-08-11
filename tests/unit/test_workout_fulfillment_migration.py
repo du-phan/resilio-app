@@ -66,8 +66,9 @@ from resilio.schemas.planning.plans import BaselineAssessmentPlan
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.planning_evidence import AssessmentPlanningContext
 from resilio.schemas.profile import AthleteProfile, TrainingConstraints
-from resilio.schemas.publication import PublicationManifest
+from resilio.schemas.publication import PublicationManifest, RetiredWorkoutPublication
 from resilio.schemas.workout_fulfillment import (
+    HistoricalLegacyWorkoutFulfillment,
     ProviderPairedFulfillmentEvidence,
     WorkoutFulfillmentManifest,
     WorkoutFulfillmentRecord,
@@ -220,6 +221,7 @@ def test_planning_transform_does_not_backdate_late_recorded_fulfillment() -> Non
         execution_local_date=date(2026, 7, 28),
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=42,
             observed_at_utc=datetime(2026, 7, 30, tzinfo=timezone.utc),
         ),
@@ -483,7 +485,7 @@ def test_migration_is_dry_run_first_then_backs_up_and_applies(
     assert applied.applied
     assert applied.backup_relative_path is not None
     assert not completion_path.exists()
-    assert load_manifest(repo).schema_version == 7
+    assert load_manifest(repo).schema_version == 8
     fulfillment = load_fulfillment_manifest(repo).fulfillments[activity.local_activity_id]
     assert fulfillment.fulfillment_basis == "provider_paired"
     assert fulfillment.provider_pair is not None
@@ -750,6 +752,7 @@ def test_migration_rejects_fulfillment_after_plan_closure_authority() -> None:
         execution_local_date=authority.prescription.date,
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=42,
             observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
         ),
@@ -871,3 +874,237 @@ def test_migration_preserves_published_plus_pending_recovery_state() -> None:
 
     assert "planned-run" in migrated.workouts
     assert "planned-run" in migrated.pending
+def test_v7_early_retirement_becomes_historical_audit_for_native_pairing() -> None:
+    publication = _publication()
+    retired = RetiredWorkoutPublication(
+        publication=publication,
+        fulfilling_local_activity_id="activity-1",
+        fulfillment_record_sha256_at_retirement="f" * 64,
+        execution_local_date_at_retirement=date(2026, 7, 27),
+        schedule_offset_days_at_retirement=-1,
+        provider_deletion_status="deleted",
+        retired_at_utc=datetime(2026, 7, 27, 12, tzinfo=timezone.utc),
+    )
+
+    migrated, changed = migration_module._migrate_publication_manifest(
+        {
+            "schema_version": 7,
+            "retired": {"planned-run": retired.model_dump(mode="json")},
+        },
+        [],
+        migration_date=date(2026, 8, 11),
+    )
+
+    assert changed is True
+    assert migrated.schema_version == 8
+    assert migrated.historical_fulfillment_event_retirements == [retired]
+
+
+def test_v7_migration_rejects_duplicate_confirmed_drift_targets() -> None:
+    target = {
+        "local_workout_id": "planned-run",
+        "event_id": 42,
+        "observed_remote_fingerprint_sha256": "a" * 64,
+    }
+    raw = {
+        "schema_version": 7,
+        "drift_resolutions": [
+            {
+                "plan_id": "plan-1",
+                "plan_revision_id": "plan_revision_0123456789abcdef",
+                "week_number": 1,
+                "strategy": "retire_fulfilled",
+                "confirmed_targets": [target, target],
+                "athlete_confirmation_reference": "Exact duplicate source evidence.",
+                "confirmed_at_utc": "2026-08-10T09:00:00Z",
+            }
+        ],
+    }
+
+    with pytest.raises(
+        migration_module.WorkoutFulfillmentMigrationError,
+        match="version 7 contract",
+    ):
+        migration_module._migrate_publication_manifest(
+            raw,
+            [],
+            migration_date=date(2026, 8, 11),
+        )
+
+
+def _v1_active_fulfillment_migration_inputs():
+    authority = _authority()
+    record = WorkoutFulfillmentRecord(
+        local_activity_id="activity-1",
+        workout_identity=authority.identity,
+        applied_week_approval_id=authority.applied_week_approval_id,
+        applied_running_workouts_sha256=authority.applied_running_workouts_sha256,
+        workout_prescription_sha256=canonical_data_sha256(authority.prescription),
+        activity_performance_evidence_sha256="a" * 64,
+        schedule_timezone=authority.schedule_timezone,
+        scheduled_local_date=authority.prescription.date,
+        execution_local_date=authority.prescription.date,
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
+            event_id=42,
+            observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+    )
+    raw = WorkoutFulfillmentManifest(
+        fulfillments={record.local_activity_id: record}
+    ).model_dump(mode="json")
+    raw["schema_version"] = 1
+    raw.pop("remote_pairing_operations")
+    raw.pop("remote_pairing_drift_resolutions")
+    raw["fulfillments"]["activity-1"]["provider_pair"].pop("provenance")
+
+    publication = _publication().model_copy(
+        update={
+            "workout_identity": authority.identity,
+            "applied_week_approval_id": authority.applied_week_approval_id,
+            "applied_running_workouts_sha256": (
+                authority.applied_running_workouts_sha256
+            ),
+            "workout_prescription_sha256": canonical_data_sha256(
+                authority.prescription
+            ),
+            "schedule_timezone": authority.schedule_timezone,
+            "occurrence_date": authority.prescription.date,
+        }
+    )
+    publication_manifest = PublicationManifest(workouts={"planned-run": publication})
+    migration_authority = _migration_authority()
+    activity = make_activity(id="activity-1", date=authority.prescription.date)
+    activity = activity.model_copy(
+        update={
+            "audit": activity.audit.model_copy(
+                update={
+                    "performance_evidence_sha256": "a" * 64,
+                    "provider_snapshot_sha256": "f" * 64,
+                    "canonical_mapping_version": 9,
+                }
+            )
+        }
+    )
+    activities_by_local_id = {activity.local_activity_id: activity}
+    return (
+        raw,
+        publication_manifest,
+        [migration_authority],
+        activities_by_local_id,
+    )
+
+
+def test_fulfillment_v1_migrates_exact_pair_provenance_and_is_idempotent() -> None:
+    (
+        raw,
+        publication_manifest,
+        authorities,
+        activities_by_local_id,
+    ) = _v1_active_fulfillment_migration_inputs()
+    migrated, changed = migration_module._migrate_current_fulfillment_manifest(
+        raw,
+        publication_manifest,
+        authorities,
+        activities_by_local_id,
+    )
+    repeated, repeated_changed = migration_module._migrate_current_fulfillment_manifest(
+        migrated.model_dump(mode="json"),
+        publication_manifest,
+        authorities,
+        activities_by_local_id,
+    )
+
+    assert changed is True
+    assert migrated.schema_version == 2
+    assert migrated.fulfillments["activity-1"].provider_pair is not None
+    assert migrated.fulfillments["activity-1"].provider_pair.provenance == "provider_observed"
+    assert migrated.remote_pairing_operations == {}
+    assert repeated == migrated
+    assert repeated_changed is False
+
+
+def test_fulfillment_v1_rejects_provider_pair_for_a_different_owned_event() -> None:
+    raw, publication_manifest, authorities, activities = (
+        _v1_active_fulfillment_migration_inputs()
+    )
+    raw["fulfillments"]["activity-1"]["provider_pair"]["event_id"] = 999
+
+    with pytest.raises(
+        migration_module.WorkoutFulfillmentMigrationError,
+        match="exact publication authority",
+    ):
+        migration_module._migrate_current_fulfillment_manifest(
+            raw,
+            publication_manifest,
+            authorities,
+            activities,
+        )
+
+
+def test_fulfillment_v1_rejects_active_fulfillment_without_current_activity() -> None:
+    raw, publication_manifest, authorities, _ = (
+        _v1_active_fulfillment_migration_inputs()
+    )
+
+    with pytest.raises(
+        migration_module.WorkoutFulfillmentMigrationError,
+        match="exact current running-activity evidence",
+    ):
+        migration_module._migrate_current_fulfillment_manifest(
+            raw,
+            publication_manifest,
+            authorities,
+            {},
+        )
+
+
+def test_fulfillment_v1_rejects_historical_pair_without_exact_publication() -> None:
+    activity = make_activity(id="activity-historical", date=date(2026, 7, 28))
+    activity = activity.model_copy(
+        update={
+            "audit": activity.audit.model_copy(
+                update={
+                    "performance_evidence_sha256": "a" * 64,
+                    "provider_snapshot_sha256": "f" * 64,
+                    "canonical_mapping_version": 9,
+                }
+            )
+        }
+    )
+    historical = HistoricalLegacyWorkoutFulfillment(
+        local_activity_id=activity.local_activity_id,
+        workout_identity=_authority().identity,
+        activity_performance_evidence_sha256="a" * 64,
+        scheduled_local_date=date(2026, 7, 28),
+        execution_local_date=date(2026, 7, 28),
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=42,
+            provenance="provider_observed",
+            observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+        ),
+        matched_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+    )
+    raw = WorkoutFulfillmentManifest(
+        historical_legacy_fulfillments={activity.local_activity_id: historical}
+    ).model_dump(mode="json")
+    raw["schema_version"] = 1
+    raw.pop("remote_pairing_operations")
+    raw.pop("remote_pairing_drift_resolutions")
+    raw["historical_legacy_fulfillments"][activity.local_activity_id][
+        "provider_pair"
+    ].pop("provenance")
+
+    with pytest.raises(
+        migration_module.WorkoutFulfillmentMigrationError,
+        match="exact legacy publication authority",
+    ):
+        migration_module._migrate_current_fulfillment_manifest(
+            raw,
+            PublicationManifest(),
+            [],
+            {activity.local_activity_id: activity},
+        )

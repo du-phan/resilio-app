@@ -1,7 +1,11 @@
 """Presentation-neutral API wiring for workout fulfillment lifecycle actions."""
 
+from contextlib import contextmanager
+
 import resilio.api as stable_api
+from resilio.api import publication as publication_api
 from resilio.api import workout_fulfillment as fulfillment_api
+from resilio.core.locking import OperationLockError
 from resilio.core.workout_fulfillment.service import WorkoutFulfillmentError
 
 
@@ -93,16 +97,40 @@ def test_fulfillment_api_returns_typed_validation_error(monkeypatch) -> None:
     assert result.message == "candidate evidence is stale"
 
 
-def test_stable_api_exports_the_complete_fulfillment_and_retirement_surface() -> None:
+def test_stable_api_exports_the_complete_native_pairing_fulfillment_surface() -> None:
     expected_names = {
         "FulfillmentError",
         "confirm_workout_fulfillment",
         "dismiss_workout_fulfillment_candidate",
         "get_workout_fulfillment_candidates",
         "get_workout_fulfillment_week_status",
-        "retire_fulfilled_week_run_workouts",
+        "reconcile_remote_workout_pairing_operations",
         "revoke_workout_fulfillment",
     }
 
     assert expected_names.issubset(stable_api.__all__)
     assert all(hasattr(stable_api, name) for name in expected_names)
+
+
+def test_global_pairing_drain_returns_a_typed_lock_error(monkeypatch) -> None:
+    @contextmanager
+    def locked(*_args, **_kwargs):
+        raise OperationLockError("activity mutation lock is held")
+        yield
+
+    monkeypatch.setattr(
+        publication_api,
+        "_with_intervals_client",
+        lambda **_kwargs: (object(), False),
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "coordinated_publication_plan_activity_lock",
+        locked,
+    )
+
+    result = publication_api.reconcile_remote_workout_pairing_operations()
+
+    assert isinstance(result, publication_api.PublicationError)
+    assert result.error_type == "remote_pairing_reconciliation"
+    assert "lock is held" in result.message

@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from resilio import __version__
 from resilio.integrations.intervals_icu.dto import (
     ActivityDTO,
+    ActivityPairingWriteDTO,
     ActivitySummaryDTO,
     AthleteDTO,
     ConnectionsDTO,
@@ -392,6 +393,22 @@ class IntervalsIcuClient:
             operation="delete_activity",
             retry_reads=False,
         )
+
+    def update_activity_pairing(
+        self,
+        activity_id: str,
+        pairing: ActivityPairingWriteDTO,
+    ) -> ActivityDTO:
+        """Set or clear one native activity/event pair without a blind retry."""
+        operation = "update_activity_pairing"
+        response = self._request(
+            "PUT",
+            f"/activity/{activity_id}",
+            operation=operation,
+            retry_reads=False,
+            json=pairing.model_dump(mode="json"),
+        )
+        return self._validated(response, ActivityDTO, operation)
 
     def list_events(
         self,

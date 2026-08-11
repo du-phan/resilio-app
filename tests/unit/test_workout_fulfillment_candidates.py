@@ -132,6 +132,27 @@ def test_candidate_builder_does_not_rank_or_hide_same_week_options() -> None:
     ]
 
 
+def test_strava_source_remains_eligible_for_provider_neutral_confirmation() -> None:
+    activity = make_activity(id="act_strava", date=date(2026, 8, 10))
+    activity = activity.model_copy(
+        update={
+            "origin": activity.origin.model_copy(
+                update={"source_recording_provider": "STRAVA"}
+            )
+        }
+    )
+
+    candidates = build_fulfillment_candidates(
+        activity=activity,
+        workout_authorities=[_authority(_workout("w_tuesday", date(2026, 8, 11)))],
+        manifest=WorkoutFulfillmentManifest(),
+    )
+
+    assert [candidate.workout_identity.local_workout_id for candidate in candidates] == [
+        "w_tuesday"
+    ]
+
+
 def test_candidates_exclude_cross_week_race_and_benchmark_workouts() -> None:
     activity = make_activity(id="act_run", date=date(2026, 8, 16))
     authorities = [
@@ -167,6 +188,7 @@ def test_candidates_exclude_activity_owned_by_migrated_historical_pair() -> None
                 execution_local_date=date(2026, 8, 10),
                 schedule_offset_days=0,
                 provider_pair=ProviderPairedFulfillmentEvidence(
+                    provenance="provider_observed",
                     event_id=42,
                     observed_at_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
                 ),

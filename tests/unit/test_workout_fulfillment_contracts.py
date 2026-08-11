@@ -11,6 +11,7 @@ from resilio.schemas.workout_fulfillment import (
     WorkoutFulfillmentManifest,
     WorkoutFulfillmentRecord,
 )
+from resilio.schemas.workout_pairing import RemoteWorkoutPairingOperation
 
 
 def _identity(local_workout_id: str = "w_easy") -> PlanWorkoutIdentity:
@@ -71,12 +72,55 @@ def test_provider_pair_can_enrich_an_athlete_confirmed_record() -> None:
         update={
             "provider_pair": ProviderPairedFulfillmentEvidence(
                 event_id=42,
+                provenance="provider_observed",
                 observed_at_utc=datetime(2026, 8, 11, 8, tzinfo=timezone.utc),
             )
         }
     )
 
     assert record.fulfillment_basis == "provider_paired_and_athlete_confirmed"
+    assert record.has_independent_provider_pair_evidence
+
+
+def test_resilio_requested_pair_does_not_become_independent_provider_evidence() -> None:
+    record = _record().model_copy(
+        update={
+            "provider_pair": ProviderPairedFulfillmentEvidence(
+                event_id=42,
+                provenance="resilio_requested",
+                observed_at_utc=datetime(2026, 8, 11, 8, tzinfo=timezone.utc),
+            )
+        }
+    )
+
+    assert record.provider_pair_supports_event(42)
+    assert not record.has_independent_provider_pair_evidence
+
+
+def test_remote_pairing_operation_requires_coherent_lifecycle_fields() -> None:
+    operation = RemoteWorkoutPairingOperation(
+        operation_id="pairing_operation_0123456789abcdef",
+        action="pair",
+        state="pending",
+        local_activity_id="act_example",
+        intervals_icu_activity_id="i123",
+        workout_identity=_identity(),
+        event_id=42,
+        activity_performance_evidence_sha256="3" * 64,
+        publication_provider_event_fingerprint_sha256="5" * 64,
+        fulfillment_record_sha256="6" * 64,
+        expected_paired_event_id_before=None,
+        requested_at_utc=datetime(2026, 8, 11, 8, tzinfo=timezone.utc),
+    )
+
+    assert operation.desired_paired_event_id == 42
+    with pytest.raises(ValueError, match="verified pairing operation"):
+        RemoteWorkoutPairingOperation.model_validate(
+            {
+                **operation.model_dump(mode="python"),
+                "state": "verified",
+            }
+        )
 
 
 def test_activity_evidence_revision_chain_must_end_at_current_evidence() -> None:
@@ -177,6 +221,7 @@ def test_manifest_rejects_workout_reuse_across_active_and_historical_records() -
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
             event_id=42,
+            provenance="provider_observed",
             observed_at_utc=datetime(2026, 8, 10, 14, tzinfo=timezone.utc),
         ),
         matched_at_utc=datetime(2026, 8, 10, 14, tzinfo=timezone.utc),

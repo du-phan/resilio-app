@@ -28,6 +28,7 @@ from resilio.core.planning.state_repository import load_planning_aggregate_unloc
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.legacy_source_state import (
     legacy_coaching_evidence_source_sha256_unlocked,
+    v1_coaching_evidence_source_sha256_unlocked,
 )
 from resilio.core.workout_fulfillment.planning_evidence_migration_models import (
     PlanningEvidenceHashMigration,
@@ -96,6 +97,7 @@ class _ArtifactGraphMigration:
         publication_manifest: PublicationManifest,
         legacy_completion_raw: dict[str, Any] | None,
         legacy_publication_raw: dict[str, Any] | None,
+        pre_migration_fulfillment_raw: dict[str, Any] | None,
     ):
         self.repo = repo
         self.fulfillment_index = fulfillment_index(fulfillment_manifest)
@@ -103,6 +105,7 @@ class _ArtifactGraphMigration:
         self.publication_manifest = publication_manifest
         self.legacy_completion_raw = legacy_completion_raw
         self.legacy_publication_raw = legacy_publication_raw
+        self.pre_migration_fulfillment_raw = pre_migration_fulfillment_raw
         self.raw_by_key = self._load_raw_artifacts()
         self.reference_by_key: dict[ArtifactKey, EvidenceArtifactReference] = {}
         self.model_by_path: dict[str, BaseModel] = {}
@@ -253,9 +256,13 @@ class _ArtifactGraphMigration:
         self.visiting.add(key)
         raw = copy.deepcopy(raw_source)
         legacy_contract = contains_legacy_planning_contracts(raw)
+        source_contract_changed = legacy_contract or (
+            self.pre_migration_fulfillment_raw is not None
+            and self.pre_migration_fulfillment_raw.get("schema_version") == 1
+        )
         try:
             legacy_source_is_current = True
-            if legacy_contract and "source_state_sha256" in raw:
+            if source_contract_changed and "source_state_sha256" in raw:
                 try:
                     expected_legacy_source_sha256 = self._legacy_source_state_sha256(
                         reference.artifact_type,
@@ -273,7 +280,7 @@ class _ArtifactGraphMigration:
                 evidence_by_identity=self.fulfillment_index,
             )
             raw.pop("source_context_sha256", None)
-            if legacy_contract and "source_state_sha256" in raw:
+            if source_contract_changed and "source_state_sha256" in raw:
                 raw["source_state_sha256"] = (
                     self._source_state_sha256(reference.artifact_type, raw)
                     if legacy_source_is_current
@@ -330,6 +337,17 @@ class _ArtifactGraphMigration:
             artifact_type,
             raw,
         )
+        if (
+            self.pre_migration_fulfillment_raw is not None
+            and self.pre_migration_fulfillment_raw.get("schema_version") == 1
+        ):
+            return v1_coaching_evidence_source_sha256_unlocked(
+                self.repo,
+                evidence_as_of_date=evidence_as_of_date,
+                evidence_window_start=evidence_window_start,
+                fulfillment_raw=self.pre_migration_fulfillment_raw,
+                publication_raw=self.legacy_publication_raw,
+            )
         return legacy_coaching_evidence_source_sha256_unlocked(
             self.repo,
             evidence_as_of_date=evidence_as_of_date,
@@ -458,6 +476,7 @@ def prepare_planning_evidence_migration(
     publication_manifest: PublicationManifest,
     legacy_completion_raw: dict[str, Any] | None = None,
     legacy_publication_raw: dict[str, Any] | None = None,
+    pre_migration_fulfillment_raw: dict[str, Any] | None = None,
 ) -> PlanningEvidenceMigrationResult:
     """Prepare a lossless strict-schema graph rewrite without writing any state."""
     state = load_planning_aggregate_unlocked(repo, allow_missing=True)
@@ -467,6 +486,7 @@ def prepare_planning_evidence_migration(
         publication_manifest,
         legacy_completion_raw,
         legacy_publication_raw,
+        pre_migration_fulfillment_raw,
     )
     proposals = PlanningProposalMigration(repo, graph)
     skeleton_migrations: list[PlanSkeletonHashMigration] = []

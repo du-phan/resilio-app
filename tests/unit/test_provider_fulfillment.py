@@ -365,6 +365,7 @@ def test_revoked_provider_pair_is_suppressed_only_for_the_exact_evidence() -> No
     revocation = WorkoutFulfillmentRevocation(
         revocation_id="fulfillment_revocation_1111111111111111",
         fulfillment=fulfillment,
+        intervals_icu_activity_id=activity.origin.intervals_icu_activity_id,
         reason="association_incorrect",
         athlete_confirmation_reference="Athlete withdrew this exact association.",
         coaching_rationale=(

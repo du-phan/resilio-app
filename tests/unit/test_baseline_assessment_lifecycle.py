@@ -428,6 +428,7 @@ def _record_owned_completion(
                     execution_local_date=activity.occurrence.local_date,
                     schedule_offset_days=0,
                     provider_pair=ProviderPairedFulfillmentEvidence(
+                        provenance="provider_observed",
                         event_id=publication.event_id,
                         observed_at_utc=datetime(2026, 8, 20, 8, tzinfo=timezone.utc),
                     ),
@@ -800,7 +801,7 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
     )
     with pytest.raises(
         WorkoutFulfillmentMigrationError,
-        match="Assessment result source is invalid",
+        match="Active fulfillment lacks exact current running-activity evidence",
     ):
         migrate_workout_fulfillment_state(repo, apply=False)
     activity_archive.write(benchmark_activity)

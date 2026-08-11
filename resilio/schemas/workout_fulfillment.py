@@ -8,13 +8,31 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from resilio.canonical import canonical_data_sha256
+from resilio.schemas.fulfillment_conflict import (
+    UnresolvedFulfillmentConflict as UnresolvedFulfillmentConflict,
+)
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.workout_pairing import (
+    RemotePairingDriftResolution,
+    RemoteWorkoutPairingOperation,
+    native_pair_operation_id,
+    native_unpair_operation_id,
+    restored_pair_operation_id,
+)
+
+ProviderPairProvenance = Literal[
+    "provider_observed",
+    "resilio_requested",
+    "pair_origin_ambiguous",
+]
 
 
 class ProviderPairedFulfillmentEvidence(BaseModel):
     """Intervals.icu's exact pairing between an activity and an owned event."""
 
     event_id: int = Field(gt=0)
+    provenance: ProviderPairProvenance
     observed_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -256,9 +274,25 @@ class WorkoutFulfillmentRecord(BaseModel):
         """Whether exact provider pairing was observed."""
         return self.provider_pair is not None
 
+    @property
+    def has_independent_provider_pair_evidence(self) -> bool:
+        """Whether Intervals supplied the pair independently of a Resilio write."""
+        return (
+            self.provider_pair is not None
+            and self.provider_pair.provenance == "provider_observed"
+        )
+
     def provider_pair_supports_event(self, event_id: int) -> bool:
         """Prove exact provider event linkage."""
         return self.provider_pair is not None and self.provider_pair.event_id == event_id
+
+    def independent_provider_pair_supports_event(self, event_id: int) -> bool:
+        """Prove a provider-origin pair suitable for benchmark authority."""
+        return (
+            self.has_independent_provider_pair_evidence
+            and self.provider_pair is not None
+            and self.provider_pair.event_id == event_id
+        )
 
 
 class WorkoutFulfillmentCandidateDismissal(BaseModel):
@@ -314,6 +348,7 @@ class WorkoutFulfillmentRevocation(BaseModel):
 
     revocation_id: str = Field(pattern=r"^fulfillment_revocation_[0-9a-f]{16}$")
     fulfillment: WorkoutFulfillmentRecord
+    intervals_icu_activity_id: str | None = Field(default=None, min_length=1)
     reason: Literal[
         "activity_deleted",
         "activity_reclassified",
@@ -332,30 +367,24 @@ class WorkoutFulfillmentRevocation(BaseModel):
             raise ValueError("revoked_at_utc must be timezone-aware")
         return value.astimezone(timezone.utc)
 
-
-class UnresolvedFulfillmentConflict(BaseModel):
-    """Durable synchronized contradiction that suspends fulfillment evidence."""
-
-    local_activity_id: str = Field(min_length=1)
-    rule: str = Field(pattern=r"^(paired_event|fulfilled_activity)_[a-z0-9_]+$")
-    provider_event_id_sha256: str | None = Field(
-        default=None,
-        pattern=r"^[0-9a-f]{64}$",
-    )
-    observed_at_utc: datetime
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("observed_at_utc")
-    @classmethod
-    def observation_time_is_utc(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("observed_at_utc must be timezone-aware")
-        return value.astimezone(timezone.utc)
+    @model_validator(mode="after")
+    def revocation_follows_association_authority(self) -> "WorkoutFulfillmentRevocation":
+        confirmation = self.fulfillment.athlete_confirmation
+        authorized_at_utc = max(
+            self.fulfillment.recorded_at_utc,
+            (
+                confirmation.confirmed_at_utc
+                if confirmation is not None
+                else self.fulfillment.recorded_at_utc
+            ),
+        )
+        if self.revoked_at_utc < authorized_at_utc:
+            raise ValueError("fulfillment revocation cannot predate association authority")
+        return self
 
 
 class WorkoutFulfillmentManifest(BaseModel):
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     fulfillments: dict[str, WorkoutFulfillmentRecord] = Field(default_factory=dict)
     dismissed_candidates: dict[str, WorkoutFulfillmentCandidateDismissal] = Field(
         default_factory=dict
@@ -369,11 +398,16 @@ class WorkoutFulfillmentManifest(BaseModel):
         str,
         UnresolvedFulfillmentConflict,
     ] = Field(default_factory=dict)
+    remote_pairing_operations: dict[str, RemoteWorkoutPairingOperation] = Field(
+        default_factory=dict
+    )
+    remote_pairing_drift_resolutions: list[RemotePairingDriftResolution] = Field(
+        default_factory=list
+    )
 
     model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="after")
-    def identities_are_unique(self) -> "WorkoutFulfillmentManifest":
+    def _validate_fulfillment_ownership(self) -> None:
         workout_owners: dict[tuple[str, str, int, str], str] = {}
         for local_activity_id, record in self.fulfillments.items():
             if record.local_activity_id != local_activity_id:
@@ -417,6 +451,137 @@ class WorkoutFulfillmentManifest(BaseModel):
         for local_activity_id, conflict in self.unresolved_fulfillment_conflicts.items():
             if conflict.local_activity_id != local_activity_id:
                 raise ValueError("fulfillment conflict key must match local activity ID")
+
+    def _validate_pair_operation(
+        self,
+        operation: RemoteWorkoutPairingOperation,
+    ) -> None:
+        ordinary_operation_id = native_pair_operation_id(
+            local_activity_id=operation.local_activity_id,
+            intervals_icu_activity_id=operation.intervals_icu_activity_id,
+            workout_identity=operation.workout_identity,
+            event_id=operation.event_id,
+            fulfillment_record_sha256=operation.fulfillment_record_sha256,
+        )
+        restoration_authorized = any(
+            operation.operation_id
+            == restored_pair_operation_id(resolution.pairing_drift_token_sha256)
+            and operation.local_activity_id
+            == resolution.pair_operation_snapshot.local_activity_id
+            and operation.intervals_icu_activity_id
+            == resolution.pair_operation_snapshot.intervals_icu_activity_id
+            and operation.workout_identity
+            == resolution.pair_operation_snapshot.workout_identity
+            and operation.event_id == resolution.pair_operation_snapshot.event_id
+            and operation.activity_performance_evidence_sha256
+            == resolution.pair_operation_snapshot.activity_performance_evidence_sha256
+            and operation.publication_provider_event_fingerprint_sha256
+            == (
+                resolution
+                .pair_operation_snapshot
+                .publication_provider_event_fingerprint_sha256
+            )
+            and operation.fulfillment_record_sha256
+            == resolution.pair_operation_snapshot.fulfillment_record_sha256
+            and operation.requested_at_utc >= resolution.confirmed_at_utc
+            for resolution in self.remote_pairing_drift_resolutions
+        )
+        if operation.operation_id != ordinary_operation_id and not restoration_authorized:
+            raise ValueError("pair operation ID lacks exact association authority")
+
+    def _validate_unpair_operation(
+        self,
+        operation: RemoteWorkoutPairingOperation,
+    ) -> None:
+        matching_revocation = next(
+            (
+                item
+                for item in self.revoked_fulfillments
+                if item.revocation_id == operation.revocation_id
+            ),
+            None,
+        )
+        if matching_revocation is None:
+            raise ValueError("unpair operation requires its exact revocation")
+        fulfillment = matching_revocation.fulfillment
+        fulfillment_record_sha256 = canonical_data_sha256(fulfillment)
+        operation_matches_revocation = (
+            operation.operation_id
+            == native_unpair_operation_id(
+                local_activity_id=operation.local_activity_id,
+                event_id=operation.event_id,
+                revocation_id=matching_revocation.revocation_id,
+                fulfillment_record_sha256=fulfillment_record_sha256,
+            )
+            and operation.fulfillment_record_sha256 == fulfillment_record_sha256
+            and operation.local_activity_id == fulfillment.local_activity_id
+            and operation.intervals_icu_activity_id
+            == matching_revocation.intervals_icu_activity_id
+            and operation.workout_identity == fulfillment.workout_identity
+            and operation.activity_performance_evidence_sha256
+            == fulfillment.activity_performance_evidence_sha256
+            and operation.requested_at_utc == matching_revocation.revoked_at_utc
+        )
+        if not operation_matches_revocation:
+            raise ValueError("unpair operation must match its revoked fulfillment")
+        provider_pair = fulfillment.provider_pair
+        originating_pair = any(
+            candidate.action == "pair"
+            and candidate.local_activity_id == operation.local_activity_id
+            and candidate.intervals_icu_activity_id == operation.intervals_icu_activity_id
+            and candidate.workout_identity == operation.workout_identity
+            and candidate.event_id == operation.event_id
+            and candidate.activity_performance_evidence_sha256
+            == operation.activity_performance_evidence_sha256
+            and candidate.publication_provider_event_fingerprint_sha256
+            == operation.publication_provider_event_fingerprint_sha256
+            and candidate.fulfillment_record_sha256
+            == operation.fulfillment_record_sha256
+            and candidate.requested_at_utc <= operation.requested_at_utc
+            and (
+                candidate.state in {"pending", "verified"}
+                or candidate.provider_write_submitted_at_utc is not None
+            )
+            for candidate in self.remote_pairing_operations.values()
+        )
+        exact_provider_pair = (
+            provider_pair is not None and provider_pair.event_id == operation.event_id
+        )
+        if not (exact_provider_pair or (provider_pair is None and originating_pair)):
+            raise ValueError("unpair operation lacks exact native pair authority")
+
+    def _validate_remote_pairing_authority(self) -> None:
+        for operation_id, operation in self.remote_pairing_operations.items():
+            if operation.operation_id != operation_id:
+                raise ValueError("remote pairing operation key must match its ID")
+            if operation.action == "pair":
+                self._validate_pair_operation(operation)
+            else:
+                self._validate_unpair_operation(operation)
+
+    def _validate_pairing_drift_resolutions(self) -> None:
+        drift_tokens = [
+            resolution.pairing_drift_token_sha256
+            for resolution in self.remote_pairing_drift_resolutions
+        ]
+        if len(drift_tokens) != len(set(drift_tokens)):
+            raise ValueError("remote pairing drift resolution tokens must be unique")
+        for resolution in self.remote_pairing_drift_resolutions:
+            resolved_pair_operation = self.remote_pairing_operations.get(
+                resolution.pair_operation_snapshot.operation_id
+            )
+            if (
+                resolved_pair_operation is None
+                or resolved_pair_operation.action != "pair"
+                or resolved_pair_operation != resolution.pair_operation_snapshot
+            ):
+                raise ValueError("pairing drift resolution requires its exact pair operation")
+
+    @model_validator(mode="after")
+    def identities_are_unique(self) -> "WorkoutFulfillmentManifest":
+        self._validate_fulfillment_ownership()
+        self._validate_remote_pairing_authority()
+        self._validate_pairing_drift_resolutions()
         return self
 
 

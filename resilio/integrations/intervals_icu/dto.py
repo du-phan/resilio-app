@@ -219,6 +219,10 @@ class HeartRateRecoveryDTO(ExternalDTO):
 
 
 class ActivityDTO(ExternalDTO):
+    # Native pairing verifies that no provider-returned field except the pair
+    # pointer changes across a write, including fields introduced by Intervals.
+    model_config = ConfigDict(extra="allow", populate_by_name=True)
+
     id: str
     type: str
     name: str
@@ -373,6 +377,14 @@ class ActivityDTO(ExternalDTO):
         if len(provider_zone_ids) != len(set(provider_zone_ids)):
             raise ValueError("icu_zone_times contains duplicate provider zone IDs")
         return self
+
+
+class ActivityPairingWriteDTO(BaseModel):
+    """The complete payload Resilio is allowed to write on an activity."""
+
+    paired_event_id: Optional[int] = Field(gt=0)
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class WorkoutStepTargetDTO(ExternalDTO):

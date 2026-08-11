@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from resilio.core.activity_sync.activity_merge import merge_reviewed_activity
 from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.activity_sync.evidence_identity import (
     activity_performance_evidence_sha256,
@@ -42,6 +43,7 @@ from resilio.core.workout_fulfillment.repository import (
     save_fulfillment_manifest,
 )
 from resilio.core.workout_publication.manifest import save_manifest
+from resilio.integrations.intervals_icu.activity_mapper import map_activity
 from resilio.integrations.intervals_icu.dto import (
     ActivityDTO,
     AthleteDTO,
@@ -615,6 +617,7 @@ def _fulfillment(
         execution_local_date=publication.occurrence_date,
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=publication.event_id,
             observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
         ),
@@ -787,13 +790,14 @@ def test_running_activity_reclassification_durably_suspends_fulfillment(
 
 
 @pytest.mark.parametrize(
-    ("paired_event_id", "expect_conflict"),
-    [(41, False), (42, True), (None, True)],
+    ("paired_event_id", "performance_matches", "expect_conflict"),
+    [(41, True, False), (41, False, True), (42, True, True), (None, True, True)],
 )
 def test_historical_pair_never_promotes_to_active_fulfillment(
     tmp_path,
     monkeypatch,
     paired_event_id: int | None,
+    performance_matches: bool,
     expect_conflict: bool,
 ) -> None:
     repo, _ = _repo_with_linked_history(tmp_path, monkeypatch)
@@ -811,6 +815,12 @@ def test_historical_pair_never_promotes_to_active_fulfillment(
         )
     )
     current_publication = _publication(event_id=42, workout_id="current-run")
+    client = SyncClient()
+    client.row = client.row.model_copy(update={"paired_event_id": paired_event_id})
+    reconciled_activity = merge_reviewed_activity(
+        activity,
+        map_activity(client.row, default_timezone="Europe/Paris"),
+    )
     save_manifest(
         repo,
         PublicationManifest(
@@ -821,11 +831,16 @@ def test_historical_pair_never_promotes_to_active_fulfillment(
     historical_fulfillment = HistoricalLegacyWorkoutFulfillment(
         local_activity_id=activity.local_activity_id,
         workout_identity=historical_publication.workout_identity,
-        activity_performance_evidence_sha256=activity_performance_evidence_sha256(activity),
+        activity_performance_evidence_sha256=(
+            activity_performance_evidence_sha256(reconciled_activity)
+            if performance_matches
+            else "f" * 64
+        ),
         scheduled_local_date=historical_publication.occurrence_date,
         execution_local_date=activity.occurrence.local_date,
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=historical_publication.event_id,
             observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
         ),
@@ -837,9 +852,6 @@ def test_historical_pair_never_promotes_to_active_fulfillment(
             historical_legacy_fulfillments={activity.local_activity_id: historical_fulfillment}
         ),
     )
-    client = SyncClient()
-    client.row = client.row.model_copy(update={"paired_event_id": paired_event_id})
-
     report = ActivitySyncService(repo, _config(), client).run(today=date(2026, 7, 28))
     manifest = load_fulfillment_manifest(repo)
 

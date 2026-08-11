@@ -98,7 +98,7 @@ def _paired_activity(
         record
         for record in fulfillment_manifest.fulfillments.values()
         if record.workout_identity == benchmark_identity
-        and record.provider_pair_supports_event(publication.event_id)
+        and record.independent_provider_pair_supports_event(publication.event_id)
     ]
     if len(matching_records) != 1:
         raise PlanOperationError(

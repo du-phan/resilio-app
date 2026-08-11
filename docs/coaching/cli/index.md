@@ -116,21 +116,24 @@ authority. Commands return JSON envelopes.
   --reason <activity_deleted|activity_reclassified|association_incorrect>
   --confirmation-reference <TEXT> --rationale <TEXT>` — preserve and withdraw
   one exact fulfillment after athlete confirmation, suppress its automatic
-  recreation, and reopen any schedule item retired by that evidence.
+  recreation, and stage an exact native unpair when Resilio owns that pair.
+- `resilio workout reconcile-pairing-operations` — drain exact durable native
+  unpair obligations independently of active-plan or week lifecycle state.
 - `resilio workout fulfillment-status --week-number <N>` — inspect fulfilled
   and outstanding approved workouts without rewriting the week.
-- `resilio workout resolve-drift --week-number <N> --restore-local
+- `resilio workout resolve-drift --week-number <N>
   --drift-target-token <SHA> --confirmation-reference <TEXT>` — replace only
   the exact owned remote bytes represented by the status token after explicit
   athlete confirmation. There is no automatic remote adoption.
-- `resilio workout resolve-drift --week-number <N> --retire-fulfilled
-  --drift-target-token <SHA> --confirmation-reference <TEXT>` — retire a
-  drifted still-future owned event only after a second explicit confirmation
-  of the exact status token.
-- `resilio migrate workout-fulfillment-v1 [--apply]` — validate the completion
-  v3/publication v6 cutover in dry-run mode, then apply it through a
-  crash-recoverable, hash-verified backup transaction. Normal fulfillment and
-  sync access remains blocked while legacy completion state exists.
+- `resilio workout resolve-pairing-drift --week-number <N>
+  --pairing-drift-token <SHA> --confirmation-reference <TEXT>` — restore only
+  an exact removed Resilio-authored native pair, or retry one pending pair whose
+  non-performance fields changed, after exact re-observation and explicit
+  athlete confirmation.
+- `resilio migrate workout-fulfillment-v2 [--apply]` — validate the strict
+  publication/fulfillment/planning-evidence cutover in dry-run mode, then apply
+  it through a crash-recoverable, hash-verified backup transaction. Normal
+  fulfillment, publication, and sync access remains blocked until it succeeds.
 
 `resilio plan apply-week` returns the successful local application and its
 automatic run-synchronization outcome in one typed result. A provider failure

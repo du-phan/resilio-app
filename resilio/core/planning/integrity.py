@@ -9,6 +9,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from resilio.schemas.approvals import AppliedWeekRevision
 from resilio.schemas.planning.constraints import (
     AthleteManagedSportExpectation,
     PlanningConstraintsSnapshot,
@@ -109,3 +110,24 @@ def target_week_skeleton_sha256(week: WeekPlan) -> str:
 def applied_running_workouts_sha256(week: WeekPlan) -> str:
     """Hash the ordered exact running workouts applied to a macro week."""
     return _canonical_sha256([workout.model_dump(mode="json") for workout in week.running_workouts])
+
+
+def assert_applied_week_revision_matches_plan(
+    plan: TrainingPlan,
+    revision: AppliedWeekRevision,
+) -> None:
+    """Prove one applied snapshot still belongs to its approved macro-week skeleton."""
+    plan_week = next(
+        (week for week in plan.weeks if week.week_number == revision.week_number),
+        None,
+    )
+    if (
+        revision.plan_id != plan.id
+        or revision.plan_revision_id != plan.plan_revision_id
+        or plan_week is None
+        or target_week_skeleton_sha256(revision.applied_week_snapshot)
+        != target_week_skeleton_sha256(plan_week)
+        or revision.applied_running_workouts_sha256
+        != applied_running_workouts_sha256(revision.applied_week_snapshot)
+    ):
+        raise ValueError("Applied-week evidence does not match its approved plan skeleton")

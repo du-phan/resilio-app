@@ -14,8 +14,11 @@ from resilio.core.workout_fulfillment.service import (
     WorkoutFulfillmentError,
     WorkoutFulfillmentService,
 )
+from resilio.core.workout_publication.manifest import save_manifest
+from resilio.schemas.activity import ActivityOrigin, ActivityOriginKind
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
+from resilio.schemas.publication import PublicationManifest, PublishedWorkout
 from resilio.schemas.workout_fulfillment import (
     ProviderPairedFulfillmentEvidence,
     UnresolvedFulfillmentConflict,
@@ -117,6 +120,7 @@ def _provider_fulfillment(candidate) -> WorkoutFulfillmentRecord:
         schedule_offset_days=candidate.schedule_offset_days,
         provider_pair=ProviderPairedFulfillmentEvidence(
             event_id=42,
+            provenance="provider_observed",
             observed_at_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
         ),
         recorded_at_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
@@ -193,7 +197,7 @@ def test_confirmation_enriches_an_exact_early_provider_pair_for_calendar_cleanup
         local_workout_id="w_easy",
         candidate_sha256=confirmation_candidate.candidate_sha256,
         athlete_confirmation_reference=(
-            "Athlete confirmed the early pair and authorized future-event cleanup."
+            "Athlete confirmed the exact early activity and workout association."
         ),
         coaching_rationale=(
             "The exact provider pair and the athlete both identify this as the easy run."
@@ -343,6 +347,71 @@ def test_revocation_is_idempotent_and_suppresses_the_same_exact_candidate(
 
     assert second.revocation_id != first.revocation_id
     assert len(load_fulfillment_manifest(service.repo).revoked_fulfillments) == 2
+
+
+def test_revocation_stages_exact_unpair_for_a_native_provider_pair(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    service = _service(tmp_path, monkeypatch)
+    service.activity = service.activity.model_copy(
+        update={
+            "origin": ActivityOrigin(
+                kind=ActivityOriginKind.HISTORICAL_IMPORT,
+                intervals_icu_activity_id="i123",
+            )
+        }
+    )
+    candidate = service.candidates(local_activity_id="act_run")[0]
+    fulfillment = _provider_fulfillment(candidate)
+    save_fulfillment_manifest(
+        service.repo,
+        WorkoutFulfillmentManifest(fulfillments={"act_run": fulfillment}),
+    )
+    save_manifest(
+        service.repo,
+        PublicationManifest(
+            workouts={
+                "w_easy": PublishedWorkout(
+                    workout_identity=fulfillment.workout_identity,
+                    applied_week_approval_id=fulfillment.applied_week_approval_id,
+                    applied_running_workouts_sha256=(
+                        fulfillment.applied_running_workouts_sha256
+                    ),
+                    workout_prescription_sha256=fulfillment.workout_prescription_sha256,
+                    schedule_timezone=fulfillment.schedule_timezone,
+                    event_id=42,
+                    requested_uid="owned-uid",
+                    uid="owned-uid",
+                    external_id="resilio:v1:workout:w_easy",
+                    publication_fingerprint_sha256="4" * 64,
+                    rendered_workout_sha256="5" * 64,
+                    sport_settings_version_sha256="6" * 64,
+                    provider_event_fingerprint_sha256="7" * 64,
+                    sport="run",
+                    occurrence_date=fulfillment.scheduled_local_date,
+                    provider_start_date_local="2026-08-11T00:00:00",
+                    garmin_forwarding_status="not_configured",
+                    verified_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
+                )
+            }
+        ),
+    )
+
+    service.revoke(
+        local_activity_id="act_run",
+        local_workout_id="w_easy",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact native association.",
+        coaching_rationale="The athlete confirmed this activity did not fulfill the workout.",
+        revoked_at_utc=datetime(2026, 8, 10, 9, tzinfo=timezone.utc),
+    )
+
+    manifest = load_fulfillment_manifest(service.repo)
+    operation = next(iter(manifest.remote_pairing_operations.values()))
+    assert operation.action == "unpair"
+    assert operation.event_id == 42
+    assert operation.state == "pending"
 
 
 def test_dismissed_exact_candidate_is_not_offered_again(tmp_path, monkeypatch) -> None:

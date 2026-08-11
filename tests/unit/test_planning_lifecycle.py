@@ -1519,6 +1519,7 @@ def test_week_replacement_cannot_alter_a_fulfilled_workout(
         execution_local_date=workout.date,
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=42,
             observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
         ),
@@ -1844,6 +1845,7 @@ def test_unapproved_plan_with_fulfillment_ownership_cannot_be_discarded(
                     execution_local_date=date(2026, 7, 27),
                     schedule_offset_days=0,
                     provider_pair=ProviderPairedFulfillmentEvidence(
+                        provenance="provider_observed",
                         event_id=42,
                         observed_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
                     ),

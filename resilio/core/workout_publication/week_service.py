@@ -10,6 +10,12 @@ from resilio.core.planning.service import PlanOperationError
 from resilio.core.planning.state_repository import required_planning_state_unlocked
 from resilio.core.planning.workout_evidence import load_publishable_workouts_unlocked
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_fulfillment.remote_pairing import (
+    WorkoutPairingReconciliationService,
+)
+from resilio.core.workout_fulfillment.remote_unpairing import (
+    WorkoutUnpairingReconciliationService,
+)
 from resilio.core.workout_publication.drift_confirmation import (
     confirm_publication_drift_targets,
 )
@@ -27,6 +33,9 @@ from resilio.core.workout_publication.policy import (
     pending_matches,
 )
 from resilio.core.workout_publication.preparation import prepare_publication
+from resilio.core.workout_publication.retained_authority import (
+    retained_pending_publication_authorities,
+)
 from resilio.core.workout_publication.retirement_service import (
     WorkoutRetirementService,
 )
@@ -34,9 +43,12 @@ from resilio.core.workout_publication.service import WorkoutPublicationService
 from resilio.core.workout_publication.week_deletions import (
     reconcile_owned_future_deletions,
 )
+from resilio.core.workout_publication.week_pairing import (
+    attach_remote_pairing_status,
+    confirmed_pairing_drift_retry_tokens,
+)
 from resilio.core.workout_publication.week_selection import (
     select_run_week_items,
-    week_fulfillment_retirements,
 )
 from resilio.core.workout_publication.week_status import (
     build_run_week_status,
@@ -58,6 +70,24 @@ class RunWeekSynchronizationService:
         self.client = client
         self.workout_service = WorkoutPublicationService(repo, client)
         self.retirement_service = WorkoutRetirementService(repo, client)
+        self.pairing_service = WorkoutPairingReconciliationService(repo, client)
+        self.unpairing_service = WorkoutUnpairingReconciliationService(repo, client)
+
+    def _with_remote_pairing_status(
+        self,
+        report: RunWeekSynchronizationReport,
+        *,
+        workouts: list[AuthoritativeWorkout],
+        mutate: bool,
+    ) -> RunWeekSynchronizationReport:
+        return attach_remote_pairing_status(
+            repo=self.repo,
+            pairing_service=self.pairing_service,
+            unpairing_service=self.unpairing_service,
+            report=report,
+            workouts=workouts,
+            mutate=mutate,
+        )
 
     def _load_authoritative_week_unlocked(
         self,
@@ -196,6 +226,9 @@ class RunWeekSynchronizationService:
         restore_local: bool = False,
         confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
+        deletion_authorities, deletion_provider_names = (
+            retained_pending_publication_authorities(self.repo, workouts)
+        )
         return build_run_week_status(
             self.repo,
             self.client,
@@ -225,6 +258,10 @@ class RunWeekSynchronizationService:
                     provider_name=provider_name,
                 )
             ),
+            deletion_authorities_by_local_workout_id=deletion_authorities,
+            deletion_provider_names_by_local_workout_id=(
+                deletion_provider_names
+            ),
         )
 
     def status_week(
@@ -238,10 +275,14 @@ class RunWeekSynchronizationService:
             "status_run_week_synchronization",
         ):
             workouts = self._load_authoritative_week_unlocked(week_number)
-            return self._status_authoritative_week(
-                week_number,
-                as_of_date=as_of_date,
+            return self._with_remote_pairing_status(
+                self._status_authoritative_week(
+                    week_number,
+                    as_of_date=as_of_date,
+                    workouts=workouts,
+                ),
                 workouts=workouts,
+                mutate=False,
             )
 
     def reconcile_week(
@@ -255,18 +296,29 @@ class RunWeekSynchronizationService:
             "reconcile_run_week",
         ):
             workouts = self._load_authoritative_week_unlocked(week_number)
-            status = self._status_authoritative_week(
-                week_number,
-                as_of_date=as_of_date,
+            status = self._with_remote_pairing_status(
+                self._status_authoritative_week(
+                    week_number,
+                    as_of_date=as_of_date,
+                    workouts=workouts,
+                ),
                 workouts=workouts,
+                mutate=False,
             )
             if not status.reconciliation_safe:
                 return status.model_copy(update={"operation": "reconcile"})
-            return self._reconcile_status(
+            report = self._reconcile_status(
                 status,
                 workouts=workouts,
                 as_of_date=as_of_date,
                 restore_local=False,
+            )
+            if report.partial:
+                return report
+            return self._with_remote_pairing_status(
+                report,
+                workouts=workouts,
+                mutate=True,
             )
 
     def restore_local_week(
@@ -311,18 +363,6 @@ class RunWeekSynchronizationService:
                 for item in ordinary_status.items
                 if item.status == "error" and item.error_type == "remote_drift"
             ]
-            retirement_ids = set(
-                week_fulfillment_retirements(
-                    self.repo,
-                    workouts=workouts,
-                    as_of_date=as_of_date,
-                )
-            )
-            if any(item.local_workout_id in retirement_ids for item in drift_items):
-                raise PublicationSafetyError(
-                    "Restore-local cannot authorize deletion of a fulfilled future event; "
-                    "use the retire-fulfilled workflow"
-                )
             confirmed_targets = confirm_publication_drift_targets(
                 self.retirement_service,
                 drift_items=drift_items,
@@ -358,104 +398,6 @@ class RunWeekSynchronizationService:
             )
             if not status.reconciliation_safe:
                 return status
-            return self._reconcile_status(
-                status,
-                workouts=workouts,
-                as_of_date=as_of_date,
-                restore_local=True,
-                confirmed_remote_targets=confirmed_remote_targets,
-            )
-
-    def retire_fulfilled_week(
-        self,
-        week_number: int,
-        *,
-        as_of_date: date,
-        athlete_confirmation_reference: str,
-        confirmed_drift_target_tokens: list[str],
-    ) -> RunWeekSynchronizationReport:
-        """Delete drifted owned future events after a second explicit confirmation."""
-        confirmation = athlete_confirmation_reference.strip()
-        if not confirmation:
-            raise PublicationSafetyError(
-                "Fulfillment retirement drift resolution requires athlete confirmation"
-            )
-        with coordinated_publication_plan_activity_lock(
-            self.repo,
-            "retire_drifted_fulfilled_run_week",
-        ):
-            workouts = self._load_authoritative_week_unlocked(week_number)
-            retirement_ids = set(
-                week_fulfillment_retirements(
-                    self.repo,
-                    workouts=workouts,
-                    as_of_date=as_of_date,
-                )
-            )
-            if not retirement_ids:
-                raise PublicationSafetyError("There are no fulfilled future owned events to retire")
-            ordinary_status = self._status_authoritative_week(
-                week_number,
-                as_of_date=as_of_date,
-                workouts=workouts,
-            )
-            drift_items = [
-                item
-                for item in ordinary_status.items
-                if item.status == "error" and item.error_type == "remote_drift"
-            ]
-            other_errors = [
-                item
-                for item in ordinary_status.items
-                if item.status == "error" and item.error_type != "remote_drift"
-            ]
-            if (
-                not drift_items
-                or other_errors
-                or any(item.local_workout_id not in retirement_ids for item in drift_items)
-            ):
-                raise PublicationSafetyError(
-                    "Retire-fulfilled may resolve only owned drift on fulfilled future events"
-                )
-            identity = workouts[0].identity
-            manifest = load_manifest(self.repo)
-            provider_names = provider_workout_names([item.prescription for item in workouts])
-            workouts_by_id = {item.identity.local_workout_id: item for item in workouts}
-            confirmed_targets = confirm_publication_drift_targets(
-                self.retirement_service,
-                drift_items=drift_items,
-                authoritative_workouts_by_local_id=workouts_by_id,
-                provider_names_by_local_workout_id=provider_names,
-                supplied_confirmation_tokens=confirmed_drift_target_tokens,
-            )
-            manifest.drift_resolutions.append(
-                PublicationDriftResolution(
-                    plan_id=identity.plan_id,
-                    plan_revision_id=identity.plan_revision_id,
-                    week_number=week_number,
-                    strategy="retire_fulfilled",
-                    confirmed_targets=confirmed_targets,
-                    athlete_confirmation_reference=confirmation,
-                    confirmed_at_utc=datetime.now(timezone.utc),
-                )
-            )
-            save_manifest(self.repo, manifest)
-            confirmed_remote_targets = {
-                target.local_workout_id: (
-                    target.event_id,
-                    target.observed_remote_fingerprint_sha256,
-                )
-                for target in confirmed_targets
-            }
-            status = self._status_authoritative_week(
-                week_number,
-                as_of_date=as_of_date,
-                workouts=workouts,
-                restore_local=True,
-                confirmed_remote_targets=confirmed_remote_targets,
-            )
-            if not status.reconciliation_safe:
-                return status.model_copy(update={"operation": "retire_fulfilled"})
             report = self._reconcile_status(
                 status,
                 workouts=workouts,
@@ -463,7 +405,101 @@ class RunWeekSynchronizationService:
                 restore_local=True,
                 confirmed_remote_targets=confirmed_remote_targets,
             )
-            return report.model_copy(update={"operation": "retire_fulfilled"})
+            if report.partial:
+                return report
+            return self._with_remote_pairing_status(
+                report,
+                workouts=workouts,
+                mutate=True,
+            )
+
+    def resolve_pairing_drift_week(
+        self,
+        week_number: int,
+        *,
+        as_of_date: date,
+        athlete_confirmation_reference: str,
+        confirmed_pairing_drift_tokens: list[str],
+    ) -> RunWeekSynchronizationReport:
+        """Restore exact removed native pairs after athlete confirmation."""
+        confirmation = athlete_confirmation_reference.strip()
+        if not confirmation:
+            raise PublicationSafetyError(
+                "Pairing drift resolution requires athlete confirmation"
+            )
+        with coordinated_publication_plan_activity_lock(
+            self.repo,
+            "resolve_run_week_pairing_drift",
+        ):
+            workouts = self._load_authoritative_week_unlocked(week_number)
+            publication_status = self._status_authoritative_week(
+                week_number,
+                as_of_date=as_of_date,
+                workouts=workouts,
+            )
+            if not publication_status.reconciliation_safe:
+                return publication_status.model_copy(
+                    update={"operation": "resolve_pairing_drift"}
+                )
+            pairing_status = self._with_remote_pairing_status(
+                publication_status,
+                workouts=workouts,
+                mutate=False,
+            )
+            drift_items = [
+                item
+                for item in pairing_status.items
+                if item.pairing_drift_token_sha256 is not None
+            ]
+            observed_tokens = {
+                item.pairing_drift_token_sha256 for item in drift_items
+            }
+            supplied_tokens = set(confirmed_pairing_drift_tokens)
+            if len(supplied_tokens) != len(confirmed_pairing_drift_tokens):
+                raise PublicationSafetyError(
+                    "Pairing drift confirmation tokens must be unique"
+                )
+            confirmed_retry_tokens = confirmed_pairing_drift_retry_tokens(
+                self.repo,
+                pairing_status,
+                supplied_tokens,
+            )
+            if not observed_tokens and not confirmed_retry_tokens:
+                raise PublicationSafetyError(
+                    "There is no Resilio-authored native pairing drift to resolve"
+                )
+            if observed_tokens | confirmed_retry_tokens != supplied_tokens:
+                raise PublicationSafetyError(
+                    "Pairing drift confirmations must match the exact displayed token set"
+                )
+            if any(item.remote_pairing_operation_id is None for item in drift_items):
+                raise PublicationSafetyError("Pairing drift lacks its durable operation identity")
+            if drift_items:
+                self.pairing_service.confirm_pairing_drifts(
+                    [
+                        (
+                            item.remote_pairing_operation_id,
+                            item.pairing_drift_token_sha256,
+                            confirmation,
+                        )
+                        for item in drift_items
+                        if item.remote_pairing_operation_id is not None
+                        and item.pairing_drift_token_sha256 is not None
+                    ]
+                )
+            report = self._reconcile_status(
+                publication_status,
+                workouts=workouts,
+                as_of_date=as_of_date,
+                restore_local=False,
+            )
+            if not report.partial:
+                report = self._with_remote_pairing_status(
+                    report,
+                    workouts=workouts,
+                    mutate=True,
+                )
+            return report.model_copy(update={"operation": "resolve_pairing_drift"})
 
     def _reconcile_status(
         self,
@@ -479,13 +515,10 @@ class RunWeekSynchronizationService:
             workouts=workouts,
             as_of_date=as_of_date,
         )
-        retirements = week_fulfillment_retirements(
-            self.repo,
-            workouts=workouts,
-            as_of_date=as_of_date,
-        )
         provider_names = provider_workout_names([item.prescription for item in workouts])
-        workout_by_id = {item.identity.local_workout_id: item for item in workouts}
+        deletion_authorities, deletion_provider_names = (
+            retained_pending_publication_authorities(self.repo, workouts)
+        )
         items = list(skipped)
         partial = False
         for workout in selected:
@@ -528,9 +561,8 @@ class RunWeekSynchronizationService:
                 repo=self.repo,
                 retirement_service=self.retirement_service,
                 local_workout_ids=status.owned_future_deletion_ids,
-                fulfillments_by_local_workout_id=retirements,
-                authoritative_workouts_by_local_id=workout_by_id,
-                provider_names_by_local_workout_id=provider_names,
+                authoritative_workouts_by_local_id=deletion_authorities,
+                provider_names_by_local_workout_id=deletion_provider_names,
                 as_of_date=as_of_date,
                 restore_local=restore_local,
                 confirmed_remote_targets=confirmed_remote_targets,

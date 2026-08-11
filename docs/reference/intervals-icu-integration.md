@@ -228,14 +228,17 @@ verified owned-field fingerprint is the ownership proof. Update, reschedule,
 and delete refuse ambiguous, unowned, or drifted events. One canonical lock
 order holds publication authority before plan authority for reconciliation and
 plan closure. A replacement week updates retained identities and deletes only
-removed future unfulfilled events after exact ownership proof. An
-athlete-confirmed early fulfillment retires its still-future owned event;
-same-day, late, and historical events remain. Explicit restore-local drift resolution
-records athlete confirmation before overwriting exact owned content; ordinary
-reconciliation never overwrites drift. A drifted fulfilled event requires a
-second explicit retire-fulfilled confirmation. Adherence accepts exact provider
-pairing or an athlete-confirmed candidate revalidated against immutable applied
-authority; it never uses date/sport/duration resemblance automatically.
+removed future unfulfilled events after exact ownership proof. Fulfilled events
+remain on their approved dates. Early, same-day, and late activities retain
+their execution dates and are linked to the owned event through Intervals.icu's
+native `paired_event_id`. Resilio persists the exact pairing intent before
+mutation, writes only that activity field, and requires exact readback with all
+other activity fields unchanged. A different existing pair, immutable activity
+source, provider failure, or removed Resilio-authored pair blocks without
+deleting either record. Explicit publication and pairing drift resolutions are
+separate athlete authorities. Adherence accepts exact provider pairing or an
+athlete-confirmed candidate revalidated against immutable applied authority; it
+never uses date/sport/duration resemblance automatically.
 
 Only a qualified plan/revision/week/workout identity resolved from the active
 planning-state aggregate may be published. The aggregate must have a fresh

@@ -14,9 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from resilio.core.activity_transaction import remove_path, write_json
 from resilio.core.repository import RepositoryIO
 from resilio.core.state_permissions import ensure_private_directory_tree, harden_sensitive_file
+from resilio.core.workout_fulfillment.cutover_guard import MIGRATION_TRANSACTION_PATH
 from resilio.schemas.repository import RepoError
 
-MIGRATION_TRANSACTION_PATH = "data/state/workout-fulfillment-migration.json"
 _FIXED_MIGRATION_TARGETS = frozenset(
     {
         "data/state/workout_publications.json",
@@ -148,6 +148,24 @@ def _is_safe_migration_target(relative_path: str) -> bool:
     return False
 
 
+def validate_migration_target_paths(target_relative_paths: tuple[str, ...]) -> None:
+    """Reject unsafe or duplicate transaction targets before any local write."""
+    if not target_relative_paths:
+        raise OSError("Fulfillment migration requires at least one state target")
+    if len(target_relative_paths) != len(set(target_relative_paths)):
+        raise OSError("Fulfillment migration state targets must be unique")
+    unsafe_paths = [
+        relative_path
+        for relative_path in target_relative_paths
+        if not _is_safe_migration_target(relative_path)
+    ]
+    if unsafe_paths:
+        raise OSError(
+            "Fulfillment migration contains an unsafe state target: "
+            f"{unsafe_paths[0]}"
+        )
+
+
 def _backup_name(relative_path: str) -> str:
     path_digest = hashlib.sha256(relative_path.encode()).hexdigest()[:16]
     return f"{path_digest}-{Path(relative_path).name}"
@@ -219,6 +237,7 @@ def commit_workout_fulfillment_migration(
     apply_state: Callable[[], None],
 ) -> None:
     """Apply fixed state files behind a durable rollback decision point."""
+    validate_migration_target_paths(target_relative_paths)
     if _load_transaction(repo) is not None:
         raise OSError("Fulfillment migration has unresolved transaction state")
     backup_root = _validated_backup_root(

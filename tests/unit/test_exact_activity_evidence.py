@@ -127,6 +127,7 @@ def test_exact_activity_rejects_stale_fulfillment_performance_evidence(
         execution_local_date=date(2026, 8, 6),
         schedule_offset_days=0,
         provider_pair=ProviderPairedFulfillmentEvidence(
+            provenance="provider_observed",
             event_id=42,
             observed_at_utc=datetime(2026, 8, 6, 10, tzinfo=timezone.utc),
         ),

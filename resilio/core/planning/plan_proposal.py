@@ -31,15 +31,13 @@ def _publication_ownership_identities(repo: RepositoryIO) -> list[PlanWorkoutIde
     return [
         *(record.workout_identity for record in manifest.workouts.values()),
         *(record.workout_identity for record in manifest.pending.values()),
-        *(record.publication.workout_identity for record in manifest.retired.values()),
-        *(record.publication.workout_identity for record in manifest.retirement_history),
         *(
-            record.pending_publication.workout_identity
-            for record in manifest.retired_pending.values()
+            record.publication.workout_identity
+            for record in manifest.historical_fulfillment_event_retirements
         ),
         *(
             record.pending_publication.workout_identity
-            for record in manifest.pending_retirement_history
+            for record in manifest.historical_fulfillment_pending_retirements
         ),
         *(record.workout_identity for record in manifest.historical_legacy_workouts.values()),
     ]

@@ -24,6 +24,10 @@ from resilio.core.workout_fulfillment.evidence import (
     assert_fulfillment_authority_is_current,
     assert_fulfillment_is_usable,
 )
+from resilio.core.workout_fulfillment.pair_operation_evidence import (
+    matching_resilio_pair_operation,
+)
+from resilio.core.workout_fulfillment.remote_unpairing import stage_remote_unpairing
 from resilio.core.workout_fulfillment.repository import (
     load_fulfillment_manifest,
     save_fulfillment_manifest,
@@ -33,9 +37,6 @@ from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_lock,
 )
 from resilio.core.workout_publication.manifest import load_manifest
-from resilio.core.workout_publication.retirement_reopening import (
-    reopen_revoked_fulfillment_retirement,
-)
 from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.workout_fulfillment import (
     AthleteConfirmedFulfillmentEvidence,
@@ -375,7 +376,7 @@ class WorkoutFulfillmentService:
         coaching_rationale: str,
         revoked_at_utc: datetime | None = None,
     ) -> WorkoutFulfillmentRevocation:
-        """Withdraw one exact association and reopen any retirement it authorized."""
+        """Withdraw one exact association and stage any required native unpair."""
         revocation_time_utc = revoked_at_utc or datetime.now(timezone.utc)
         if revocation_time_utc.tzinfo is None or revocation_time_utc.utcoffset() is None:
             raise WorkoutFulfillmentError("revoked_at_utc must be timezone-aware")
@@ -406,11 +407,6 @@ class WorkoutFulfillmentService:
                     None,
                 )
                 if prior is not None:
-                    reopen_revoked_fulfillment_retirement(
-                        self.repo,
-                        load_manifest(self.repo),
-                        local_workout_id=local_workout_id,
-                    )
                     return prior
                 raise WorkoutFulfillmentError(
                     "No active workout fulfillment matches the revocation request"
@@ -423,9 +419,12 @@ class WorkoutFulfillmentService:
                 raise WorkoutFulfillmentError(
                     "Fulfillment revocation workout identity does not match"
                 )
+            activity = self._load_activity_unlocked(local_activity_id)
+            intervals_icu_activity_id = activity.origin.intervals_icu_activity_id
             revocation = WorkoutFulfillmentRevocation(
                 revocation_id=revocation_id,
                 fulfillment=existing,
+                intervals_icu_activity_id=intervals_icu_activity_id,
                 reason=reason,
                 athlete_confirmation_reference=athlete_confirmation_reference,
                 coaching_rationale=coaching_rationale,
@@ -435,12 +434,23 @@ class WorkoutFulfillmentService:
             del updated.fulfillments[local_activity_id]
             updated.unresolved_fulfillment_conflicts.pop(local_activity_id, None)
             updated.revoked_fulfillments.append(revocation)
+            publication_manifest = load_manifest(self.repo)
+            published = publication_manifest.workouts.get(local_workout_id)
+            if published is not None:
+                pair_operation = matching_resilio_pair_operation(
+                    manifest,
+                    publication=published,
+                    fulfillment=existing,
+                )
+                if existing.provider_pair is not None or pair_operation is not None:
+                    stage_remote_unpairing(
+                        manifest=updated,
+                        publication=published,
+                        revocation=revocation,
+                        activity=activity,
+                        pair_operation=pair_operation,
+                    )
             save_fulfillment_manifest(self.repo, updated)
-            reopen_revoked_fulfillment_retirement(
-                self.repo,
-                load_manifest(self.repo),
-                local_workout_id=local_workout_id,
-            )
             return revocation
 
     def _required_candidate_unlocked(

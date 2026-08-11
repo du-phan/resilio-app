@@ -20,6 +20,7 @@ from resilio.schemas.publication import PublishedWorkout
 from resilio.schemas.workout_fulfillment import (
     FulfillmentActivityEvidenceRevision,
     ProviderPairedFulfillmentEvidence,
+    ProviderPairProvenance,
     WithdrawnProviderPairEvidence,
     WorkoutFulfillmentRecord,
 )
@@ -213,6 +214,7 @@ def _reconcile_existing_provider_pair(
             and existing_fulfillment.execution_local_date == execution_local_date
         ):
             return ProviderFulfillmentReconciliation()
+        provider_pair = existing_fulfillment.provider_pair
     revisions = list(existing_fulfillment.activity_evidence_revisions)
     if (
         existing_fulfillment.activity_performance_evidence_sha256 != performance_sha256
@@ -251,6 +253,7 @@ def reconcile_provider_fulfillment(
     authoritative_workout: AuthoritativeWorkout | None,
     existing_fulfillment: WorkoutFulfillmentRecord | None,
     observed_at_utc: datetime,
+    provider_pair_provenance: ProviderPairProvenance = "provider_observed",
 ) -> ProviderFulfillmentReconciliation:
     """Accept only an exact pairing to an ownership-proven published event."""
     publication = publications_by_event_id.get(paired_event_id) if paired_event_id else None
@@ -304,6 +307,7 @@ def reconcile_provider_fulfillment(
         )
     provider_pair = ProviderPairedFulfillmentEvidence(
         event_id=publication.event_id,
+        provenance=provider_pair_provenance,
         observed_at_utc=observed_at_utc,
     )
     if existing_fulfillment is not None:

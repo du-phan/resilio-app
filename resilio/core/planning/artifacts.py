@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from pydantic import BaseModel
 
+from resilio.canonical import canonical_data_sha256 as canonical_data_sha256
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.approvals import ClosedPlanArchive
 from resilio.schemas.plan_history import (
@@ -45,20 +46,6 @@ def canonical_json_bytes(model: BaseModel) -> bytes:
 
 def model_sha256(model: BaseModel) -> str:
     return hashlib.sha256(canonical_json_bytes(model)).hexdigest()
-
-
-def canonical_data_sha256(value: BaseModel | dict[str, Any] | list[Any]) -> str:
-    """Hash typed evidence inputs with the same canonical JSON rules."""
-    payload = (
-        value.model_dump(mode="json", by_alias=True) if isinstance(value, BaseModel) else value
-    )
-    encoded = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    ).encode()
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def file_sha256(path: Path) -> str:

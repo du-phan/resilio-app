@@ -104,7 +104,7 @@ def verify_assessment_result_source(
     fulfillment = fulfillment_manifest.fulfillments.get(result.local_activity_id)
     if (
         fulfillment is None
-        or not fulfillment.provider_pair_supports_event(publication.event_id)
+        or not fulfillment.independent_provider_pair_supports_event(publication.event_id)
         or fulfillment.workout_identity != result.workout_identity
     ):
         raise PlanOperationError("Assessment result lacks its exact ownership-paired fulfillment")

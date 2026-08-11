@@ -1,5 +1,8 @@
 """Idempotence policy for migrated historical provider pairs."""
 
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.publication import HistoricalLegacyWorkoutPublication
 from resilio.schemas.workout_fulfillment import HistoricalLegacyWorkoutFulfillment
@@ -22,6 +25,8 @@ def historical_provider_pair_decision(
             publication is not None
             and fulfillment.provider_pair.event_id == publication.event_id
             and fulfillment.workout_identity == publication.workout_identity
+            and fulfillment.activity_performance_evidence_sha256
+            == activity_performance_evidence_sha256(activity)
         )
         if exact_pair:
             return True, None

@@ -146,19 +146,14 @@ def coaching_evidence_source_sha256_unlocked(
             for local_workout_id, publication in sorted(publications.workouts.items())
             if window_start <= publication.occurrence_date <= context_window_end
         },
-        "retired_workout_publications": {
-            local_workout_id: retirement.model_dump(mode="json")
-            for local_workout_id, retirement in sorted(publications.retired.items())
-            if window_start <= retirement.publication.occurrence_date <= context_window_end
-        },
-        "workout_publication_retirement_history": [
+        "historical_fulfillment_event_retirements": [
             retirement.model_dump(mode="json")
-            for retirement in publications.retirement_history
+            for retirement in publications.historical_fulfillment_event_retirements
             if window_start <= retirement.publication.occurrence_date <= context_window_end
         ],
-        "pending_workout_publication_retirement_history": [
+        "historical_fulfillment_pending_retirements": [
             retirement.model_dump(mode="json")
-            for retirement in publications.pending_retirement_history
+            for retirement in publications.historical_fulfillment_pending_retirements
             if window_start <= retirement.pending_publication.occurrence_date <= context_window_end
         ],
         "historical_workout_publications": {

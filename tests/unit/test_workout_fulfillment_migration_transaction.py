@@ -13,6 +13,24 @@ from resilio.core.workout_fulfillment.migration_transaction import (
     commit_workout_fulfillment_migration,
     recover_workout_fulfillment_migration,
 )
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
+from resilio.core.workout_publication.manifest import load_manifest
+
+
+def test_normal_state_access_is_blocked_during_incomplete_cutover(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    transaction_path = repo.resolve_path(MIGRATION_TRANSACTION_PATH)
+    transaction_path.parent.mkdir(parents=True)
+    transaction_path.write_text('{"state":"prepared"}\n')
+
+    for loader in (load_manifest, load_fulfillment_manifest):
+        with pytest.raises(ValueError, match="migration recovery is required"):
+            loader(repo)
 
 
 def test_process_interruption_is_recovered_from_hash_verified_backups(
@@ -32,14 +50,14 @@ def test_process_interruption_is_recovered_from_hash_verified_backups(
 
     def interrupted_apply() -> None:
         fulfillment_path.write_text('{"schema_version": 1}\n')
-        publication_path.write_text('{"schema_version": 7}\n')
+        publication_path.write_text('{"schema_version": 8}\n')
         raise KeyboardInterrupt("simulated process termination")
 
     with pytest.raises(KeyboardInterrupt, match="simulated process termination"):
         commit_workout_fulfillment_migration(
             repo,
-            run_id="workout-fulfillment-v1-crash",
-            backup_relative_path="data/backups/workout-fulfillment-v1-crash",
+            run_id="workout-fulfillment-v2-crash",
+            backup_relative_path="data/backups/workout-fulfillment-v2-crash",
             target_relative_paths=MIGRATION_TARGET_PATHS,
             apply_state=interrupted_apply,
         )
@@ -58,7 +76,7 @@ def test_process_interruption_is_recovered_from_hash_verified_backups(
     assert completion_path.exists()
     assert not fulfillment_path.exists()
     audit = json.loads(
-        repo.resolve_path("data/backups/workout-fulfillment-v1-crash/recovered.json").read_text()
+        repo.resolve_path("data/backups/workout-fulfillment-v2-crash/recovered.json").read_text()
     )
     assert all(item["before_sha256"] for item in audit["files"] if item["existed"])
 
@@ -79,8 +97,8 @@ def test_recovery_accepts_exact_managed_proposal_targets(tmp_path, monkeypatch) 
     with pytest.raises(KeyboardInterrupt):
         commit_workout_fulfillment_migration(
             repo,
-            run_id="workout-fulfillment-v1-proposal-crash",
-            backup_relative_path=("data/backups/workout-fulfillment-v1-proposal-crash"),
+            run_id="workout-fulfillment-v2-proposal-crash",
+            backup_relative_path=("data/backups/workout-fulfillment-v2-proposal-crash"),
             target_relative_paths=(proposal_relative_path,),
             apply_state=interrupted_apply,
         )
@@ -111,14 +129,14 @@ def test_recovery_rejects_tampered_backup_paths_before_mutation(
     publication_path.write_text('{"schema_version": 6}\n')
 
     def interrupted_apply() -> None:
-        publication_path.write_text('{"schema_version": 7}\n')
+        publication_path.write_text('{"schema_version": 8}\n')
         raise KeyboardInterrupt("simulated process termination")
 
     with pytest.raises(KeyboardInterrupt):
         commit_workout_fulfillment_migration(
             repo,
-            run_id="workout-fulfillment-v1-tamper",
-            backup_relative_path="data/backups/workout-fulfillment-v1-tamper",
+            run_id="workout-fulfillment-v2-tamper",
+            backup_relative_path="data/backups/workout-fulfillment-v2-tamper",
             target_relative_paths=MIGRATION_TARGET_PATHS,
             apply_state=interrupted_apply,
         )
@@ -152,21 +170,21 @@ def test_recovery_validates_every_backup_before_removing_any_target(
     publication_path.write_text('{"schema_version": 6}\n')
 
     def interrupted_apply() -> None:
-        publication_path.write_text('{"schema_version": 7}\n')
+        publication_path.write_text('{"schema_version": 8}\n')
         raise KeyboardInterrupt("simulated process termination")
 
     with pytest.raises(KeyboardInterrupt):
         commit_workout_fulfillment_migration(
             repo,
-            run_id="workout-fulfillment-v1-missing-backup",
-            backup_relative_path=("data/backups/workout-fulfillment-v1-missing-backup"),
+            run_id="workout-fulfillment-v2-missing-backup",
+            backup_relative_path=("data/backups/workout-fulfillment-v2-missing-backup"),
             target_relative_paths=MIGRATION_TARGET_PATHS,
             apply_state=interrupted_apply,
         )
     transaction = json.loads(repo.resolve_path(MIGRATION_TRANSACTION_PATH).read_text())
     backup_name = transaction["files"][0]["backup_name"]
     backup_path = repo.resolve_path(
-        f"data/backups/workout-fulfillment-v1-missing-backup/{backup_name}"
+        f"data/backups/workout-fulfillment-v2-missing-backup/{backup_name}"
     )
     backup_path.unlink()
     partial_bytes = publication_path.read_bytes()
@@ -207,4 +225,30 @@ def test_commit_rejects_preexisting_backup_directory_before_any_write(
 
     assert publication_path.read_bytes() == original_bytes
     assert marker.read_text() == "preserve me"
+    assert not repo.resolve_path(MIGRATION_TRANSACTION_PATH).exists()
+
+
+def test_commit_rejects_unsafe_dynamic_target_before_backup_or_transaction(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    unsafe_relative_path = "data/plans/proposals/week 1.json"
+    unsafe_path = repo.resolve_path(unsafe_relative_path)
+    unsafe_path.parent.mkdir(parents=True)
+    unsafe_path.write_text('{"preserve":"exact bytes"}\n')
+
+    with pytest.raises(OSError, match="unsafe state target"):
+        commit_workout_fulfillment_migration(
+            repo,
+            run_id="unsafe-target-run",
+            backup_relative_path="data/backups/unsafe-target-run",
+            target_relative_paths=(unsafe_relative_path,),
+            apply_state=lambda: unsafe_path.write_text("changed"),
+        )
+
+    assert unsafe_path.read_text() == '{"preserve":"exact bytes"}\n'
+    assert not repo.resolve_path("data/backups/unsafe-target-run").exists()
     assert not repo.resolve_path(MIGRATION_TRANSACTION_PATH).exists()

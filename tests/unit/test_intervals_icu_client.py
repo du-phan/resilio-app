@@ -1,12 +1,13 @@
 """Typed HTTP boundary tests; every request uses MockTransport."""
 
+import json
 from datetime import date, datetime, timezone
 
 import httpx
 import pytest
 
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
-from resilio.integrations.intervals_icu.dto import EventWriteDTO
+from resilio.integrations.intervals_icu.dto import ActivityPairingWriteDTO, EventWriteDTO
 from resilio.integrations.intervals_icu.errors import (
     IntervalsAuthenticationError,
     IntervalsAuthorizationError,
@@ -291,6 +292,34 @@ def test_exact_activity_delete_is_single_target_and_not_retried() -> None:
     ) as client:
         with pytest.raises(IntervalsTransportError) as captured:
             client.delete_activity("manual-1")
+
+    assert calls == 1
+    assert "private body" not in str(captured.value)
+
+
+@pytest.mark.parametrize("paired_event_id", [42, None])
+def test_activity_pairing_update_is_minimal_typed_and_not_retried(
+    paired_event_id: int | None,
+) -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        assert request.method == "PUT"
+        assert request.url.path == "/api/v1/activity/i123"
+        assert json.loads(request.content) == {"paired_event_id": paired_event_id}
+        return httpx.Response(503, text="private body")
+
+    with IntervalsIcuClient(
+        _config(),
+        transport=httpx.MockTransport(handler),
+    ) as client:
+        with pytest.raises(IntervalsTransportError) as captured:
+            client.update_activity_pairing(
+                "i123",
+                ActivityPairingWriteDTO(paired_event_id=paired_event_id),
+            )
 
     assert calls == 1
     assert "private body" not in str(captured.value)

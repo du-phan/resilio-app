@@ -26,7 +26,6 @@ from resilio.core.workout_publication.retirement_service import (
 from resilio.core.workout_publication.week_selection import (
     select_run_week_items,
     stale_future_owned_run_ids,
-    week_fulfillment_retirements,
 )
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError
@@ -167,6 +166,8 @@ def build_run_week_status(
     restore_local: bool,
     verify_workout: VerifyWorkout,
     verify_deletion: VerifyDeletion,
+    deletion_authorities_by_local_workout_id: dict[str, AuthoritativeWorkout],
+    deletion_provider_names_by_local_workout_id: dict[str, str],
 ) -> RunWeekSynchronizationReport:
     """Project verification results without changing local or provider state."""
     capabilities = get_run_synchronization_capabilities(client)
@@ -181,14 +182,8 @@ def build_run_week_status(
         current_run_ids=current_run_ids,
         as_of_date=as_of_date,
     )
-    retirement_ids = week_fulfillment_retirements(
-        repo,
-        workouts=workouts,
-        as_of_date=as_of_date,
-    )
-    deletion_ids = sorted(set(stale_ids) | set(retirement_ids))
+    deletion_ids = stale_ids
     provider_names = provider_workout_names([item.prescription for item in workouts])
-    workouts_by_id = {item.identity.local_workout_id: item for item in workouts}
     workout_items, workouts_passed = _verified_workout_items(
         selected=selected,
         provider_names_by_local_workout_id=provider_names,
@@ -199,8 +194,10 @@ def build_run_week_status(
     deletion_items, deletions_passed = _verified_deletion_items(
         repo,
         local_workout_ids=deletion_ids,
-        workouts_by_local_id=workouts_by_id,
-        provider_names_by_local_workout_id=provider_names,
+        workouts_by_local_id=deletion_authorities_by_local_workout_id,
+        provider_names_by_local_workout_id=(
+            deletion_provider_names_by_local_workout_id
+        ),
         retirement_service=retirement_service,
         verify_deletion=verify_deletion,
         as_of_date=as_of_date,

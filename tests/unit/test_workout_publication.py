@@ -31,6 +31,7 @@ from resilio.core.workout_publication.service import (
     WorkoutPublicationService as ProductionWorkoutPublicationService,
 )
 from resilio.integrations.intervals_icu.dto import (
+    ActivityDTO,
     AthleteDTO,
     ConnectionsDTO,
     EventDTO,
@@ -275,6 +276,8 @@ class FakeClient:
             ),
         ]
         self.events: dict[int, EventDTO] = {}
+        self.activities: dict[str, ActivityDTO] = {}
+        self.activity_pairing_updates: list[tuple[str, int | None]] = []
         self.upserts = 0
         self.next_id = 100
 
@@ -317,6 +320,29 @@ class FakeClient:
 
     def delete_event(self, event_id, *, athlete_id=None):
         del self.events[event_id]
+
+    def get_activity(self, activity_id, *, intervals=True):
+        return self.activities.setdefault(
+            activity_id,
+            ActivityDTO(
+                id=activity_id,
+                type="Run",
+                name="Completed run",
+                start_date=datetime(2026, 8, 10, 5, tzinfo=timezone.utc),
+                start_date_local=datetime(2026, 8, 10, 7),
+                elapsed_time=1800,
+                moving_time=1800,
+                source="GARMIN_CONNECT",
+            ),
+        )
+
+    def update_activity_pairing(self, activity_id, pairing):
+        self.activity_pairing_updates.append((activity_id, pairing.paired_event_id))
+        updated = self.get_activity(activity_id).model_copy(
+            update={"paired_event_id": pairing.paired_event_id}
+        )
+        self.activities[activity_id] = updated
+        return updated
 
 
 def _parse_fake_workout_steps(description: str) -> list[dict[str, object]]:
@@ -914,7 +940,7 @@ def test_publication_manifest_rejects_cross_workout_identity_collisions(
 
 
 def test_run_only_publication_manifest_uses_schema_version_seven() -> None:
-    assert PublicationManifest().schema_version == 7
+    assert PublicationManifest().schema_version == 8
     with pytest.raises(ValidationError):
         PublicationManifest.model_validate({"schema_version": 6})
 

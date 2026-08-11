@@ -52,6 +52,9 @@ poetry run resilio workout fulfillment-status --week-number <WEEK_NUMBER>
 Status performs no mutation. Require `reconciliation_safe: true` before an
 ordinary reconcile. Report every blocker exactly; do not silently remove
 targets, invent a start time, or synchronize only the runs that happen to pass.
+For an athlete-confirmed fulfillment, status also inspects the exact native
+Intervals activity/event pair and blocks publication reconciliation when that
+pair is conflicted, unsupported, or drifted.
 
 ## Reconcile and verify
 
@@ -60,10 +63,11 @@ poetry run resilio workout reconcile --week-number <WEEK_NUMBER>
 ```
 
 Reconciliation updates retained owned identities in place, creates missing
-future runs, and deletes only removed future unfulfilled runs or still-future
-events retired by athlete-confirmed early fulfillment. Same-day, late, and
-historical owned events remain in Intervals. Non-running events and unowned
-workouts are never mutated.
+approved runs, and deletes only removed future unfulfilled runs. Fulfilled
+workouts remain published on their approved dates; early, same-day, and late
+activities are linked through Intervals.icu's native `paired_event_id`. The
+pairing workflow changes only that activity field after durable intent and
+exact readback. Non-running events and unowned workouts are never mutated.
 Intervals controls its rolling Garmin export window and may remove older
 downstream workouts to limit clutter. Resilio cannot inspect or delete the
 watch's local workout list and never claims that cleanup occurred.
@@ -91,7 +95,6 @@ after the coach supplies explicit athlete confirmation may the executor use:
 ```bash
 poetry run resilio workout resolve-drift \
   --week-number <WEEK_NUMBER> \
-  --restore-local \
   --drift-target-token <DRIFT_TARGET_TOKEN_SHA256> \
   --confirmation-reference "<ATHLETE_CONFIRMATION>"
 ```
@@ -99,10 +102,10 @@ poetry run resilio workout resolve-drift \
 This records the confirmation before replacing exact owned remote content.
 There is no automatic adopt-remote strategy.
 
-If drift belongs to a still-future event already fulfilled early, require a
-separate confirmation to delete that edited event and use `--retire-fulfilled`
-instead of `--restore-local`. The running-workout-fulfillment procedure owns
-that decision.
+If status reports that a Resilio-authored native pair was removed, do not treat
+publication restore authority as pairing authority. The
+running-workout-fulfillment procedure owns the separate exact
+`resolve-pairing-drift` confirmation.
 
 Report Intervals synchronization and Garmin forwarding separately:
 

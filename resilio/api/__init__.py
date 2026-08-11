@@ -37,9 +37,10 @@ from resilio.api.publication import (
     get_run_workout_synchronization_capabilities,
     get_run_workout_synchronization_preferences,
     get_week_run_workout_sync_status,
+    reconcile_remote_workout_pairing_operations,
     reconcile_week_run_workouts,
+    resolve_week_run_workout_pairing_drift,
     restore_local_week_run_workouts,
-    retire_fulfilled_week_run_workouts,
 )
 from resilio.api.reconciliation import (
     ActivityReviewError,
@@ -115,7 +116,8 @@ __all__ = [
     "is_error",
     "predict_race_times",
     "reconcile_week_run_workouts",
-    "retire_fulfilled_week_run_workouts",
+    "reconcile_remote_workout_pairing_operations",
+    "resolve_week_run_workout_pairing_drift",
     "revoke_workout_fulfillment",
     "restore_local_week_run_workouts",
     "set_goal",
