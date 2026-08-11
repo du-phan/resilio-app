@@ -53,9 +53,9 @@ mirror.
 | Race-plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed race summaries and assessment results, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
 | Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, independently provider-observed exact pairing, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
 | Weekly application | Exact run-only proposal path, byte SHA-256, target-week hash, prior applied-running-workouts hash, immutable weekly context, and complete configured/observed other-sport considerations |
-| Workout fulfillment | Exact provider pairing provenance or athlete-confirmed same-week activity/workout association, applied-week hashes, execution date, schedule offset, and crash-recoverable native pair/unpair operations |
+| Workout fulfillment | Exact provider pairing provenance or athlete-confirmed same-week activity/workout association, applied-week hashes, immutable scheduled date, factual execution date, provider occurrence placement, schedule offset, and crash-recoverable native pair/unpair operations |
 | Run synchronization preferences | Athlete-confirmed automation mode, calendar-day policy, and requested Garmin destination |
-| External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, semantic parsed-workout readback, native activity/event pair evidence, separate drift-resolution audits, and push-error evidence |
+| External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, scheduled-date authority with an exact execution-date provider projection, semantic parsed-workout readback, native activity/event pair evidence, separate drift-resolution audits, and push-error evidence |
 | Raw external response | Ephemeral only |
 
 ## Coordinated state boundary
@@ -138,6 +138,9 @@ context and must cite the latest assessment result when one exists.
   durable phase journal, coordinated wellness/settings/fulfillment/state
   sidecars, and
   idempotent crash recovery.
+- Ambiguous workout creates that leave desired state are retained as permanent
+  publication-deletion tombstones; their exact pending identity survives plan
+  closure and a plan-independent reaper removes only unchanged late events.
 - Ambiguous mappings and canonical mapping failures are sanitized and
   quarantined without raw payload persistence. A malformed external DTO
   collection rejects that sync boundary before canonical mutation.

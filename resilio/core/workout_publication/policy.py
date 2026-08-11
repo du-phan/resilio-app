@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -107,6 +107,22 @@ def provider_event_fingerprint(remote: EventDTO) -> str:
         "target": remote.target,
     }
     return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+
+def provider_local_date(provider_start_date_local: str) -> date:
+    """Parse the exact local date from a persisted provider start timestamp."""
+    try:
+        return datetime.fromisoformat(provider_start_date_local).date()
+    except ValueError as exc:
+        raise PublicationSafetyError(
+            "Persisted provider start timestamp is not a valid ISO local datetime"
+        ) from exc
+
+
+def training_week_bounds(occurrence_date: date) -> tuple[date, date]:
+    """Return the Monday-Sunday bounds containing one local occurrence date."""
+    week_start = occurrence_date - timedelta(days=occurrence_date.weekday())
+    return week_start, week_start + timedelta(days=6)
 
 
 def assert_remote_unchanged(remote: EventDTO, previous: PublishedWorkout) -> None:

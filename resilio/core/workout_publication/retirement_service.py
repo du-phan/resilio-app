@@ -4,26 +4,34 @@ from __future__ import annotations
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.identity_discovery import (
+    discover_owned_identity_matches,
+)
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     RemoteWorkoutDriftError,
-    assert_remote_external_ownership,
     assert_remote_matches,
     assert_remote_ownership,
     assert_remote_unchanged,
     pending_matches,
     provider_event_fingerprint,
+    provider_local_date,
 )
 from resilio.core.workout_publication.preparation import (
     PreparedPublication,
     prepare_publication,
+)
+from resilio.core.workout_publication.publication_deletions import (
+    activate_publication_deletion_monitoring,
+    stage_pending_publication_deletion,
 )
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
 from resilio.integrations.intervals_icu.errors import IntervalsNotFoundError
 from resilio.schemas.publication import (
     PendingWorkoutPublication,
+    PublicationManifest,
     PublicationResult,
     PublishedWorkout,
 )
@@ -40,27 +48,14 @@ class WorkoutRetirementService:
         self,
         prepared: PreparedPublication,
         pending: PendingWorkoutPublication,
+        previous: PublishedWorkout | None,
     ) -> list[EventDTO]:
-        events = self.client.list_events(
-            min(prepared.workout.date, pending.occurrence_date),
-            max(prepared.workout.date, pending.occurrence_date),
-            athlete_id=prepared.athlete_id,
+        return discover_owned_identity_matches(
+            self.client,
+            prepared,
+            previous=previous,
+            pending=pending,
         )
-        matches = [
-            event
-            for event in events
-            if event.uid == prepared.event.uid or event.external_id == prepared.external_id
-        ]
-        if len(matches) > 1:
-            raise PublicationSafetyError(
-                "Multiple remote events claim the workout ownership identity"
-            )
-        for remote in matches:
-            assert_remote_external_ownership(
-                remote,
-                external_id=prepared.external_id,
-            )
-        return matches
 
     def _prepare_pending(
         self,
@@ -82,6 +77,9 @@ class WorkoutRetirementService:
             authoritative_workout,
             previous=previous,
             provider_name=provider_name,
+            provider_occurrence_date=provider_local_date(
+                pending.provider_start_date_local
+            ),
         )
         if not pending_matches(
             pending,
@@ -92,7 +90,11 @@ class WorkoutRetirementService:
             raise PublicationSafetyError(
                 "Pending publication intent differs from applied workout authority"
             )
-        return pending, prepared, self._pending_identity_matches(prepared, pending)
+        return pending, prepared, self._pending_identity_matches(
+            prepared,
+            pending,
+            previous,
+        )
 
     def _assert_remote_matches_published_or_pending(
         self,
@@ -202,63 +204,38 @@ class WorkoutRetirementService:
             )
         return matches[0].id, provider_event_fingerprint(matches[0])
 
-    def retire_published(
+    def _retire_existing_publication(
         self,
         local_workout_id: str,
         *,
-        restore_local: bool = False,
-        expected_remote_target: tuple[int, str] | None = None,
-        authoritative_workout: AuthoritativeWorkout | None = None,
-        provider_name: str | None = None,
+        manifest: PublicationManifest,
+        record: PublishedWorkout,
+        restore_local: bool,
+        expected_remote_target: tuple[int, str] | None,
+        authoritative_workout: AuthoritativeWorkout | None,
+        provider_name: str | None,
     ) -> PublicationResult:
-        manifest = load_manifest(self.repo)
-        record = manifest.workouts.get(local_workout_id)
-        if record is None:
-            if authoritative_workout is None or provider_name is None:
-                raise PublicationSafetyError(
-                    "Pending deletion requires exact applied-workout authority"
-                )
-            pending, prepared, matches = self._prepare_pending(
-                authoritative_workout,
-                provider_name=provider_name,
+        published_pending = manifest.pending.get(local_workout_id)
+        deletion_operation = (
+            stage_pending_publication_deletion(
+                self.repo,
+                published_pending,
+                previous=record,
             )
-            remote = matches[0] if matches else None
-            if remote is not None:
-                if expected_remote_target is not None and (
-                    remote.id != expected_remote_target[0]
-                    or provider_event_fingerprint(remote) != expected_remote_target[1]
-                ):
-                    raise PublicationSafetyError(
-                        "Remote event changed after athlete deletion confirmation"
-                    )
-                if not restore_local:
-                    assert_remote_matches(
-                        remote,
-                        prepared.event,
-                        prepared.expected_step_semantics,
-                    )
-                athlete = self.client.get_athlete()
-                self.client.delete_event(remote.id, athlete_id=athlete.id)
-                try:
-                    self.client.get_event(remote.id, athlete_id=athlete.id)
-                except IntervalsNotFoundError:
-                    pass
-                else:
-                    raise PublicationSafetyError("Deleted event still exists on read-back")
-            manifest.pending.pop(local_workout_id, None)
-            save_manifest(self.repo, manifest)
-            return PublicationResult(
-                action="deleted" if remote is not None else "recovered_deleted",
-                local_workout_id=local_workout_id,
-                event_id=remote.id if remote is not None else None,
-                uid=pending.uid,
-                external_id=pending.external_id,
-            )
+            if published_pending is not None
+            else None
+        )
         athlete = self.client.get_athlete()
         try:
             remote = self.client.get_event(record.event_id, athlete_id=athlete.id)
         except IntervalsNotFoundError:
-            manifest.pending.pop(local_workout_id, None)
+            if deletion_operation is not None:
+                activate_publication_deletion_monitoring(
+                    self.repo,
+                    deletion_operation,
+                )
+            else:
+                manifest.pending.pop(local_workout_id, None)
             del manifest.workouts[local_workout_id]
             save_manifest(self.repo, manifest)
             return PublicationResult(
@@ -290,7 +267,13 @@ class WorkoutRetirementService:
             pass
         else:
             raise PublicationSafetyError("Deleted event still exists on read-back")
-        manifest.pending.pop(local_workout_id, None)
+        if deletion_operation is not None:
+            activate_publication_deletion_monitoring(
+                self.repo,
+                deletion_operation,
+            )
+        else:
+            manifest.pending.pop(local_workout_id, None)
         del manifest.workouts[local_workout_id]
         save_manifest(self.repo, manifest)
         return PublicationResult(
@@ -299,4 +282,69 @@ class WorkoutRetirementService:
             event_id=record.event_id,
             uid=record.uid,
             external_id=record.external_id,
+        )
+
+    def retire_published(
+        self,
+        local_workout_id: str,
+        *,
+        restore_local: bool = False,
+        expected_remote_target: tuple[int, str] | None = None,
+        authoritative_workout: AuthoritativeWorkout | None = None,
+        provider_name: str | None = None,
+    ) -> PublicationResult:
+        manifest = load_manifest(self.repo)
+        record = manifest.workouts.get(local_workout_id)
+        if record is None:
+            if authoritative_workout is None or provider_name is None:
+                raise PublicationSafetyError(
+                    "Pending deletion requires exact applied-workout authority"
+                )
+            pending, prepared, matches = self._prepare_pending(
+                authoritative_workout,
+                provider_name=provider_name,
+            )
+            deletion_operation = stage_pending_publication_deletion(self.repo, pending)
+            remote = matches[0] if matches else None
+            if remote is not None:
+                if expected_remote_target is not None and (
+                    remote.id != expected_remote_target[0]
+                    or provider_event_fingerprint(remote) != expected_remote_target[1]
+                ):
+                    raise PublicationSafetyError(
+                        "Remote event changed after athlete deletion confirmation"
+                    )
+                if not restore_local:
+                    assert_remote_matches(
+                        remote,
+                        prepared.event,
+                        prepared.expected_step_semantics,
+                    )
+                athlete = self.client.get_athlete()
+                self.client.delete_event(remote.id, athlete_id=athlete.id)
+                try:
+                    self.client.get_event(remote.id, athlete_id=athlete.id)
+                except IntervalsNotFoundError:
+                    pass
+                else:
+                    raise PublicationSafetyError("Deleted event still exists on read-back")
+            activate_publication_deletion_monitoring(
+                self.repo,
+                deletion_operation,
+            )
+            return PublicationResult(
+                action="deleted" if remote is not None else "deletion_monitoring",
+                local_workout_id=local_workout_id,
+                event_id=remote.id if remote is not None else None,
+                uid=pending.uid,
+                external_id=pending.external_id,
+            )
+        return self._retire_existing_publication(
+            local_workout_id,
+            manifest=manifest,
+            record=record,
+            restore_local=restore_local,
+            expected_remote_target=expected_remote_target,
+            authoritative_workout=authoritative_workout,
+            provider_name=provider_name,
         )

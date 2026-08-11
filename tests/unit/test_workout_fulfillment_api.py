@@ -7,6 +7,7 @@ from resilio.api import publication as publication_api
 from resilio.api import workout_fulfillment as fulfillment_api
 from resilio.core.locking import OperationLockError
 from resilio.core.workout_fulfillment.service import WorkoutFulfillmentError
+from resilio.integrations.intervals_icu.errors import IntervalsTransportError
 
 
 def test_fulfillment_api_routes_every_lifecycle_action(monkeypatch) -> None:
@@ -104,7 +105,9 @@ def test_stable_api_exports_the_complete_native_pairing_fulfillment_surface() ->
         "dismiss_workout_fulfillment_candidate",
         "get_workout_fulfillment_candidates",
         "get_workout_fulfillment_week_status",
+        "reconcile_remote_publication_deletions",
         "reconcile_remote_workout_pairing_operations",
+        "resolve_remote_publication_deletion_drift",
         "revoke_workout_fulfillment",
     }
 
@@ -134,3 +137,164 @@ def test_global_pairing_drain_returns_a_typed_lock_error(monkeypatch) -> None:
     assert isinstance(result, publication_api.PublicationError)
     assert result.error_type == "remote_pairing_reconciliation"
     assert "lock is held" in result.message
+
+
+def test_global_publication_deletion_reaper_returns_a_typed_lock_error(
+    monkeypatch,
+) -> None:
+    @contextmanager
+    def locked(*_args, **_kwargs):
+        raise OperationLockError("publication mutation lock is held")
+        yield
+
+    monkeypatch.setattr(
+        publication_api,
+        "_with_intervals_client",
+        lambda **_kwargs: (object(), False),
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "coordinated_publication_plan_lock",
+        locked,
+    )
+
+    result = publication_api.reconcile_remote_publication_deletions()
+
+    assert isinstance(result, publication_api.PublicationError)
+    assert result.error_type == "publication_safety"
+    assert "lock is held" in result.message
+
+
+def test_global_publication_deletion_reaper_translates_cross_proof_failure(
+    monkeypatch,
+) -> None:
+    @contextmanager
+    def unlocked(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(
+        publication_api,
+        "_with_intervals_client",
+        lambda **_kwargs: (object(), False),
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "coordinated_publication_plan_lock",
+        unlocked,
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "reconcile_publication_deletion_operations",
+        lambda *_args: (_ for _ in ()).throw(
+            publication_api.PublicationSafetyError(
+                "tombstone lost its retained ownership intent"
+            )
+        ),
+    )
+
+    result = publication_api.reconcile_remote_publication_deletions()
+
+    assert isinstance(result, publication_api.PublicationError)
+    assert result.error_type == "publication_safety"
+    assert "lost its retained ownership" in result.message
+
+
+def test_global_publication_deletion_reaper_preserves_provider_error_type(
+    monkeypatch,
+) -> None:
+    @contextmanager
+    def unlocked(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(
+        publication_api,
+        "_with_intervals_client",
+        lambda **_kwargs: (object(), False),
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "coordinated_publication_plan_lock",
+        unlocked,
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "reconcile_publication_deletion_operations",
+        lambda *_args: (_ for _ in ()).throw(
+            IntervalsTransportError(
+                "provider request failed",
+                operation="reconcile_publication_deletions",
+            )
+        ),
+    )
+
+    result = publication_api.reconcile_remote_publication_deletions()
+
+    assert isinstance(result, publication_api.PublicationError)
+    assert result.error_type == "transport"
+
+
+def test_publication_deletion_drift_api_preserves_safety_error_type(monkeypatch) -> None:
+    @contextmanager
+    def unlocked(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(
+        publication_api,
+        "_with_intervals_client",
+        lambda **_kwargs: (object(), False),
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "coordinated_publication_plan_lock",
+        unlocked,
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "resolve_publication_deletion_drifts",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            publication_api.PublicationSafetyError("drift token is stale")
+        ),
+    )
+
+    result = publication_api.resolve_remote_publication_deletion_drift(
+        confirmed_drift_tokens=["a" * 64],
+        athlete_confirmation_reference="Athlete confirmed the exact target.",
+    )
+
+    assert isinstance(result, publication_api.PublicationError)
+    assert result.error_type == "publication_safety"
+
+
+def test_publication_deletion_drift_api_preserves_provider_error_type(monkeypatch) -> None:
+    @contextmanager
+    def unlocked(*_args, **_kwargs):
+        yield
+
+    monkeypatch.setattr(
+        publication_api,
+        "_with_intervals_client",
+        lambda **_kwargs: (object(), False),
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "coordinated_publication_plan_lock",
+        unlocked,
+    )
+    monkeypatch.setattr(
+        publication_api,
+        "resolve_publication_deletion_drifts",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            IntervalsTransportError(
+                "provider request failed",
+                operation="resolve_publication_deletion_drift",
+            )
+        ),
+    )
+
+    result = publication_api.resolve_remote_publication_deletion_drift(
+        confirmed_drift_tokens=["a" * 64],
+        athlete_confirmation_reference="Athlete confirmed the exact target.",
+    )
+
+    assert isinstance(result, publication_api.PublicationError)
+    assert result.error_type == "transport"

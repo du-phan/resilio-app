@@ -58,6 +58,7 @@ def _verified_workout_items(
     retirement_service: WorkoutRetirementService,
     verify_workout: VerifyWorkout,
     garmin_forwarding_eligible: bool,
+    provider_occurrence_dates_by_local_workout_id: dict[str, date],
 ) -> tuple[list[WeekSynchronizationItem], bool]:
     items: list[WeekSynchronizationItem] = []
     passed = True
@@ -81,6 +82,9 @@ def _verified_workout_items(
                 WeekSynchronizationItem(
                     local_workout_id=workout.identity.local_workout_id,
                     occurrence_date=workout.prescription.date,
+                    provider_occurrence_date=provider_occurrence_dates_by_local_workout_id[
+                        workout.identity.local_workout_id
+                    ],
                     status="error",
                     error_type=publication_error_type(exc),
                     message=str(exc),
@@ -92,6 +96,9 @@ def _verified_workout_items(
                 WeekSynchronizationItem(
                     local_workout_id=workout.identity.local_workout_id,
                     occurrence_date=workout.prescription.date,
+                    provider_occurrence_date=provider_occurrence_dates_by_local_workout_id[
+                        workout.identity.local_workout_id
+                    ],
                     status="ready",
                     garmin_forwarding_status=(
                         "eligible_unverified" if garmin_forwarding_eligible else "not_configured"
@@ -168,6 +175,7 @@ def build_run_week_status(
     verify_deletion: VerifyDeletion,
     deletion_authorities_by_local_workout_id: dict[str, AuthoritativeWorkout],
     deletion_provider_names_by_local_workout_id: dict[str, str],
+    provider_occurrence_dates_by_local_workout_id: dict[str, date],
 ) -> RunWeekSynchronizationReport:
     """Project verification results without changing local or provider state."""
     capabilities = get_run_synchronization_capabilities(client)
@@ -190,6 +198,9 @@ def build_run_week_status(
         retirement_service=retirement_service,
         verify_workout=verify_workout,
         garmin_forwarding_eligible=capabilities.garmin_forwarding_eligible,
+        provider_occurrence_dates_by_local_workout_id=(
+            provider_occurrence_dates_by_local_workout_id
+        ),
     )
     deletion_items, deletions_passed = _verified_deletion_items(
         repo,

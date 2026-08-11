@@ -32,6 +32,7 @@ from resilio.integrations.intervals_icu.errors import (
     IntervalsInvalidPayloadError,
     IntervalsNotFoundError,
     IntervalsRateLimitError,
+    IntervalsRequestNotSubmittedError,
     IntervalsTransportError,
     UnsupportedSportError,
 )
@@ -139,7 +140,22 @@ class IntervalsIcuClient:
         for attempt in range(1, attempts + 1):
             try:
                 response = self._client.request(method, path, **kwargs)
-            except (httpx.ConnectError, httpx.TimeoutException, httpx.NetworkError) as exc:
+            except (
+                httpx.ConnectError,
+                httpx.ConnectTimeout,
+                httpx.PoolTimeout,
+            ) as exc:
+                if attempt == attempts:
+                    raise IntervalsRequestNotSubmittedError(
+                        "Intervals.icu request was not submitted",
+                        operation=operation,
+                    ) from exc
+                self._sleeper(
+                    min(8.0, 0.5 * (2 ** (attempt - 1)))
+                    + self._jitter(0, 0.25)
+                )
+                continue
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_transport_error = exc
                 if attempt == attempts:
                     break

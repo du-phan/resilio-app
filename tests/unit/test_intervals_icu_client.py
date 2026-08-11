@@ -13,6 +13,7 @@ from resilio.integrations.intervals_icu.errors import (
     IntervalsAuthorizationError,
     IntervalsInvalidPayloadError,
     IntervalsRateLimitError,
+    IntervalsRequestNotSubmittedError,
     IntervalsTransportError,
 )
 from resilio.schemas.config import Config, Settings
@@ -257,6 +258,29 @@ def test_mutating_request_is_never_retried_blindly() -> None:
         transport=httpx.MockTransport(handler),
     ) as client:
         with pytest.raises(IntervalsTransportError):
+            client.upsert_event(event)
+
+    assert calls == 1
+
+
+def test_connect_failure_proves_mutating_request_was_not_submitted() -> None:
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        raise httpx.ConnectError("not connected", request=request)
+
+    event = EventWriteDTO(
+        uid="uid-1",
+        external_id="resilio:v1:workout:test",
+        type="Run",
+        name="Test",
+        description="- 10m easy",
+        start_date_local="2026-07-28T07:00:00",
+    )
+    with IntervalsIcuClient(_config(), transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(IntervalsRequestNotSubmittedError):
             client.upsert_event(event)
 
     assert calls == 1

@@ -4,6 +4,7 @@ import json
 
 from typer.testing import CliRunner
 
+from resilio.api.publication import PublicationError
 from resilio.cli import app
 from resilio.cli.commands import migrate as migrate_commands
 from resilio.cli.commands import workout as workout_commands
@@ -23,6 +24,8 @@ def test_run_sync_commands_are_bounded_to_capabilities_and_one_week() -> None:
     assert "status" in workout_help.stdout
     assert "reconcile" in workout_help.stdout
     assert "reconcile-pairing-operations" in workout_help.stdout
+    assert "reconcile-publication-deletions" in workout_help.stdout
+    assert "resolve-publication-deletion-drift" in workout_help.stdout
     assert "resolve-drift" in workout_help.stdout
     assert "fulfillment-candidates" in workout_help.stdout
     assert "confirm-fulfillment" in workout_help.stdout
@@ -52,6 +55,105 @@ def test_reconcile_pairing_operations_delegates_to_the_global_drain(
 
     assert result.exit_code == 0
     assert captured == ["drained"]
+
+
+def test_reconcile_publication_deletions_delegates_to_the_global_reaper(
+    monkeypatch,
+) -> None:
+    captured: list[str] = []
+    monkeypatch.setattr(
+        workout_commands,
+        "reconcile_remote_publication_deletions",
+        lambda: captured.append("reaped") or "reconciled",
+    )
+    monkeypatch.setattr(workout_commands, "_emit", lambda result, message: None)
+
+    result = CliRunner().invoke(
+        app,
+        ["workout", "reconcile-publication-deletions"],
+    )
+
+    assert result.exit_code == 0
+    assert captured == ["reaped"]
+
+
+def test_reconcile_publication_deletions_returns_network_error_envelope(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        workout_commands,
+        "reconcile_remote_publication_deletions",
+        lambda: PublicationError("transport", "Provider request failed."),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        ["workout", "reconcile-publication-deletions"],
+    )
+
+    assert result.exit_code == 4
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["error_type"] == "transport"
+
+
+def test_resolve_publication_deletion_drift_passes_every_exact_token(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        workout_commands,
+        "resolve_remote_publication_deletion_drift",
+        lambda **kwargs: captured.update(kwargs) or "resolved",
+    )
+    monkeypatch.setattr(workout_commands, "_emit", lambda result, message: None)
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "workout",
+            "resolve-publication-deletion-drift",
+            "--confirmation-reference",
+            "Athlete confirmed deleting both exact remote targets.",
+            "--drift-target-token",
+            "a" * 64,
+            "--drift-target-token",
+            "b" * 64,
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["confirmed_drift_tokens"] == ["a" * 64, "b" * 64]
+
+
+def test_resolve_publication_deletion_drift_returns_validation_envelope(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        workout_commands,
+        "resolve_remote_publication_deletion_drift",
+        lambda **_kwargs: PublicationError(
+            "publication_safety",
+            "Publication deletion drift token is stale.",
+        ),
+    )
+
+    result = CliRunner().invoke(
+        app,
+        [
+            "workout",
+            "resolve-publication-deletion-drift",
+            "--confirmation-reference",
+            "Athlete confirmed the exact remote target.",
+            "--drift-target-token",
+            "a" * 64,
+        ],
+    )
+
+    assert result.exit_code == 5
+    payload = json.loads(result.stdout)
+    assert payload["ok"] is False
+    assert payload["error_type"] == "publication_safety"
 
 
 def test_run_capability_command_rejects_non_running_sports_before_network_access() -> None:

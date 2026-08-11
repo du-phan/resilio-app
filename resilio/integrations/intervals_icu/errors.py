@@ -52,6 +52,12 @@ class IntervalsTransportError(IntervalsIcuError):
     error_type = "transport"
 
 
+class IntervalsRequestNotSubmittedError(IntervalsTransportError):
+    """The request failed before the provider could mutate remote state."""
+
+    error_type = "request_not_submitted"
+
+
 class IntervalsInvalidPayloadError(IntervalsIcuError):
     error_type = "invalid_payload"
 

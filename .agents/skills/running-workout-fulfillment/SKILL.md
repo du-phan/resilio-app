@@ -7,9 +7,11 @@ description: Detect and confirm that one synchronized running activity fulfilled
 
 Preserve both dates as facts: the approved workout remains on its planned date,
 and the activity remains on its execution date. Record their association in the
-fulfillment overlay and in Intervals.icu's native activity/event pairing. Never
-move, delete, or rewrite approved workout content merely because the athlete ran
-it early or late.
+fulfillment overlay. On Intervals.icu, place the exact owned calendar occurrence
+on the athlete-confirmed execution date and pair it natively to the activity so
+the provider calendar presents one execution. Never change the approved local
+date, delete the owned event, or rewrite approved workout content merely because
+the athlete ran it early or late.
 
 Before first use after upgrading, require a successful dry run and applied
 cutover:
@@ -48,9 +50,10 @@ Do not infer fulfillment from date, title, sport, distance, duration, pace,
 heart rate, or a single plausible option. Present each candidate's approved
 date, type, purpose, planned distance, planned duration, and schedule offset.
 Ask which exact workout, if any, the activity fulfilled. Explain the consequence
-before confirmation: Resilio will keep both records on their original dates and
-request a native Intervals.icu pair so the calendar displays the activity as the
-workout's execution; it will not delete the approved event.
+before confirmation: Resilio will retain the approved schedule date locally,
+place the exact owned Intervals occurrence on the factual execution date, and
+request a native pair so the provider calendar displays one execution. It will
+not delete the owned event or rewrite the approved prescription.
 
 If none is correct, preserve that exact decision:
 
@@ -100,12 +103,15 @@ Inspect, then reconcile the exact applied week:
 
 ```bash
 poetry run resilio workout status --week-number <WEEK_NUMBER>
+poetry run resilio workout reconcile-publication-deletions
 poetry run resilio workout reconcile --week-number <WEEK_NUMBER>
 ```
 
 This workflow applies equally to early, same-day, and late execution. It first
 proves the local fulfillment, publication lineage, canonical activity, exact
-owned event, and mutable activity source. It then persists an exact operation
+owned event, and mutable activity source. Publication reconciliation moves only
+the provider occurrence to the confirmed execution date, with ordinary owned
+drift protection and exact readback. Pairing then persists an exact operation
 before requesting only `paired_event_id`, reads the activity back, and proves
 that no other activity fields changed.
 
@@ -171,7 +177,8 @@ Tell the athlete:
 
 - which activity fulfilled which approved workout;
 - whether execution was early, on schedule, or late and by how many days;
-- that plan intent and both original dates remain unchanged;
+- that plan intent, its approved date, and the activity date remain unchanged;
+- whether the owned provider occurrence was placed on the execution date;
 - whether the native Intervals pair is verified, pending, or blocked;
 - any exact conflict or drift still requiring action;
 - Garmin forwarding separately, without claiming physical-device state.

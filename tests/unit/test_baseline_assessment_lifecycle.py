@@ -58,6 +58,10 @@ from resilio.core.workout_fulfillment.migration import (
 )
 from resilio.core.workout_fulfillment.repository import save_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
+from resilio.core.workout_publication.publication_deletions import (
+    activate_publication_deletion_monitoring,
+    stage_pending_publication_deletion,
+)
 from resilio.schemas.assessment import TemporaryScheduleConstraint
 from resilio.schemas.plan_history import EvidenceArtifactReference
 from resilio.schemas.planning.drafts import AssessmentPlanDraft
@@ -585,13 +589,15 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
         rendered_workout_sha256="5" * 64,
         sport_settings_version_sha256="6" * 64,
         sport="run",
-        occurrence_date=date(2026, 8, 21),
+        occurrence_date=review.result.performance_date,
         approved_start_time_local=time(7),
-        provider_start_date_local="2026-08-21T07:00:00",
+        provider_start_date_local=(
+            f"{review.result.performance_date.isoformat()}T07:00:00"
+        ),
         prepared_at_utc=datetime(2026, 8, 20, 18, 30, tzinfo=timezone.utc),
     )
     save_manifest(repo, manifest)
-    with pytest.raises(PlanOperationError, match="future owned"):
+    with pytest.raises(PlanOperationError, match="unfinished assessment publication"):
         close_assessment_from_review(
             repo,
             assessment_review_reference=review_reference,
@@ -601,8 +607,11 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
             ),
             closed_at_utc=datetime(2026, 8, 20, 19, tzinfo=timezone.utc),
         )
-    manifest.pending.clear()
-    save_manifest(repo, manifest)
+    deletion_operation = stage_pending_publication_deletion(
+        repo,
+        manifest.pending["future_owned_workout"],
+    )
+    activate_publication_deletion_monitoring(repo, deletion_operation)
 
     closed_state = close_assessment_from_review(
         repo,

@@ -22,7 +22,9 @@ from resilio.core.workout_fulfillment.repository import (
     load_fulfillment_manifest,
     save_fulfillment_manifest,
 )
+from resilio.core.workout_fulfillment.service import WorkoutFulfillmentService
 from resilio.core.workout_publication import retained_authority as retained_authority_module
+from resilio.core.workout_publication import week_service as week_service_module
 from resilio.core.workout_publication.capabilities import (
     get_run_synchronization_capabilities,
 )
@@ -33,6 +35,11 @@ from resilio.core.workout_publication.policy import PublicationSafetyError
 from resilio.core.workout_publication.preferences import (
     load_run_synchronization_preferences,
     save_run_synchronization_preferences,
+)
+from resilio.core.workout_publication.publication_deletions import (
+    load_publication_deletion_manifest,
+    reconcile_publication_deletion_operations,
+    stage_pending_publication_deletion,
 )
 from resilio.core.workout_publication.retained_authority import (
     retained_pending_publication_authorities,
@@ -112,6 +119,19 @@ def _save_fulfillment_activity(
     local_activity_id: str,
     execution_date: date,
 ) -> str:
+    provider_start_time_utc = datetime(
+        execution_date.year,
+        execution_date.month,
+        execution_date.day,
+        5,
+        tzinfo=timezone.utc,
+    )
+    provider_start_time_local = datetime(
+        execution_date.year,
+        execution_date.month,
+        execution_date.day,
+        7,
+    )
     activity = make_activity(id=local_activity_id, date=execution_date)
     activity = activity.model_copy(
         update={
@@ -126,14 +146,8 @@ def _save_fulfillment_activity(
                             id=f"i_{local_activity_id}",
                             type="Run",
                             name="Completed run",
-                            start_date=datetime(
-                                2026,
-                                8,
-                                10,
-                                5,
-                                tzinfo=timezone.utc,
-                            ),
-                            start_date_local=datetime(2026, 8, 10, 7),
+                            start_date=provider_start_time_utc,
+                            start_date_local=provider_start_time_local,
                             elapsed_time=1800,
                             moving_time=1800,
                             source="GARMIN_CONNECT",
@@ -535,7 +549,7 @@ def test_replacement_week_deletes_only_stale_future_owned_run(
     assert len(client.events) == 1
 
 
-def test_early_confirmed_fulfillment_pairs_activity_and_preserves_owned_event(
+def test_early_confirmed_fulfillment_places_owned_event_on_execution_day_and_pairs(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -577,13 +591,241 @@ def test_early_confirmed_fulfillment_pairs_activity_and_preserves_owned_event(
 
     report = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
 
-    assert [item.status for item in report.items] == ["noop"]
+    assert [item.status for item in report.items] == ["updated"]
+    assert report.items[0].occurrence_date == date(2026, 8, 11)
+    assert report.items[0].provider_occurrence_date == date(2026, 8, 10)
     assert report.items[0].remote_pairing_status == "paired"
     assert client.activity_pairing_updates == [("i_act_early", event_id)]
     assert event_id in client.events
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
     manifest = load_manifest(repo)
     assert "early-run" in manifest.workouts
+    assert manifest.workouts["early-run"].occurrence_date == date(2026, 8, 11)
+    assert (
+        manifest.workouts["early-run"].provider_start_date_local
+        == "2026-08-10T00:00:00"
+    )
     assert manifest.historical_fulfillment_event_retirements == []
+
+    repeated = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert [item.status for item in repeated.items] == ["noop"]
+    assert repeated.items[0].provider_occurrence_date == date(2026, 8, 10)
+    assert repeated.items[0].remote_pairing_status == "pairing_noop"
+    assert client.upserts == 2
+    assert client.activity_pairing_updates == [("i_act_early", event_id)]
+
+
+def test_late_confirmed_fulfillment_places_owned_event_on_execution_day_and_pairs(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = FakeClient()
+    workout = _authoritative(_targetless_run("late-run", date(2026, 8, 10)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    event_id = service.reconcile_week(1, as_of_date=date(2026, 8, 9)).items[0].event_id
+    activity_evidence_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_late",
+        execution_date=date(2026, 8, 11),
+    )
+    client.activities["i_act_late"] = ActivityDTO(
+        id="i_act_late",
+        type="Run",
+        name="Completed run",
+        start_date=datetime(2026, 8, 11, 5, tzinfo=timezone.utc),
+        start_date_local=datetime(2026, 8, 11, 7),
+        elapsed_time=1800,
+        moving_time=1800,
+        source="GARMIN_CONNECT",
+    )
+    fulfillment = _confirmed_fulfillment(
+        workout,
+        local_activity_id="act_late",
+        execution_date=date(2026, 8, 11),
+        activity_performance_sha256=activity_evidence_sha256,
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={"act_late": fulfillment}),
+    )
+
+    report = service.reconcile_week(1, as_of_date=date(2026, 8, 11))
+
+    assert [item.status for item in report.items] == ["updated"]
+    assert report.items[0].remote_pairing_status == "paired"
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+    stored = load_manifest(repo).workouts["late-run"]
+    assert stored.occurrence_date == date(2026, 8, 10)
+    assert stored.provider_start_date_local == "2026-08-11T00:00:00"
+
+
+def test_revoked_early_fulfillment_restores_future_owned_event_to_scheduled_day(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = FakeClient()
+    workout = _authoritative(_targetless_run("revoked-run", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    event_id = service.reconcile_week(1, as_of_date=date(2026, 8, 9)).items[0].event_id
+    activity_evidence_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_revoked",
+        execution_date=date(2026, 8, 10),
+    )
+    fulfillment = _confirmed_fulfillment(
+        workout,
+        local_activity_id="act_revoked",
+        execution_date=date(2026, 8, 10),
+        activity_performance_sha256=activity_evidence_sha256,
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={"act_revoked": fulfillment}),
+    )
+    placed = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+    assert not placed.partial
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
+
+    WorkoutFulfillmentService(repo).revoke(
+        local_activity_id="act_revoked",
+        local_workout_id="revoked-run",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact association.",
+        coaching_rationale="The athlete clarified that this run was not the workout.",
+        revoked_at_utc=datetime(2026, 8, 10, 12, tzinfo=timezone.utc),
+    )
+    restored = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert not restored.partial
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+    assert client.get_activity("i_act_revoked").paired_event_id is None
+    assert load_manifest(repo).workouts["revoked-run"].occurrence_date == date(2026, 8, 11)
+
+
+def test_revoked_late_fulfillment_restores_past_owned_event_to_scheduled_day(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = FakeClient()
+    workout = _authoritative(_targetless_run("revoked-late", date(2026, 8, 10)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    event_id = service.reconcile_week(1, as_of_date=date(2026, 8, 9)).items[0].event_id
+    activity_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_revoked_late",
+        execution_date=date(2026, 8, 11),
+    )
+    client.activities["i_act_revoked_late"] = ActivityDTO(
+        id="i_act_revoked_late",
+        type="Run",
+        name="Completed run",
+        start_date=datetime(2026, 8, 11, 5, tzinfo=timezone.utc),
+        start_date_local=datetime(2026, 8, 11, 7),
+        elapsed_time=1800,
+        moving_time=1800,
+        source="GARMIN_CONNECT",
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "act_revoked_late": _confirmed_fulfillment(
+                    workout,
+                    local_activity_id="act_revoked_late",
+                    execution_date=date(2026, 8, 11),
+                    activity_performance_sha256=activity_sha256,
+                )
+            }
+        ),
+    )
+    placed = service.reconcile_week(1, as_of_date=date(2026, 8, 11))
+    assert not placed.partial
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+
+    WorkoutFulfillmentService(repo).revoke(
+        local_activity_id="act_revoked_late",
+        local_workout_id="revoked-late",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact association.",
+        coaching_rationale="The athlete clarified that this run was not the workout.",
+        revoked_at_utc=datetime(2026, 8, 11, 12, tzinfo=timezone.utc),
+    )
+    restored = service.reconcile_week(1, as_of_date=date(2026, 8, 11))
+
+    assert not restored.partial
+    assert [item.status for item in restored.items] == ["updated"]
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
+    assert client.get_activity("i_act_revoked_late").paired_event_id is None
+
+
+def test_replacement_deletes_revoked_late_placement_still_on_current_day(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = FakeClient()
+    original = _authoritative(_targetless_run("late-stale", date(2026, 8, 10)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [original])
+    event_id = service.reconcile_week(1, as_of_date=date(2026, 8, 9)).items[0].event_id
+    activity_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_late_stale",
+        execution_date=date(2026, 8, 11),
+    )
+    client.activities["i_act_late_stale"] = ActivityDTO(
+        id="i_act_late_stale",
+        type="Run",
+        name="Completed run",
+        start_date=datetime(2026, 8, 11, 5, tzinfo=timezone.utc),
+        start_date_local=datetime(2026, 8, 11, 7),
+        elapsed_time=1800,
+        moving_time=1800,
+        source="GARMIN_CONNECT",
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "act_late_stale": _confirmed_fulfillment(
+                    original,
+                    local_activity_id="act_late_stale",
+                    execution_date=date(2026, 8, 11),
+                    activity_performance_sha256=activity_sha256,
+                )
+            }
+        ),
+    )
+    assert not service.reconcile_week(1, as_of_date=date(2026, 8, 11)).partial
+
+    WorkoutFulfillmentService(repo).revoke(
+        local_activity_id="act_late_stale",
+        local_workout_id="late-stale",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact association.",
+        coaching_rationale="The athlete clarified that this run was not the workout.",
+        revoked_at_utc=datetime(2026, 8, 11, 12, tzinfo=timezone.utc),
+    )
+    service.workouts = [
+        _authoritative(_targetless_run("replacement-run", date(2026, 8, 15)))
+    ]
+    replacement = service.reconcile_week(1, as_of_date=date(2026, 8, 11))
+
+    assert not replacement.partial
+    assert [item.status for item in replacement.items] == ["created", "deleted"]
+    assert event_id not in client.events
+    assert "late-stale" not in load_manifest(repo).workouts
 
 
 def test_stale_publication_converges_before_native_pairing(
@@ -689,6 +931,11 @@ def test_dual_published_pending_recovery_converges_before_native_pairing(
     assert interrupted.partial
     assert "recovery-run" in interrupted_manifest.workouts
     assert "recovery-run" in interrupted_manifest.pending
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
+    assert (
+        interrupted_manifest.pending["recovery-run"].provider_start_date_local
+        == "2026-08-10T00:00:00"
+    )
 
     recovered = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
 
@@ -696,6 +943,410 @@ def test_dual_published_pending_recovery_converges_before_native_pairing(
     assert recovered.items[0].remote_pairing_status == "paired"
     assert client.activity_pairing_updates == [("i_act_recovery", event_id)]
     assert "recovery-run" not in load_manifest(repo).pending
+    assert (
+        load_manifest(repo).workouts["recovery-run"].provider_start_date_local
+        == "2026-08-10T00:00:00"
+    )
+
+
+def test_fulfillment_confirmation_after_interrupted_create_recovers_then_places(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = False
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    workout = _authoritative(_targetless_run("confirm-after-crash", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    client.interrupt_next_upsert = True
+
+    interrupted = service.reconcile_week(1, as_of_date=date(2026, 8, 9))
+
+    assert interrupted.partial
+    assert load_manifest(repo).workouts == {}
+    assert set(load_manifest(repo).pending) == {"confirm-after-crash"}
+    event_id = next(iter(client.events))
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+
+    activity_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_confirm_after_crash",
+        execution_date=date(2026, 8, 10),
+    )
+    fulfillment = _confirmed_fulfillment(
+        workout,
+        local_activity_id="act_confirm_after_crash",
+        execution_date=date(2026, 8, 10),
+        activity_performance_sha256=activity_sha256,
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={"act_confirm_after_crash": fulfillment}
+        ),
+    )
+
+    recovered = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert not recovered.partial
+    assert recovered.items[0].remote_pairing_status == "paired"
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
+    assert load_manifest(repo).pending == {}
+    assert load_publication_deletion_manifest(repo).operations == {}
+
+
+def test_revoked_pending_only_execution_placement_is_deleted_after_replacement(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = False
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    fulfilled = _authoritative(_targetless_run("pending-placed", date(2026, 8, 11)))
+    activity_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_pending_placed",
+        execution_date=date(2026, 8, 10),
+    )
+    fulfillment = _confirmed_fulfillment(
+        fulfilled,
+        local_activity_id="act_pending_placed",
+        execution_date=date(2026, 8, 10),
+        activity_performance_sha256=activity_sha256,
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={"act_pending_placed": fulfillment}
+        ),
+    )
+    service = HarnessRunWeekSynchronizationService(repo, client, [fulfilled])
+    client.interrupt_next_upsert = True
+
+    interrupted = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert interrupted.partial
+    pending_manifest = load_manifest(repo)
+    assert pending_manifest.workouts == {}
+    pending = pending_manifest.pending["pending-placed"]
+    assert pending.occurrence_date == date(2026, 8, 11)
+    assert pending.provider_start_date_local == "2026-08-10T00:00:00"
+    assert next(iter(client.events.values())).start_date_local == (
+        "2026-08-10T00:00:00"
+    )
+
+    WorkoutFulfillmentService(repo).revoke(
+        local_activity_id="act_pending_placed",
+        local_workout_id="pending-placed",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact association.",
+        coaching_rationale="The athlete clarified that this was not the workout.",
+        revoked_at_utc=datetime(2026, 8, 10, 12, tzinfo=timezone.utc),
+    )
+    replacement = _authoritative(
+        _targetless_run("replacement-after-pending", date(2026, 8, 15))
+    )
+    service.workouts = [replacement]
+    pending_provider_name = provider_workout_names([fulfilled.prescription])[
+        fulfilled.identity.local_workout_id
+    ]
+    replacement_provider_name = provider_workout_names([replacement.prescription])[
+        replacement.identity.local_workout_id
+    ]
+    monkeypatch.setattr(
+        week_service_module,
+        "retained_pending_publication_authorities",
+        lambda _repo, _workouts: (
+            {
+                replacement.identity.local_workout_id: replacement,
+                fulfilled.identity.local_workout_id: fulfilled,
+            },
+            {
+                replacement.identity.local_workout_id: replacement_provider_name,
+                fulfilled.identity.local_workout_id: pending_provider_name,
+            },
+        ),
+    )
+    reconciled = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert not reconciled.partial, [
+        (item.status, item.error_type, item.message) for item in reconciled.items
+    ]
+    assert [item.status for item in reconciled.items] == ["created", "deleted"]
+    assert reconciled.items[1].occurrence_date == date(2026, 8, 11)
+    assert reconciled.items[1].provider_occurrence_date == date(2026, 8, 10)
+    assert set(client.events) == {reconciled.items[0].event_id}
+    assert set(load_manifest(repo).pending) == {"pending-placed"}
+    assert len(load_publication_deletion_manifest(repo).operations) == 1
+
+
+def test_revoked_pending_only_execution_placement_restores_current_workout(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    workout = _authoritative(_targetless_run("pending-current", date(2026, 8, 11)))
+    activity_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_pending_current",
+        execution_date=date(2026, 8, 10),
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "act_pending_current": _confirmed_fulfillment(
+                    workout,
+                    local_activity_id="act_pending_current",
+                    execution_date=date(2026, 8, 10),
+                    activity_performance_sha256=activity_sha256,
+                )
+            }
+        ),
+    )
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    interrupted = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+    assert interrupted.partial
+    event_id = next(iter(client.events))
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
+
+    WorkoutFulfillmentService(repo).revoke(
+        local_activity_id="act_pending_current",
+        local_workout_id="pending-current",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact association.",
+        coaching_rationale="The athlete clarified that this run was not the workout.",
+        revoked_at_utc=datetime(2026, 8, 10, 12, tzinfo=timezone.utc),
+    )
+    restored = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert not restored.partial
+    assert [item.status for item in restored.items] == ["updated"]
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+    assert load_manifest(repo).pending == {}
+
+
+def test_pending_only_remote_drift_has_token_and_requires_exact_restore(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    workout = _authoritative(_targetless_run("pending-drift", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    interrupted = service.reconcile_week(1, as_of_date=date(2026, 8, 9))
+    assert interrupted.partial
+    event_id = next(iter(client.events))
+    client.events[event_id] = client.events[event_id].model_copy(
+        update={
+            "start_date_local": "2026-08-14T00:00:00",
+            "description": "Athlete edited this interrupted publication.",
+        }
+    )
+
+    blocked = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert not blocked.reconciliation_safe
+    assert client.upserts == 1
+    assert blocked.items[0].error_type == "remote_drift"
+    drift_token = blocked.items[0].drift_resolution_token_sha256
+    assert drift_token is not None
+
+    restored = service.restore_local_week(
+        1,
+        as_of_date=date(2026, 8, 10),
+        confirmed_drift_target_tokens=[drift_token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed restoring the exact interrupted publication."
+        ),
+    )
+
+    assert not restored.partial
+    assert client.upserts == 2
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+    assert load_manifest(repo).pending == {}
+
+
+def test_pending_only_remote_outside_authoritative_week_is_discovered_as_drift(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    workout = _authoritative(_targetless_run("pending-outside", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 9)).partial
+    event_id = next(iter(client.events))
+    client.events[event_id] = client.events[event_id].model_copy(
+        update={
+            "start_date_local": "2026-08-17T00:00:00",
+            "description": "Athlete moved this event outside its training week.",
+        }
+    )
+
+    blocked = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+
+    assert not blocked.reconciliation_safe
+    assert blocked.items[0].error_type == "remote_drift"
+    assert blocked.items[0].drift_resolution_token_sha256 is not None
+    assert client.upserts == 1
+    assert client.events[event_id].start_date_local == "2026-08-17T00:00:00"
+    assert client.events[event_id].description == (
+        "Athlete moved this event outside its training week."
+    )
+
+
+def test_revoked_interrupted_placement_restores_confirmed_third_state_drift(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedUpdateClient(FakeClient):
+        interrupt_next_upsert = False
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "placement response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedUpdateClient()
+    workout = _authoritative(_targetless_run("dual-drift", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    event_id = service.reconcile_week(1, as_of_date=date(2026, 8, 9)).items[0].event_id
+    activity_sha256 = _save_fulfillment_activity(
+        repo,
+        local_activity_id="act_dual_drift",
+        execution_date=date(2026, 8, 10),
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "act_dual_drift": _confirmed_fulfillment(
+                    workout,
+                    local_activity_id="act_dual_drift",
+                    execution_date=date(2026, 8, 10),
+                    activity_performance_sha256=activity_sha256,
+                )
+            }
+        ),
+    )
+    client.interrupt_next_upsert = True
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 10)).partial
+    assert set(load_manifest(repo).workouts) == {"dual-drift"}
+    assert set(load_manifest(repo).pending) == {"dual-drift"}
+
+    WorkoutFulfillmentService(repo).revoke(
+        local_activity_id="act_dual_drift",
+        local_workout_id="dual-drift",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the exact association.",
+        coaching_rationale="The athlete clarified that this run was not the workout.",
+        revoked_at_utc=datetime(2026, 8, 10, 12, tzinfo=timezone.utc),
+    )
+    client.events[event_id] = client.events[event_id].model_copy(
+        update={
+            "start_date_local": "2026-08-14T00:00:00",
+            "description": "Athlete edited this interrupted placement.",
+        }
+    )
+    blocked = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
+    token = blocked.items[0].drift_resolution_token_sha256
+    assert token is not None
+
+    restored = service.restore_local_week(
+        1,
+        as_of_date=date(2026, 8, 10),
+        confirmed_drift_target_tokens=[token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed restoring the exact interrupted placement."
+        ),
+    )
+
+    assert not restored.partial
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
+    assert load_manifest(repo).pending == {}
 
 
 def test_stale_deletion_accepts_exact_pending_remote_bytes_from_interrupted_update(
@@ -754,7 +1405,181 @@ def test_stale_deletion_accepts_exact_pending_remote_bytes_from_interrupted_upda
     assert deleted.action == "deleted"
     assert event_id not in client.events
     assert load_manifest(repo).workouts == {}
+    assert set(load_manifest(repo).pending) == {"stale-recovery"}
+    assert len(load_publication_deletion_manifest(repo).operations) == 1
+
+
+def test_ambiguous_desired_create_retries_after_its_scheduled_date(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InitiallyAmbiguousClient(FakeClient):
+        ambiguous = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            if self.ambiguous:
+                self.ambiguous = False
+                raise IntervalsTransportError(
+                    "create outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InitiallyAmbiguousClient()
+    workout = _authoritative(_targetless_run("past-pending", date(2026, 8, 10)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 10)).partial
+    assert set(load_manifest(repo).pending) == {"past-pending"}
+
+    retried = service.reconcile_week(1, as_of_date=date(2026, 8, 11))
+
+    assert not retried.partial
+    assert [item.status for item in retried.items] == ["created"]
     assert load_manifest(repo).pending == {}
+    assert set(load_manifest(repo).workouts) == {"past-pending"}
+
+
+def test_replacement_tombstones_a_removed_past_pending_intent(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InitiallyAmbiguousClient(FakeClient):
+        ambiguous = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            if self.ambiguous:
+                self.ambiguous = False
+                raise IntervalsTransportError(
+                    "create outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InitiallyAmbiguousClient()
+    removed = _authoritative(_targetless_run("removed-past", date(2026, 8, 10)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [removed])
+
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 10)).partial
+    assert set(load_manifest(repo).pending) == {"removed-past"}
+
+    replacement = _authoritative(
+        _targetless_run("replacement-run", date(2026, 8, 12))
+    )
+    service.workouts = [replacement]
+    retained_names = provider_workout_names(
+        [removed.prescription, replacement.prescription]
+    )
+    monkeypatch.setattr(
+        week_service_module,
+        "retained_pending_publication_authorities",
+        lambda _repo, _workouts: (
+            {
+                removed.identity.local_workout_id: removed,
+                replacement.identity.local_workout_id: replacement,
+            },
+            retained_names,
+        ),
+    )
+    reconciled = service.reconcile_week(1, as_of_date=date(2026, 8, 11))
+
+    assert not reconciled.partial, reconciled.model_dump(mode="json")
+    assert [item.status for item in reconciled.items] == [
+        "created",
+        "deletion_monitoring",
+    ]
+    assert set(load_manifest(repo).pending) == {"removed-past"}
+    deletion_manifest = load_publication_deletion_manifest(repo)
+    operation = next(iter(deletion_manifest.operations.values()))
+    assert operation.pending_publication.workout_identity == removed.identity
+    assert operation.state == "monitoring"
+
+
+def test_dual_state_deletion_reaps_an_update_that_materializes_late(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class DelayedUpdateClient(FakeClient):
+        delay_next_upsert = False
+        delayed_event = None
+
+        def upsert_event(self, event, *, athlete_id=None):
+            if self.delay_next_upsert:
+                self.delay_next_upsert = False
+                self.delayed_event = event
+                raise IntervalsTransportError(
+                    "update outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = DelayedUpdateClient()
+    original = _authoritative(_targetless_run("late-update", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [original])
+    old_event_id = service.reconcile_week(
+        1,
+        as_of_date=date(2026, 8, 9),
+    ).items[0].event_id
+    revised = replace(
+        original,
+        prescription=original.prescription.model_copy(
+            update={"purpose": "Use the delayed update prescription."}
+        ),
+        applied_week_approval_id="week_approval_2222222222222222",
+        applied_running_workouts_sha256="b" * 64,
+    )
+    service.workouts = [revised]
+    client.delay_next_upsert = True
+
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 10)).partial
+    assert set(load_manifest(repo).workouts) == {"late-update"}
+    assert set(load_manifest(repo).pending) == {"late-update"}
+
+    manifest = load_manifest(repo)
+    staged = stage_pending_publication_deletion(
+        repo,
+        manifest.pending["late-update"],
+        previous=manifest.workouts["late-update"],
+    )
+    assert staged.state == "staged"
+
+    recovered = reconcile_publication_deletion_operations(repo, client)
+
+    assert [(item.status, item.event_id) for item in recovered.items] == [
+        ("deleted", old_event_id)
+    ]
+    assert old_event_id not in client.events
+    assert load_manifest(repo).workouts == {}
+    assert set(load_manifest(repo).pending) == {"late-update"}
+    operation = next(iter(load_publication_deletion_manifest(repo).operations.values()))
+    assert operation.state == "monitoring"
+
+    repeated = service.retirement_service.retire_published(
+        "late-update",
+        authoritative_workout=revised,
+        provider_name=provider_workout_names([revised.prescription])["late-update"],
+    )
+    assert repeated.action == "deletion_monitoring"
+    assert len(load_publication_deletion_manifest(repo).operations) == 1
+
+    assert client.delayed_event is not None
+    late_event_id = FakeClient.upsert_event(client, client.delayed_event).id
+    report = reconcile_publication_deletion_operations(repo, client)
+
+    assert report.reconciliation_safe
+    assert [(item.status, item.event_id) for item in report.items] == [
+        ("deleted", late_event_id)
+    ]
+    assert client.events == {}
 
 
 def test_stale_deletion_rejects_remote_bytes_matching_neither_published_nor_pending(
@@ -917,7 +1742,7 @@ def test_removed_native_pair_blocks_ordinary_reconcile_until_exact_resolution(
 
 
 @pytest.mark.parametrize("execution_date", [date(2026, 8, 11), date(2026, 8, 12)])
-def test_on_schedule_or_late_fulfillment_preserves_owned_event(
+def test_on_schedule_or_late_fulfillment_places_owned_event_on_execution_day(
     tmp_path,
     monkeypatch,
     execution_date: date,
@@ -934,6 +1759,27 @@ def test_on_schedule_or_late_fulfillment_preserves_owned_event(
         repo,
         local_activity_id="act_preserved",
         execution_date=execution_date,
+    )
+    client.activities["i_act_preserved"] = ActivityDTO(
+        id="i_act_preserved",
+        type="Run",
+        name="Completed run",
+        start_date=datetime(
+            execution_date.year,
+            execution_date.month,
+            execution_date.day,
+            5,
+            tzinfo=timezone.utc,
+        ),
+        start_date_local=datetime(
+            execution_date.year,
+            execution_date.month,
+            execution_date.day,
+            7,
+        ),
+        elapsed_time=1800,
+        moving_time=1800,
+        source="GARMIN_CONNECT",
     )
     fulfillment = WorkoutFulfillmentRecord(
         local_activity_id="act_preserved",
@@ -961,9 +1807,13 @@ def test_on_schedule_or_late_fulfillment_preserves_owned_event(
 
     report = service.reconcile_week(1, as_of_date=execution_date)
 
-    assert [item.status for item in report.items] == ["noop"]
+    expected_status = "noop" if offset_days == 0 else "updated"
+    assert [item.status for item in report.items] == [expected_status]
     assert report.items[0].remote_pairing_status == "paired"
     assert event_id in client.events
+    assert client.events[event_id].start_date_local == (
+        f"{execution_date.isoformat()}T00:00:00"
+    )
     assert load_manifest(repo).historical_fulfillment_event_retirements == []
 
 
@@ -1013,6 +1863,7 @@ def test_drifted_fulfilled_event_requires_restore_before_native_pairing(
     blocked = service.reconcile_week(1, as_of_date=date(2026, 8, 10))
     assert not blocked.reconciliation_safe
     assert event_id in client.events
+    assert client.events[event_id].start_date_local == "2026-08-11T00:00:00"
     drift_token = next(
         item.drift_resolution_token_sha256
         for item in blocked.items
@@ -1033,6 +1884,7 @@ def test_drifted_fulfilled_event_requires_restore_before_native_pairing(
     assert [item.status for item in restored.items] == ["updated"]
     assert restored.items[0].remote_pairing_status == "paired"
     assert event_id in client.events
+    assert client.events[event_id].start_date_local == "2026-08-10T00:00:00"
     assert load_manifest(repo).drift_resolutions[-1].strategy == "restore_local"
 
 

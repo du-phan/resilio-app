@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.planning.artifacts import canonical_data_sha256
@@ -13,6 +14,7 @@ from resilio.core.workout_publication.policy import (
     event_type_for_sport,
     external_id_for,
     garmin_filter_allows,
+    provider_local_date,
     publication_fingerprint,
     publication_settings_version,
     settings_for_event_type,
@@ -36,7 +38,7 @@ from resilio.integrations.intervals_icu.dto import (
 from resilio.schemas.activity import SportType
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
-from resilio.schemas.publication import PublishedWorkout
+from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
 from resilio.schemas.structured_workout import TargetMode, TargetUnit
 
 
@@ -57,6 +59,7 @@ class PreparedPublication:
     settings_version_sha256: str
     publication_fingerprint_sha256: str
     rendered_workout_sha256: str
+    provider_occurrence_date: date
     provider_start_date_local: str
     garmin_forwarding_eligible: bool
     expected_step_semantics: tuple[StepSemantics, ...]
@@ -77,6 +80,7 @@ def prepare_publication(
     authoritative_workout: AuthoritativeWorkout,
     *,
     previous: PublishedWorkout | None,
+    provider_occurrence_date: date,
     provider_name: str | None = None,
 ) -> PreparedPublication:
     """Validate device policy, render content, and bind deterministic identity."""
@@ -119,7 +123,7 @@ def prepare_publication(
     external_id = external_id_for(workout.id)
     requested_uid = uid_for(workout.id)
     start_local = validated_local_start(
-        workout.date,
+        provider_occurrence_date,
         workout.start_time_local,
         athlete.timezone,
     )
@@ -155,10 +159,54 @@ def prepare_publication(
             settings_version_sha256,
         ),
         rendered_workout_sha256=rendered_workout_sha256(workout),
+        provider_occurrence_date=provider_occurrence_date,
         provider_start_date_local=start_local,
         garmin_forwarding_eligible=garmin_eligible,
         expected_step_semantics=expected_semantics,
     )
+
+
+def prepare_current_authority_pending(
+    client: IntervalsIcuClient,
+    authoritative_workout: AuthoritativeWorkout,
+    *,
+    previous: PublishedWorkout | None,
+    pending: PendingWorkoutPublication,
+    provider_name: str,
+) -> PreparedPublication:
+    """Rebuild and prove one pending intent from unchanged current authority."""
+    prepared = prepare_publication(
+        client,
+        authoritative_workout,
+        previous=previous,
+        provider_name=provider_name,
+        provider_occurrence_date=provider_local_date(
+            pending.provider_start_date_local
+        ),
+    )
+    if (
+        pending.workout_identity != prepared.workout_identity
+        or pending.applied_week_approval_id != prepared.applied_week_approval_id
+        or pending.applied_running_workouts_sha256
+        != prepared.applied_running_workouts_sha256
+        or pending.workout_prescription_sha256
+        != prepared.workout_prescription_sha256
+        or pending.schedule_timezone != prepared.schedule_timezone
+        or pending.occurrence_date != prepared.workout.date
+        or pending.approved_start_time_local != prepared.workout.start_time_local
+        or pending.uid != prepared.event.uid
+        or pending.external_id != prepared.external_id
+        or pending.publication_fingerprint_sha256
+        != prepared.publication_fingerprint_sha256
+        or pending.rendered_workout_sha256 != prepared.rendered_workout_sha256
+        or pending.sport_settings_version_sha256
+        != prepared.settings_version_sha256
+        or pending.provider_start_date_local != prepared.provider_start_date_local
+    ):
+        raise PublicationSafetyError(
+            "Pending publication intent differs from current applied workout authority"
+        )
+    return prepared
 
 
 def _garmin_forwarding_eligible(

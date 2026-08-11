@@ -17,7 +17,17 @@ from resilio.core.workout_publication.naming import (
     provider_workout_name,
     provider_workout_names,
 )
+from resilio.core.workout_publication.publication_deletion_drift import (
+    resolve_publication_deletion_drifts,
+)
+from resilio.core.workout_publication.publication_deletions import (
+    load_publication_deletion_manifest,
+    reconcile_publication_deletion_operations,
+)
 from resilio.core.workout_publication.renderer import render_structured_workout
+from resilio.core.workout_publication.retirement_service import (
+    WorkoutRetirementService,
+)
 from resilio.core.workout_publication.semantics import (
     WorkoutSemanticsError,
     assert_workout_semantics_match,
@@ -41,6 +51,7 @@ from resilio.integrations.intervals_icu.dto import (
 )
 from resilio.integrations.intervals_icu.errors import (
     IntervalsNotFoundError,
+    IntervalsRequestNotSubmittedError,
     IntervalsTransportError,
 )
 from resilio.schemas.plan_history import PlanWorkoutIdentity
@@ -212,14 +223,12 @@ class WorkoutPublicationService(ProductionWorkoutPublicationService):
 
     def __init__(self, repo, client):
         super().__init__(repo, client)
-        self._approved_workouts = {}
 
     def publish(self, workout):
-        self._approved_workouts[workout.id] = self._authoritative(workout)
-        return super().publish(workout.id)
-
-    def _load_approved_workout(self, workout_id):
-        return self._approved_workouts[workout_id]
+        return self._publish(
+            self._authoritative(workout),
+            provider_occurrence_date=workout.date,
+        )
 
     @staticmethod
     def _authoritative(workout):
@@ -290,8 +299,14 @@ class FakeClient:
     def get_sport_settings(self, _athlete_id=None):
         return self.settings
 
-    def list_events(self, _oldest, _newest, *, athlete_id=None):
-        return list(self.events.values())
+    def list_events(self, oldest, newest, *, athlete_id=None):
+        return [
+            event
+            for event in self.events.values()
+            if oldest
+            <= datetime.fromisoformat(event.start_date_local).date()
+            <= newest
+        ]
 
     def get_event(self, event_id, *, athlete_id=None):
         if event_id not in self.events:
@@ -1087,6 +1102,274 @@ def test_rejected_initial_intent_can_be_replaced_when_no_remote_exists(
     assert created.action == "created"
     assert len(client.events) == 1
     assert client.events[created.event_id].start_date_local.startswith("2026-10-26")
+
+
+def test_proven_unsubmitted_initial_intent_can_retry_without_ambiguity(repo) -> None:
+    class InitiallyDisconnectedClient(FakeClient):
+        disconnected = True
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.disconnected:
+                self.disconnected = False
+                raise IntervalsRequestNotSubmittedError(
+                    "request did not reach Intervals.icu",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    client = InitiallyDisconnectedClient()
+    service = WorkoutPublicationService(repo, client)
+
+    with pytest.raises(IntervalsRequestNotSubmittedError):
+        service.publish(_workout())
+
+    assert load_manifest(repo).pending == {}
+    assert service.publish(_workout()).action == "created"
+
+
+def test_ambiguous_initial_failure_retries_after_provider_wide_absence_proof(repo) -> None:
+    class InitiallyAmbiguousClient(FakeClient):
+        ambiguous = True
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.ambiguous:
+                self.ambiguous = False
+                raise IntervalsTransportError(
+                    "provider outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    client = InitiallyAmbiguousClient()
+    service = WorkoutPublicationService(repo, client)
+
+    with pytest.raises(IntervalsTransportError):
+        service.publish(_workout())
+
+    assert set(load_manifest(repo).pending) == {"workout-1"}
+    assert service.publish(_workout()).action == "created"
+    assert load_manifest(repo).pending == {}
+
+
+def test_ambiguous_pending_deletion_reaps_a_late_provider_materialization(repo) -> None:
+    class DelayedCreateClient(FakeClient):
+        delayed_event: EventWriteDTO | None = None
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.delayed_event is None:
+                self.delayed_event = event
+                raise IntervalsTransportError(
+                    "provider outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+        def materialize_delayed_event(self) -> int:
+            assert self.delayed_event is not None
+            return super().upsert_event(self.delayed_event).id
+
+    client = DelayedCreateClient()
+    publication_service = WorkoutPublicationService(repo, client)
+    workout = _workout()
+
+    with pytest.raises(IntervalsTransportError):
+        publication_service.publish(workout)
+
+    retirement = WorkoutRetirementService(repo, client).retire_published(
+        workout.id,
+        authoritative_workout=publication_service._authoritative(workout),
+        provider_name=provider_workout_name(workout),
+    )
+
+    assert retirement.action == "deletion_monitoring"
+    assert set(load_manifest(repo).pending) == {workout.id}
+    deletion_manifest = load_publication_deletion_manifest(repo)
+    assert len(deletion_manifest.operations) == 1
+    operation = next(iter(deletion_manifest.operations.values()))
+    assert operation.state == "monitoring"
+    assert operation.pending_publication == load_manifest(repo).pending[workout.id]
+
+    repeated = WorkoutRetirementService(repo, client).retire_published(
+        workout.id,
+        authoritative_workout=publication_service._authoritative(workout),
+        provider_name=provider_workout_name(workout),
+    )
+    assert repeated.action == "deletion_monitoring"
+    assert len(load_publication_deletion_manifest(repo).operations) == 1
+    with pytest.raises(PublicationSafetyError, match="permanently reserved"):
+        publication_service.publish(workout)
+
+    late_event_id = client.materialize_delayed_event()
+    report = reconcile_publication_deletion_operations(repo, client)
+
+    assert report.reconciliation_safe
+    assert not report.partial
+    assert [(item.status, item.event_id) for item in report.items] == [
+        ("deleted", late_event_id)
+    ]
+    assert report.items[0].occurrence_date == workout.date
+    assert report.items[0].provider_occurrence_date == workout.date
+    assert client.events == {}
+    assert set(load_manifest(repo).pending) == {workout.id}
+    assert len(load_publication_deletion_manifest(repo).operations) == 1
+
+
+def test_publication_deletion_tombstone_refuses_late_remote_drift(repo) -> None:
+    class DelayedCreateClient(FakeClient):
+        delayed_event: EventWriteDTO | None = None
+        fail_next_delete = False
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.delayed_event is None:
+                self.delayed_event = event
+                raise IntervalsTransportError(
+                    "provider outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+        def delete_event(self, event_id, *, athlete_id=None):
+            if self.fail_next_delete:
+                self.fail_next_delete = False
+                raise IntervalsTransportError(
+                    "temporary provider deletion failure",
+                    operation="delete_event",
+                )
+            return super().delete_event(event_id, athlete_id=athlete_id)
+
+    client = DelayedCreateClient()
+    publication_service = WorkoutPublicationService(repo, client)
+    workout = _workout()
+    with pytest.raises(IntervalsTransportError):
+        publication_service.publish(workout)
+    WorkoutRetirementService(repo, client).retire_published(
+        workout.id,
+        authoritative_workout=publication_service._authoritative(workout),
+        provider_name=provider_workout_name(workout),
+    )
+    assert client.delayed_event is not None
+    created = FakeClient.upsert_event(client, client.delayed_event)
+    client.events[created.id] = created.model_copy(
+        update={"description": "Athlete changed this workout."}
+    )
+
+    report = reconcile_publication_deletion_operations(repo, client)
+
+    assert not report.reconciliation_safe
+    assert report.partial
+    assert report.items[0].status == "error"
+    assert report.items[0].error_type == "remote_drift"
+    assert created.id in client.events
+    assert len(load_publication_deletion_manifest(repo).operations) == 1
+
+    token = report.items[0].drift_resolution_token_sha256
+    assert token is not None
+    client.fail_next_delete = True
+    failed_resolution = resolve_publication_deletion_drifts(
+        repo,
+        client,
+        confirmed_drift_tokens=[token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed deleting these exact changed remote bytes."
+        ),
+    )
+    assert failed_resolution.partial
+    assert failed_resolution.items[0].error_type == "provider"
+    assert len(load_publication_deletion_manifest(repo).drift_resolutions) == 1
+
+    resolved = resolve_publication_deletion_drifts(
+        repo,
+        client,
+        confirmed_drift_tokens=[token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed deleting these exact changed remote bytes."
+        ),
+    )
+    assert resolved.reconciliation_safe
+    assert resolved.items[0].status == "deleted"
+    assert client.events == {}
+
+    repeated = resolve_publication_deletion_drifts(
+        repo,
+        client,
+        confirmed_drift_tokens=[token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed deleting these exact changed remote bytes."
+        ),
+    )
+    assert repeated.items[0].status == "deletion_monitoring"
+
+    assert client.delayed_event is not None
+    recreated = FakeClient.upsert_event(client, client.delayed_event)
+    client.events[recreated.id] = recreated.model_copy(
+        update={"description": "Athlete changed the recreated workout again."}
+    )
+    stale_retry = resolve_publication_deletion_drifts(
+        repo,
+        client,
+        confirmed_drift_tokens=[token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed deleting the prior exact changed remote bytes."
+        ),
+    )
+    assert stale_retry.partial
+    assert stale_retry.items[0].error_type == "remote_drift"
+    replacement_token = stale_retry.items[0].drift_resolution_token_sha256
+    assert replacement_token is not None and replacement_token != token
+    assert recreated.id in client.events
+
+
+def test_publication_deletion_drift_resolution_refuses_duplicate_owned_identity(
+    repo,
+) -> None:
+    class DelayedCreateClient(FakeClient):
+        delayed_event: EventWriteDTO | None = None
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.delayed_event is None:
+                self.delayed_event = event
+                raise IntervalsTransportError(
+                    "provider outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    client = DelayedCreateClient()
+    publication_service = WorkoutPublicationService(repo, client)
+    workout = _workout()
+    with pytest.raises(IntervalsTransportError):
+        publication_service.publish(workout)
+    WorkoutRetirementService(repo, client).retire_published(
+        workout.id,
+        authoritative_workout=publication_service._authoritative(workout),
+        provider_name=provider_workout_name(workout),
+    )
+    assert client.delayed_event is not None
+    first = FakeClient.upsert_event(client, client.delayed_event)
+    client.events[first.id] = first.model_copy(
+        update={"description": "Athlete changed this workout."}
+    )
+    report = reconcile_publication_deletion_operations(repo, client)
+    token = report.items[0].drift_resolution_token_sha256
+    assert token is not None
+
+    second = client.events[first.id].model_copy(update={"id": client.next_id})
+    client.next_id += 1
+    client.events[second.id] = second
+    resolution = resolve_publication_deletion_drifts(
+        repo,
+        client,
+        confirmed_drift_tokens=[token],
+        athlete_confirmation_reference=(
+            "Athlete confirmed deleting the first exact changed remote target."
+        ),
+    )
+
+    assert not resolution.reconciliation_safe
+    assert resolution.partial
+    assert resolution.items[0].error_type == "publication_safety"
+    assert "Multiple remote events" in (resolution.items[0].message or "")
+    assert set(client.events) == {first.id, second.id}
 
 
 def test_owned_looking_remote_without_manifest_or_intent_is_rejected(repo) -> None:

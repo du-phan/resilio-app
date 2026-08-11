@@ -9,6 +9,7 @@ from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest
+from resilio.core.workout_publication.policy import provider_local_date
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import WeekSynchronizationItem
 
@@ -41,6 +42,7 @@ def select_run_week_items(
     PlanWorkoutIdentity,
 ]:
     fulfilled = _fulfilled_identities(repo)
+    publication_manifest = load_manifest(repo)
     selected: list[AuthoritativeWorkout] = []
     skipped: list[WeekSynchronizationItem] = []
     for item in sorted(
@@ -52,8 +54,29 @@ def select_run_week_items(
     ):
         workout = item.prescription
         is_fulfilled = _identity_tuple(item.identity) in fulfilled
+        owned_records = [
+            record
+            for record in (
+                publication_manifest.workouts.get(workout.id),
+                publication_manifest.pending.get(workout.id),
+            )
+            if record is not None and record.workout_identity == item.identity
+        ]
+        requires_schedule_restore = any(
+            provider_local_date(record.provider_start_date_local) != workout.date
+            for record in owned_records
+        )
+        pending = publication_manifest.pending.get(workout.id)
+        has_unfinished_pending = (
+            pending is not None and pending.workout_identity == item.identity
+        )
         status: Literal["skipped_past"] | None = (
-            "skipped_past" if workout.date < as_of_date and not is_fulfilled else None
+            "skipped_past"
+            if workout.date < as_of_date
+            and not is_fulfilled
+            and not requires_schedule_restore
+            and not has_unfinished_pending
+            else None
         )
         if status is None:
             selected.append(item)
@@ -82,15 +105,27 @@ def stale_future_owned_run_ids(
 ) -> list[str]:
     fulfilled = _fulfilled_identities(repo)
     manifest = load_manifest(repo)
-    stale_ids = {
+    stale_published_ids = {
         local_id
-        for records in (manifest.workouts, manifest.pending)
-        for local_id, record in records.items()
+        for local_id, record in manifest.workouts.items()
         if record.workout_identity.plan_id == week_identity.plan_id
         and record.workout_identity.plan_revision_id == week_identity.plan_revision_id
         and record.workout_identity.week_number == week_identity.week_number
-        and record.occurrence_date >= as_of_date
+        and max(
+            record.occurrence_date,
+            provider_local_date(record.provider_start_date_local),
+        )
+        >= as_of_date
         and _identity_tuple(record.workout_identity) not in fulfilled
         and local_id not in current_run_ids
     }
-    return sorted(stale_ids)
+    stale_pending_ids = {
+        local_id
+        for local_id, record in manifest.pending.items()
+        if record.workout_identity.plan_id == week_identity.plan_id
+        and record.workout_identity.plan_revision_id == week_identity.plan_revision_id
+        and record.workout_identity.week_number == week_identity.week_number
+        and _identity_tuple(record.workout_identity) not in fulfilled
+        and local_id not in current_run_ids
+    }
+    return sorted(stale_published_ids | stale_pending_ids)

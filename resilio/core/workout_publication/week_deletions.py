@@ -8,6 +8,7 @@ from typing import Callable
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.manifest import load_manifest
+from resilio.core.workout_publication.policy import provider_local_date
 from resilio.core.workout_publication.retirement_service import (
     WorkoutRetirementService,
 )
@@ -41,6 +42,15 @@ def reconcile_owned_future_deletions(
             else as_of_date
         )
         event_id = record.event_id if record is not None else None
+        provider_occurrence_date = provider_local_date(
+            (
+                record.provider_start_date_local
+                if record is not None
+                else pending.provider_start_date_local
+                if pending is not None
+                else occurrence_date.isoformat()
+            )
+        )
         expected_target = (
             confirmed_remote_targets.get(local_workout_id)
             if confirmed_remote_targets is not None
@@ -65,6 +75,7 @@ def reconcile_owned_future_deletions(
                 WeekSynchronizationItem(
                     local_workout_id=local_workout_id,
                     occurrence_date=occurrence_date,
+                    provider_occurrence_date=provider_occurrence_date,
                     status="error",
                     event_id=event_id,
                     error_type=error_type_for(exc),
@@ -76,6 +87,7 @@ def reconcile_owned_future_deletions(
                 WeekSynchronizationItem(
                     local_workout_id=local_workout_id,
                     occurrence_date=occurrence_date,
+                    provider_occurrence_date=provider_occurrence_date,
                     status=result.action,
                     event_id=result.event_id,
                 )

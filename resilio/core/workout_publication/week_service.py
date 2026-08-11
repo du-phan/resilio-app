@@ -19,20 +19,16 @@ from resilio.core.workout_fulfillment.remote_unpairing import (
 from resilio.core.workout_publication.drift_confirmation import (
     confirm_publication_drift_targets,
 )
+from resilio.core.workout_publication.execution_placement import (
+    confirmed_execution_placement_dates,
+)
 from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
     coordinated_publication_plan_lock,
 )
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.naming import provider_workout_names
-from resilio.core.workout_publication.policy import (
-    PublicationSafetyError,
-    assert_remote_matches,
-    assert_remote_ownership,
-    assert_remote_unchanged,
-    pending_matches,
-)
-from resilio.core.workout_publication.preparation import prepare_publication
+from resilio.core.workout_publication.policy import PublicationSafetyError
 from resilio.core.workout_publication.retained_authority import (
     retained_pending_publication_authorities,
 )
@@ -53,6 +49,9 @@ from resilio.core.workout_publication.week_selection import (
 from resilio.core.workout_publication.week_status import (
     build_run_week_status,
     publication_error_type,
+)
+from resilio.core.workout_publication.week_verification import (
+    verify_workout_publication,
 )
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.schemas.publication import (
@@ -129,79 +128,6 @@ class RunWeekSynchronizationService:
                 raise PublicationSafetyError("Current timestamp must be timezone-aware")
             return timestamp.astimezone(ZoneInfo(schedule_timezones.pop())).date()
 
-    def _verify_one(
-        self,
-        workout: AuthoritativeWorkout,
-        *,
-        restore_local: bool,
-        provider_name: str,
-    ) -> None:
-        manifest = load_manifest(self.repo)
-        previous = manifest.workouts.get(workout.identity.local_workout_id)
-        prepared = prepare_publication(
-            self.client,
-            workout,
-            previous=previous,
-            provider_name=provider_name,
-        )
-        pending = manifest.pending.get(workout.identity.local_workout_id)
-        matches = self.workout_service._identity_matches(
-            prepared,
-            previous,
-            pending,
-        )
-        pending_matches_prepared = pending is not None and pending_matches(
-            pending,
-            uid=prepared.event.uid,
-            external_id=prepared.external_id,
-            fingerprint=prepared.publication_fingerprint_sha256,
-        )
-        if pending is not None and not pending_matches_prepared and matches:
-            raise PublicationSafetyError(
-                "Pending publication intent changed after a remote event claimed its identity"
-            )
-        if previous is None and matches and pending is None:
-            raise PublicationSafetyError(
-                "Remote owned-looking event exists without a local manifest"
-            )
-        if previous is None and matches:
-            if not restore_local:
-                assert_remote_matches(
-                    matches[0],
-                    prepared.event,
-                    prepared.expected_step_semantics,
-                )
-        if previous is not None:
-            remote = self.client.get_event(previous.event_id, athlete_id=prepared.athlete_id)
-            assert_remote_ownership(
-                remote,
-                uid=previous.uid,
-                external_id=previous.external_id,
-            )
-            if restore_local:
-                return
-            if pending_matches_prepared:
-                try:
-                    assert_remote_matches(
-                        remote,
-                        prepared.event,
-                        prepared.expected_step_semantics,
-                    )
-                except PublicationSafetyError:
-                    assert_remote_unchanged(remote, previous)
-            else:
-                assert_remote_unchanged(remote, previous)
-            if (
-                pending is None
-                and previous.publication_fingerprint_sha256
-                == prepared.publication_fingerprint_sha256
-            ):
-                assert_remote_matches(
-                    remote,
-                    prepared.event,
-                    prepared.expected_step_semantics,
-                )
-
     def _verify_owned_future_deletion(
         self,
         local_workout_id: str,
@@ -226,6 +152,10 @@ class RunWeekSynchronizationService:
         restore_local: bool = False,
         confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
+        provider_occurrence_dates = confirmed_execution_placement_dates(
+            self.repo,
+            workouts,
+        )
         deletion_authorities, deletion_provider_names = (
             retained_pending_publication_authorities(self.repo, workouts)
         )
@@ -237,7 +167,10 @@ class RunWeekSynchronizationService:
             as_of_date=as_of_date,
             workouts=workouts,
             restore_local=restore_local,
-            verify_workout=lambda workout, provider_name: self._verify_one(
+            verify_workout=lambda workout, provider_name: verify_workout_publication(
+                self.repo,
+                self.client,
+                self.workout_service,
                 workout,
                 restore_local=(
                     restore_local
@@ -245,6 +178,15 @@ class RunWeekSynchronizationService:
                     and workout.identity.local_workout_id in confirmed_remote_targets
                 ),
                 provider_name=provider_name,
+                provider_occurrence_date=provider_occurrence_dates.get(
+                    workout.identity.local_workout_id,
+                    workout.prescription.date,
+                ),
+                expected_remote_target=(
+                    confirmed_remote_targets.get(workout.identity.local_workout_id)
+                    if confirmed_remote_targets is not None
+                    else None
+                ),
             ),
             verify_deletion=lambda local_workout_id, workout, provider_name: (
                 self._verify_owned_future_deletion(
@@ -262,6 +204,13 @@ class RunWeekSynchronizationService:
             deletion_provider_names_by_local_workout_id=(
                 deletion_provider_names
             ),
+            provider_occurrence_dates_by_local_workout_id={
+                workout.identity.local_workout_id: provider_occurrence_dates.get(
+                    workout.identity.local_workout_id,
+                    workout.prescription.date,
+                )
+                for workout in workouts
+            },
         )
 
     def status_week(
@@ -510,6 +459,10 @@ class RunWeekSynchronizationService:
         restore_local: bool,
         confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
+        provider_occurrence_dates = confirmed_execution_placement_dates(
+            self.repo,
+            workouts,
+        )
         selected, skipped, _, _ = select_run_week_items(
             self.repo,
             workouts=workouts,
@@ -522,6 +475,10 @@ class RunWeekSynchronizationService:
         items = list(skipped)
         partial = False
         for workout in selected:
+            desired_provider_occurrence_date = provider_occurrence_dates.get(
+                workout.identity.local_workout_id,
+                workout.prescription.date,
+            )
             expected_remote_target = (
                 confirmed_remote_targets.get(workout.identity.local_workout_id)
                 if confirmed_remote_targets is not None
@@ -532,6 +489,7 @@ class RunWeekSynchronizationService:
                     workout,
                     restore_local=restore_local and expected_remote_target is not None,
                     provider_name=provider_names[workout.identity.local_workout_id],
+                    provider_occurrence_date=desired_provider_occurrence_date,
                     expected_remote_target=expected_remote_target,
                 )
             except Exception as exc:
@@ -540,6 +498,7 @@ class RunWeekSynchronizationService:
                     WeekSynchronizationItem(
                         local_workout_id=workout.identity.local_workout_id,
                         occurrence_date=workout.prescription.date,
+                        provider_occurrence_date=desired_provider_occurrence_date,
                         status="error",
                         error_type=publication_error_type(exc),
                         message=str(exc),
@@ -550,6 +509,7 @@ class RunWeekSynchronizationService:
                     WeekSynchronizationItem(
                         local_workout_id=result.local_workout_id,
                         occurrence_date=workout.prescription.date,
+                        provider_occurrence_date=result.provider_occurrence_date,
                         status=result.action,
                         event_id=result.event_id,
                         garmin_forwarding_status=result.garmin_forwarding_status,

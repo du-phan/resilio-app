@@ -119,8 +119,20 @@ authority. Commands return JSON envelopes.
   recreation, and stage an exact native unpair when Resilio owns that pair.
 - `resilio workout reconcile-pairing-operations` — drain exact durable native
   unpair obligations independently of active-plan or week lifecycle state.
+- `resilio workout reconcile-publication-deletions` — recheck permanent
+  deletion tombstones and delete any exact owned event that materialized after
+  an ambiguous publication write; tombstones retain ownership across plan closure.
+- `resilio workout resolve-publication-deletion-drift
+  --drift-target-token <SHA> --confirmation-reference <TEXT>` — delete only
+  the exact changed late-event bytes the athlete confirmed, independently of
+  active plan/week lifecycle, while retaining the permanent tombstone.
 - `resilio workout fulfillment-status --week-number <N>` — inspect fulfilled
   and outstanding approved workouts without rewriting the week.
+- Confirmed off-schedule fulfillment retains the approved date locally while
+  week reconciliation places the exactly owned Intervals occurrence on the
+  execution date and pairs it to the activity; it never deletes the event or
+  rewrites the approved prescription. Synchronization items report these facts
+  separately as `occurrence_date` and `provider_occurrence_date`.
 - `resilio workout resolve-drift --week-number <N>
   --drift-target-token <SHA> --confirmation-reference <TEXT>` — replace only
   the exact owned remote bytes represented by the status token after explicit

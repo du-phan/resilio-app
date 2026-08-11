@@ -29,6 +29,9 @@ from resilio.core.workout_fulfillment.evidence import assert_fulfillment_is_usab
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
 from resilio.core.workout_publication.manifest import load_manifest
+from resilio.core.workout_publication.publication_deletions import (
+    monitored_pending_workout_ids,
+)
 from resilio.schemas.activity import ActivityStatus, CanonicalActivity, is_running_sport
 from resilio.schemas.approvals import ClosedPlanArchive, PlanningState
 from resilio.schemas.plan_history import (
@@ -321,6 +324,7 @@ def close_assessment_from_review(
         if review.result.performance_date > closed_local_date:
             raise PlanOperationError("Assessment closure cannot predate its benchmark result")
         publication_manifest = load_manifest(repo)
+        monitored_pending_ids = monitored_pending_workout_ids(repo)
         future_owned_ids = sorted(
             local_workout_id
             for local_workout_id, publication in publication_manifest.workouts.items()
@@ -328,17 +332,18 @@ def close_assessment_from_review(
             and publication.workout_identity.plan_revision_id == plan.plan_revision_id
             and publication.occurrence_date > review.result.performance_date
         )
-        future_pending_ids = sorted(
+        pending_ids = sorted(
             local_workout_id
             for local_workout_id, publication in publication_manifest.pending.items()
             if publication.workout_identity.plan_id == plan.id
             and publication.workout_identity.plan_revision_id == plan.plan_revision_id
-            and publication.occurrence_date > review.result.performance_date
+            and local_workout_id not in monitored_pending_ids
         )
-        if future_owned_ids or future_pending_ids:
+        if future_owned_ids or pending_ids:
             raise PlanOperationError(
-                "Delete future owned assessment events before closure: "
-                f"{future_owned_ids + future_pending_ids}"
+                "Reconcile unfinished assessment publication intents and delete "
+                "future owned events before closure: "
+                f"{pending_ids + future_owned_ids}"
             )
         closure = AssessmentClosure(
             effective_end_date=review.result.performance_date,

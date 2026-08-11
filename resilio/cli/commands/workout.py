@@ -10,8 +10,10 @@ from resilio.api.publication import (
     get_run_workout_synchronization_capabilities,
     get_run_workout_synchronization_preferences,
     get_week_run_workout_sync_status,
+    reconcile_remote_publication_deletions,
     reconcile_remote_workout_pairing_operations,
     reconcile_week_run_workouts,
+    resolve_remote_publication_deletion_drift,
     resolve_week_run_workout_pairing_drift,
     restore_local_week_run_workouts,
 )
@@ -119,6 +121,31 @@ def reconcile_pairing_operations_command() -> None:
     _emit(
         reconcile_remote_workout_pairing_operations(),
         "Durable native pairing operations reconciled.",
+    )
+
+
+@app.command(name="reconcile-publication-deletions")
+def reconcile_publication_deletions_command() -> None:
+    _emit(
+        reconcile_remote_publication_deletions(),
+        "Durable publication deletion tombstones reconciled.",
+    )
+
+
+@app.command(name="resolve-publication-deletion-drift")
+def resolve_publication_deletion_drift_command(
+    confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
+    drift_target_tokens: list[str] | None = typer.Option(
+        None,
+        "--drift-target-token",
+    ),
+) -> None:
+    _emit(
+        resolve_remote_publication_deletion_drift(
+            confirmed_drift_tokens=drift_target_tokens or [],
+            athlete_confirmation_reference=confirmation_reference,
+        ),
+        "Confirmed publication deletion drift reconciled.",
     )
 
 

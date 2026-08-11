@@ -35,6 +35,7 @@ from resilio.core.planning.service import (
     load_current_plan,
     load_planning_aggregate,
     load_publishable_workout,
+    validate_week_application,
 )
 from resilio.core.planning.weekly_context import create_week_planning_context
 from resilio.core.profile.repository import ProfileRepository
@@ -43,6 +44,11 @@ from resilio.core.state import save_planning_state
 from resilio.core.sync_state import write_sync_state
 from resilio.core.workout_fulfillment.repository import save_fulfillment_manifest
 from resilio.core.workout_fulfillment.service import WorkoutFulfillmentService
+from resilio.core.workout_publication.manifest import load_manifest, save_manifest
+from resilio.core.workout_publication.publication_deletions import (
+    activate_publication_deletion_monitoring,
+    stage_pending_publication_deletion,
+)
 from resilio.core.workout_publication.week_service import RunWeekSynchronizationService
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
@@ -59,6 +65,7 @@ from resilio.schemas.profile import (
     PBEntry,
     TrainingConstraints,
 )
+from resilio.schemas.publication import PendingWorkoutPublication
 from resilio.schemas.sync import ActivityCoverageWindow, ActivitySyncState
 from resilio.schemas.workout_fulfillment import (
     ProviderPairedFulfillmentEvidence,
@@ -469,6 +476,63 @@ def test_exact_applied_week_is_the_end_to_end_publication_authority(
         "created",
     ]
     assert len(client.events) == 3
+
+
+def test_plan_closure_rejects_every_unfinished_publication_intent(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _apply_test_week(repo, tmp_path)
+    client = FakeClient()
+    RunWeekSynchronizationService(repo, client).reconcile_week(
+        1,
+        as_of_date=date(2026, 7, 27),
+    )
+    manifest = load_manifest(repo)
+    published = manifest.workouts["w_long_1"]
+    manifest.pending["w_long_1"] = PendingWorkoutPublication(
+        workout_identity=published.workout_identity,
+        applied_week_approval_id=published.applied_week_approval_id,
+        applied_running_workouts_sha256=published.applied_running_workouts_sha256,
+        workout_prescription_sha256=published.workout_prescription_sha256,
+        schedule_timezone=published.schedule_timezone,
+        uid=published.uid,
+        external_id=published.external_id,
+        publication_fingerprint_sha256=published.publication_fingerprint_sha256,
+        rendered_workout_sha256=published.rendered_workout_sha256,
+        sport_settings_version_sha256=published.sport_settings_version_sha256,
+        sport="run",
+        occurrence_date=published.occurrence_date,
+        approved_start_time_local=published.approved_start_time_local,
+        provider_start_date_local=published.provider_start_date_local,
+        prepared_at_utc=datetime(2026, 8, 2, 20, tzinfo=timezone.utc),
+    )
+    save_manifest(repo, manifest)
+
+    with pytest.raises(PlanOperationError, match="unfinished publication intents"):
+        _close_test_plan(repo)
+
+    manifest = load_manifest(repo)
+    deletion_operation = stage_pending_publication_deletion(
+        repo,
+        manifest.pending["w_long_1"],
+        previous=manifest.workouts["w_long_1"],
+    )
+    with pytest.raises(PlanOperationError, match="unfinished publication intents"):
+        _close_test_plan(repo)
+
+    reused_path = tmp_path / "reused-tombstoned-workout.json"
+    _write_application(
+        reused_path,
+        repo=repo,
+        purpose="Attempt to reuse a permanently reserved ownership ID.",
+    )
+    with pytest.raises(PlanOperationError, match="deletion tombstones"):
+        validate_week_application(repo, reused_path)
+
+    activate_publication_deletion_monitoring(repo, deletion_operation)
+
+    assert _close_test_plan(repo).active_plan is None
 
 
 def _close_test_plan(

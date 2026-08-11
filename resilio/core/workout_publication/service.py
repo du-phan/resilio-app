@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from resilio.core.locking import OperationLock
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
-from resilio.core.planning.service import (
-    PlanOperationError,
-    load_publishable_workout,
-)
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.identity_discovery import (
+    discover_owned_identity_matches,
+)
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError as PublicationSafetyError,
 )
 from resilio.core.workout_publication.policy import (
+    RemoteWorkoutDriftError,
     assert_remote_external_ownership,
     assert_remote_matches,
     assert_remote_ownership,
@@ -35,13 +35,21 @@ from resilio.core.workout_publication.policy import (
 )
 from resilio.core.workout_publication.preparation import (
     PreparedPublication,
+    prepare_current_authority_pending,
     prepare_publication,
+)
+from resilio.core.workout_publication.publication_deletions import (
+    publication_deletion_workout_ids,
 )
 from resilio.core.workout_publication.retirement_service import (
     WorkoutRetirementService,
 )
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
+from resilio.integrations.intervals_icu.errors import (
+    IntervalsIcuError,
+    IntervalsRequestNotSubmittedError,
+)
 from resilio.schemas.publication import (
     PendingWorkoutPublication,
     PublicationManifest,
@@ -83,33 +91,20 @@ class WorkoutPublicationService:
         self.repo = repo
         self.client = client
 
-    def _load_approved_workout(
-        self,
-        workout_id: str,
-    ) -> AuthoritativeWorkout:
-        return load_publishable_workout(self.repo, workout_id)
-
-    def publish(
-        self,
-        workout_id: str,
-    ) -> PublicationResult:
-        lock_path = self.repo.resolve_path("data/state/.workout-publication.lock")
-        with OperationLock(lock_path, "workout_publication"):
-            try:
-                workout = self._load_approved_workout(workout_id)
-            except PlanOperationError as exc:
-                raise PublicationSafetyError(str(exc)) from exc
-            return self._publish(workout)
-
     def _publish(
         self,
         authoritative_workout: AuthoritativeWorkout,
         *,
+        provider_occurrence_date: date,
         restore_local: bool = False,
         provider_name: str | None = None,
         expected_remote_target: tuple[int, str] | None = None,
     ) -> PublicationResult:
         workout = authoritative_workout.prescription
+        if workout.id in publication_deletion_workout_ids(self.repo):
+            raise PublicationSafetyError(
+                "Workout ID is permanently reserved by a publication deletion tombstone"
+            )
         manifest = load_manifest(self.repo)
         previous = manifest.workouts.get(workout.id)
         prepared = prepare_publication(
@@ -117,9 +112,23 @@ class WorkoutPublicationService:
             authoritative_workout,
             previous=previous,
             provider_name=provider_name,
+            provider_occurrence_date=provider_occurrence_date,
         )
         pending = manifest.pending.get(workout.id)
         identity_matches = self._identity_matches(prepared, previous, pending)
+        superseded_pending_result = self._recover_superseded_pending_intent(
+            authoritative_workout,
+            manifest=manifest,
+            prepared=prepared,
+            previous=previous,
+            pending=pending,
+            identity_matches=identity_matches,
+            restore_local=restore_local,
+            provider_name=provider_name,
+            expected_remote_target=expected_remote_target,
+        )
+        if superseded_pending_result is not None:
+            return superseded_pending_result
         pending = self._normalize_pending(
             prepared,
             manifest,
@@ -150,44 +159,85 @@ class WorkoutPublicationService:
             return recovered_or_noop
         return self._upsert(prepared, manifest, previous)
 
+    def _recover_superseded_pending_intent(
+        self,
+        authoritative_workout: AuthoritativeWorkout,
+        *,
+        manifest: PublicationManifest,
+        prepared: PreparedPublication,
+        previous: PublishedWorkout | None,
+        pending: PendingWorkoutPublication | None,
+        identity_matches: list[EventDTO],
+        restore_local: bool,
+        provider_name: str | None,
+        expected_remote_target: tuple[int, str] | None,
+    ) -> PublicationResult | None:
+        if pending is None or not identity_matches or pending_matches(
+            pending,
+            uid=prepared.event.uid,
+            external_id=prepared.external_id,
+            fingerprint=prepared.publication_fingerprint_sha256,
+        ):
+            return None
+        if expected_remote_target is not None:
+            remote = identity_matches[0]
+            self._assert_confirmed_remote_target(
+                remote,
+                expected_remote_target=expected_remote_target,
+            )
+            return self._upsert(prepared, manifest, previous)
+        if restore_local:
+            raise PublicationSafetyError(
+                "Restoring superseded pending drift requires one exact confirmed target"
+            )
+        if provider_name is None:
+            raise PublicationSafetyError(
+                "Superseded pending publication requires its deterministic provider name"
+            )
+        pending_prepared = prepare_current_authority_pending(
+            self.client,
+            authoritative_workout,
+            previous=previous,
+            pending=pending,
+            provider_name=provider_name,
+        )
+        remote = identity_matches[0]
+        if previous is not None:
+            try:
+                assert_remote_unchanged(remote, previous)
+            except RemoteWorkoutDriftError:
+                pass
+            else:
+                del manifest.pending[prepared.workout.id]
+                save_manifest(self.repo, manifest)
+                return self._publish(
+                    authoritative_workout,
+                    provider_name=provider_name,
+                    provider_occurrence_date=prepared.provider_occurrence_date,
+                )
+        self._publish(
+            authoritative_workout,
+            provider_name=provider_name,
+            provider_occurrence_date=pending_prepared.provider_occurrence_date,
+        )
+        return self._publish(
+            authoritative_workout,
+            provider_name=provider_name,
+            provider_occurrence_date=prepared.provider_occurrence_date,
+        )
+
     def _identity_matches(
         self,
         prepared: PreparedPublication,
         previous: PublishedWorkout | None,
         pending: PendingWorkoutPublication | None,
     ) -> list[EventDTO]:
-        event_range_start = prepared.workout.date
-        event_range_end = prepared.workout.date
-        if pending is not None:
-            event_range_start = min(event_range_start, pending.occurrence_date)
-            event_range_end = max(event_range_end, pending.occurrence_date)
-        range_events = self.client.list_events(
-            event_range_start,
-            event_range_end,
-            athlete_id=prepared.athlete_id,
+        return discover_owned_identity_matches(
+            self.client,
+            prepared,
+            previous=previous,
+            pending=pending,
         )
-        identity_matches = [
-            item
-            for item in range_events
-            if item.uid == prepared.event.uid or item.external_id == prepared.external_id
-        ]
-        if len(identity_matches) > 1:
-            raise PublicationSafetyError(
-                "Multiple remote events claim the workout ownership identity"
-            )
-        for remote in identity_matches:
-            if previous is not None:
-                assert_remote_ownership(
-                    remote,
-                    uid=previous.uid,
-                    external_id=prepared.external_id,
-                )
-            else:
-                assert_remote_external_ownership(
-                    remote,
-                    external_id=prepared.external_id,
-                )
-        return identity_matches
 
     @staticmethod
     def _assert_confirmed_remote_target(
@@ -302,6 +352,7 @@ class WorkoutPublicationService:
                     uid=remote_uid,
                     external_id=prepared.external_id,
                     fingerprint_sha256=recovered_fingerprint,
+                    provider_occurrence_date=prepared.provider_occurrence_date,
                     garmin_forwarding_status=garmin_forwarding_status(
                         eligible=prepared.garmin_forwarding_eligible,
                         remote=recovered,
@@ -366,6 +417,7 @@ class WorkoutPublicationService:
                         uid=prepared.event.uid,
                         external_id=prepared.external_id,
                         fingerprint_sha256=prepared.publication_fingerprint_sha256,
+                        provider_occurrence_date=prepared.provider_occurrence_date,
                         garmin_forwarding_status=garmin_forwarding_status(
                             eligible=prepared.garmin_forwarding_eligible,
                             remote=remote,
@@ -402,6 +454,7 @@ class WorkoutPublicationService:
                     uid=prepared.event.uid,
                     external_id=prepared.external_id,
                     fingerprint_sha256=prepared.publication_fingerprint_sha256,
+                    provider_occurrence_date=prepared.provider_occurrence_date,
                     garmin_forwarding_status=garmin_forwarding_status(
                         eligible=prepared.garmin_forwarding_eligible,
                         remote=remote,
@@ -435,10 +488,24 @@ class WorkoutPublicationService:
             prepared_at_utc=datetime.now(timezone.utc),
         )
         save_manifest(self.repo, manifest)
-        response = self.client.upsert_event(
-            prepared.event,
-            athlete_id=prepared.athlete_id,
-        )
+        try:
+            response = self.client.upsert_event(
+                prepared.event,
+                athlete_id=prepared.athlete_id,
+            )
+        except IntervalsRequestNotSubmittedError:
+            del manifest.pending[workout.id]
+            save_manifest(self.repo, manifest)
+            raise
+        except IntervalsIcuError as exc:
+            if (
+                exc.status_code is not None
+                and 400 <= exc.status_code < 500
+                and exc.status_code != 408
+            ):
+                del manifest.pending[workout.id]
+                save_manifest(self.repo, manifest)
+            raise
         read_back = self.client.get_event(
             response.id,
             athlete_id=prepared.athlete_id,
@@ -485,6 +552,7 @@ class WorkoutPublicationService:
             uid=remote_uid,
             external_id=prepared.external_id,
             fingerprint_sha256=persisted_fingerprint,
+            provider_occurrence_date=prepared.provider_occurrence_date,
             garmin_forwarding_status=garmin_forwarding_status(
                 eligible=prepared.garmin_forwarding_eligible,
                 remote=read_back,

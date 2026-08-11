@@ -31,7 +31,6 @@ from resilio.core.planning.policy import (
     WeekPolicyError,
     validate_populated_week,
 )
-from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.state_repository import (
     persist_planning_state,
     required_planning_state_unlocked,
@@ -39,6 +38,10 @@ from resilio.core.planning.state_repository import (
 from resilio.core.planning.weekly_evidence import validate_week_planning_evidence
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
+from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
+from resilio.core.workout_publication.publication_deletions import (
+    publication_deletion_workout_ids,
+)
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
     PlanningState,
@@ -128,6 +131,14 @@ def _validate_workout_ids_are_globally_unique(
             raise PlanOperationError(
                 "Workout ID is already owned by another plan or week: " f"{workout.id}"
             )
+    tombstoned_ids = publication_deletion_workout_ids(repo).intersection(
+        workout.id for workout in populated_week.running_workouts
+    )
+    if tombstoned_ids:
+        raise PlanOperationError(
+            "Workout IDs are permanently reserved by publication deletion tombstones: "
+            f"{sorted(tombstoned_ids)}"
+        )
 
 
 def validate_week_application(
@@ -136,7 +147,7 @@ def validate_week_application(
 ) -> WeekApplication:
     """Validate an exact file against the fresh current macro and profile."""
     application = load_week_application(application_file)
-    with coordinated_plan_lock(repo, "validate_week_application"):
+    with coordinated_publication_plan_lock(repo, "validate_week_application"):
         state = required_planning_state_unlocked(repo)
         plan = require_fresh_plan(repo, state)
         if state.active_plan is None or state.active_plan.plan_approval is None:
@@ -170,7 +181,7 @@ def approve_week_application(
     """Bind an exact weekly proposal to its plan, revision, and prior content."""
     resolved_file = approved_file.expanduser().resolve()
     application = load_week_application(resolved_file)
-    with coordinated_plan_lock(repo, "approve_week_application"):
+    with coordinated_publication_plan_lock(repo, "approve_week_application"):
         state = required_planning_state_unlocked(repo)
         plan = require_fresh_plan(repo, state)
         assert state.active_plan is not None
@@ -279,7 +290,7 @@ def apply_approved_week(
     """Atomically consume an exact-file approval into its bound plan revision."""
     resolved_file = approved_file.expanduser().resolve()
     application = load_week_application(resolved_file)
-    with coordinated_plan_lock(repo, "apply_approved_week"):
+    with coordinated_publication_plan_lock(repo, "apply_approved_week"):
         state = required_planning_state_unlocked(repo)
         plan = require_fresh_plan(repo, state)
         if state.active_plan is None:

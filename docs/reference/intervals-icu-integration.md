@@ -227,12 +227,25 @@ The publication manifest plus exact remote UID/external ID and the last
 verified owned-field fingerprint is the ownership proof. Update, reschedule,
 and delete refuse ambiguous, unowned, or drifted events. One canonical lock
 order holds publication authority before plan authority for reconciliation and
-plan closure. A replacement week updates retained identities and deletes only
-removed future unfulfilled events after exact ownership proof. Fulfilled events
-remain on their approved dates. Early, same-day, and late activities retain
-their execution dates and are linked to the owned event through Intervals.icu's
-native `paired_event_id`. Resilio persists the exact pairing intent before
-mutation, writes only that activity field, and requires exact readback with all
+plan closure. After an ambiguous pending create, recovery first searches the
+authoritative week and then the provider-wide ISO calendar range for the exact
+UID/external ID. Ordinary publication can retry its idempotent UID upsert after
+provider-wide absence. Deletion never treats that point-in-time absence as
+completion: it persists a permanent exact tombstone, retains the pending
+ownership intent across plan closure, and a plan-independent reaper deletes
+any late materialization only when its rendered fingerprint is unchanged.
+Every publication workflow runs this plan-independent reaper before its
+week-specific reconciliation. Changed late bytes require their own exact
+athlete-confirmed deletion token; the confirmation is persisted before the
+remote mutation and never removes the tombstone.
+A replacement week updates retained identities and deletes only
+removed future unfulfilled events after exact ownership proof. Fulfilled
+workouts retain their approved dates in local authority while the exact owned
+Intervals occurrence is placed on the factual execution date. Early, same-day,
+and late activities retain their execution dates and are linked to that owned
+event through Intervals.icu's native `paired_event_id`. Resilio persists the
+approved and provider dates separately in synchronization output. It persists
+the exact pairing intent before mutation, writes only that activity field, and requires exact readback with all
 other activity fields unchanged. A different existing pair, immutable activity
 source, provider failure, or removed Resilio-authored pair blocks without
 deleting either record. Explicit publication and pairing drift resolutions are

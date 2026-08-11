@@ -17,6 +17,7 @@ from resilio.core.workout_publication.capabilities import (
 )
 from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
+    coordinated_publication_plan_lock,
 )
 from resilio.core.workout_publication.policy import (
     ProviderSemanticsMismatchError,
@@ -25,6 +26,12 @@ from resilio.core.workout_publication.policy import (
 from resilio.core.workout_publication.preferences import (
     load_run_synchronization_preferences,
     save_run_synchronization_preferences,
+)
+from resilio.core.workout_publication.publication_deletion_drift import (
+    resolve_publication_deletion_drifts,
+)
+from resilio.core.workout_publication.publication_deletions import (
+    reconcile_publication_deletion_operations,
 )
 from resilio.core.workout_publication.week_service import (
     RunWeekSynchronizationService,
@@ -36,6 +43,7 @@ from resilio.schemas.publication import (
     RunWeekSynchronizationReport,
     RunWorkoutSynchronizationPreferences,
 )
+from resilio.schemas.publication_operations import PublicationDeletionOperationsReport
 from resilio.schemas.workout_pairing import RemotePairingOperationsReport
 
 
@@ -289,6 +297,69 @@ def reconcile_remote_workout_pairing_operations(
             return reconcile_actionable_unpair_operations(repo, integration)
     except (IntervalsIcuError, OperationLockError, OSError, ValueError) as exc:
         return PublicationError("remote_pairing_reconciliation", str(exc))
+    finally:
+        if owned_client:
+            integration.close()
+
+
+def reconcile_remote_publication_deletions(
+    *,
+    environment: Optional[Mapping[str, str]] = None,
+    client: Optional[IntervalsIcuClient] = None,
+) -> PublicationDeletionOperationsReport | PublicationError:
+    """Reap late events protected by permanent publication tombstones."""
+    resolved_client = _with_intervals_client(environment=environment, client=client)
+    if isinstance(resolved_client, PublicationError):
+        return resolved_client
+    integration, owned_client = resolved_client
+    repo = RepositoryIO()
+    try:
+        with coordinated_publication_plan_lock(
+            repo,
+            "reconcile_remote_publication_deletions",
+        ):
+            return reconcile_publication_deletion_operations(repo, integration)
+    except PublicationSafetyError as exc:
+        return PublicationError("publication_safety", str(exc))
+    except IntervalsIcuError as exc:
+        return PublicationError(exc.error_type, str(exc))
+    except (OperationLockError, OSError, ValueError) as exc:
+        return PublicationError("publication_safety", str(exc))
+    finally:
+        if owned_client:
+            integration.close()
+
+
+def resolve_remote_publication_deletion_drift(
+    *,
+    confirmed_drift_tokens: list[str],
+    athlete_confirmation_reference: str,
+    environment: Optional[Mapping[str, str]] = None,
+    client: Optional[IntervalsIcuClient] = None,
+) -> PublicationDeletionOperationsReport | PublicationError:
+    """Delete only exact tombstone drift bytes confirmed by the athlete."""
+    resolved_client = _with_intervals_client(environment=environment, client=client)
+    if isinstance(resolved_client, PublicationError):
+        return resolved_client
+    integration, owned_client = resolved_client
+    repo = RepositoryIO()
+    try:
+        with coordinated_publication_plan_lock(
+            repo,
+            "resolve_remote_publication_deletion_drift",
+        ):
+            return resolve_publication_deletion_drifts(
+                repo,
+                integration,
+                confirmed_drift_tokens=confirmed_drift_tokens,
+                athlete_confirmation_reference=athlete_confirmation_reference,
+            )
+    except PublicationSafetyError as exc:
+        return PublicationError("publication_safety", str(exc))
+    except IntervalsIcuError as exc:
+        return PublicationError(exc.error_type, str(exc))
+    except (OperationLockError, OSError, ValueError) as exc:
+        return PublicationError("publication_safety", str(exc))
     finally:
         if owned_client:
             integration.close()

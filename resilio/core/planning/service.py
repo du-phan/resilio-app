@@ -97,6 +97,9 @@ from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
 )
 from resilio.core.workout_publication.manifest import load_manifest
+from resilio.core.workout_publication.publication_deletions import (
+    monitored_pending_workout_ids,
+)
 from resilio.schemas.approvals import (
     ActivePlanState,
     ClosedPlanArchive,
@@ -289,13 +292,14 @@ def _publication_closure_blockers(
 ) -> list[str]:
     publication_manifest = load_manifest(repo)
     fulfillment_manifest = load_fulfillment_manifest(repo)
+    monitored_pending_ids = monitored_pending_workout_ids(repo)
     plan = active_plan.plan
     blockers = [
         local_workout_id
         for local_workout_id, pending in publication_manifest.pending.items()
         if pending.workout_identity.plan_id == plan.id
         and pending.workout_identity.plan_revision_id == plan.plan_revision_id
-        and pending.occurrence_date > effective_end_date
+        and local_workout_id not in monitored_pending_ids
     ]
     for local_workout_id, publication in publication_manifest.workouts.items():
         if (
@@ -409,7 +413,8 @@ def _validate_plan_closure(
     )
     if publication_blockers:
         raise PlanOperationError(
-            "Reconcile future owned workouts and native pairing operations before "
+            "Reconcile unfinished publication intents, future owned workouts, and "
+            "native pairing operations before "
             f"closing the plan: {publication_blockers}"
         )
 

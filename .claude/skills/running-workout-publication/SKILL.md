@@ -59,14 +59,19 @@ pair is conflicted, unsupported, or drifted.
 ## Reconcile and verify
 
 ```bash
+poetry run resilio workout reconcile-publication-deletions
 poetry run resilio workout reconcile --week-number <WEEK_NUMBER>
 ```
 
-Reconciliation updates retained owned identities in place, creates missing
+Always run the global deletion reaper before the week-specific reconciliation;
+this is the recurring retry for late provider materializations after a prior
+plan closed. Reconciliation updates retained owned identities in place, creates missing
 approved runs, and deletes only removed future unfulfilled runs. Fulfilled
-workouts remain published on their approved dates; early, same-day, and late
-activities are linked through Intervals.icu's native `paired_event_id`. The
-pairing workflow changes only that activity field after durable intent and
+workouts retain their approved dates in local authority. For an exact
+athlete-confirmed off-schedule fulfillment, reconciliation places the owned
+Intervals occurrence on the execution date before linking the activity through
+the native `paired_event_id`; it does not rewrite the approved prescription.
+The pairing workflow changes only that activity field after durable intent and
 exact readback. Non-running events and unowned workouts are never mutated.
 Intervals controls its rolling Garmin export window and may remove older
 downstream workouts to limit clutter. Resilio cannot inspect or delete the
@@ -88,6 +93,24 @@ Remote failures do not roll back the already-applied local week. If the report
 is partial, identify verified and failed items; the same reconcile command is
 the idempotent retry. Never delete or overwrite remote drift during ordinary
 reconciliation.
+
+An ambiguously submitted publication write later removed from desired state keeps
+a permanent deletion tombstone; one absence read is not completion proof. Use
+`poetry run resilio workout reconcile-publication-deletions` to recheck those
+exact UID/external-ID obligations independently of plan closure. It deletes
+only a late event whose rendered ownership fingerprint still matches and
+retains the tombstone afterward so an even later materialization cannot become
+orphaned. If it reports changed late-event drift, return the exact token to the
+coach. Only after explicit athlete confirmation may the executor use:
+
+```bash
+poetry run resilio workout resolve-publication-deletion-drift \
+  --drift-target-token <DRIFT_TARGET_TOKEN_SHA256> \
+  --confirmation-reference "<ATHLETE_CONFIRMATION>"
+```
+
+This plan-independent command records every exact confirmed fingerprint before
+deletion and retains the tombstone afterward. Never clear that ownership.
 
 If status reports owned remote drift, return the blocker to the coach. Only
 after the coach supplies explicit athlete confirmation may the executor use:

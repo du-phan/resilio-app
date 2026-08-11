@@ -393,6 +393,7 @@ PublicationAction = Literal[
     "recovered",
     "deleted",
     "recovered_deleted",
+    "deletion_monitoring",
 ]
 
 
@@ -403,6 +404,7 @@ class PublicationResult(BaseModel):
     uid: str
     external_id: str
     fingerprint_sha256: Optional[str] = None
+    provider_occurrence_date: Optional[date] = None
     garmin_forwarding_status: GarminForwardingStatus = "not_configured"
     provider_push_errors: list[PublicationPushError] = Field(default_factory=list)
 
@@ -478,6 +480,7 @@ class RunSynchronizationCapabilities(BaseModel):
 class WeekSynchronizationItem(BaseModel):
     local_workout_id: str
     occurrence_date: date
+    provider_occurrence_date: Optional[date] = None
     status: Literal[
         "ready",
         "created",
@@ -488,6 +491,7 @@ class WeekSynchronizationItem(BaseModel):
         "error",
         "deleted",
         "recovered_deleted",
+        "deletion_monitoring",
     ]
     event_id: Optional[int] = None
     error_type: Optional[str] = None
