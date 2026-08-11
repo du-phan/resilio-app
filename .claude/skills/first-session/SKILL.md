@@ -42,7 +42,7 @@ names, or local paths. Use one Poetry environment throughout.
    ```
 
    Report the returned window, counts, partial state, quarantines, and
-   completion matches exactly. Do not claim that quarantined or ambiguous rows
+   workout fulfillments exactly. Do not claim that quarantined or ambiguous rows
    were imported.
 
 3. Establish dates and inspect factual state:

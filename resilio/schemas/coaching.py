@@ -229,6 +229,22 @@ class PlannedWorkoutContext(BaseModel):
         allow_inf_nan=False,
     )
     is_due: bool
+    is_outstanding: bool
+    fulfillment_status: Literal[
+        "unfulfilled",
+        "fulfilled_early",
+        "fulfilled_on_schedule",
+        "fulfilled_late",
+    ]
+    fulfillment_basis: Optional[
+        Literal[
+            "provider_paired",
+            "athlete_confirmed",
+            "provider_paired_and_athlete_confirmed",
+        ]
+    ] = None
+    execution_local_date: Optional[date] = None
+    schedule_offset_days: Optional[int] = None
     matched_local_activity_id: Optional[str] = None
     provider_computed_aerobic_load_points: Optional[float] = Field(
         default=None,
@@ -244,25 +260,83 @@ class PlannedWorkoutContext(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
-    def local_id_matches_qualified_identity(self) -> "PlannedWorkoutContext":
+    def identity_and_fulfillment_are_coherent(self) -> "PlannedWorkoutContext":
         if self.local_workout_id != self.workout_identity.local_workout_id:
             raise ValueError("local workout ID must match the qualified workout identity")
+        fulfillment_fields = (
+            self.fulfillment_basis,
+            self.execution_local_date,
+            self.schedule_offset_days,
+            self.matched_local_activity_id,
+        )
+        if self.fulfillment_status == "unfulfilled":
+            if not self.is_outstanding or any(value is not None for value in fulfillment_fields):
+                raise ValueError(
+                    "unfulfilled workout must be outstanding without fulfillment evidence"
+                )
+            return self
+        if self.is_outstanding or any(value is None for value in fulfillment_fields):
+            raise ValueError(
+                "fulfilled workout must not be outstanding and requires fulfillment evidence"
+            )
+        assert self.schedule_offset_days is not None
+        expected_status = (
+            "fulfilled_early"
+            if self.schedule_offset_days < 0
+            else "fulfilled_late"
+            if self.schedule_offset_days > 0
+            else "fulfilled_on_schedule"
+        )
+        if self.fulfillment_status != expected_status:
+            raise ValueError("fulfillment status must match schedule offset")
         return self
 
 
 class AdherenceContext(BaseModel):
+    schema_version: Literal[2] = 2
     status: Literal["available", "no_plan", "unavailable"]
     reason: Optional[str] = None
     planned_workout_count: int = Field(ge=0)
     due_workout_count: int = Field(ge=0)
-    verified_completed_workout_count: int = Field(ge=0)
-    due_unmatched_workout_count: int = Field(ge=0)
+    fulfilled_workout_count: int = Field(ge=0)
+    due_fulfilled_workout_count: int = Field(ge=0)
+    due_unfulfilled_workout_count: int = Field(ge=0)
+    fulfilled_early_workout_count: int = Field(ge=0)
+    fulfilled_late_workout_count: int = Field(ge=0)
     workouts: list[PlannedWorkoutContext] = Field(default_factory=list)
     due_planned_low_intensity_duration_seconds: int = Field(ge=0)
     due_planned_moderate_intensity_duration_seconds: int = Field(ge=0)
     due_planned_high_intensity_duration_seconds: int = Field(ge=0)
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def aggregate_counts_match_workout_projections(self) -> "AdherenceContext":
+        expected_counts = {
+            "planned_workout_count": len(self.workouts),
+            "due_workout_count": sum(workout.is_due for workout in self.workouts),
+            "fulfilled_workout_count": sum(
+                workout.fulfillment_status != "unfulfilled" for workout in self.workouts
+            ),
+            "due_fulfilled_workout_count": sum(
+                workout.is_due and workout.fulfillment_status != "unfulfilled"
+                for workout in self.workouts
+            ),
+            "due_unfulfilled_workout_count": sum(
+                workout.is_due and workout.fulfillment_status == "unfulfilled"
+                for workout in self.workouts
+            ),
+            "fulfilled_early_workout_count": sum(
+                workout.fulfillment_status == "fulfilled_early" for workout in self.workouts
+            ),
+            "fulfilled_late_workout_count": sum(
+                workout.fulfillment_status == "fulfilled_late" for workout in self.workouts
+            ),
+        }
+        for field_name, expected_value in expected_counts.items():
+            if getattr(self, field_name) != expected_value:
+                raise ValueError(f"{field_name} must match workout projections")
+        return self
 
 
 class CoachingDataQuality(BaseModel):
@@ -300,7 +374,7 @@ class SyncEvidenceCoverage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class WeeklyCoachContext(BaseModel):
+class _WeeklyCoachContextBase(BaseModel):
     week_start: date
     week_end: date
     as_of_date: date
@@ -309,12 +383,18 @@ class WeeklyCoachContext(BaseModel):
     activities: list[ActivityContext]
     run_exposure: RunExposure
     other_sport_exposure_by_sport: list[SportExposure]
-    adherence: AdherenceContext
     intensity: IntensityContext
     data_quality: CoachingDataQuality
     source_evidence_coverage: SyncEvidenceCoverage
 
     model_config = ConfigDict(extra="forbid")
+
+
+class WeeklyCoachContext(_WeeklyCoachContextBase):
+    """Current fulfillment-aware weekly coaching evidence."""
+
+    schema_version: Literal[2] = 2
+    adherence: AdherenceContext
 
 
 class CoachHistoryContext(BaseModel):

@@ -15,7 +15,8 @@ from resilio.core.planning.artifacts import (
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.state_repository import load_planning_aggregate_unlocked
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.completions import load_completion_manifest
+from resilio.core.workout_fulfillment.evidence import assert_fulfillment_is_usable
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.activity import ActivityStatus
 from resilio.schemas.approvals import OwnedBaselineAssessmentVDOTEvidence
@@ -27,6 +28,8 @@ from resilio.schemas.plan_history import (
 )
 from resilio.schemas.planning.plans import BaselineAssessmentPlan
 from resilio.schemas.planning_evidence import BaselineAssessmentReview
+from resilio.schemas.publication import PublicationManifest
+from resilio.schemas.workout_fulfillment import WorkoutFulfillmentManifest
 
 
 def load_verified_closed_assessment_review(
@@ -34,7 +37,7 @@ def load_verified_closed_assessment_review(
     *,
     review_sha256: str,
 ) -> BaselineAssessmentReview:
-    """Load one review and prove archive, completion, and canonical activity facts."""
+    """Load one review and prove archive, fulfillment, and canonical activity facts."""
     reference = EvidenceArtifactReference(
         artifact_type="assessment_review",
         artifact_sha256=review_sha256,
@@ -77,24 +80,41 @@ def load_verified_closed_assessment_review(
         or review.benchmark_intent != plan.benchmark_intent
     ):
         raise PlanOperationError("Closed assessment archive does not match its review")
-    _verify_result_source(repo, review)
+    verify_assessment_result_source(
+        repo,
+        review,
+        publication_manifest=load_manifest(repo),
+        fulfillment_manifest=load_fulfillment_manifest(repo),
+    )
     return review
 
 
-def _verify_result_source(
+def verify_assessment_result_source(
     repo: RepositoryIO,
     review: BaselineAssessmentReview,
+    *,
+    publication_manifest: PublicationManifest,
+    fulfillment_manifest: WorkoutFulfillmentManifest,
 ) -> None:
+    """Prove the exact publication, fulfillment, and performance result source."""
     result = review.result
-    publication = load_manifest(repo).workouts.get(result.workout_identity.local_workout_id)
+    publication = publication_manifest.workouts.get(result.workout_identity.local_workout_id)
     if publication is None or publication.workout_identity != result.workout_identity:
         raise PlanOperationError("Assessment result lacks its ownership-proven publication")
-    completion = load_completion_manifest(repo).matches.get(result.local_activity_id)
-    if completion is None or completion.workout_identity != result.workout_identity:
-        raise PlanOperationError("Assessment result lacks its exact ownership-paired completion")
+    fulfillment = fulfillment_manifest.fulfillments.get(result.local_activity_id)
+    if (
+        fulfillment is None
+        or not fulfillment.provider_pair_supports_event(publication.event_id)
+        or fulfillment.workout_identity != result.workout_identity
+    ):
+        raise PlanOperationError("Assessment result lacks its exact ownership-paired fulfillment")
     activity = ActivityArchive(repo.resolve_path("data/activities")).load(result.local_activity_id)
     if activity is None or activity.status != ActivityStatus.ACTIVE:
         raise PlanOperationError("Assessment result activity is absent or inactive")
+    try:
+        assert_fulfillment_is_usable(fulfillment, activity, fulfillment_manifest)
+    except ValueError as exc:
+        raise PlanOperationError(str(exc)) from exc
     if activity_performance_evidence_sha256(activity) != result.performance_evidence_sha256:
         raise PlanOperationError("Assessment result performance evidence changed")
     if isinstance(result, DedicatedActivityAssessmentResult):

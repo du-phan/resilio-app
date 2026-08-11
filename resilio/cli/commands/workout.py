@@ -12,6 +12,14 @@ from resilio.api.publication import (
     get_week_run_workout_sync_status,
     reconcile_week_run_workouts,
     restore_local_week_run_workouts,
+    retire_fulfilled_week_run_workouts,
+)
+from resilio.api.workout_fulfillment import (
+    confirm_workout_fulfillment,
+    dismiss_workout_fulfillment_candidate,
+    get_workout_fulfillment_candidates,
+    get_workout_fulfillment_week_status,
+    revoke_workout_fulfillment,
 )
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from resilio.cli.output import output_json
@@ -109,19 +117,133 @@ def reconcile_command(
 def resolve_drift_command(
     week_number: int = typer.Option(..., "--week-number", min=1),
     restore_local: bool = typer.Option(False, "--restore-local"),
+    retire_fulfilled: bool = typer.Option(False, "--retire-fulfilled"),
     confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
+    drift_target_tokens: list[str] | None = typer.Option(
+        None,
+        "--drift-target-token",
+    ),
     as_of_date: str | None = typer.Option(None, "--as-of"),
 ) -> None:
-    if not restore_local:
+    if restore_local == retire_fulfilled:
         raise typer.BadParameter(
-            "Only the explicit --restore-local strategy is supported",
-            param_hint="--restore-local",
+            "Select exactly one of --restore-local or --retire-fulfilled",
         )
-    _emit(
+    operation = (
         restore_local_week_run_workouts(
             week_number,
             athlete_confirmation_reference=confirmation_reference,
+            confirmed_drift_target_tokens=drift_target_tokens or [],
             as_of_date=_parse_date(as_of_date),
+        )
+        if restore_local
+        else retire_fulfilled_week_run_workouts(
+            week_number,
+            athlete_confirmation_reference=confirmation_reference,
+            confirmed_drift_target_tokens=drift_target_tokens or [],
+            as_of_date=_parse_date(as_of_date),
+        )
+    )
+    _emit(
+        operation,
+        (
+            "Owned remote drift replaced from the approved local week."
+            if restore_local
+            else "Drifted fulfilled future workout retired."
         ),
-        "Owned remote drift replaced from the approved local week.",
+    )
+
+
+@app.command(name="fulfillment-candidates")
+def fulfillment_candidates_command(
+    local_activity_id: str = typer.Option(..., "--activity-id"),
+) -> None:
+    _emit(
+        get_workout_fulfillment_candidates(local_activity_id=local_activity_id),
+        "Workout fulfillment candidates loaded.",
+    )
+
+
+@app.command(name="confirm-fulfillment")
+def confirm_fulfillment_command(
+    local_activity_id: str = typer.Option(..., "--activity-id"),
+    local_workout_id: str = typer.Option(..., "--workout-id"),
+    candidate_sha256: str = typer.Option(..., "--candidate-sha256"),
+    confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
+    coaching_rationale: str = typer.Option(..., "--rationale"),
+) -> None:
+    _emit(
+        confirm_workout_fulfillment(
+            local_activity_id=local_activity_id,
+            local_workout_id=local_workout_id,
+            candidate_sha256=candidate_sha256,
+            athlete_confirmation_reference=confirmation_reference,
+            coaching_rationale=coaching_rationale,
+        ),
+        "Workout fulfillment recorded.",
+    )
+
+
+@app.command(name="dismiss-fulfillment-candidate")
+def dismiss_fulfillment_candidate_command(
+    local_activity_id: str = typer.Option(..., "--activity-id"),
+    local_workout_id: str = typer.Option(..., "--workout-id"),
+    candidate_sha256: str = typer.Option(..., "--candidate-sha256"),
+    athlete_response_reference: str = typer.Option(..., "--response-reference"),
+) -> None:
+    _emit(
+        dismiss_workout_fulfillment_candidate(
+            local_activity_id=local_activity_id,
+            local_workout_id=local_workout_id,
+            candidate_sha256=candidate_sha256,
+            athlete_response_reference=athlete_response_reference,
+        ),
+        "Workout fulfillment candidate dismissed.",
+    )
+
+
+@app.command(name="revoke-fulfillment")
+def revoke_fulfillment_command(
+    local_activity_id: str = typer.Option(..., "--activity-id"),
+    local_workout_id: str = typer.Option(..., "--workout-id"),
+    reason: str = typer.Option(..., "--reason"),
+    confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
+    coaching_rationale: str = typer.Option(..., "--rationale"),
+) -> None:
+    allowed_reasons = {
+        "activity_deleted",
+        "activity_reclassified",
+        "association_incorrect",
+    }
+    if reason not in allowed_reasons:
+        raise typer.BadParameter(
+            "Use activity_deleted, activity_reclassified, or association_incorrect",
+            param_hint="--reason",
+        )
+    _emit(
+        revoke_workout_fulfillment(
+            local_activity_id=local_activity_id,
+            local_workout_id=local_workout_id,
+            reason=cast(
+                Literal[
+                    "activity_deleted",
+                    "activity_reclassified",
+                    "association_incorrect",
+                ],
+                reason,
+            ),
+            athlete_confirmation_reference=confirmation_reference,
+            coaching_rationale=coaching_rationale,
+        ),
+        "Workout fulfillment revoked and its schedule state reopened.",
+    )
+
+
+@app.command(name="fulfillment-status")
+def fulfillment_status_command(
+    week_number: int = typer.Option(..., "--week-number", min=1),
+) -> None:
+    _emit(
+        get_workout_fulfillment_week_status(week_number=week_number),
+        "Workout fulfillment status loaded.",
     )

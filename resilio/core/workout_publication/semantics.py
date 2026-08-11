@@ -118,9 +118,7 @@ def expected_workout_semantics(steps: list[WorkoutStep]) -> tuple[StepSemantics,
                     "Intervals ramp publication requires scalar endpoint targets"
                 )
             target = _expected_target(
-                step.start_target.model_copy(
-                    update={"maximum": step.end_target.maximum}
-                ),
+                step.start_target.model_copy(update={"maximum": step.end_target.maximum}),
                 ramp=True,
             )
         else:
@@ -292,9 +290,7 @@ def assert_workout_semantics_match(
             )
             or not _prompt_preserved(expected_step.prompt, actual_step.prompt)
         ):
-            raise WorkoutSemanticsError(
-                f"provider semantics mismatch at executable step {index}"
-            )
+            raise WorkoutSemanticsError(f"provider semantics mismatch at executable step {index}")
 
 
 def _optional_number_equal(left: float | None, right: float | None) -> bool:

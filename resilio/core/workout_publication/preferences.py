@@ -4,9 +4,7 @@ from resilio.core.repository import RepositoryIO
 from resilio.schemas.publication import RunWorkoutSynchronizationPreferences
 from resilio.schemas.repository import RepoError
 
-RUN_SYNCHRONIZATION_PREFERENCES_PATH = (
-    "data/state/run_workout_synchronization_preferences.json"
-)
+RUN_SYNCHRONIZATION_PREFERENCES_PATH = "data/state/run_workout_synchronization_preferences.json"
 
 
 def load_run_synchronization_preferences(

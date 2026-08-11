@@ -25,8 +25,7 @@ from resilio.core.planning.source_state import (
 from resilio.core.planning.state_repository import load_planning_aggregate
 from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
-from resilio.schemas.approvals import ClosedPlanArchive, PlanningState, VDOTApproval
-from resilio.schemas.coaching import WeeklyCoachContext
+from resilio.schemas.approvals import ClosedPlanArchive, PlanningState
 from resilio.schemas.plan_history import (
     AssessmentClosure,
     EvidenceArtifactReference,
@@ -42,7 +41,6 @@ from resilio.schemas.planning_evidence import (
     PlanCycleReview,
     PlanningEvidencePointer,
 )
-from resilio.schemas.profile import AthleteProfile
 
 MAX_HISTORICAL_COMPACT_WEEKS = 52
 MAX_RECENT_DETAILED_WEEKS = 12
@@ -229,27 +227,6 @@ def _historical_evidence(
     )
 
 
-def _source_payload(
-    *,
-    profile: AthleteProfile,
-    approval: VDOTApproval,
-    summaries: list[HistoricalPlanSummary],
-    assessment_summaries: list[HistoricalAssessmentSummary],
-    compact_weeks: list[CompactTrainingWeek],
-    recent_weeks: list[WeeklyCoachContext],
-) -> dict[str, object]:
-    return {
-        "profile": profile.model_dump(mode="json"),
-        "vdot_approval": approval.model_dump(mode="json"),
-        "historical_plan_summaries": [summary.model_dump(mode="json") for summary in summaries],
-        "historical_assessment_summaries": [
-            summary.model_dump(mode="json") for summary in assessment_summaries
-        ],
-        "historical_compact_weeks": [week.model_dump(mode="json") for week in compact_weeks],
-        "recent_detailed_weeks": [week.model_dump(mode="json") for week in recent_weeks],
-    }
-
-
 def create_macro_planning_context(
     repo: RepositoryIO,
     *,
@@ -339,14 +316,6 @@ def create_macro_planning_context(
             for week in recent_weeks
         ],
     ]
-    source_payload = _source_payload(
-        profile=profile,
-        approval=approval,
-        summaries=summaries,
-        assessment_summaries=assessment_summaries,
-        compact_weeks=compact_weeks,
-        recent_weeks=recent_weeks,
-    )
     context = MacroPlanningContext(
         evidence_as_of_date=evidence_as_of_date,
         intended_plan_start_date=intended_plan_start_date,
@@ -360,7 +329,6 @@ def create_macro_planning_context(
         historical_compact_weeks=compact_weeks,
         recent_detailed_weeks=recent_weeks,
         evidence_index=evidence_index,
-        source_context_sha256=canonical_data_sha256(source_payload),
         source_state_sha256=source_state_sha256,
     )
     return import_evidence_artifact(

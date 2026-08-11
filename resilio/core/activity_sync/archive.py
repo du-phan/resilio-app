@@ -70,9 +70,7 @@ class ActivityArchive:
             ) from exc
         expected = self.path_for(activity)
         if activity.local_activity_id != local_activity_id or path != expected:
-            raise ActivityArchiveError(
-                "Activity path does not match its stable ID and local date"
-            )
+            raise ActivityArchiveError("Activity path does not match its stable ID and local date")
         return activity
 
     def path_for(self, activity: CanonicalActivity) -> Path:

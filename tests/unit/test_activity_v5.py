@@ -598,12 +598,12 @@ def test_historical_performance_identity_excludes_segment_analysis_overlays() ->
         update={"segments": [segment.model_copy(update={"distance_meters": 1_010})]}
     )
 
-    assert activity_performance_evidence_sha256(
-        baseline
-    ) == activity_performance_evidence_sha256(revised_analysis)
-    assert activity_performance_evidence_sha256(
-        baseline
-    ) != activity_performance_evidence_sha256(revised_measurement)
+    assert activity_performance_evidence_sha256(baseline) == activity_performance_evidence_sha256(
+        revised_analysis
+    )
+    assert activity_performance_evidence_sha256(baseline) != activity_performance_evidence_sha256(
+        revised_measurement
+    )
 
 
 def test_literal_schema_alias_round_trips_and_legacy_shape_is_refused() -> None:

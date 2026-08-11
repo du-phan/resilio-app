@@ -8,6 +8,26 @@ import typer
 from resilio.api.coaching_context import CoachingContextError, get_weekly_coach_context
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from resilio.cli.output import output_json
+from resilio.schemas.coaching import AdherenceContext, PlannedWorkoutContext
+
+
+def _project_day_workouts(
+    workouts: list[PlannedWorkoutContext],
+    *,
+    target_date: date,
+) -> dict[str, list[PlannedWorkoutContext]]:
+    scheduled_workouts = [workout for workout in workouts if workout.occurrence_date == target_date]
+    return {
+        "scheduled_outstanding_workouts": [
+            workout for workout in scheduled_workouts if workout.is_outstanding
+        ],
+        "scheduled_fulfilled_workouts": [
+            workout for workout in scheduled_workouts if not workout.is_outstanding
+        ],
+        "executed_planned_workouts": [
+            workout for workout in workouts if workout.execution_local_date == target_date
+        ],
+    }
 
 
 def today_command(
@@ -35,6 +55,11 @@ def today_command(
         )
         if isinstance(context, CoachingContextError):
             result = context
+        elif not isinstance(context.adherence, AdherenceContext):
+            result = CoachingContextError(
+                "state",
+                "Today's coaching context is not fulfillment-aware",
+            )
         else:
             result = {
                 "local_date": target_date,
@@ -45,11 +70,10 @@ def today_command(
                     for activity in context.activities
                     if activity.local_date == target_date
                 ],
-                "planned_workouts": [
-                    workout
-                    for workout in context.adherence.workouts
-                    if workout.occurrence_date == target_date
-                ],
+                **_project_day_workouts(
+                    context.adherence.workouts,
+                    target_date=target_date,
+                ),
             }
     envelope = api_result_to_envelope(
         result,

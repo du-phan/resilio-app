@@ -6,11 +6,15 @@ from resilio.core.planning.state_repository import (
     required_planning_state_unlocked,
 )
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.completions import load_completion_manifest
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.approvals import PlanningState
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.workout_fulfillment import (
+    HistoricalLegacyWorkoutFulfillment,
+    WorkoutFulfillmentRecord,
+)
 
 
 def _belongs_to_plan_revision(
@@ -19,10 +23,37 @@ def _belongs_to_plan_revision(
     plan_id: str,
     plan_revision_id: str,
 ) -> bool:
-    return (
-        identity.plan_id == plan_id
-        and identity.plan_revision_id == plan_revision_id
-    )
+    return identity.plan_id == plan_id and identity.plan_revision_id == plan_revision_id
+
+
+def _publication_ownership_identities(repo: RepositoryIO) -> list[PlanWorkoutIdentity]:
+    manifest = load_manifest(repo)
+    return [
+        *(record.workout_identity for record in manifest.workouts.values()),
+        *(record.workout_identity for record in manifest.pending.values()),
+        *(record.publication.workout_identity for record in manifest.retired.values()),
+        *(record.publication.workout_identity for record in manifest.retirement_history),
+        *(
+            record.pending_publication.workout_identity
+            for record in manifest.retired_pending.values()
+        ),
+        *(
+            record.pending_publication.workout_identity
+            for record in manifest.pending_retirement_history
+        ),
+        *(record.workout_identity for record in manifest.historical_legacy_workouts.values()),
+    ]
+
+
+def _fulfillment_ownership_records(
+    repo: RepositoryIO,
+) -> list[WorkoutFulfillmentRecord | HistoricalLegacyWorkoutFulfillment]:
+    manifest = load_fulfillment_manifest(repo)
+    return [
+        *manifest.fulfillments.values(),
+        *manifest.historical_legacy_fulfillments.values(),
+        *(revocation.fulfillment for revocation in manifest.revoked_fulfillments),
+    ]
 
 
 def discard_unapproved_current_plan(
@@ -50,40 +81,28 @@ def discard_unapproved_current_plan(
         if active_plan.applied_week_revisions:
             raise PlanOperationError("A plan with applied week revisions cannot be discarded")
 
-        publication_manifest = load_manifest(repo)
-        publication_identities: list[PlanWorkoutIdentity] = [
-            *(
-                record.workout_identity
-                for record in publication_manifest.workouts.values()
-            ),
-            *(
-                record.workout_identity
-                for record in publication_manifest.pending.values()
-            ),
-        ]
         published_ids = sorted(
             identity.local_workout_id
-            for identity in publication_identities
+            for identity in _publication_ownership_identities(repo)
             if _belongs_to_plan_revision(
                 identity,
                 plan_id=plan.id,
                 plan_revision_id=plan.plan_revision_id,
             )
         )
-        completion_manifest = load_completion_manifest(repo)
-        completed_ids = sorted(
-            match.local_activity_id
-            for match in completion_manifest.matches.values()
+        fulfilled_activity_ids = sorted(
+            record.local_activity_id
+            for record in _fulfillment_ownership_records(repo)
             if _belongs_to_plan_revision(
-                match.workout_identity,
+                record.workout_identity,
                 plan_id=plan.id,
                 plan_revision_id=plan.plan_revision_id,
             )
         )
-        if published_ids or completed_ids:
+        if published_ids or fulfilled_activity_ids:
             raise PlanOperationError(
                 "Plan ownership records exist and must be reconciled before discard: "
-                f"published={published_ids}, completed={completed_ids}"
+                f"published={published_ids}, fulfilled={fulfilled_activity_ids}"
             )
         return persist_planning_state(
             repo,

@@ -82,11 +82,7 @@ def vdot_calculate_command(
     """
     result: VDOTResult | VDOTError
     try:
-        parsed_as_of_date = (
-            date.fromisoformat(as_of_date)
-            if as_of_date is not None
-            else None
-        )
+        parsed_as_of_date = date.fromisoformat(as_of_date) if as_of_date is not None else None
     except ValueError:
         result = VDOTError(
             "invalid_input",

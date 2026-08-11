@@ -50,6 +50,4 @@ def test_calculate_requires_explicit_as_of_date_for_dated_evidence() -> None:
     assert result.exit_code == 5
     assert payload["ok"] is False
     assert payload["error_type"] == "invalid_input"
-    assert payload["message"] == (
-        "as_of_date is required when race_date is supplied"
-    )
+    assert payload["message"] == ("as_of_date is required when race_date is supplied")

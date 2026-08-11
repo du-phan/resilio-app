@@ -33,9 +33,7 @@ def _prompt(value: str | None, *, fallback: str | None = None) -> str | None:
 def _duration(value: StepDuration) -> str:
     if value.unit == StepDurationUnit.UNTIL_LAP_PRESS:
         assert value.nominal_seconds is not None
-        return _duration(
-            StepDuration(unit=StepDurationUnit.SECONDS, value=value.nominal_seconds)
-        )
+        return _duration(StepDuration(unit=StepDurationUnit.SECONDS, value=value.nominal_seconds))
     if value.unit == StepDurationUnit.METERS:
         # Intervals uses "m" for minutes. "mtr" is the unambiguous metre token.
         return f"{value.value}mtr"
@@ -98,9 +96,7 @@ def _render_step(step: WorkoutStep, indent: str = "") -> list[str]:
         prompt = _prompt(
             step.cue,
             fallback=(
-                "Press lap"
-                if step.duration.unit == StepDurationUnit.UNTIL_LAP_PRESS
-                else None
+                "Press lap" if step.duration.unit == StepDurationUnit.UNTIL_LAP_PRESS else None
             ),
         )
         if prompt:
@@ -121,9 +117,7 @@ def _render_step(step: WorkoutStep, indent: str = "") -> list[str]:
         prompt = _prompt(
             step.cue,
             fallback=(
-                "Press lap"
-                if step.duration.unit == StepDurationUnit.UNTIL_LAP_PRESS
-                else None
+                "Press lap" if step.duration.unit == StepDurationUnit.UNTIL_LAP_PRESS else None
             ),
         )
         if prompt:

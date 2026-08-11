@@ -166,9 +166,7 @@ def test_context_uses_native_training_state_and_separate_exposure_channels(
     assert resting_hr.unit == "bpm"
     assert resting_hr.baseline_sample_count >= 7
     ride_ftp = next(
-        signal
-        for signal in context.recovery.signals
-        if signal.name == "sport_estimated_ftp[Ride]"
+        signal for signal in context.recovery.signals if signal.name == "sport_estimated_ftp[Ride]"
     )
     assert ride_ftp.current_value == 255
     assert ride_ftp.unit == "watts"
@@ -411,9 +409,7 @@ def test_recovery_uses_latest_non_null_observation_per_signal() -> None:
         assert signal.current_date == date(2026, 7, 29)
         assert signal.observation_age_days == 1
 
-    sleep_quality = next(
-        signal for signal in result.signals if signal.name == "sleep_quality"
-    )
+    sleep_quality = next(signal for signal in result.signals if signal.name == "sleep_quality")
     assert sleep_quality.scale_direction == "lower_is_better"
     assert sleep_quality.scale_minimum == 1
     assert sleep_quality.scale_maximum == 4

@@ -51,9 +51,9 @@ mirror.
 | VDOT approval | Recomputable performance plus a verified canonical activity/fingerprint, exact profile personal best, owned closed assessment review, or explicit athlete-confirmed manual value; every approval also binds the proposal path and byte SHA-256 |
 | Plan lifecycle and approvals | Compact planning-state v6 with a discriminated race-macro or baseline-assessment active plan, generic plan revision/approval identity, and immutable content-addressed archives and evidence artifacts |
 | Race-plan renewal evidence | Coverage-aware cycle review, athlete-confirmed goal outcome and performance, all closed race summaries and assessment results, 52 compact historical weeks, 12 detailed recent weeks, and source-state freshness fingerprints |
-| Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, exact publication/completion pairing, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
+| Baseline-assessment evidence | Immutable assessment context, one owned timed-distance workout, exact provider-paired fulfillment, athlete-selected whole activity or exact canonical segment, and separately confirmed closure |
 | Weekly application | Exact run-only proposal path, byte SHA-256, target-week hash, prior applied-running-workouts hash, immutable weekly context, and complete configured/observed other-sport considerations |
-| Completed-workout adherence | Exact owned-event pairing manifest |
+| Workout fulfillment | Exact provider pairing or athlete-confirmed same-week activity/workout association, applied-week hashes, execution date, and schedule offset |
 | Run synchronization preferences | Athlete-confirmed automation mode, calendar-day policy, and requested Garmin destination |
 | External calendar ownership | Local manifest plus matching remote UID/external ID, owned-field fingerprint, semantic parsed-workout readback, drift-resolution audit, and push-error evidence |
 | Raw external response | Ephemeral only |
@@ -61,7 +61,7 @@ mirror.
 ## Coordinated state boundary
 
 Activity archive, wellness, sport settings, sync state, profile, planning
-aggregate, and publication/completion manifests are one migration state set.
+aggregate, and publication/fulfillment manifests are one migration state set.
 Migrations validate and stage candidates, preserve a recoverable backup, switch
 same-filesystem paths atomically where applicable, verify identities and
 digests, and demonstrate rollback before touching athlete state. The `data/`
@@ -78,9 +78,10 @@ models:
 - `exposure.py` separates run and other-sport exposure and preserves zone
   coverage;
 - `recovery.py` creates individual baseline comparisons;
-- `exact_activity.py` binds one complete canonical activity to its completion,
+- `exact_activity.py` binds one complete canonical activity to its fulfillment,
   as-of recovery, training-state, and optional provider curve evidence;
-- `adherence.py` accepts only exact owned completion matches.
+- `adherence.py` accepts only exact provider-paired or athlete-confirmed
+  fulfillment identities and keeps due state separate from execution timing.
 
 It deliberately does not compute a composite readiness score, injury
 probability, local performance-management chart, or cross-sport multiplier.
@@ -124,16 +125,18 @@ approval, weekly-context creation, weekly approval, weekly application,
 invalidation, and closure timestamps must be
 chronological. Persisted-state validation rejects an impossible sequence even
 if a service was bypassed. Cycle closure also re-verifies the exact active-plan
-snapshot and the date-bounded activity, wellness, coverage, completion, and
+snapshot and the date-bounded activity, wellness, coverage, fulfillment, and
 publication inputs used by the review. Assessment review additionally
-re-verifies the owned publication/completion chain and exact canonical result.
+re-verifies the owned publication/provider-paired-fulfillment chain and exact
+canonical result.
 Race-macro creation performs the analogous freshness check for its 12-week
 context and must cite the latest assessment result when one exists.
 
 ## Mutation boundaries
 
-- Completed sync uses one activity-mutation lock, staged archive, durable
-  phase journal, coordinated wellness/settings/completion/state sidecars, and
+- Completed sync uses publication, plan, then activity locks, a staged archive,
+  durable phase journal, coordinated wellness/settings/fulfillment/state
+  sidecars, and
   idempotent crash recovery.
 - Ambiguous mappings and canonical mapping failures are sanitized and
   quarantined without raw payload persistence. A malformed external DTO
@@ -153,7 +156,7 @@ context and must cite the latest assessment result when one exists.
   outcomes separately; provider failure never rolls back the local commit.
 - Unapproved proposal discard requires the exact current revision ID, empty
   plan/weekly approval state, no applied revisions, and no matching publication
-  or completion ownership. Approved plan removal remains impossible here.
+  or fulfillment ownership. Approved plan removal remains impossible here.
 - Weekly application policy accepts only running workouts and requires a typed
   structured prescription for each one. Publication resolves a qualified
   plan/revision/week/workout identity from fresh, plan-approved, applied weekly

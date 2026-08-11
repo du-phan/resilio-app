@@ -3,62 +3,51 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.planning.service import PlanOperationError
 from resilio.core.planning.state_repository import required_planning_state_unlocked
 from resilio.core.planning.workout_evidence import load_publishable_workouts_unlocked
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.capabilities import (
-    get_run_synchronization_capabilities,
+from resilio.core.workout_publication.drift_confirmation import (
+    confirm_publication_drift_targets,
 )
-from resilio.core.workout_publication.completions import load_completion_manifest
-from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
+from resilio.core.workout_publication.locking import (
+    coordinated_publication_plan_activity_lock,
+    coordinated_publication_plan_lock,
+)
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.naming import provider_workout_names
 from resilio.core.workout_publication.policy import (
-    ProviderSemanticsMismatchError,
     PublicationSafetyError,
-    RemoteWorkoutDriftError,
     assert_remote_matches,
     assert_remote_ownership,
     assert_remote_unchanged,
     pending_matches,
 )
 from resilio.core.workout_publication.preparation import prepare_publication
-from resilio.core.workout_publication.service import WorkoutPublicationService
-from resilio.integrations.intervals_icu.client import IntervalsIcuClient
-from resilio.integrations.intervals_icu.errors import (
-    IntervalsIcuError,
-    IntervalsNotFoundError,
+from resilio.core.workout_publication.retirement_service import (
+    WorkoutRetirementService,
 )
-from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.core.workout_publication.service import WorkoutPublicationService
+from resilio.core.workout_publication.week_deletions import (
+    reconcile_owned_future_deletions,
+)
+from resilio.core.workout_publication.week_selection import (
+    select_run_week_items,
+    week_fulfillment_retirements,
+)
+from resilio.core.workout_publication.week_status import (
+    build_run_week_status,
+    publication_error_type,
+)
+from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.schemas.publication import (
     PublicationDriftResolution,
     RunWeekSynchronizationReport,
     WeekSynchronizationItem,
 )
-
-
-def _identity_tuple(identity: PlanWorkoutIdentity) -> tuple[str, str, int, str]:
-    return (
-        identity.plan_id,
-        identity.plan_revision_id,
-        identity.week_number,
-        identity.local_workout_id,
-    )
-
-
-def _publication_error_type(exc: Exception) -> str:
-    if isinstance(exc, ProviderSemanticsMismatchError):
-        return "provider_semantics_mismatch"
-    if isinstance(exc, RemoteWorkoutDriftError):
-        return "remote_drift"
-    if isinstance(exc, PublicationSafetyError):
-        return "publication_safety"
-    if isinstance(exc, IntervalsIcuError):
-        return exc.error_type
-    return "publication"
 
 
 class RunWeekSynchronizationService:
@@ -68,6 +57,7 @@ class RunWeekSynchronizationService:
         self.repo = repo
         self.client = client
         self.workout_service = WorkoutPublicationService(repo, client)
+        self.retirement_service = WorkoutRetirementService(repo, client)
 
     def _load_authoritative_week_unlocked(
         self,
@@ -87,73 +77,27 @@ class RunWeekSynchronizationService:
             )
         return selected
 
-    def _completed_workout_identities(self) -> set[tuple[str, str, int, str]]:
-        return {
-            _identity_tuple(match.workout_identity)
-            for match in load_completion_manifest(self.repo).matches.values()
-        }
-
-    def _selected_runs(
+    def current_schedule_date(
         self,
-        workouts: list[AuthoritativeWorkout],
-        as_of_date: date,
-    ) -> tuple[
-        list[AuthoritativeWorkout],
-        list[WeekSynchronizationItem],
-        set[str],
-        PlanWorkoutIdentity,
-    ]:
-        week_identity = workouts[0].identity
-        completed = self._completed_workout_identities()
-        selected: list[AuthoritativeWorkout] = []
-        skipped: list[WeekSynchronizationItem] = []
-        current_run_ids = {item.identity.local_workout_id for item in workouts}
-        for item in sorted(
-            workouts,
-            key=lambda candidate: (
-                candidate.prescription.date,
-                candidate.identity.local_workout_id,
-            ),
+        week_number: int,
+        *,
+        now_utc: datetime | None = None,
+    ) -> date:
+        """Resolve today in the immutable timezone captured by the applied week."""
+        with coordinated_publication_plan_lock(
+            self.repo,
+            "resolve_run_week_schedule_date",
         ):
-            workout = item.prescription
-            if workout.date < as_of_date:
-                skipped.append(
-                    WeekSynchronizationItem(
-                        local_workout_id=workout.id,
-                        occurrence_date=workout.date,
-                        status="skipped_past",
-                    )
+            workouts = self._load_authoritative_week_unlocked(week_number)
+            schedule_timezones = {workout.schedule_timezone for workout in workouts}
+            if len(schedule_timezones) != 1:
+                raise PublicationSafetyError(
+                    "Applied week does not have one captured schedule timezone"
                 )
-            elif _identity_tuple(item.identity) in completed:
-                skipped.append(
-                    WeekSynchronizationItem(
-                        local_workout_id=workout.id,
-                        occurrence_date=workout.date,
-                        status="skipped_completed",
-                    )
-                )
-            else:
-                selected.append(item)
-        return selected, skipped, current_run_ids, week_identity
-
-    def _stale_future_owned_run_ids(
-        self,
-        week_identity: PlanWorkoutIdentity,
-        current_run_ids: set[str],
-        as_of_date: date,
-    ) -> list[str]:
-        manifest = load_manifest(self.repo)
-        completed = self._completed_workout_identities()
-        return sorted(
-            local_id
-            for local_id, record in manifest.workouts.items()
-            if record.workout_identity.plan_id == week_identity.plan_id
-            and record.workout_identity.plan_revision_id == week_identity.plan_revision_id
-            and record.workout_identity.week_number == week_identity.week_number
-            and record.occurrence_date >= as_of_date
-            and _identity_tuple(record.workout_identity) not in completed
-            and local_id not in current_run_ids
-        )
+            timestamp = now_utc or datetime.now(timezone.utc)
+            if timestamp.tzinfo is None or timestamp.utcoffset() is None:
+                raise PublicationSafetyError("Current timestamp must be timezone-aware")
+            return timestamp.astimezone(ZoneInfo(schedule_timezones.pop())).date()
 
     def _verify_one(
         self,
@@ -233,16 +177,15 @@ class RunWeekSynchronizationService:
         local_workout_id: str,
         *,
         restore_local: bool,
+        authoritative_workout: AuthoritativeWorkout | None,
+        provider_name: str | None,
     ) -> None:
-        record = load_manifest(self.repo).workouts[local_workout_id]
-        athlete = self.client.get_athlete()
-        try:
-            remote = self.client.get_event(record.event_id, athlete_id=athlete.id)
-        except IntervalsNotFoundError:
-            return
-        assert_remote_ownership(remote, uid=record.uid, external_id=record.external_id)
-        if not restore_local:
-            assert_remote_unchanged(remote, record)
+        self.retirement_service.verify(
+            local_workout_id,
+            restore_local=restore_local,
+            authoritative_workout=authoritative_workout,
+            provider_name=provider_name,
+        )
 
     def _status_authoritative_week(
         self,
@@ -251,82 +194,37 @@ class RunWeekSynchronizationService:
         as_of_date: date,
         workouts: list[AuthoritativeWorkout],
         restore_local: bool = False,
+        confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
-        capabilities = get_run_synchronization_capabilities(self.client)
-        (
-            selected,
-            skipped,
-            current_run_ids,
-            week_identity,
-        ) = self._selected_runs(workouts, as_of_date)
-        stale_ids = self._stale_future_owned_run_ids(
-            week_identity,
-            current_run_ids,
-            as_of_date,
-        )
-        items = list(skipped)
-        passed = True
-        provider_names = provider_workout_names([item.prescription for item in workouts])
-        for workout in selected:
-            try:
-                self._verify_one(
-                    workout,
-                    restore_local=restore_local,
-                    provider_name=provider_names[workout.identity.local_workout_id],
-                )
-            except Exception as exc:
-                passed = False
-                items.append(
-                    WeekSynchronizationItem(
-                        local_workout_id=workout.identity.local_workout_id,
-                        occurrence_date=workout.prescription.date,
-                        status="error",
-                        error_type=_publication_error_type(exc),
-                        message=str(exc),
-                    )
-                )
-            else:
-                items.append(
-                    WeekSynchronizationItem(
-                        local_workout_id=workout.identity.local_workout_id,
-                        occurrence_date=workout.prescription.date,
-                        status="ready",
-                        garmin_forwarding_status=(
-                            "eligible_unverified"
-                            if capabilities.garmin_forwarding_eligible
-                            else "not_configured"
-                        ),
-                    )
-                )
-        for local_workout_id in stale_ids:
-            try:
-                self._verify_owned_future_deletion(
-                    local_workout_id,
-                    restore_local=restore_local,
-                )
-            except Exception as exc:
-                passed = False
-                record = load_manifest(self.repo).workouts[local_workout_id]
-                items.append(
-                    WeekSynchronizationItem(
-                        local_workout_id=local_workout_id,
-                        occurrence_date=record.occurrence_date,
-                        status="error",
-                        error_type=_publication_error_type(exc),
-                        message=str(exc),
-                    )
-                )
-        return RunWeekSynchronizationReport(
+        return build_run_week_status(
+            self.repo,
+            self.client,
+            retirement_service=self.retirement_service,
             week_number=week_number,
             as_of_date=as_of_date,
-            operation="restore_local" if restore_local else "status",
-            reconciliation_safe=passed,
-            run_workouts_considered=len(selected) + len(skipped),
-            desired_future_run_workouts=len(selected),
-            partial=not passed,
-            capabilities=capabilities,
-            items=items,
-            owned_future_deletion_ids=stale_ids,
+            workouts=workouts,
+            restore_local=restore_local,
+            verify_workout=lambda workout, provider_name: self._verify_one(
+                workout,
+                restore_local=(
+                    restore_local
+                    and confirmed_remote_targets is not None
+                    and workout.identity.local_workout_id in confirmed_remote_targets
+                ),
+                provider_name=provider_name,
+            ),
+            verify_deletion=lambda local_workout_id, workout, provider_name: (
+                self._verify_owned_future_deletion(
+                    local_workout_id,
+                    restore_local=(
+                        restore_local
+                        and confirmed_remote_targets is not None
+                        and local_workout_id in confirmed_remote_targets
+                    ),
+                    authoritative_workout=workout,
+                    provider_name=provider_name,
+                )
+            ),
         )
 
     def status_week(
@@ -335,7 +233,7 @@ class RunWeekSynchronizationService:
         *,
         as_of_date: date,
     ) -> RunWeekSynchronizationReport:
-        with coordinated_publication_plan_lock(
+        with coordinated_publication_plan_activity_lock(
             self.repo,
             "status_run_week_synchronization",
         ):
@@ -352,7 +250,10 @@ class RunWeekSynchronizationService:
         *,
         as_of_date: date,
     ) -> RunWeekSynchronizationReport:
-        with coordinated_publication_plan_lock(self.repo, "reconcile_run_week"):
+        with coordinated_publication_plan_activity_lock(
+            self.repo,
+            "reconcile_run_week",
+        ):
             workouts = self._load_authoritative_week_unlocked(week_number)
             status = self._status_authoritative_week(
                 week_number,
@@ -374,6 +275,7 @@ class RunWeekSynchronizationService:
         *,
         as_of_date: date,
         athlete_confirmation_reference: str,
+        confirmed_drift_target_tokens: list[str],
     ) -> RunWeekSynchronizationReport:
         """Replace exact owned drift only after explicit athlete confirmation."""
         confirmation = athlete_confirmation_reference.strip()
@@ -381,7 +283,10 @@ class RunWeekSynchronizationService:
             raise PublicationSafetyError(
                 "Restore-local drift resolution requires athlete confirmation evidence"
             )
-        with coordinated_publication_plan_lock(self.repo, "restore_local_run_week"):
+        with coordinated_publication_plan_activity_lock(
+            self.repo,
+            "restore_local_run_week",
+        ):
             workouts = self._load_authoritative_week_unlocked(week_number)
             ordinary_status = self._status_authoritative_week(
                 week_number,
@@ -399,21 +304,57 @@ class RunWeekSynchronizationService:
                 return ordinary_status.model_copy(update={"operation": "restore_local"})
             identity = workouts[0].identity
             manifest = load_manifest(self.repo)
+            provider_names = provider_workout_names([item.prescription for item in workouts])
+            workouts_by_id = {item.identity.local_workout_id: item for item in workouts}
+            drift_items = [
+                item
+                for item in ordinary_status.items
+                if item.status == "error" and item.error_type == "remote_drift"
+            ]
+            retirement_ids = set(
+                week_fulfillment_retirements(
+                    self.repo,
+                    workouts=workouts,
+                    as_of_date=as_of_date,
+                )
+            )
+            if any(item.local_workout_id in retirement_ids for item in drift_items):
+                raise PublicationSafetyError(
+                    "Restore-local cannot authorize deletion of a fulfilled future event; "
+                    "use the retire-fulfilled workflow"
+                )
+            confirmed_targets = confirm_publication_drift_targets(
+                self.retirement_service,
+                drift_items=drift_items,
+                authoritative_workouts_by_local_id=workouts_by_id,
+                provider_names_by_local_workout_id=provider_names,
+                supplied_confirmation_tokens=confirmed_drift_target_tokens,
+            )
             manifest.drift_resolutions.append(
                 PublicationDriftResolution(
                     plan_id=identity.plan_id,
                     plan_revision_id=identity.plan_revision_id,
                     week_number=week_number,
+                    strategy="restore_local",
+                    confirmed_targets=confirmed_targets,
                     athlete_confirmation_reference=confirmation,
                     confirmed_at_utc=datetime.now(timezone.utc),
                 )
             )
             save_manifest(self.repo, manifest)
+            confirmed_remote_targets = {
+                target.local_workout_id: (
+                    target.event_id,
+                    target.observed_remote_fingerprint_sha256,
+                )
+                for target in confirmed_targets
+            }
             status = self._status_authoritative_week(
                 week_number,
                 as_of_date=as_of_date,
                 workouts=workouts,
                 restore_local=True,
+                confirmed_remote_targets=confirmed_remote_targets,
             )
             if not status.reconciliation_safe:
                 return status
@@ -422,7 +363,107 @@ class RunWeekSynchronizationService:
                 workouts=workouts,
                 as_of_date=as_of_date,
                 restore_local=True,
+                confirmed_remote_targets=confirmed_remote_targets,
             )
+
+    def retire_fulfilled_week(
+        self,
+        week_number: int,
+        *,
+        as_of_date: date,
+        athlete_confirmation_reference: str,
+        confirmed_drift_target_tokens: list[str],
+    ) -> RunWeekSynchronizationReport:
+        """Delete drifted owned future events after a second explicit confirmation."""
+        confirmation = athlete_confirmation_reference.strip()
+        if not confirmation:
+            raise PublicationSafetyError(
+                "Fulfillment retirement drift resolution requires athlete confirmation"
+            )
+        with coordinated_publication_plan_activity_lock(
+            self.repo,
+            "retire_drifted_fulfilled_run_week",
+        ):
+            workouts = self._load_authoritative_week_unlocked(week_number)
+            retirement_ids = set(
+                week_fulfillment_retirements(
+                    self.repo,
+                    workouts=workouts,
+                    as_of_date=as_of_date,
+                )
+            )
+            if not retirement_ids:
+                raise PublicationSafetyError("There are no fulfilled future owned events to retire")
+            ordinary_status = self._status_authoritative_week(
+                week_number,
+                as_of_date=as_of_date,
+                workouts=workouts,
+            )
+            drift_items = [
+                item
+                for item in ordinary_status.items
+                if item.status == "error" and item.error_type == "remote_drift"
+            ]
+            other_errors = [
+                item
+                for item in ordinary_status.items
+                if item.status == "error" and item.error_type != "remote_drift"
+            ]
+            if (
+                not drift_items
+                or other_errors
+                or any(item.local_workout_id not in retirement_ids for item in drift_items)
+            ):
+                raise PublicationSafetyError(
+                    "Retire-fulfilled may resolve only owned drift on fulfilled future events"
+                )
+            identity = workouts[0].identity
+            manifest = load_manifest(self.repo)
+            provider_names = provider_workout_names([item.prescription for item in workouts])
+            workouts_by_id = {item.identity.local_workout_id: item for item in workouts}
+            confirmed_targets = confirm_publication_drift_targets(
+                self.retirement_service,
+                drift_items=drift_items,
+                authoritative_workouts_by_local_id=workouts_by_id,
+                provider_names_by_local_workout_id=provider_names,
+                supplied_confirmation_tokens=confirmed_drift_target_tokens,
+            )
+            manifest.drift_resolutions.append(
+                PublicationDriftResolution(
+                    plan_id=identity.plan_id,
+                    plan_revision_id=identity.plan_revision_id,
+                    week_number=week_number,
+                    strategy="retire_fulfilled",
+                    confirmed_targets=confirmed_targets,
+                    athlete_confirmation_reference=confirmation,
+                    confirmed_at_utc=datetime.now(timezone.utc),
+                )
+            )
+            save_manifest(self.repo, manifest)
+            confirmed_remote_targets = {
+                target.local_workout_id: (
+                    target.event_id,
+                    target.observed_remote_fingerprint_sha256,
+                )
+                for target in confirmed_targets
+            }
+            status = self._status_authoritative_week(
+                week_number,
+                as_of_date=as_of_date,
+                workouts=workouts,
+                restore_local=True,
+                confirmed_remote_targets=confirmed_remote_targets,
+            )
+            if not status.reconciliation_safe:
+                return status.model_copy(update={"operation": "retire_fulfilled"})
+            report = self._reconcile_status(
+                status,
+                workouts=workouts,
+                as_of_date=as_of_date,
+                restore_local=True,
+                confirmed_remote_targets=confirmed_remote_targets,
+            )
+            return report.model_copy(update={"operation": "retire_fulfilled"})
 
     def _reconcile_status(
         self,
@@ -431,17 +472,34 @@ class RunWeekSynchronizationService:
         workouts: list[AuthoritativeWorkout],
         as_of_date: date,
         restore_local: bool,
+        confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
-        selected, skipped, _, _ = self._selected_runs(workouts, as_of_date)
+        selected, skipped, _, _ = select_run_week_items(
+            self.repo,
+            workouts=workouts,
+            as_of_date=as_of_date,
+        )
+        retirements = week_fulfillment_retirements(
+            self.repo,
+            workouts=workouts,
+            as_of_date=as_of_date,
+        )
         provider_names = provider_workout_names([item.prescription for item in workouts])
+        workout_by_id = {item.identity.local_workout_id: item for item in workouts}
         items = list(skipped)
         partial = False
         for workout in selected:
+            expected_remote_target = (
+                confirmed_remote_targets.get(workout.identity.local_workout_id)
+                if confirmed_remote_targets is not None
+                else None
+            )
             try:
                 result = self.workout_service._publish(
                     workout,
-                    restore_local=restore_local,
+                    restore_local=restore_local and expected_remote_target is not None,
                     provider_name=provider_names[workout.identity.local_workout_id],
+                    expected_remote_target=expected_remote_target,
                 )
             except Exception as exc:
                 partial = True
@@ -450,7 +508,7 @@ class RunWeekSynchronizationService:
                         local_workout_id=workout.identity.local_workout_id,
                         occurrence_date=workout.prescription.date,
                         status="error",
-                        error_type=_publication_error_type(exc),
+                        error_type=publication_error_type(exc),
                         message=str(exc),
                     )
                 )
@@ -466,34 +524,20 @@ class RunWeekSynchronizationService:
                     )
                 )
         if not partial:
-            for local_workout_id in status.owned_future_deletion_ids:
-                record = load_manifest(self.repo).workouts[local_workout_id]
-                try:
-                    result = self.workout_service._delete(
-                        local_workout_id,
-                        restore_local=restore_local,
-                    )
-                except Exception as exc:
-                    partial = True
-                    items.append(
-                        WeekSynchronizationItem(
-                            local_workout_id=local_workout_id,
-                            occurrence_date=record.occurrence_date,
-                            status="error",
-                            event_id=record.event_id,
-                            error_type=_publication_error_type(exc),
-                            message=str(exc),
-                        )
-                    )
-                else:
-                    items.append(
-                        WeekSynchronizationItem(
-                            local_workout_id=local_workout_id,
-                            occurrence_date=record.occurrence_date,
-                            status=result.action,
-                            event_id=result.event_id,
-                        )
-                    )
+            deletion_items, deletion_partial = reconcile_owned_future_deletions(
+                repo=self.repo,
+                retirement_service=self.retirement_service,
+                local_workout_ids=status.owned_future_deletion_ids,
+                fulfillments_by_local_workout_id=retirements,
+                authoritative_workouts_by_local_id=workout_by_id,
+                provider_names_by_local_workout_id=provider_names,
+                as_of_date=as_of_date,
+                restore_local=restore_local,
+                confirmed_remote_targets=confirmed_remote_targets,
+                error_type_for=publication_error_type,
+            )
+            items.extend(deletion_items)
+            partial = deletion_partial
         return status.model_copy(
             update={
                 "operation": "restore_local" if restore_local else "reconcile",

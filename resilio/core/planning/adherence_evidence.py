@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
 
+from resilio.core.planning.artifacts import canonical_data_sha256
 from resilio.core.planning.integrity import (
     applied_running_workouts_sha256,
     plan_skeleton_sha256,
@@ -27,11 +28,26 @@ from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 
 
 @dataclass(frozen=True)
+class AppliedWorkoutAuthority:
+    """One immutable applied-week authority that contained a workout identity."""
+
+    applied_week_approval_id: str
+    applied_running_workouts_sha256: str
+    workout_prescription_sha256: str
+    schedule_timezone: str
+    scheduled_local_date: date
+
+
+@dataclass(frozen=True)
 class AuthoritativeWorkout:
     """An exact prescription bound to the plan revision that authorized it."""
 
     identity: PlanWorkoutIdentity
     prescription: RunningWorkoutPrescription
+    applied_week_approval_id: str
+    applied_running_workouts_sha256: str
+    schedule_timezone: str
+    applied_authority_history: tuple[AppliedWorkoutAuthority, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -56,6 +72,32 @@ class _RevisionResolution:
     workouts_by_date: dict[date, tuple[str, list[AuthoritativeWorkout]]]
     unresolved_reason: str | None = None
     invalid_reason: str | None = None
+
+
+def applied_workout_authority_history(
+    revisions: list[AppliedWeekRevision],
+    *,
+    week_number: int,
+    local_workout_id: str,
+) -> tuple[AppliedWorkoutAuthority, ...]:
+    """Return every retained applied authority for one qualified workout slot."""
+    history: list[AppliedWorkoutAuthority] = []
+    for revision in revisions:
+        if revision.week_number != week_number:
+            continue
+        for workout in revision.applied_week_snapshot.running_workouts:
+            if workout.id != local_workout_id:
+                continue
+            history.append(
+                AppliedWorkoutAuthority(
+                    applied_week_approval_id=revision.approval_id,
+                    applied_running_workouts_sha256=(revision.applied_running_workouts_sha256),
+                    workout_prescription_sha256=canonical_data_sha256(workout),
+                    schedule_timezone=revision.schedule_timezone,
+                    scheduled_local_date=workout.date,
+                )
+            )
+    return tuple(history)
 
 
 def _unavailable(reason: str) -> ApprovedWorkoutWindow:
@@ -162,6 +204,16 @@ def _collect_authoritative_workouts(
                         local_workout_id=workout.id,
                     ),
                     prescription=workout,
+                    applied_week_approval_id=applied_revision.approval_id,
+                    applied_running_workouts_sha256=(
+                        applied_revision.applied_running_workouts_sha256
+                    ),
+                    schedule_timezone=applied_revision.schedule_timezone,
+                    applied_authority_history=applied_workout_authority_history(
+                        revision.applied_week_revisions,
+                        week_number=applied_revision.week_number,
+                        local_workout_id=workout.id,
+                    ),
                 )
             )
     return _RevisionResolution(True, workouts_by_date)

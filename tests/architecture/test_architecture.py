@@ -140,9 +140,10 @@ def test_skill_mirror_matches_authoritative_tree():
             collect(child, f"{prefix}{name}/")
 
     collect(comparison)
-    assert (
-        not failures
-    ), ".agents/skills is authoritative; mechanically mirror changed files:\n" + "\n".join(failures)
+    assert not failures, (
+        ".agents/skills is authoritative; mechanically mirror changed files:\n"
+        + "\n".join(failures)
+    )
 
 
 def test_weekly_plan_skill_uses_typed_structured_workouts():

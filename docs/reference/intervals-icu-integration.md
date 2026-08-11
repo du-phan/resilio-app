@@ -29,7 +29,7 @@ sport settings DTO -> SportSettingsSnapshot
                   |
                   v
 validated staging -> atomic activity switch + coordinated state writes
-                  -> completion-manifest reconciliation -> checkpoint
+                  -> fulfillment-manifest reconciliation -> checkpoint
 ```
 
 The sync:
@@ -132,7 +132,7 @@ review, sensitive exclusion, raw/location exclusion, communication exclusion,
 or reviewed-not-integrated.
 
 An exact activity review embeds the complete canonical activity, its
-performance-evidence hash, exact completion match when one exists, recovery
+performance-evidence hash, exact workout fulfillment when one exists, recovery
 and training state as of the activity date, explicit same-day causality limits,
 and the athlete-text trust boundary. HR duration curves are fetched read-only
 only for the selected activity. Best efforts and bounded histogram/curve
@@ -228,18 +228,20 @@ verified owned-field fingerprint is the ownership proof. Update, reschedule,
 and delete refuse ambiguous, unowned, or drifted events. One canonical lock
 order holds publication authority before plan authority for reconciliation and
 plan closure. A replacement week updates retained identities and deletes only
-removed future, uncompleted events after exact ownership proof. Past and
-completed events remain for pairing. Explicit restore-local drift resolution
+removed future unfulfilled events after exact ownership proof. An
+athlete-confirmed early fulfillment retires its still-future owned event;
+same-day, late, and historical events remain. Explicit restore-local drift resolution
 records athlete confirmation before overwriting exact owned content; ordinary
-reconciliation never overwrites drift. Completed-workout adherence accepts
-only the provider’s exact paired event identity; date/sport/duration resemblance
-remains a report-only candidate.
+reconciliation never overwrites drift. A drifted fulfilled event requires a
+second explicit retire-fulfilled confirmation. Adherence accepts exact provider
+pairing or an athlete-confirmed candidate revalidated against immutable applied
+authority; it never uses date/sport/duration resemblance automatically.
 
 Only a qualified plan/revision/week/workout identity resolved from the active
 planning-state aggregate may be published. The aggregate must have a fresh
 planning-input fingerprint, an approved plan skeleton, an active
 applied-week approval, and an unchanged applied-running-workouts SHA-256. Publication
-and completion manifests retain that full lineage.
+and fulfillment manifests retain that full lineage.
 
 Historical adherence is revision-aware: content-addressed closed-plan archives
 retain their plan approval, closure facts, lifecycle-review evidence, and

@@ -7,6 +7,9 @@ from pathlib import Path
 import pytest
 
 from resilio.core.activity_sync.archive import ActivityArchive
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.core.activity_sync.review import list_external_deletion_reviews
 from resilio.core.activity_sync.service import (
     ActivitySyncService,
@@ -18,15 +21,25 @@ from resilio.core.activity_sync.windowing import (
     enumerate_windows,
     fetch_complete_window,
 )
+from resilio.core.planning.adherence_evidence import (
+    ApprovedWorkoutWindow,
+    AuthoritativeWorkout,
+)
+from resilio.core.planning.artifacts import canonical_data_sha256
 from resilio.core.repository import RepositoryIO
 from resilio.core.sync_state import (
     read_sync_progress,
     read_sync_state,
     write_sync_state,
 )
-from resilio.core.workout_publication.completions import (
-    load_completion_manifest,
-    save_completion_manifest,
+from resilio.core.workout_fulfillment.candidates import (
+    FulfillmentWorkoutAuthority,
+    build_fulfillment_candidates,
+)
+from resilio.core.workout_fulfillment.repository import (
+    WorkoutFulfillmentCutoverRequiredError,
+    load_fulfillment_manifest,
+    save_fulfillment_manifest,
 )
 from resilio.core.workout_publication.manifest import save_manifest
 from resilio.integrations.intervals_icu.dto import (
@@ -50,11 +63,11 @@ from resilio.schemas.activity import (
 )
 from resilio.schemas.config import Config, IntervalsIcuSettings, Settings
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.publication import (
+    HistoricalLegacyWorkoutPublication,
     PublicationManifest,
     PublishedWorkout,
-    WorkoutCompletionManifest,
-    WorkoutCompletionMatch,
 )
 from resilio.schemas.reconciliation import (
     ReconciliationAction,
@@ -64,6 +77,13 @@ from resilio.schemas.sync import (
     ActivityCoverageWindow,
     ActivitySyncState,
     SourceCoverageExclusion,
+)
+from resilio.schemas.workout_fulfillment import (
+    HistoricalLegacyWorkoutFulfillment,
+    ProviderPairedFulfillmentEvidence,
+    WorkoutFulfillmentCandidateDismissal,
+    WorkoutFulfillmentManifest,
+    WorkoutFulfillmentRecord,
 )
 from tests.factories import make_activity
 
@@ -265,6 +285,52 @@ def test_incremental_sync_merges_explicit_historical_coverage(
     ]
 
 
+def test_sync_fails_before_provider_access_or_progress_when_cutover_is_required(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "data" / "activities").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    legacy_path = repo.resolve_path("data/state/workout_completions.json")
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_path.write_text('{"schema_version":3,"matches":{}}')
+
+    class ProviderMustNotBeCalled(SyncClient):
+        def get_athlete(self):
+            raise AssertionError("provider access must follow local cutover preflight")
+
+    with pytest.raises(WorkoutFulfillmentCutoverRequiredError, match="requires"):
+        ActivitySyncService(repo, _config(), ProviderMustNotBeCalled()).run(today=date(2026, 7, 28))
+
+    assert read_sync_progress(repo) is None
+
+
+def test_sync_preflights_legacy_publication_without_completion_state(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "data" / "activities").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    publication_path = repo.resolve_path("data/state/workout_publications.json")
+    publication_path.parent.mkdir(parents=True, exist_ok=True)
+    publication_path.write_text(
+        '{"schema_version":6,"workouts":{},"pending":{},"drift_resolutions":[]}'
+    )
+
+    class ProviderMustNotBeCalled(SyncClient):
+        def get_athlete(self):
+            raise AssertionError("provider access must follow local cutover preflight")
+
+    with pytest.raises(WorkoutFulfillmentCutoverRequiredError, match="requires"):
+        ActivitySyncService(repo, _config(), ProviderMustNotBeCalled()).run(today=date(2026, 7, 28))
+
+    assert read_sync_progress(repo) is None
+
+
 def test_partial_retrieval_invalidates_previously_complete_window(
     tmp_path,
     monkeypatch,
@@ -463,6 +529,10 @@ def _publication(
             week_number=1,
             local_workout_id=workout_id,
         ),
+        applied_week_approval_id="week_approval_0123456789abcdef",
+        applied_running_workouts_sha256="1" * 64,
+        workout_prescription_sha256="2" * 64,
+        schedule_timezone="Europe/Paris",
         event_id=event_id,
         requested_uid=f"uid-{workout_id}",
         uid=f"uid-{workout_id}",
@@ -484,6 +554,71 @@ def _save_publication(repo: RepositoryIO, publication: PublishedWorkout) -> None
     save_manifest(
         repo,
         PublicationManifest(workouts={publication.workout_identity.local_workout_id: publication}),
+    )
+
+
+def _publication_with_authority() -> tuple[PublishedWorkout, AuthoritativeWorkout]:
+    publication = _publication()
+    prescription = RunningWorkoutPrescription.model_validate(
+        {
+            "id": publication.workout_identity.local_workout_id,
+            "date": publication.occurrence_date,
+            "workout_type": "easy",
+            "planned_duration_seconds": 2_400,
+            "planned_distance_meters": 5_000,
+            "planned_low_intensity_duration_seconds": 2_400,
+            "planned_moderate_intensity_duration_seconds": 0,
+            "planned_high_intensity_duration_seconds": 0,
+            "target_rpe_1_to_10": 3,
+            "purpose": "Complete one conversational five-kilometre run.",
+            "structured_workout": {
+                "sport": "run",
+                "steps": [
+                    {
+                        "kind": "steady",
+                        "duration": {"unit": "seconds", "value": 2_400},
+                        "intensity": "active",
+                    }
+                ],
+            },
+        }
+    )
+    authority = AuthoritativeWorkout(
+        identity=publication.workout_identity,
+        prescription=prescription,
+        applied_week_approval_id=publication.applied_week_approval_id,
+        applied_running_workouts_sha256=(publication.applied_running_workouts_sha256),
+        schedule_timezone=publication.schedule_timezone,
+    )
+    return (
+        publication.model_copy(
+            update={"workout_prescription_sha256": canonical_data_sha256(prescription)}
+        ),
+        authority,
+    )
+
+
+def _fulfillment(
+    *,
+    local_activity_id: str,
+    publication: PublishedWorkout,
+) -> WorkoutFulfillmentRecord:
+    return WorkoutFulfillmentRecord(
+        local_activity_id=local_activity_id,
+        workout_identity=publication.workout_identity,
+        applied_week_approval_id=publication.applied_week_approval_id,
+        applied_running_workouts_sha256=publication.applied_running_workouts_sha256,
+        workout_prescription_sha256=publication.workout_prescription_sha256,
+        activity_performance_evidence_sha256="9" * 64,
+        schedule_timezone=publication.schedule_timezone,
+        scheduled_local_date=publication.occurrence_date,
+        execution_local_date=publication.occurrence_date,
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=publication.event_id,
+            observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
     )
 
 
@@ -518,32 +653,205 @@ def test_exact_paired_event_links_completion_idempotently(
     (tmp_path / "data" / "activities").mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
     repo = RepositoryIO()
-    publication = _publication()
+    publication, authority = _publication_with_authority()
     _save_publication(repo, publication)
+    monkeypatch.setattr(
+        "resilio.core.activity_sync.staged_reconciliation." "load_approved_workouts_for_date_range",
+        lambda *_args, **_kwargs: ApprovedWorkoutWindow(
+            status="available",
+            workouts=[authority],
+        ),
+    )
     client = SyncClient()
     client.row = client.row.model_copy(update={"paired_event_id": publication.event_id})
     service = ActivitySyncService(repo, _config(), client)
 
     first = service.run(today=date(2026, 7, 28))
-    first_manifest = load_completion_manifest(repo)
+    first_manifest = load_fulfillment_manifest(repo)
     second = service.run(today=date(2026, 7, 28))
-    second_manifest = load_completion_manifest(repo)
+    second_manifest = load_fulfillment_manifest(repo)
     client.row = client.row.model_copy(update={"paired_event_id": None})
-    pairing_omitted = service.run(today=date(2026, 7, 28))
-    final_manifest = load_completion_manifest(repo)
+    unpaired = service.run(today=date(2026, 7, 28))
+    final_manifest = load_fulfillment_manifest(repo)
 
-    local_activity_id = next(iter(first_manifest.matches))
-    assert first.completion_matches_linked == 1
-    assert second.completion_matches_linked == 0
+    local_activity_id = next(iter(first_manifest.fulfillments))
+    assert first.workout_fulfillments_linked == 1
+    assert second.workout_fulfillments_linked == 0
     assert first_manifest == second_manifest
-    assert pairing_omitted.completion_candidates_reported == 0
-    assert final_manifest == first_manifest
+    assert unpaired.partial
+    assert unpaired.workout_provider_pairs_withdrawn == 0
+    assert final_manifest.fulfillments == first_manifest.fulfillments
+    assert local_activity_id in final_manifest.unresolved_fulfillment_conflicts
     assert (
-        first_manifest.matches[local_activity_id].workout_identity == publication.workout_identity
+        first_manifest.fulfillments[local_activity_id].workout_identity
+        == publication.workout_identity
     )
 
 
-def test_unique_unpaired_candidate_is_reported_without_automatic_link(
+def test_dismissed_candidate_blocks_later_automatic_provider_pair(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    (tmp_path / "data" / "activities").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    publication, authority = _publication_with_authority()
+    _save_publication(repo, publication)
+    monkeypatch.setattr(
+        "resilio.core.activity_sync.staged_reconciliation." "load_approved_workouts_for_date_range",
+        lambda *_args, **_kwargs: ApprovedWorkoutWindow(
+            status="available",
+            workouts=[authority],
+        ),
+    )
+    client = SyncClient()
+    service = ActivitySyncService(repo, _config(), client)
+    service.run(today=date(2026, 7, 28))
+    activity = ActivityArchive(repo.resolve_path("data/activities")).load_all()[0]
+    candidate = build_fulfillment_candidates(
+        activity=activity,
+        workout_authorities=[
+            FulfillmentWorkoutAuthority(
+                identity=authority.identity,
+                prescription=authority.prescription,
+                applied_week_approval_id=authority.applied_week_approval_id,
+                applied_running_workouts_sha256=(authority.applied_running_workouts_sha256),
+                schedule_timezone=authority.schedule_timezone,
+            )
+        ],
+        manifest=WorkoutFulfillmentManifest(),
+    )[0]
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            dismissed_candidates={
+                candidate.candidate_sha256: WorkoutFulfillmentCandidateDismissal(
+                    candidate_sha256=candidate.candidate_sha256,
+                    local_activity_id=activity.local_activity_id,
+                    workout_identity=authority.identity,
+                    athlete_response_reference=(
+                        "Athlete said this activity did not fulfill the workout."
+                    ),
+                    dismissed_at_utc=datetime(
+                        2026,
+                        7,
+                        28,
+                        9,
+                        tzinfo=timezone.utc,
+                    ),
+                )
+            }
+        ),
+    )
+    client.row = client.row.model_copy(update={"paired_event_id": publication.event_id})
+
+    report = service.run(today=date(2026, 7, 28))
+    manifest = load_fulfillment_manifest(repo)
+
+    assert report.partial
+    assert manifest.fulfillments == {}
+    assert (
+        manifest.unresolved_fulfillment_conflicts[activity.local_activity_id].rule
+        == "paired_event_fulfillment_was_dismissed"
+    )
+
+
+def test_running_activity_reclassification_durably_suspends_fulfillment(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repo, archive = _repo_with_linked_history(tmp_path, monkeypatch)
+    publication = _publication()
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "historical-local": _fulfillment(
+                    local_activity_id="historical-local",
+                    publication=publication,
+                )
+            }
+        ),
+    )
+    client = SyncClient()
+    client.row = client.row.model_copy(update={"type": "Ride"})
+
+    first = ActivitySyncService(repo, _config(), client).run(today=date(2026, 7, 28))
+    second = ActivitySyncService(repo, _config(), client).run(today=date(2026, 7, 28))
+
+    assert first.partial and second.partial
+    assert ActivityArchive(archive).load_all()[0].sport == "run"
+    conflict = load_fulfillment_manifest(repo).unresolved_fulfillment_conflicts["historical-local"]
+    assert conflict.rule == "fulfilled_activity_sport_changed"
+
+
+@pytest.mark.parametrize(
+    ("paired_event_id", "expect_conflict"),
+    [(41, False), (42, True), (None, True)],
+)
+def test_historical_pair_never_promotes_to_active_fulfillment(
+    tmp_path,
+    monkeypatch,
+    paired_event_id: int | None,
+    expect_conflict: bool,
+) -> None:
+    repo, _ = _repo_with_linked_history(tmp_path, monkeypatch)
+    activity = _linked_historical()
+    legacy_source = _publication(event_id=41, workout_id="historical-run")
+    historical_publication = HistoricalLegacyWorkoutPublication.model_validate(
+        legacy_source.model_dump(
+            mode="python",
+            exclude={
+                "applied_week_approval_id",
+                "applied_running_workouts_sha256",
+                "workout_prescription_sha256",
+                "schedule_timezone",
+            },
+        )
+    )
+    current_publication = _publication(event_id=42, workout_id="current-run")
+    save_manifest(
+        repo,
+        PublicationManifest(
+            workouts={"current-run": current_publication},
+            historical_legacy_workouts={"historical-run": historical_publication},
+        ),
+    )
+    historical_fulfillment = HistoricalLegacyWorkoutFulfillment(
+        local_activity_id=activity.local_activity_id,
+        workout_identity=historical_publication.workout_identity,
+        activity_performance_evidence_sha256=activity_performance_evidence_sha256(activity),
+        scheduled_local_date=historical_publication.occurrence_date,
+        execution_local_date=activity.occurrence.local_date,
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=historical_publication.event_id,
+            observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+        ),
+        matched_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            historical_legacy_fulfillments={activity.local_activity_id: historical_fulfillment}
+        ),
+    )
+    client = SyncClient()
+    client.row = client.row.model_copy(update={"paired_event_id": paired_event_id})
+
+    report = ActivitySyncService(repo, _config(), client).run(today=date(2026, 7, 28))
+    manifest = load_fulfillment_manifest(repo)
+
+    assert report.partial is expect_conflict
+    assert manifest.fulfillments == {}
+    assert activity.local_activity_id in manifest.historical_legacy_fulfillments
+    assert (
+        activity.local_activity_id in manifest.unresolved_fulfillment_conflicts
+    ) is expect_conflict
+
+
+def test_unpaired_activity_is_not_automatically_linked(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -557,21 +865,12 @@ def test_unique_unpaired_candidate_is_reported_without_automatic_link(
     report = ActivitySyncService(repo, _config(), SyncClient()).run(today=date(2026, 7, 28))
 
     assert not report.partial
-    assert report.completion_candidates_reported == 1
-    assert load_completion_manifest(repo).matches == {}
+    assert report.workout_fulfillments_linked == 0
+    assert load_fulfillment_manifest(repo).fulfillments == {}
     artifact = json.loads(
         next((tmp_path / "data" / "state" / "sync-runs").rglob("quarantine.json")).read_text()
     )
-    assert artifact["completion_candidates"] == [
-        {
-            "local_activity_id": (
-                ActivityArchive(tmp_path / "data" / "activities").load_all()[0].local_activity_id
-            ),
-            "local_workout_id": publication.workout_identity.local_workout_id,
-            "rule": "unique_date_sport_time_candidate",
-            "start_delta_seconds": 0.0,
-        }
-    ]
+    assert "completion_candidates" not in artifact
 
 
 def test_paired_event_sport_mismatch_fails_safe_without_completion_link(
@@ -596,8 +895,8 @@ def test_paired_event_sport_mismatch_fails_safe_without_completion_link(
 
     assert report.partial
     assert report.quarantined_rows == 1
-    assert report.completion_matches_linked == 0
-    assert load_completion_manifest(repo).matches == {}
+    assert report.workout_fulfillments_linked == 0
+    assert load_fulfillment_manifest(repo).fulfillments == {}
     artifact = json.loads(
         next((tmp_path / "data" / "state" / "sync-runs").rglob("quarantine.json")).read_text()
     )
@@ -761,6 +1060,45 @@ def test_confirmed_404_tombstones_exact_linked_record(
     assert not hasattr(tombstone, "calculated_load")
 
 
+def test_confirmed_404_durably_suspends_fulfillment_before_tombstone(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    repo, archive = _repo_with_linked_history(tmp_path, monkeypatch)
+    publication = _publication()
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "historical-local": _fulfillment(
+                    local_activity_id="historical-local",
+                    publication=publication,
+                )
+            }
+        ),
+    )
+    client = ReconciliationClient(
+        [],
+        detail_error=IntervalsNotFoundError(
+            "not found",
+            operation="get_activity",
+            status_code=404,
+        ),
+    )
+
+    report = ActivitySyncService(repo, _config(), client).run(
+        today=date(2026, 7, 28),
+        full=True,
+        confirm_deletions=True,
+    )
+
+    assert report.partial
+    assert report.activities_tombstoned == 0
+    assert ActivityArchive(archive).load_all()[0].status == ActivityStatus.ACTIVE
+    conflict = load_fulfillment_manifest(repo).unresolved_fulfillment_conflicts["historical-local"]
+    assert conflict.rule == "fulfilled_activity_provider_deleted"
+
+
 def test_unconfirmed_404_is_exposed_in_local_deletion_review(
     tmp_path,
     monkeypatch,
@@ -841,7 +1179,7 @@ def test_batch_detail_extra_id_fails_partial_without_archive_write(
     assert ActivityArchive(archive).load_all() == []
 
 
-def test_sync_state_failure_restores_workout_completion_manifest(
+def test_sync_state_failure_restores_workout_fulfillment_manifest(
     tmp_path,
     monkeypatch,
 ) -> None:
@@ -850,19 +1188,25 @@ def test_sync_state_failure_restores_workout_completion_manifest(
     archive.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
     repo = RepositoryIO()
-    old_match = WorkoutCompletionMatch(
-        local_activity_id="act_h_0123456789abcdef01234567",
-        workout_identity=PlanWorkoutIdentity(
-            plan_id="plan_old",
-            plan_revision_id="plan_revision_2222222222222222",
-            week_number=1,
-            local_workout_id="older-workout",
-        ),
-        match_method="paired_event_id",
-        matched_at_utc=datetime(2026, 7, 1, tzinfo=timezone.utc),
+    old_publication = _publication(workout_id="older-workout")
+    old_publication = old_publication.model_copy(
+        update={
+            "workout_identity": PlanWorkoutIdentity(
+                plan_id="plan_old",
+                plan_revision_id="plan_revision_2222222222222222",
+                week_number=1,
+                local_workout_id="older-workout",
+            )
+        }
     )
-    original_manifest = WorkoutCompletionManifest(matches={old_match.local_activity_id: old_match})
-    save_completion_manifest(repo, original_manifest)
+    old_fulfillment = _fulfillment(
+        local_activity_id="act_h_0123456789abcdef01234567",
+        publication=old_publication,
+    )
+    original_manifest = WorkoutFulfillmentManifest(
+        fulfillments={old_fulfillment.local_activity_id: old_fulfillment}
+    )
+    save_fulfillment_manifest(repo, original_manifest)
     publication = _publication()
     _save_publication(repo, publication)
     client = SyncClient()
@@ -879,36 +1223,30 @@ def test_sync_state_failure_restores_workout_completion_manifest(
         ActivitySyncService(repo, _config(), client).run(today=date(2026, 7, 28))
 
     assert ActivityArchive(archive).load_all() == []
-    assert load_completion_manifest(repo) == original_manifest
+    assert load_fulfillment_manifest(repo) == original_manifest
 
 
-def test_completion_save_revalidates_mutated_mapping(
+def test_fulfillment_save_revalidates_mutated_mapping(
     tmp_path,
     monkeypatch,
 ) -> None:
     (tmp_path / ".git").mkdir()
     monkeypatch.chdir(tmp_path)
     repo = RepositoryIO()
-    first = WorkoutCompletionMatch(
+    publication = _publication()
+    first = _fulfillment(
         local_activity_id="act_h_0123456789abcdef01234567",
-        workout_identity=PlanWorkoutIdentity(
-            plan_id="plan_test",
-            plan_revision_id="plan_revision_1111111111111111",
-            week_number=1,
-            local_workout_id="planned-run",
-        ),
-        match_method="paired_event_id",
-        matched_at_utc=datetime(2026, 7, 1, tzinfo=timezone.utc),
+        publication=publication,
     )
-    manifest = WorkoutCompletionManifest(matches={first.local_activity_id: first})
+    manifest = WorkoutFulfillmentManifest(fulfillments={first.local_activity_id: first})
     second = first.model_copy(update={"local_activity_id": "act_h_89abcdef0123456701234567"})
-    manifest.matches[second.local_activity_id] = second
+    manifest.fulfillments[second.local_activity_id] = second
 
     with pytest.raises(
         ValueError,
-        match="cannot match multiple activities",
+        match="cannot fulfill multiple activities",
     ):
-        save_completion_manifest(repo, manifest)
+        save_fulfillment_manifest(repo, manifest)
 
 
 def test_interrupted_archive_swap_is_recovered_before_retry(

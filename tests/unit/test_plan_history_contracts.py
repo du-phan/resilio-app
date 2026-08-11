@@ -22,6 +22,7 @@ from resilio.schemas.plan_history import (
     PlanWorkoutIdentity,
 )
 from resilio.schemas.planning_evidence import (
+    CompactTrainingWeek,
     MacroPlanningContext,
     PlanningEvidencePointer,
 )
@@ -45,6 +46,23 @@ def test_plan_workout_identity_is_fully_qualified() -> None:
 
     assert identity.plan_id == "plan_renewal"
     assert identity.week_number == 3
+
+
+def test_compact_week_can_capture_late_fulfillment_observed_after_sunday() -> None:
+    week = CompactTrainingWeek(
+        week_start=date(2026, 7, 27),
+        week_end=date(2026, 8, 2),
+        evidence_as_of_date=date(2026, 8, 3),
+        adherence_status="available",
+        due_planned_workout_count=1,
+        due_fulfilled_workout_count=1,
+        due_unfulfilled_workout_count=0,
+        actual_run_count=0,
+        actual_run_elapsed_duration_seconds=0,
+        source_coverage_status="complete",
+    )
+
+    assert week.evidence_as_of_date > week.week_end
 
 
 def test_new_closure_cannot_silently_leave_race_outcome_unknown() -> None:
@@ -144,7 +162,6 @@ def test_macro_context_requires_start_after_evidence_and_unique_evidence_ids() -
                 "description": "The exact currently approved VDOT evidence.",
             },
         ],
-        "source_context_sha256": "b" * 64,
         "source_state_sha256": "c" * 64,
     }
     context = MacroPlanningContext.model_validate(payload)

@@ -5,6 +5,7 @@ from datetime import date
 from resilio.core.planning.adherence_evidence import (
     ApprovedWorkoutWindow,
     AuthoritativeWorkout,
+    applied_workout_authority_history,
     resolve_approved_workouts_for_date_range,
 )
 from resilio.core.planning.artifacts import (
@@ -69,6 +70,14 @@ def load_publishable_workouts_unlocked(
                     local_workout_id=workout.id,
                 ),
                 prescription=workout,
+                applied_week_approval_id=approval.approval_id,
+                applied_running_workouts_sha256=(approval.applied_running_workouts_sha256),
+                schedule_timezone=approval.schedule_timezone,
+                applied_authority_history=applied_workout_authority_history(
+                    state.active_plan.applied_week_revisions,
+                    week_number=week.week_number,
+                    local_workout_id=workout.id,
+                ),
             )
             for workout in week.running_workouts
         )

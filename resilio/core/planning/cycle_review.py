@@ -21,20 +21,22 @@ from resilio.core.planning.source_state import (
 )
 from resilio.core.planning.state_repository import load_planning_aggregate
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.completions import (
-    load_completion_manifest,
-)
+from resilio.core.workout_fulfillment.evidence import assert_fulfillment_is_usable
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.schemas.activity import (
     RUNNING_SPORT_VALUES,
     ActivityStatus,
     CanonicalActivity,
 )
-from resilio.schemas.coaching import WeeklyCoachContext
+from resilio.schemas.coaching import (
+    AdherenceContext,
+    WeeklyCoachContext,
+)
 from resilio.schemas.plan_history import (
     AthleteConfirmedGoalActivityEvidence,
     EvidenceArtifactReference,
     GoalOutcome,
-    OwnedCompletionGoalEvidence,
+    OwnedFulfillmentGoalEvidence,
 )
 from resilio.schemas.planning.plans import RaceMacroPlan
 from resilio.schemas.planning_evidence import (
@@ -87,7 +89,7 @@ def _validate_goal_outcome(
     if not isinstance(
         evidence,
         (
-            OwnedCompletionGoalEvidence,
+            OwnedFulfillmentGoalEvidence,
             AthleteConfirmedGoalActivityEvidence,
         ),
     ):
@@ -97,12 +99,17 @@ def _validate_goal_outcome(
         raise PlanOperationError(
             "Goal activity performance evidence changed after athlete confirmation"
         )
-    if isinstance(evidence, OwnedCompletionGoalEvidence):
-        completion = load_completion_manifest(repo).matches.get(evidence.local_activity_id)
-        if completion is None or completion.workout_identity != evidence.workout_identity:
+    if isinstance(evidence, OwnedFulfillmentGoalEvidence):
+        fulfillment_manifest = load_fulfillment_manifest(repo)
+        fulfillment = fulfillment_manifest.fulfillments.get(evidence.local_activity_id)
+        if fulfillment is None or fulfillment.workout_identity != evidence.workout_identity:
             raise PlanOperationError(
-                "Owned goal evidence is not present in the completion manifest"
+                "Owned goal evidence is not present in the fulfillment manifest"
             )
+        try:
+            assert_fulfillment_is_usable(fulfillment, activity, fulfillment_manifest)
+        except ValueError as exc:
+            raise PlanOperationError(str(exc)) from exc
     return activity
 
 
@@ -133,14 +140,20 @@ def confirmed_goal_outcome(
             }
         )
     activity = _activity_by_id(repo, local_activity_id)
-    completion = load_completion_manifest(repo).matches.get(local_activity_id)
+    fulfillment_manifest = load_fulfillment_manifest(repo)
+    fulfillment = fulfillment_manifest.fulfillments.get(local_activity_id)
+    if fulfillment is not None:
+        try:
+            assert_fulfillment_is_usable(fulfillment, activity, fulfillment_manifest)
+        except ValueError as exc:
+            raise PlanOperationError(str(exc)) from exc
     evidence = (
-        OwnedCompletionGoalEvidence(
-            workout_identity=completion.workout_identity,
+        OwnedFulfillmentGoalEvidence(
+            workout_identity=fulfillment.workout_identity,
             local_activity_id=local_activity_id,
             performance_evidence_sha256=activity_performance_evidence_sha256(activity),
         )
-        if completion is not None
+        if fulfillment is not None
         else AthleteConfirmedGoalActivityEvidence(
             local_activity_id=local_activity_id,
             performance_evidence_sha256=activity_performance_evidence_sha256(activity),
@@ -158,6 +171,8 @@ def confirmed_goal_outcome(
 
 
 def _compact_week(context: WeeklyCoachContext) -> CompactTrainingWeek:
+    if not isinstance(context.adherence, AdherenceContext):
+        raise PlanOperationError("Cycle review requires current fulfillment-aware weekly evidence")
     coverage = context.source_evidence_coverage
     limitation = context.adherence.reason
     if coverage.status in {"incomplete", "unavailable"}:
@@ -168,8 +183,8 @@ def _compact_week(context: WeeklyCoachContext) -> CompactTrainingWeek:
         evidence_as_of_date=context.as_of_date,
         adherence_status=context.adherence.status,
         due_planned_workout_count=context.adherence.due_workout_count,
-        verified_completed_workout_count=(context.adherence.verified_completed_workout_count),
-        due_unmatched_workout_count=context.adherence.due_unmatched_workout_count,
+        due_fulfilled_workout_count=context.adherence.due_fulfilled_workout_count,
+        due_unfulfilled_workout_count=context.adherence.due_unfulfilled_workout_count,
         actual_run_count=context.run_exposure.run_count,
         actual_run_distance_km=context.run_exposure.distance_km,
         actual_run_elapsed_duration_seconds=(context.run_exposure.elapsed_duration_seconds),
@@ -193,10 +208,10 @@ def _cycle_totals(
         reviewed_week_count=len(compact_weeks),
         planned_target_run_volume_meters=sum(week.target_run_volume_meters for week in plan.weeks),
         due_planned_workout_count=sum(week.due_planned_workout_count for week in compact_weeks),
-        verified_completed_workout_count=sum(
-            week.verified_completed_workout_count for week in compact_weeks
+        due_fulfilled_workout_count=sum(week.due_fulfilled_workout_count for week in compact_weeks),
+        due_unfulfilled_workout_count=sum(
+            week.due_unfulfilled_workout_count for week in compact_weeks
         ),
-        due_unmatched_workout_count=sum(week.due_unmatched_workout_count for week in compact_weeks),
         actual_run_count=sum(week.actual_run_count for week in compact_weeks),
         actual_run_distance_km=(sum(distance_values) if distance_values else None),
         actual_run_elapsed_duration_seconds=sum(
@@ -332,18 +347,6 @@ def create_cycle_review(
         totals=_cycle_totals(plan, compact_weeks),
         compact_weeks=compact_weeks,
         recent_detailed_weeks=weeks[-MAX_DETAILED_REVIEW_WEEKS:],
-        source_context_sha256=canonical_data_sha256(
-            {
-                "active_plan": active_plan.model_dump(mode="json"),
-                "reviewed_weeks": [week.model_dump(mode="json") for week in weeks],
-                "goal_outcome": goal_outcome.model_dump(mode="json"),
-                "goal_activity": (
-                    goal_activity_summary.model_dump(mode="json")
-                    if goal_activity_summary is not None
-                    else None
-                ),
-            }
-        ),
         source_state_sha256=source_state_sha256,
         evidence_limitations=limitations,
     )

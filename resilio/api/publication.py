@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from typing import Literal, Mapping, Optional
-from zoneinfo import ZoneInfo
 
 from resilio.core.config import ConfigError, load_config
 from resilio.core.repository import RepositoryIO
@@ -132,6 +131,7 @@ def restore_local_week_run_workouts(
     week_number: int,
     *,
     athlete_confirmation_reference: str,
+    confirmed_drift_target_tokens: list[str],
     as_of_date: Optional[date] = None,
     environment: Optional[Mapping[str, str]] = None,
     client: Optional[IntervalsIcuClient] = None,
@@ -143,25 +143,57 @@ def restore_local_week_run_workouts(
         environment=environment,
         client=client,
         athlete_confirmation_reference=athlete_confirmation_reference,
+        confirmed_drift_target_tokens=confirmed_drift_target_tokens,
+    )
+
+
+def retire_fulfilled_week_run_workouts(
+    week_number: int,
+    *,
+    athlete_confirmation_reference: str,
+    confirmed_drift_target_tokens: list[str],
+    as_of_date: Optional[date] = None,
+    environment: Optional[Mapping[str, str]] = None,
+    client: Optional[IntervalsIcuClient] = None,
+) -> RunWeekSynchronizationReport | PublicationError:
+    return _run_week_sync_operation(
+        week_number,
+        operation="retire_fulfilled",
+        as_of_date=as_of_date,
+        environment=environment,
+        client=client,
+        athlete_confirmation_reference=athlete_confirmation_reference,
+        confirmed_drift_target_tokens=confirmed_drift_target_tokens,
     )
 
 
 def _run_week_sync_operation(
     week_number: int,
     *,
-    operation: Literal["status", "reconcile", "restore_local"],
+    operation: Literal[
+        "status",
+        "reconcile",
+        "restore_local",
+        "retire_fulfilled",
+    ],
     as_of_date: Optional[date],
     environment: Optional[Mapping[str, str]],
     client: Optional[IntervalsIcuClient],
     athlete_confirmation_reference: Optional[str] = None,
+    confirmed_drift_target_tokens: list[str] | None = None,
 ) -> RunWeekSynchronizationReport | PublicationError:
     result = _with_intervals_client(environment=environment, client=client)
     if isinstance(result, PublicationError):
         return result
     integration, owned_client = result
     try:
-        resolved_date = _resolved_as_of_date(integration, as_of_date)
         service = RunWeekSynchronizationService(RepositoryIO(), integration)
+        resolved_date = _resolved_as_of_date(
+            service,
+            week_number=week_number,
+            supplied_date=as_of_date,
+            operation=operation,
+        )
         if operation == "status":
             return service.status_week(week_number, as_of_date=resolved_date)
         if operation == "restore_local":
@@ -169,6 +201,14 @@ def _run_week_sync_operation(
                 week_number,
                 as_of_date=resolved_date,
                 athlete_confirmation_reference=athlete_confirmation_reference or "",
+                confirmed_drift_target_tokens=confirmed_drift_target_tokens or [],
+            )
+        if operation == "retire_fulfilled":
+            return service.retire_fulfilled_week(
+                week_number,
+                as_of_date=resolved_date,
+                athlete_confirmation_reference=athlete_confirmation_reference or "",
+                confirmed_drift_target_tokens=confirmed_drift_target_tokens or [],
             )
         return service.reconcile_week(week_number, as_of_date=resolved_date)
     except ProviderSemanticsMismatchError as exc:
@@ -199,10 +239,23 @@ def _with_intervals_client(
 
 
 def _resolved_as_of_date(
-    integration: IntervalsIcuClient,
+    service: RunWeekSynchronizationService,
+    *,
+    week_number: int,
     supplied_date: Optional[date],
+    operation: Literal[
+        "status",
+        "reconcile",
+        "restore_local",
+        "retire_fulfilled",
+    ],
 ) -> date:
-    if supplied_date is not None:
+    current_schedule_date = service.current_schedule_date(week_number)
+    if operation == "status" and supplied_date is not None:
         return supplied_date
-    capabilities = get_run_synchronization_capabilities(integration)
-    return datetime.now(ZoneInfo(capabilities.athlete_timezone)).date()
+    if supplied_date is not None and supplied_date != current_schedule_date:
+        raise PublicationSafetyError(
+            "Live calendar mutation requires today's date in the applied week's "
+            "captured schedule timezone"
+        )
+    return current_schedule_date

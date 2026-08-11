@@ -25,9 +25,8 @@ def get_run_synchronization_capabilities(
     garmin_eligible = (
         connections.garmin_training_connected and garmin_enabled and garmin_run_allowed
     )
-    pace_ready = (
-        settings.threshold_speed_meters_per_second is not None
-        and bool(settings.pace_zones)
+    pace_ready = settings.threshold_speed_meters_per_second is not None and bool(
+        settings.pace_zones
     )
     limitations: list[str] = []
     if not connections.garmin_training_connected:
@@ -49,9 +48,7 @@ def get_run_synchronization_capabilities(
 
     threshold_pace_seconds_per_kilometer = None
     if settings.threshold_speed_meters_per_second is not None:
-        threshold_pace_seconds_per_kilometer = (
-            1_000 / settings.threshold_speed_meters_per_second
-        )
+        threshold_pace_seconds_per_kilometer = 1_000 / settings.threshold_speed_meters_per_second
     return RunSynchronizationCapabilities(
         athlete_id=athlete.id,
         athlete_timezone=athlete.timezone,

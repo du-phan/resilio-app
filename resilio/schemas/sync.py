@@ -140,8 +140,9 @@ class SyncReport(BaseModel):
     activities_linked: int = 0
     activities_unchanged: int = 0
     activities_tombstoned: int = 0
-    completion_matches_linked: int = 0
-    completion_candidates_reported: int = 0
+    workout_fulfillments_linked: int = 0
+    workout_fulfillment_evidence_revisions: int = 0
+    workout_provider_pairs_withdrawn: int = 0
     hidden_rows: int = 0
     ambiguous_rows: int = 0
     excluded_duplicate_rows: int = 0

@@ -5,14 +5,24 @@ from datetime import date, datetime, timezone
 import pytest
 
 from resilio.core.activity_sync.archive import ActivityArchive
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.core.coaching_context.exact_activity import (
     build_exact_activity_coaching_evidence,
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.training_state_repository import write_wellness
+from resilio.core.workout_fulfillment.repository import save_fulfillment_manifest
 from resilio.integrations.intervals_icu.dto import HeartRateCurveDTO
 from resilio.schemas.activity import ActivityOrigin, ActivityOriginKind
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.training_state import WellnessDay
+from resilio.schemas.workout_fulfillment import (
+    ProviderPairedFulfillmentEvidence,
+    WorkoutFulfillmentManifest,
+    WorkoutFulfillmentRecord,
+)
 from tests.factories import make_activity
 
 
@@ -90,6 +100,50 @@ def test_exact_activity_evidence_maps_requested_provider_hr_curve(
         300,
     ]
     assert evidence.provider_heart_rate_curve[1].heart_rate_beats_per_minute == 160
+
+
+def test_exact_activity_rejects_stale_fulfillment_performance_evidence(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    original = make_activity(id="stale-fulfillment", date=date(2026, 8, 6))
+    fulfillment = WorkoutFulfillmentRecord(
+        local_activity_id=original.local_activity_id,
+        workout_identity=PlanWorkoutIdentity(
+            plan_id="plan_test",
+            plan_revision_id="plan_revision_1111111111111111",
+            week_number=1,
+            local_workout_id="planned-run",
+        ),
+        applied_week_approval_id="week_approval_0123456789abcdef",
+        applied_running_workouts_sha256="1" * 64,
+        workout_prescription_sha256="2" * 64,
+        activity_performance_evidence_sha256=activity_performance_evidence_sha256(original),
+        schedule_timezone="Europe/Paris",
+        scheduled_local_date=date(2026, 8, 6),
+        execution_local_date=date(2026, 8, 6),
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=42,
+            observed_at_utc=datetime(2026, 8, 6, 10, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 8, 6, 10, tzinfo=timezone.utc),
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={original.local_activity_id: fulfillment}),
+    )
+    changed = original.model_copy(update={"distance_meters": (original.distance_meters or 0) + 100})
+    ActivityArchive(repo.resolve_path("data/activities")).write(changed)
+
+    with pytest.raises(ValueError, match="performance evidence changed"):
+        build_exact_activity_coaching_evidence(
+            repo,
+            local_activity_id=original.local_activity_id,
+        )
 
 
 def test_provider_hr_curve_requires_parallel_duration_and_value_arrays() -> None:

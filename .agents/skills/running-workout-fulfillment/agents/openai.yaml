@@ -1,0 +1,4 @@
+interface:
+  display_name: "Running Workout Fulfillment"
+  short_description: "Confirm early or late workout execution"
+  default_prompt: "Use $running-workout-fulfillment to confirm and reconcile an off-schedule completed run."

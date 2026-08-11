@@ -26,7 +26,7 @@ separate. Interpret recovery signal by signal; do not compute a composite
 readiness score or injury probability.
 
 Running is the only prescribed weekly-plan content. Other physical activities
-remain athlete-managed: synchronized completions are factual observed
+remain athlete-managed: synchronized activities are factual observed
 exposure, while profile entries are athlete-confirmed future expectations.
 Flexible expectations never acquire dates; recurring expectations constrain
 run placement only through their confirmed weekdays and same-day permission.
@@ -85,7 +85,7 @@ The baseline-assessment sequence is:
    benchmark intent;
 4. generate, approve, and apply exact weekly files;
 5. publish the approved benchmark as a structured calendar-day or exactly
-   timed run and require exact owned completion pairing;
+   timed run and require exact provider-paired fulfillment;
 6. let the athlete select either the whole paired activity or an exact
    canonical segment and confirm the official benchmark distance;
 7. create the immutable review, separately confirm closure, and archive the
@@ -108,7 +108,7 @@ They constrain running only. The coach never creates temporary session-count
 overrides for athlete-managed sports or crams running into the remaining days.
 
 An unapproved, unapplied plan proposal may be discarded for revision only by
-its exact plan revision ID and only after local publication and completion
+its exact plan revision ID and only after local publication and fulfillment
 manifests prove that no ownership record exists. Approved plans always require
 the normal evidence-backed closure lifecycle.
 
@@ -165,7 +165,7 @@ fix changes the architecture or contract.
 ## Migration safety
 
 Treat activities, wellness, sport settings, sync state, profile, plans,
-approvals, and publication/completion manifests as coordinated state.
+approvals, and publication/fulfillment manifests as coordinated state.
 
 - Validate sources before backup.
 - Create a permission-restricted, hash-verifiable backup outside switched

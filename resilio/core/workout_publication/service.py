@@ -22,6 +22,7 @@ from resilio.core.workout_publication.policy import (
     assert_remote_unchanged,
     garmin_forwarding_status,
     pending_matches,
+    provider_event_fingerprint,
     provider_push_errors,
     publication_fingerprint,
     published_record,
@@ -36,15 +37,45 @@ from resilio.core.workout_publication.preparation import (
     PreparedPublication,
     prepare_publication,
 )
+from resilio.core.workout_publication.retirement_reopening import (
+    reopen_revoked_fulfillment_retirement,
+)
+from resilio.core.workout_publication.retirement_service import (
+    WorkoutRetirementService,
+)
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
-from resilio.integrations.intervals_icu.errors import IntervalsNotFoundError
 from resilio.schemas.publication import (
     PendingWorkoutPublication,
     PublicationManifest,
     PublicationResult,
     PublishedWorkout,
 )
+from resilio.schemas.workout_fulfillment import WorkoutFulfillmentRecord
+
+
+def _prepared_published_record(
+    prepared: PreparedPublication,
+    remote: EventDTO,
+) -> PublishedWorkout:
+    return published_record(
+        workout=prepared.workout,
+        workout_identity=prepared.workout_identity,
+        applied_week_approval_id=prepared.applied_week_approval_id,
+        applied_running_workouts_sha256=prepared.applied_running_workouts_sha256,
+        workout_prescription_sha256=prepared.workout_prescription_sha256,
+        schedule_timezone=prepared.schedule_timezone,
+        event_id=remote.id,
+        requested_uid=prepared.requested_uid,
+        uid=prepared.event.uid,
+        external_id=prepared.external_id,
+        fingerprint=prepared.publication_fingerprint_sha256,
+        rendered_hash=prepared.rendered_workout_sha256,
+        settings_version=prepared.settings_version_sha256,
+        provider_start_local=prepared.provider_start_date_local,
+        garmin_eligible=prepared.garmin_forwarding_eligible,
+        remote=remote,
+    )
 
 
 class WorkoutPublicationService:
@@ -80,9 +111,15 @@ class WorkoutPublicationService:
         *,
         restore_local: bool = False,
         provider_name: str | None = None,
+        expected_remote_target: tuple[int, str] | None = None,
     ) -> PublicationResult:
         workout = authoritative_workout.prescription
         manifest = load_manifest(self.repo)
+        manifest = reopen_revoked_fulfillment_retirement(
+            self.repo,
+            manifest,
+            local_workout_id=workout.id,
+        )
         previous = manifest.workouts.get(workout.id)
         prepared = prepare_publication(
             self.client,
@@ -106,6 +143,7 @@ class WorkoutPublicationService:
             pending,
             identity_matches,
             restore_local=restore_local,
+            expected_remote_target=expected_remote_target,
         )
         if recovered is not None:
             return recovered
@@ -115,6 +153,7 @@ class WorkoutPublicationService:
             previous,
             pending,
             restore_local=restore_local,
+            expected_remote_target=expected_remote_target,
         )
         if recovered_or_noop is not None:
             return recovered_or_noop
@@ -159,6 +198,20 @@ class WorkoutPublicationService:
                 )
         return identity_matches
 
+    @staticmethod
+    def _assert_confirmed_remote_target(
+        remote: EventDTO,
+        *,
+        expected_remote_target: tuple[int, str] | None,
+    ) -> None:
+        if expected_remote_target is None:
+            return
+        if (
+            remote.id != expected_remote_target[0]
+            or provider_event_fingerprint(remote) != expected_remote_target[1]
+        ):
+            raise PublicationSafetyError("Remote event changed after athlete drift confirmation")
+
     def _normalize_pending(
         self,
         prepared: PreparedPublication,
@@ -197,9 +250,14 @@ class WorkoutPublicationService:
         identity_matches: list[EventDTO],
         *,
         restore_local: bool,
+        expected_remote_target: tuple[int, str] | None,
     ) -> PublicationResult | None:
         if pending is not None and identity_matches:
             recovered = identity_matches[0]
+            self._assert_confirmed_remote_target(
+                recovered,
+                expected_remote_target=expected_remote_target,
+            )
             try:
                 assert_remote_matches(
                     recovered,
@@ -229,6 +287,10 @@ class WorkoutPublicationService:
                 manifest.workouts[prepared.workout.id] = published_record(
                     workout=prepared.workout,
                     workout_identity=prepared.workout_identity,
+                    applied_week_approval_id=prepared.applied_week_approval_id,
+                    applied_running_workouts_sha256=(prepared.applied_running_workouts_sha256),
+                    workout_prescription_sha256=prepared.workout_prescription_sha256,
+                    schedule_timezone=prepared.schedule_timezone,
                     event_id=recovered.id,
                     requested_uid=prepared.requested_uid,
                     uid=remote_uid,
@@ -265,6 +327,7 @@ class WorkoutPublicationService:
         pending: PendingWorkoutPublication | None,
         *,
         restore_local: bool,
+        expected_remote_target: tuple[int, str] | None,
     ) -> PublicationResult | None:
         if previous is not None:
             if (
@@ -281,6 +344,10 @@ class WorkoutPublicationService:
                 uid=prepared.event.uid,
                 external_id=prepared.external_id,
             )
+            self._assert_confirmed_remote_target(
+                remote,
+                expected_remote_target=expected_remote_target,
+            )
             if pending is not None:
                 try:
                     assert_remote_matches(
@@ -295,19 +362,9 @@ class WorkoutPublicationService:
                         return None
                     assert_remote_unchanged(remote, previous)
                 else:
-                    manifest.workouts[prepared.workout.id] = published_record(
-                        workout=prepared.workout,
-                        workout_identity=prepared.workout_identity,
-                        event_id=remote.id,
-                        requested_uid=prepared.requested_uid,
-                        uid=prepared.event.uid,
-                        external_id=prepared.external_id,
-                        fingerprint=prepared.publication_fingerprint_sha256,
-                        rendered_hash=prepared.rendered_workout_sha256,
-                        settings_version=prepared.settings_version_sha256,
-                        provider_start_local=prepared.provider_start_date_local,
-                        garmin_eligible=prepared.garmin_forwarding_eligible,
-                        remote=remote,
+                    manifest.workouts[prepared.workout.id] = _prepared_published_record(
+                        prepared,
+                        remote,
                     )
                     del manifest.pending[prepared.workout.id]
                     save_manifest(self.repo, manifest)
@@ -342,19 +399,9 @@ class WorkoutPublicationService:
                     prepared.event,
                     prepared.expected_step_semantics,
                 )
-                manifest.workouts[prepared.workout.id] = published_record(
-                    workout=prepared.workout,
-                    workout_identity=prepared.workout_identity,
-                    event_id=remote.id,
-                    requested_uid=prepared.requested_uid,
-                    uid=prepared.event.uid,
-                    external_id=prepared.external_id,
-                    fingerprint=prepared.publication_fingerprint_sha256,
-                    rendered_hash=prepared.rendered_workout_sha256,
-                    settings_version=prepared.settings_version_sha256,
-                    provider_start_local=prepared.provider_start_date_local,
-                    garmin_eligible=prepared.garmin_forwarding_eligible,
-                    remote=remote,
+                manifest.workouts[prepared.workout.id] = _prepared_published_record(
+                    prepared,
+                    remote,
                 )
                 save_manifest(self.repo, manifest)
                 return PublicationResult(
@@ -381,6 +428,10 @@ class WorkoutPublicationService:
         workout = prepared.workout
         manifest.pending[workout.id] = PendingWorkoutPublication(
             workout_identity=prepared.workout_identity,
+            applied_week_approval_id=prepared.applied_week_approval_id,
+            applied_running_workouts_sha256=prepared.applied_running_workouts_sha256,
+            workout_prescription_sha256=prepared.workout_prescription_sha256,
+            schedule_timezone=prepared.schedule_timezone,
             uid=prepared.event.uid,
             external_id=prepared.external_id,
             publication_fingerprint_sha256=(prepared.publication_fingerprint_sha256),
@@ -419,6 +470,10 @@ class WorkoutPublicationService:
         manifest.workouts[workout.id] = published_record(
             workout=workout,
             workout_identity=prepared.workout_identity,
+            applied_week_approval_id=prepared.applied_week_approval_id,
+            applied_running_workouts_sha256=prepared.applied_running_workouts_sha256,
+            workout_prescription_sha256=prepared.workout_prescription_sha256,
+            schedule_timezone=prepared.schedule_timezone,
             event_id=read_back.id,
             requested_uid=prepared.requested_uid,
             uid=remote_uid,
@@ -456,47 +511,25 @@ class WorkoutPublicationService:
         local_workout_id: str,
         *,
         restore_local: bool = False,
+        fulfillment: WorkoutFulfillmentRecord | None = None,
     ) -> PublicationResult:
-        manifest = load_manifest(self.repo)
-        record = manifest.workouts.get(local_workout_id)
-        if record is None:
-            raise PublicationSafetyError("Deletion requires a local publication manifest record")
-        athlete = self.client.get_athlete()
-        try:
-            remote = self.client.get_event(
-                record.event_id,
-                athlete_id=athlete.id,
-            )
-        except IntervalsNotFoundError:
-            del manifest.workouts[local_workout_id]
-            save_manifest(self.repo, manifest)
-            return PublicationResult(
-                action="recovered_deleted",
-                local_workout_id=local_workout_id,
-                event_id=record.event_id,
-                uid=record.uid,
-                external_id=record.external_id,
-            )
-        assert_remote_ownership(
-            remote,
-            uid=record.uid,
-            external_id=record.external_id,
+        return WorkoutRetirementService(self.repo, self.client).retire_published(
+            local_workout_id,
+            restore_local=restore_local,
+            fulfillment=fulfillment,
         )
-        if not restore_local:
-            assert_remote_unchanged(remote, record)
-        self.client.delete_event(record.event_id, athlete_id=athlete.id)
-        try:
-            self.client.get_event(record.event_id, athlete_id=athlete.id)
-        except IntervalsNotFoundError:
-            pass
-        else:
-            raise PublicationSafetyError("Deleted event still exists on read-back")
-        del manifest.workouts[local_workout_id]
-        save_manifest(self.repo, manifest)
-        return PublicationResult(
-            action="deleted",
-            local_workout_id=local_workout_id,
-            event_id=record.event_id,
-            uid=record.uid,
-            external_id=record.external_id,
+
+    def _retire_pending(
+        self,
+        authoritative_workout: AuthoritativeWorkout,
+        *,
+        fulfillment: WorkoutFulfillmentRecord,
+        restore_local: bool,
+        provider_name: str,
+    ) -> PublicationResult:
+        return WorkoutRetirementService(self.repo, self.client).retire_pending(
+            authoritative_workout,
+            fulfillment=fulfillment,
+            restore_local=restore_local,
+            provider_name=provider_name,
         )

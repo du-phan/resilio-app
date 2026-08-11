@@ -592,9 +592,7 @@ def test_wellness_endpoint_preserves_native_units_and_missing_values() -> None:
     assert day.provider_baevsky_stress_index == 8.4
     assert day.hydration_volume_liters == 2.1
     assert day.athlete_comments == "Late dinner; sleep felt fragmented."
-    assert day.provider_updated_at_utc == datetime(
-        2026, 7, 28, 6, 15, tzinfo=timezone.utc
-    )
+    assert day.provider_updated_at_utc == datetime(2026, 7, 28, 6, 15, tzinfo=timezone.utc)
     assert day.sport_performance_estimates[0].source_sport_type == "Run"
     assert day.sport_performance_estimates[0].estimated_ftp_watts == 302
     assert day.sport_performance_estimates[0].estimated_w_prime_joules == 12_500
@@ -609,9 +607,7 @@ def test_wellness_endpoint_preserves_native_units_and_missing_values() -> None:
 
 
 def test_wellness_fingerprint_changes_for_coaching_fields_not_excluded_health_fields() -> None:
-    baseline = WellnessDTO.model_validate(
-        {"id": "2026-07-28", "sleepSecs": 27_000, "steps": 8_000}
-    )
+    baseline = WellnessDTO.model_validate({"id": "2026-07-28", "sleepSecs": 27_000, "steps": 8_000})
     changed_steps = WellnessDTO.model_validate(
         {"id": "2026-07-28", "sleepSecs": 27_000, "steps": 8_001}
     )
@@ -642,9 +638,7 @@ def test_wellness_sport_estimate_order_does_not_change_canonical_state() -> None
     }
     first = map_wellness(WellnessDTO.model_validate(values))
     second = map_wellness(
-        WellnessDTO.model_validate(
-            {**values, "sportInfo": list(reversed(values["sportInfo"]))}
-        )
+        WellnessDTO.model_validate({**values, "sportInfo": list(reversed(values["sportInfo"]))})
     )
 
     assert first == second

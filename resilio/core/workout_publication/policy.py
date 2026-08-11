@@ -316,6 +316,10 @@ def published_record(
     *,
     workout: RunningWorkoutPrescription,
     workout_identity: PlanWorkoutIdentity,
+    applied_week_approval_id: str,
+    applied_running_workouts_sha256: str,
+    workout_prescription_sha256: str,
+    schedule_timezone: str,
     event_id: int,
     requested_uid: str,
     uid: str,
@@ -330,6 +334,10 @@ def published_record(
     """Build a verified provider read-back record."""
     return PublishedWorkout(
         workout_identity=workout_identity,
+        applied_week_approval_id=applied_week_approval_id,
+        applied_running_workouts_sha256=applied_running_workouts_sha256,
+        workout_prescription_sha256=workout_prescription_sha256,
+        schedule_timezone=schedule_timezone,
         event_id=event_id,
         requested_uid=requested_uid,
         uid=uid,

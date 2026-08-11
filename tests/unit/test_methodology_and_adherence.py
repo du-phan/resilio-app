@@ -7,6 +7,9 @@ from zoneinfo import ZoneInfo
 import pytest
 from pydantic import ValidationError
 
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
 from resilio.core.coaching_context.adherence import build_adherence_context
 from resilio.core.methodology import (
     MethodologyRegistryError,
@@ -14,6 +17,7 @@ from resilio.core.methodology import (
     verify_methodology_selection,
 )
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
+from resilio.core.planning.artifacts import canonical_data_sha256
 from resilio.schemas.activity import (
     ActivityAudit,
     ActivityDuration,
@@ -28,9 +32,12 @@ from resilio.schemas.methodology import (
 )
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription, WorkoutType
-from resilio.schemas.publication import (
-    WorkoutCompletionManifest,
-    WorkoutCompletionMatch,
+from resilio.schemas.workout_fulfillment import (
+    AthleteConfirmedFulfillmentEvidence,
+    ProviderPairedFulfillmentEvidence,
+    UnresolvedFulfillmentConflict,
+    WorkoutFulfillmentManifest,
+    WorkoutFulfillmentRecord,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +52,9 @@ def _authoritative(workout: RunningWorkoutPrescription) -> AuthoritativeWorkout:
             local_workout_id=workout.id,
         ),
         prescription=workout,
+        applied_week_approval_id="week_approval_0123456789abcdef",
+        applied_running_workouts_sha256="1" * 64,
+        schedule_timezone="Europe/Paris",
     )
 
 
@@ -198,13 +208,26 @@ def test_weekly_prescription_rejects_non_running_sport() -> None:
 def test_only_exact_completion_ownership_counts_as_adherence() -> None:
     workout = _workout("w_quality", date(2026, 7, 28), WorkoutType.INTERVALS)
     activity = _activity("act_i_completed", date(2026, 7, 28))
-    manifest = WorkoutCompletionManifest(
-        matches={
-            activity.local_activity_id: WorkoutCompletionMatch(
+    manifest = WorkoutFulfillmentManifest(
+        fulfillments={
+            activity.local_activity_id: WorkoutFulfillmentRecord(
                 local_activity_id=activity.local_activity_id,
                 workout_identity=_authoritative(workout).identity,
-                match_method="paired_event_id",
-                matched_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+                applied_week_approval_id="week_approval_0123456789abcdef",
+                applied_running_workouts_sha256="1" * 64,
+                workout_prescription_sha256=canonical_data_sha256(workout),
+                activity_performance_evidence_sha256=(
+                    activity_performance_evidence_sha256(activity)
+                ),
+                schedule_timezone="Europe/Paris",
+                scheduled_local_date=date(2026, 7, 28),
+                execution_local_date=date(2026, 7, 28),
+                schedule_offset_days=0,
+                provider_pair=ProviderPairedFulfillmentEvidence(
+                    event_id=42,
+                    observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+                ),
+                recorded_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
             )
         }
     )
@@ -212,13 +235,16 @@ def test_only_exact_completion_ownership_counts_as_adherence() -> None:
     context = build_adherence_context(
         workouts=[_authoritative(workout)],
         activities=[activity],
-        completion_manifest=manifest,
+        fulfillment_manifest=manifest,
         as_of_date=date(2026, 7, 30),
     )
 
     assert context.due_workout_count == 1
-    assert context.verified_completed_workout_count == 1
-    assert context.due_unmatched_workout_count == 0
+    assert context.fulfilled_workout_count == 1
+    assert context.due_fulfilled_workout_count == 1
+    assert context.due_unfulfilled_workout_count == 0
+    assert context.workouts[0].fulfillment_status == "fulfilled_on_schedule"
+    assert context.workouts[0].fulfillment_basis == "provider_paired"
     assert context.workouts[0].matched_local_activity_id == "act_i_completed"
     assert context.due_planned_high_intensity_duration_seconds == 3_600
 
@@ -230,14 +256,91 @@ def test_same_day_activity_without_owned_pairing_remains_unmatched() -> None:
     context = build_adherence_context(
         workouts=[_authoritative(workout)],
         activities=[activity],
-        completion_manifest=WorkoutCompletionManifest(),
+        fulfillment_manifest=WorkoutFulfillmentManifest(),
         as_of_date=date(2026, 7, 30),
     )
 
-    assert context.verified_completed_workout_count == 0
-    assert context.due_unmatched_workout_count == 1
+    assert context.fulfilled_workout_count == 0
+    assert context.due_unfulfilled_workout_count == 1
     assert context.workouts[0].matched_local_activity_id is None
     assert context.due_planned_low_intensity_duration_seconds == 3_600
+
+
+def test_adherence_rejects_fulfillment_after_activity_performance_changes() -> None:
+    workout = _workout("w_easy", date(2026, 7, 28), WorkoutType.EASY)
+    authoritative = _authoritative(workout)
+    activity = _activity("act_i_changed", date(2026, 7, 28))
+    fulfillment = WorkoutFulfillmentRecord(
+        local_activity_id=activity.local_activity_id,
+        workout_identity=authoritative.identity,
+        applied_week_approval_id=authoritative.applied_week_approval_id,
+        applied_running_workouts_sha256=authoritative.applied_running_workouts_sha256,
+        workout_prescription_sha256=canonical_data_sha256(workout),
+        activity_performance_evidence_sha256=activity_performance_evidence_sha256(activity),
+        schedule_timezone=authoritative.schedule_timezone,
+        scheduled_local_date=workout.date,
+        execution_local_date=workout.date,
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=42,
+            observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+    )
+    changed_activity = activity.model_copy(
+        update={"distance_meters": (activity.distance_meters or 0) + 100}
+    )
+
+    with pytest.raises(ValueError, match="performance evidence changed"):
+        build_adherence_context(
+            workouts=[authoritative],
+            activities=[changed_activity],
+            fulfillment_manifest=WorkoutFulfillmentManifest(
+                fulfillments={activity.local_activity_id: fulfillment}
+            ),
+            as_of_date=date(2026, 7, 30),
+        )
+
+
+def test_adherence_rejects_fulfillment_with_a_provider_contradiction() -> None:
+    workout = _workout("w_conflicted", date(2026, 7, 28), WorkoutType.EASY)
+    authoritative = _authoritative(workout)
+    activity = _activity("act_i_conflicted", date(2026, 7, 28))
+    fulfillment = WorkoutFulfillmentRecord(
+        local_activity_id=activity.local_activity_id,
+        workout_identity=authoritative.identity,
+        applied_week_approval_id=authoritative.applied_week_approval_id,
+        applied_running_workouts_sha256=authoritative.applied_running_workouts_sha256,
+        workout_prescription_sha256=canonical_data_sha256(workout),
+        activity_performance_evidence_sha256=activity_performance_evidence_sha256(activity),
+        schedule_timezone=authoritative.schedule_timezone,
+        scheduled_local_date=workout.date,
+        execution_local_date=workout.date,
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=42,
+            observed_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 7, 29, tzinfo=timezone.utc),
+    )
+    manifest = WorkoutFulfillmentManifest(
+        fulfillments={activity.local_activity_id: fulfillment},
+        unresolved_fulfillment_conflicts={
+            activity.local_activity_id: UnresolvedFulfillmentConflict(
+                local_activity_id=activity.local_activity_id,
+                rule="paired_event_removed",
+                observed_at_utc=datetime(2026, 7, 30, tzinfo=timezone.utc),
+            )
+        },
+    )
+
+    with pytest.raises(ValueError, match="unresolved synchronized conflict"):
+        build_adherence_context(
+            workouts=[authoritative],
+            activities=[activity],
+            fulfillment_manifest=manifest,
+            as_of_date=date(2026, 7, 30),
+        )
 
 
 def test_future_workout_is_not_treated_as_due() -> None:
@@ -246,11 +349,53 @@ def test_future_workout_is_not_treated_as_due() -> None:
     context = build_adherence_context(
         workouts=[_authoritative(workout)],
         activities=[],
-        completion_manifest=WorkoutCompletionManifest(),
+        fulfillment_manifest=WorkoutFulfillmentManifest(),
         as_of_date=date(2026, 7, 30),
     )
 
     assert context.planned_workout_count == 1
     assert context.due_workout_count == 0
-    assert context.due_unmatched_workout_count == 0
+    assert context.due_unfulfilled_workout_count == 0
     assert context.workouts[0].is_due is False
+
+
+def test_early_fulfilled_future_workout_is_not_outstanding() -> None:
+    workout = _workout("w_early", date(2026, 7, 28), WorkoutType.EASY)
+    authoritative = _authoritative(workout)
+    activity = _activity("act_i_early", date(2026, 7, 27))
+    fulfillment = WorkoutFulfillmentRecord(
+        local_activity_id=activity.local_activity_id,
+        workout_identity=authoritative.identity,
+        applied_week_approval_id=authoritative.applied_week_approval_id,
+        applied_running_workouts_sha256=(authoritative.applied_running_workouts_sha256),
+        workout_prescription_sha256=canonical_data_sha256(workout),
+        activity_performance_evidence_sha256=activity_performance_evidence_sha256(activity),
+        schedule_timezone=authoritative.schedule_timezone,
+        scheduled_local_date=date(2026, 7, 28),
+        execution_local_date=date(2026, 7, 27),
+        schedule_offset_days=-1,
+        athlete_confirmation=AthleteConfirmedFulfillmentEvidence(
+            candidate_sha256="4" * 64,
+            athlete_confirmation_reference="Athlete confirmed the proposed association.",
+            coaching_rationale=(
+                "The athlete explicitly confirmed the exact approved easy-run intent."
+            ),
+            confirmed_at_utc=datetime(2026, 7, 27, 9, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 7, 27, 9, tzinfo=timezone.utc),
+    )
+
+    context = build_adherence_context(
+        workouts=[authoritative],
+        activities=[activity],
+        fulfillment_manifest=WorkoutFulfillmentManifest(
+            fulfillments={activity.local_activity_id: fulfillment}
+        ),
+        as_of_date=date(2026, 7, 27),
+    )
+
+    assert context.due_workout_count == 0
+    assert context.fulfilled_workout_count == 1
+    assert context.fulfilled_early_workout_count == 1
+    assert context.workouts[0].fulfillment_status == "fulfilled_early"
+    assert context.workouts[0].is_outstanding is False

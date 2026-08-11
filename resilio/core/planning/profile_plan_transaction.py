@@ -57,14 +57,10 @@ def _write_state_pair(
 ) -> None:
     profile_error = repo.write_yaml(athlete_profile_path(), profile)
     if isinstance(profile_error, RepoError):
-        raise ProfilePlanTransactionError(
-            f"Athlete profile recovery write failed: {profile_error}"
-        )
+        raise ProfilePlanTransactionError(f"Athlete profile recovery write failed: {profile_error}")
     planning_error = repo.write_yaml(PLANNING_STATE_PATH, planning_state)
     if isinstance(planning_error, RepoError):
-        raise ProfilePlanTransactionError(
-            f"Planning-state recovery write failed: {planning_error}"
-        )
+        raise ProfilePlanTransactionError(f"Planning-state recovery write failed: {planning_error}")
 
 
 def clear_profile_plan_transaction(repo: RepositoryIO) -> None:
@@ -86,9 +82,7 @@ def recover_profile_plan_transaction(repo: RepositoryIO) -> None:
     if result is None:
         return
     if isinstance(result, RepoError):
-        raise ProfilePlanTransactionError(
-            f"Profile/plan transaction journal is invalid: {result}"
-        )
+        raise ProfilePlanTransactionError(f"Profile/plan transaction journal is invalid: {result}")
     if result.phase == "committed":
         profile = result.updated_profile
         planning_state = result.updated_planning_state

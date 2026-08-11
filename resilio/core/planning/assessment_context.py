@@ -7,10 +7,7 @@ from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
 
 from resilio.core.coaching_context.service import build_coach_history
-from resilio.core.planning.artifacts import (
-    canonical_data_sha256,
-    import_evidence_artifact,
-)
+from resilio.core.planning.artifacts import import_evidence_artifact
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.integrity import (
     planning_constraints_snapshot,
@@ -145,14 +142,6 @@ def create_assessment_planning_context(
         [week.week_start for week in recent_weeks],
         include_temporary_schedule_constraints=bool(normalized_schedule_constraints),
     )
-    source_payload = {
-        "profile": profile.model_dump(mode="json"),
-        "assessment_reasons": [reason.value for reason in normalized_reasons],
-        "temporary_schedule_constraints": [
-            constraint.model_dump(mode="json") for constraint in normalized_schedule_constraints
-        ],
-        "recent_detailed_weeks": [week.model_dump(mode="json") for week in recent_weeks],
-    }
     context = AssessmentPlanningContext(
         evidence_as_of_date=evidence_as_of_date,
         intended_plan_start_date=intended_plan_start_date,
@@ -164,7 +153,6 @@ def create_assessment_planning_context(
         temporary_schedule_constraints=normalized_schedule_constraints,
         recent_detailed_weeks=recent_weeks,
         evidence_index=evidence_index,
-        source_context_sha256=canonical_data_sha256(source_payload),
         source_state_sha256=source_state_sha256,
     )
     return import_evidence_artifact(

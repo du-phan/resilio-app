@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
+from resilio.core.planning.artifacts import canonical_data_sha256
 from resilio.core.workout_publication.naming import provider_workout_name
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
@@ -45,6 +46,10 @@ class PreparedPublication:
 
     workout: RunningWorkoutPrescription
     workout_identity: PlanWorkoutIdentity
+    applied_week_approval_id: str
+    applied_running_workouts_sha256: str
+    workout_prescription_sha256: str
+    schedule_timezone: str
     athlete_id: str
     event: EventWriteDTO
     requested_uid: str
@@ -57,6 +62,16 @@ class PreparedPublication:
     expected_step_semantics: tuple[StepSemantics, ...]
 
 
+def rendered_workout_sha256(workout: RunningWorkoutPrescription) -> str:
+    """Identify the provider workout body independent of provider settings."""
+    if workout.structured_workout is None:
+        raise PublicationSafetyError("Publishing requires a typed structured_workout")
+    rendered_steps = render_structured_workout(workout.structured_workout.steps)
+    purpose = " ".join((workout.purpose or "").split())
+    rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
+    return sha256_text(rendered)
+
+
 def prepare_publication(
     client: IntervalsIcuClient,
     authoritative_workout: AuthoritativeWorkout,
@@ -67,7 +82,7 @@ def prepare_publication(
     """Validate device policy, render content, and bind deterministic identity."""
     workout = authoritative_workout.prescription
     if previous is not None and previous.workout_identity != authoritative_workout.identity:
-        raise PublicationSafetyError("Published workout ID belongs to a different plan lineage")
+        raise PublicationSafetyError("Published workout belongs to different plan lineage")
     if workout.structured_workout is None:
         raise PublicationSafetyError("Publishing requires a typed structured_workout")
     if SportType(workout.structured_workout.sport) != SportType(workout.sport):
@@ -126,6 +141,10 @@ def prepare_publication(
     return PreparedPublication(
         workout=workout,
         workout_identity=authoritative_workout.identity,
+        applied_week_approval_id=authoritative_workout.applied_week_approval_id,
+        applied_running_workouts_sha256=(authoritative_workout.applied_running_workouts_sha256),
+        workout_prescription_sha256=canonical_data_sha256(workout),
+        schedule_timezone=authoritative_workout.schedule_timezone,
         athlete_id=athlete.id,
         event=event,
         requested_uid=requested_uid,
@@ -135,7 +154,7 @@ def prepare_publication(
             event,
             settings_version_sha256,
         ),
-        rendered_workout_sha256=sha256_text(rendered),
+        rendered_workout_sha256=rendered_workout_sha256(workout),
         provider_start_date_local=start_local,
         garmin_forwarding_eligible=garmin_eligible,
         expected_step_semantics=expected_semantics,

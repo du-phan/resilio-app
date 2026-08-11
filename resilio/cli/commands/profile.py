@@ -51,8 +51,9 @@ def profile_create_command(
     minimum_run_days_per_week: int = typer.Option(2, "--minimum-run-days-per-week"),
     maximum_run_days_per_week: int = typer.Option(4, "--maximum-run-days-per-week"),
     unavailable_run_days: str | None = typer.Option(None, "--unavailable-run-days"),
-    maximum_session_duration_minutes: int
-    | None = typer.Option(90, "--maximum-session-duration-minutes"),
+    maximum_session_duration_minutes: int | None = typer.Option(
+        90, "--maximum-session-duration-minutes"
+    ),
     weather_location: str | None = typer.Option(None, "--weather-location"),
 ) -> None:
     _emit(
@@ -85,8 +86,9 @@ def profile_set_command(
     minimum_run_days_per_week: int | None = typer.Option(None, "--minimum-run-days-per-week"),
     maximum_run_days_per_week: int | None = typer.Option(None, "--maximum-run-days-per-week"),
     unavailable_run_days: str | None = typer.Option(None, "--unavailable-run-days"),
-    maximum_session_duration_minutes: int
-    | None = typer.Option(None, "--maximum-session-duration-minutes"),
+    maximum_session_duration_minutes: int | None = typer.Option(
+        None, "--maximum-session-duration-minutes"
+    ),
     weather_location: str | None = typer.Option(None, "--weather-location"),
 ) -> None:
     profile = get_profile()

@@ -75,7 +75,7 @@ do not approve it or mutate the profile or planning state.
      --out <NEW_PROPOSAL_JSON>
    ```
 
-   This path re-verifies the plan, review, publication, completion, canonical
+   This path re-verifies the plan, review, publication, fulfillment, canonical
    activity fingerprint, and whole-activity or exact-segment result. Never
    copy assessment values into a hand-written race-performance proposal.
 

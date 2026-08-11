@@ -149,8 +149,7 @@ def create_assessment_context_command(
     evidence_as_of_date: str = typer.Option(..., "--evidence-as-of"),
     intended_plan_start_date: str = typer.Option(..., "--start"),
     assessment_reasons: list[AssessmentReason] = typer.Option(..., "--reason"),
-    schedule_constraints_file: Path
-    | None = typer.Option(
+    schedule_constraints_file: Path | None = typer.Option(
         None,
         "--constraints-file",
         help="JSON array of athlete-confirmed unavailable date ranges.",
@@ -258,8 +257,7 @@ def create_cycle_review_command(
         ...,
         "--athlete-confirmation",
     ),
-    goal_activity_id: str
-    | None = typer.Option(
+    goal_activity_id: str | None = typer.Option(
         None,
         "--goal-activity-id",
     ),
@@ -350,7 +348,7 @@ def apply_week_command(
         apply_week_file(approved_file),
         "Approved weekly plan applied",
     )
-    create_assessment_context_evidence,
-    create_assessment_plan_from_file,
-    create_assessment_review_evidence,
-    get_assessment_result_candidates,
+    (create_assessment_context_evidence,)
+    (create_assessment_plan_from_file,)
+    (create_assessment_review_evidence,)
+    (get_assessment_result_candidates,)

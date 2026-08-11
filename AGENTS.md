@@ -35,7 +35,7 @@ projections and typed coaching context locally.
   `resilio weather week --start <week-monday>`. Do not use web weather.
 - Synced activity data is authoritative for factual training questions.
 - Treat activities, wellness, sport settings, profile, sync state, plans,
-  approvals, and publication/completion manifests as one coordinated state set
+  approvals, and publication/fulfillment manifests as one coordinated state set
   during migrations.
 - Never expose credentials or raw external payloads in logs, tests, reports, or
   documentation.

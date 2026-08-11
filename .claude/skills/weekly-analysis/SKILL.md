@@ -35,7 +35,8 @@ judgment.
 
 ## Interpretation
 
-- Adherence: use only provider-paired completion identities. Do not infer a
+- Adherence: use only exact provider-paired or athlete-confirmed fulfillment
+  identities. Do not infer a
   match from date, sport, title, distance, or duration. For a mid-week review,
   count only workouts due through `as_of`; future sessions are not missed.
   A date-only approved workout is a valid schedule, not corrupt evidence. It
@@ -84,7 +85,7 @@ judgment.
 Cover:
 
 - the exact review window and whether it is partial;
-- due/completed/unmatched adherence;
+- due, fulfilled, and outstanding adherence, including early or late timing;
 - run and other-sport exposure;
 - key session execution supported by synchronized facts;
 - intensity and recovery evidence with coverage limitations;

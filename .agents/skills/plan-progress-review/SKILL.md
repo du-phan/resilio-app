@@ -1,6 +1,6 @@
 ---
 name: plan-progress-review
-description: Review progress across multiple completed weeks of the current training plan using typed weekly contexts, exact completion identities, and coverage-aware Intervals.icu-native evidence. Use for multi-week plan recaps, trend questions, or “how is my training going so far?”, not a single-week review.
+description: Review progress across multiple completed weeks of the current training plan using typed weekly contexts, exact fulfillment identities, and coverage-aware Intervals.icu-native evidence. Use for multi-week plan recaps, trend questions, or “how is my training going so far?”, not a single-week review.
 ---
 
 # Review plan progress
@@ -38,8 +38,9 @@ answer and use the plan-renewal procedure for the lifecycle transition.
 
 ## Analysis
 
-- Compare planned versus exactly paired completions by week. Do not reconstruct
-  matches heuristically.
+- Compare planned versus exact provider-paired or athlete-confirmed fulfillment
+  by week. Preserve early and late execution timing. Do not reconstruct matches
+  heuristically.
 - Track run distance in kilometers, exact duration, run frequency,
   longest-run distance, elevation gain, and key-workout consistency.
 - Track other-sport duration and native load separately from running.

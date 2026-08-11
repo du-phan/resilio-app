@@ -68,9 +68,7 @@ def _verify_proposal_calculation(proposal: VDOTProposal) -> None:
     evidence = proposal.evidence
     if isinstance(evidence, ManualVDOTEvidence):
         if evidence.athlete_confirmed_vdot != proposal.proposed_vdot:
-            raise ApprovalEvidenceError(
-                "Manual VDOT evidence does not match the proposed value"
-            )
+            raise ApprovalEvidenceError("Manual VDOT evidence does not match the proposed value")
         return
     assert isinstance(
         evidence,
@@ -104,9 +102,7 @@ def _verify_personal_best_source(
             f"Athlete profile could not verify personal-best evidence: {exc}"
         ) from exc
     if profile is None:
-        raise ApprovalEvidenceError(
-            "Athlete profile is missing for personal-best evidence"
-        )
+        raise ApprovalEvidenceError("Athlete profile is missing for personal-best evidence")
     distance_name = (
         evidence.race_distance.value
         if isinstance(evidence.race_distance, RaceDistance)
@@ -114,16 +110,12 @@ def _verify_personal_best_source(
     )
     personal_best = profile.personal_bests_by_distance.get(distance_name)
     if personal_best is None:
-        raise ApprovalEvidenceError(
-            "The source personal best is absent from the athlete profile"
-        )
+        raise ApprovalEvidenceError("The source personal best is absent from the athlete profile")
     if (
         personal_best.elapsed_time_seconds != evidence.elapsed_time_seconds
         or personal_best.performance_date != evidence.performance_date
     ):
-        raise ApprovalEvidenceError(
-            "The source personal best no longer matches the proposal"
-        )
+        raise ApprovalEvidenceError("The source personal best no longer matches the proposal")
     if profile.training_timezone != evidence.performance_timezone:
         raise ApprovalEvidenceError(
             "Personal-best evidence timezone must match the athlete profile"
@@ -138,50 +130,33 @@ def _verify_race_activity_source(
     lock_path = repo.resolve_path(ACTIVITY_MUTATION_LOCK_PATH)
     try:
         with OperationLock(lock_path, "verify_vdot_race_evidence"):
-            activity = ActivityArchive(archive_root).load(
-                evidence.source_local_activity_id
-            )
+            activity = ActivityArchive(archive_root).load(evidence.source_local_activity_id)
     except OperationLockError as exc:
         raise ApprovalEvidenceError(
             "Activity evidence is temporarily unavailable during synchronization"
         ) from exc
     except ActivityArchiveError as exc:
-        raise ApprovalEvidenceError(
-            f"Race activity evidence is invalid: {exc}"
-        ) from exc
+        raise ApprovalEvidenceError(f"Race activity evidence is invalid: {exc}") from exc
     if activity is None:
-        raise ApprovalEvidenceError(
-            "The source race activity is absent from the canonical archive"
-        )
+        raise ApprovalEvidenceError("The source race activity is absent from the canonical archive")
     if activity.status != ActivityStatus.ACTIVE:
         raise ApprovalEvidenceError("The source race activity is not active")
     if not is_running_sport(activity.sport):
-        raise ApprovalEvidenceError(
-            "The source race evidence must reference a running activity"
-        )
+        raise ApprovalEvidenceError("The source race evidence must reference a running activity")
     if activity.occurrence.local_date != evidence.performance_date:
-        raise ApprovalEvidenceError(
-            "The source race activity does not match the performance date"
-        )
+        raise ApprovalEvidenceError("The source race activity does not match the performance date")
     if activity.duration.elapsed_seconds != evidence.elapsed_time_seconds:
-        raise ApprovalEvidenceError(
-            "The source race activity does not match the elapsed time"
-        )
+        raise ApprovalEvidenceError("The source race activity does not match the elapsed time")
     if (
         activity.distance_meters is None
         or abs(activity.distance_meters - evidence.measured_distance_meters) > 0.01
     ):
-        raise ApprovalEvidenceError(
-            "The source race activity does not match the measured distance"
-        )
+        raise ApprovalEvidenceError("The source race activity does not match the measured distance")
     if activity.occurrence.timezone != evidence.performance_timezone:
         raise ApprovalEvidenceError(
             "The source race activity does not match the performance timezone"
         )
-    if (
-        activity.audit.performance_evidence_sha256
-        != evidence.source_performance_evidence_sha256
-    ):
+    if activity.audit.performance_evidence_sha256 != evidence.source_performance_evidence_sha256:
         raise ApprovalEvidenceError(
             "The source race activity fingerprint no longer matches the proposal"
         )
@@ -254,9 +229,7 @@ def load_vdot_approval_evidence_unlocked(
     ):
         raise ApprovalEvidenceError("Approved VDOT proposal no longer matches its approval")
     if approval.approved_at_utc < proposal.generated_at_utc:
-        raise ApprovalEvidenceError(
-            "VDOT approval predates its proposal generation"
-        )
+        raise ApprovalEvidenceError("VDOT approval predates its proposal generation")
     return approval, proposal
 
 

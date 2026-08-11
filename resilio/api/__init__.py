@@ -39,6 +39,7 @@ from resilio.api.publication import (
     get_week_run_workout_sync_status,
     reconcile_week_run_workouts,
     restore_local_week_run_workouts,
+    retire_fulfilled_week_run_workouts,
 )
 from resilio.api.reconciliation import (
     ActivityReviewError,
@@ -57,12 +58,21 @@ from resilio.api.week_application import (
     apply_week_file,
     validate_week_file,
 )
+from resilio.api.workout_fulfillment import (
+    FulfillmentError,
+    confirm_workout_fulfillment,
+    dismiss_workout_fulfillment_candidate,
+    get_workout_fulfillment_candidates,
+    get_workout_fulfillment_week_status,
+    revoke_workout_fulfillment,
+)
 from resilio.core.repository import RepositoryIO
 
 __all__ = [
     "ActivityEvidenceError",
     "ActivityReviewError",
     "CoachingContextError",
+    "FulfillmentError",
     "PlanError",
     "PlanStatus",
     "ProfileError",
@@ -78,12 +88,14 @@ __all__ = [
     "build_macro_template",
     "calculate_vdot_from_race",
     "configure_run_workout_synchronization",
+    "confirm_workout_fulfillment",
     "create_macro_plan",
     "create_macro_plan_from_file",
     "create_cycle_review_evidence",
     "create_macro_context_evidence",
     "create_week_planning_context_evidence",
     "create_profile",
+    "dismiss_workout_fulfillment_candidate",
     "close_plan_cycle",
     "get_current_plan",
     "get_exact_activity_coaching_evidence",
@@ -96,11 +108,15 @@ __all__ = [
     "get_run_workout_synchronization_preferences",
     "get_provider_profile_candidates",
     "get_weekly_coach_context",
+    "get_workout_fulfillment_candidates",
+    "get_workout_fulfillment_week_status",
     "get_weekly_weather_forecast",
     "handle_error",
     "is_error",
     "predict_race_times",
     "reconcile_week_run_workouts",
+    "retire_fulfilled_week_run_workouts",
+    "revoke_workout_fulfillment",
     "restore_local_week_run_workouts",
     "set_goal",
     "sync_activities",

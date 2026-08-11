@@ -135,7 +135,7 @@ estimate.
 The default benchmark is 5,000 meters. A longer distance requires explicit
 athlete confirmation and an evidence-backed rationale. The approved plan owns
 one timed-distance benchmark workout. Result evidence is accepted only after
-exact calendar publication and provider completion pairing; the athlete then
+exact calendar publication and provider-paired fulfillment; the athlete then
 selects the complete paired activity or one exact canonical segment and
 separately confirms the official benchmark distance. GPS distance remains a
 measured fact, not proof of official distance.

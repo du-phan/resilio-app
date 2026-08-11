@@ -80,9 +80,13 @@ def _load_activities(root: Path) -> tuple[list[CanonicalActivity], bool]:
             raw = yaml.safe_load(path.read_text())
             version = raw.get("_schema", {}).get("version")
             mapping_version = raw.get("audit", {}).get("canonical_mapping_version")
-            changes_required = changes_required or version == 4 or (
-                version == 5
-                and mapping_version not in {None, ACTIVITY_CANONICAL_MAPPING_VERSION}
+            changes_required = (
+                changes_required
+                or version == 4
+                or (
+                    version == 5
+                    and mapping_version not in {None, ACTIVITY_CANONICAL_MAPPING_VERSION}
+                )
             )
             activity = (
                 transform_activity_v4(raw)
@@ -241,9 +245,7 @@ def migrate_evidence_state(
         wellness_day_count=len(wellness),
         changes_required=changes_required,
         applied=apply and changes_required,
-        backup_relative_path=(
-            backup_relative.as_posix() if apply and changes_required else ""
-        ),
+        backup_relative_path=(backup_relative.as_posix() if apply and changes_required else ""),
     )
     if not report.applied:
         return report

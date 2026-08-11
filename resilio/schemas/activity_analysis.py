@@ -149,9 +149,7 @@ class ActivityZoneTime(BaseModel):
     @model_validator(mode="after")
     def bucket_identity_is_present(self) -> "ActivityZoneTime":
         if self.zone_index is None and self.provider_zone_id is None:
-            raise ValueError(
-                "zone bucket requires an ordinal index or provider zone ID"
-            )
+            raise ValueError("zone bucket requires an ordinal index or provider zone ID")
         return self
 
 

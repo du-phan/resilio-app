@@ -48,10 +48,12 @@ from resilio.core.training_state_repository import (
     write_sport_settings,
     write_wellness,
 )
-from resilio.core.workout_publication.completions import (
-    WORKOUT_COMPLETIONS_PATH,
-    save_completion_manifest,
+from resilio.core.workout_fulfillment.repository import (
+    WORKOUT_FULFILLMENTS_PATH,
+    load_fulfillment_manifest,
+    save_fulfillment_manifest,
 )
+from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import ActivityDTO, AthleteDTO
 from resilio.integrations.intervals_icu.training_state_mapper import (
@@ -156,12 +158,13 @@ class ActivitySyncService:
         confirm_deletions: bool = False,
     ) -> SyncReport:
         lock_path = self.repo_root / ACTIVITY_MUTATION_LOCK_PATH
-        with OperationLock(lock_path, "activity_sync"):
-            return self._run(
-                today=today,
-                full=full,
-                confirm_deletions=confirm_deletions,
-            )
+        with coordinated_publication_plan_lock(self.repo, "activity_sync"):
+            with OperationLock(lock_path, "activity_sync"):
+                return self._run(
+                    today=today,
+                    full=full,
+                    confirm_deletions=confirm_deletions,
+                )
 
     def _run(
         self,
@@ -171,6 +174,7 @@ class ActivitySyncService:
         confirm_deletions: bool = False,
     ) -> SyncReport:
         self._recover_prior_run()
+        load_fulfillment_manifest(self.repo)
         context = self._prepare_run(today=today, full=full)
         provider_state = self._fetch_provider_training_state(context)
         retrieval = self._retrieve_activities(
@@ -215,7 +219,7 @@ class ActivitySyncService:
             prior_run_root / "previous-wellness",
             prior_run_root / "previous-sync-state.json",
             prior_run_root / "previous-sport-settings.json",
-            prior_run_root / "previous-workout-completions.json",
+            prior_run_root / "previous-workout-fulfillments.json",
             prior_run_root / "commit.json",
         ):
             remove_path(stale)
@@ -451,7 +455,7 @@ class ActivitySyncService:
         )
 
         state_path = self.repo.resolve_path("data/state/activity_sync.json")
-        completion_path = self.repo.resolve_path(WORKOUT_COMPLETIONS_PATH)
+        fulfillment_path = self.repo.resolve_path(WORKOUT_FULFILLMENTS_PATH)
         wellness_root = self.repo.resolve_path(WELLNESS_ROOT)
         sport_settings_path = self.repo.resolve_path(SPORT_SETTINGS_PATH)
 
@@ -461,9 +465,9 @@ class ActivitySyncService:
                 provider_state.merged_wellness_by_date,
             )
             write_sport_settings(self.repo, provider_state.sport_settings)
-            save_completion_manifest(
+            save_fulfillment_manifest(
                 self.repo,
-                staged.reconciliation.completion_manifest,
+                staged.reconciliation.fulfillment_manifest,
             )
             write_sync_state(self.repo, state)
 
@@ -483,8 +487,8 @@ class ActivitySyncService:
                         "previous-sport-settings.json",
                     ),
                     MutationSidecar(
-                        completion_path,
-                        "previous-workout-completions.json",
+                        fulfillment_path,
+                        "previous-workout-fulfillments.json",
                     ),
                 ],
                 apply_sidecars=apply_sidecars,

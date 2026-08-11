@@ -60,8 +60,8 @@ class PlanClosureDisposition(str, Enum):
     MIGRATED_UNCLASSIFIED = "migrated_unclassified"
 
 
-class OwnedCompletionGoalEvidence(BaseModel):
-    evidence_kind: Literal["owned_workout_completion"] = "owned_workout_completion"
+class OwnedFulfillmentGoalEvidence(BaseModel):
+    evidence_kind: Literal["owned_workout_fulfillment"] = "owned_workout_fulfillment"
     workout_identity: PlanWorkoutIdentity
     local_activity_id: str = Field(
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
@@ -92,7 +92,7 @@ class GoalOutcomeUnavailableEvidence(BaseModel):
 
 
 GoalActivityEvidence = Annotated[
-    OwnedCompletionGoalEvidence
+    OwnedFulfillmentGoalEvidence
     | AthleteConfirmedGoalActivityEvidence
     | GoalOutcomeUnavailableEvidence,
     Field(discriminator="evidence_kind"),

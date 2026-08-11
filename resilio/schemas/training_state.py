@@ -15,15 +15,9 @@ class WellnessSource(str, Enum):
 
 class SportPerformanceEstimate(BaseModel):
     source_sport_type: str = Field(min_length=1, max_length=120)
-    estimated_ftp_watts: Optional[float] = Field(
-        default=None, gt=0, allow_inf_nan=False
-    )
-    estimated_w_prime_joules: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
-    estimated_pmax_watts: Optional[float] = Field(
-        default=None, ge=0, allow_inf_nan=False
-    )
+    estimated_ftp_watts: Optional[float] = Field(default=None, gt=0, allow_inf_nan=False)
+    estimated_w_prime_joules: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
+    estimated_pmax_watts: Optional[float] = Field(default=None, ge=0, allow_inf_nan=False)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -119,9 +113,7 @@ class WellnessDay(BaseModel):
         allow_inf_nan=False,
     )
     athlete_comments: Optional[str] = None
-    sport_performance_estimates: list[SportPerformanceEstimate] = Field(
-        default_factory=list
-    )
+    sport_performance_estimates: list[SportPerformanceEstimate] = Field(default_factory=list)
     resting_hr_is_temporary: bool = False
     source: WellnessSource = WellnessSource.INTERVALS_ICU
 

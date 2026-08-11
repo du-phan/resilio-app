@@ -65,9 +65,7 @@ def activity_performance_evidence_sha256(activity: CanonicalActivity) -> str:
             "average_stride_meters": activity.execution_summary.average_stride_meters,
         },
         "device": activity.device,
-        "segments": [
-            _performance_segment_payload(segment) for segment in activity.segments
-        ],
+        "segments": [_performance_segment_payload(segment) for segment in activity.segments],
         "origin": activity.origin,
     }
     canonical = json.dumps(

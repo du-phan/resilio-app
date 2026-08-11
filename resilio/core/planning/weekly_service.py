@@ -9,6 +9,7 @@ from pydantic import TypeAdapter
 
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
+    canonical_data_sha256,
     load_all_closed_plan_archives,
 )
 from resilio.core.planning.audit import (
@@ -37,6 +38,7 @@ from resilio.core.planning.state_repository import (
 )
 from resilio.core.planning.weekly_evidence import validate_week_planning_evidence
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
     PlanningState,
@@ -235,6 +237,39 @@ def _updated_plan(
     )
 
 
+def _assert_fulfilled_workouts_unchanged(
+    repo: RepositoryIO,
+    *,
+    previous_revision: AppliedWeekRevision,
+    populated_week: WeekPlan,
+) -> None:
+    prior_workouts = {
+        workout.id: workout for workout in previous_revision.applied_week_snapshot.running_workouts
+    }
+    proposed_workouts = {workout.id: workout for workout in populated_week.running_workouts}
+    for fulfillment in load_fulfillment_manifest(repo).fulfillments.values():
+        identity = fulfillment.workout_identity
+        if (
+            identity.plan_id != previous_revision.plan_id
+            or identity.plan_revision_id != previous_revision.plan_revision_id
+            or identity.week_number != previous_revision.week_number
+        ):
+            continue
+        prior = prior_workouts.get(identity.local_workout_id)
+        if prior is None or canonical_data_sha256(prior) != fulfillment.workout_prescription_sha256:
+            raise PlanOperationError(
+                "Fulfilled workout authority no longer matches its applied-week snapshot"
+            )
+        proposed = proposed_workouts.get(identity.local_workout_id)
+        if (
+            proposed is None
+            or canonical_data_sha256(proposed) != fulfillment.workout_prescription_sha256
+        ):
+            raise PlanOperationError(
+                "A weekly replacement cannot remove or alter a fulfilled workout"
+            )
+
+
 def apply_approved_week(
     repo: RepositoryIO,
     approved_file: Path,
@@ -287,6 +322,11 @@ def apply_approved_week(
             None,
         )
         if previous is not None:
+            _assert_fulfilled_workouts_unchanged(
+                repo,
+                previous_revision=previous,
+                populated_week=populated_week,
+            )
             revisions = [
                 item.model_copy(
                     update={

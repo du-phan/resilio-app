@@ -13,7 +13,10 @@ from resilio.core.coaching_context.recovery import (
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.training_state_repository import load_wellness
-from resilio.core.workout_publication.completions import load_completion_manifest
+from resilio.core.workout_fulfillment.evidence import (
+    assert_fulfillment_is_usable,
+)
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.integrations.intervals_icu.dto import HeartRateCurveDTO
 from resilio.schemas.activity import ActivityStatus
 from resilio.schemas.activity_evidence import (
@@ -55,10 +58,14 @@ def build_exact_activity_coaching_evidence(
         if provider_heart_rate_curve is not None
         else []
     )
+    fulfillment_manifest = load_fulfillment_manifest(repo)
+    fulfillment = fulfillment_manifest.fulfillments.get(local_activity_id)
+    if fulfillment is not None:
+        assert_fulfillment_is_usable(fulfillment, activity, fulfillment_manifest)
     return ExactActivityCoachingEvidence(
         activity=activity,
         performance_evidence_sha256=activity_performance_evidence_sha256(activity),
-        completion_match=load_completion_manifest(repo).matches.get(local_activity_id),
+        workout_fulfillment=fulfillment,
         recovery_context=build_recovery_context(
             wellness,
             as_of_date=activity.occurrence.local_date,

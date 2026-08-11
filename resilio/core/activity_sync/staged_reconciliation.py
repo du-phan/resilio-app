@@ -10,12 +10,26 @@ from typing import Any
 
 from resilio.core.activity_sync.activity_merge import merge_reviewed_activity
 from resilio.core.activity_sync.archive import ActivityArchive
-from resilio.core.activity_sync.completed_workouts import (
-    reconcile_workout_completion,
+from resilio.core.activity_sync.athlete_fulfillment_decisions import (
+    athlete_provider_pair_conflict,
 )
 from resilio.core.activity_sync.errors import ActivitySyncError
+from resilio.core.activity_sync.external_deletions import (
+    reconcile_external_deletions,
+)
+from resilio.core.activity_sync.fulfillment_conflicts import (
+    apply_provider_fulfillment_reconciliation,
+    persist_unresolved_fulfillment_conflict,
+    record_fulfillment_conflict,
+)
+from resilio.core.activity_sync.historical_fulfillment import (
+    historical_provider_pair_decision,
+)
 from resilio.core.activity_sync.original_files import (
     probe_original_file_for_ambiguity,
+)
+from resilio.core.activity_sync.provider_fulfillment import (
+    reconcile_provider_fulfillment,
 )
 from resilio.core.activity_sync.reconciliation import reconcile_activity
 from resilio.core.activity_sync.review import (
@@ -25,9 +39,12 @@ from resilio.core.activity_sync.review import (
     reconciliation_review_fingerprint,
 )
 from resilio.core.activity_transaction import write_json
+from resilio.core.planning.workout_evidence import (
+    load_approved_workouts_for_date_range,
+)
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.completions import (
-    load_completion_manifest,
+from resilio.core.workout_fulfillment.repository import (
+    load_fulfillment_manifest,
 )
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.integrations.intervals_icu.activity_fingerprint import (
@@ -36,28 +53,24 @@ from resilio.integrations.intervals_icu.activity_fingerprint import (
 from resilio.integrations.intervals_icu.activity_mapper import map_activity
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import ActivityDTO
-from resilio.integrations.intervals_icu.errors import (
-    IntervalsIcuError,
-    IntervalsNotFoundError,
-)
 from resilio.schemas.activity import (
-    ActivityStatus,
     CanonicalActivity,
+    is_running_sport,
 )
-from resilio.schemas.publication import WorkoutCompletionManifest
+from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.reconciliation import (
     ReconciliationAction,
     ReconciliationDecision,
 )
 from resilio.schemas.sync import SourceCoverageExclusion, SyncReport
+from resilio.schemas.workout_fulfillment import WorkoutFulfillmentManifest
 
 
 @dataclass(frozen=True)
 class StagedReconciliationOutcome:
-    completion_manifest: WorkoutCompletionManifest
+    fulfillment_manifest: WorkoutFulfillmentManifest
     earliest_changed_date: date | None
     decisions: list[dict[str, Any]]
-    completion_candidates: list[dict[str, Any]]
     external_deletion_candidates: list[str]
 
     def source_coverage_exclusions(self) -> list[SourceCoverageExclusion]:
@@ -116,13 +129,42 @@ class StagedActivityReconciler:
         self.override_ledger = load_override_ledger(repo)
         self.quarantine_acknowledgements = load_quarantine_acknowledgement_ledger(repo)
         self.publication_manifest = load_manifest(repo)
-        self.completion_manifest = load_completion_manifest(repo)
+        self.fulfillment_manifest = load_fulfillment_manifest(repo)
         self.published_by_event_id = {
             publication.event_id: publication
             for publication in self.publication_manifest.workouts.values()
         }
+        self.published_by_event_id.update(
+            {
+                retirement.publication.event_id: retirement.publication
+                for retirement in self.publication_manifest.retired.values()
+            }
+        )
+        self.historical_publications_by_event_id = {
+            publication.event_id: publication
+            for publication in self.publication_manifest.historical_legacy_workouts.values()
+        }
+        publication_dates = [
+            publication.occurrence_date for publication in self.published_by_event_id.values()
+        ]
+        approved_window = (
+            load_approved_workouts_for_date_range(
+                repo,
+                window_start=min(publication_dates),
+                window_end=max(publication_dates),
+            )
+            if publication_dates
+            else None
+        )
+        self.authoritative_workouts_by_identity = {
+            _workout_identity_key(workout.identity): workout
+            for workout in (
+                approved_window.workouts
+                if approved_window is not None and approved_window.status == "available"
+                else []
+            )
+        }
         self.decisions: list[dict[str, Any]] = []
-        self.completion_candidates: list[dict[str, Any]] = []
         self.external_deletion_candidates: list[str] = []
         self.earliest_changed_date: date | None = None
 
@@ -163,8 +205,31 @@ class StagedActivityReconciler:
                 )
             )
             return
+        if (
+            decision.activity is not None
+            and decision.activity.local_activity_id in self.fulfillment_manifest.fulfillments
+            and not is_running_sport(mapped.sport)
+        ):
+            conflict = {
+                "rule": "fulfilled_activity_sport_changed",
+                "local_activity_id": decision.activity.local_activity_id,
+            }
+            persist_unresolved_fulfillment_conflict(
+                self.fulfillment_manifest,
+                local_activity_id=decision.activity.local_activity_id,
+                conflict_rule=conflict["rule"],
+                paired_event_id=detail.paired_event_id,
+                observed_at_utc=datetime.now(timezone.utc),
+            )
+            record_fulfillment_conflict(
+                report=self.report,
+                decisions=self.decisions,
+                external_activity_id_sha256=_external_id_sha256(external_id),
+                conflict=conflict,
+            )
+            return
         final_activity = self._store_reconciled_activity(decision)
-        self._record_completion(external_id, detail, final_activity)
+        self._record_fulfillment(external_id, detail, final_activity)
 
     def _map_or_quarantine(
         self,
@@ -335,36 +400,106 @@ class StagedActivityReconciler:
             self.report.activities_updated += 1
         return activity
 
-    def _record_completion(
+    def _record_fulfillment(
         self,
         external_id: str,
         detail: ActivityDTO,
         activity: CanonicalActivity,
     ) -> None:
-        completion = reconcile_workout_completion(
+        observed_at_utc = datetime.now(timezone.utc)
+        historical_pair_handled, historical_pair_conflict = historical_provider_pair_decision(
+            paired_event_id=detail.paired_event_id,
+            activity=activity,
+            publications_by_event_id=self.historical_publications_by_event_id,
+            fulfillments_by_activity_id=(self.fulfillment_manifest.historical_legacy_fulfillments),
+        )
+        if historical_pair_handled:
+            if historical_pair_conflict is not None:
+                persist_unresolved_fulfillment_conflict(
+                    self.fulfillment_manifest,
+                    local_activity_id=activity.local_activity_id,
+                    conflict_rule=historical_pair_conflict["rule"],
+                    paired_event_id=detail.paired_event_id,
+                    observed_at_utc=observed_at_utc,
+                )
+                record_fulfillment_conflict(
+                    report=self.report,
+                    decisions=self.decisions,
+                    external_activity_id_sha256=_external_id_sha256(external_id),
+                    conflict=historical_pair_conflict,
+                )
+            else:
+                self.fulfillment_manifest.unresolved_fulfillment_conflicts.pop(
+                    activity.local_activity_id,
+                    None,
+                )
+            return
+        existing_fulfillment = self.fulfillment_manifest.fulfillments.get(
+            activity.local_activity_id
+        )
+        paired_publication = (
+            self.published_by_event_id.get(detail.paired_event_id)
+            if detail.paired_event_id is not None
+            else None
+        )
+        athlete_decision_conflict = (
+            athlete_provider_pair_conflict(
+                activity=activity,
+                publication=paired_publication,
+                authoritative_workout=(
+                    self.authoritative_workouts_by_identity.get(
+                        _workout_identity_key(paired_publication.workout_identity)
+                    )
+                    if paired_publication is not None
+                    else None
+                ),
+                manifest=self.fulfillment_manifest,
+            )
+            if existing_fulfillment is None
+            else None
+        )
+        if athlete_decision_conflict is not None:
+            persist_unresolved_fulfillment_conflict(
+                self.fulfillment_manifest,
+                local_activity_id=activity.local_activity_id,
+                conflict_rule=athlete_decision_conflict["rule"],
+                paired_event_id=detail.paired_event_id,
+                observed_at_utc=observed_at_utc,
+            )
+            record_fulfillment_conflict(
+                report=self.report,
+                decisions=self.decisions,
+                external_activity_id_sha256=_external_id_sha256(external_id),
+                conflict=athlete_decision_conflict,
+            )
+            return
+        reconciliation = reconcile_provider_fulfillment(
             activity=activity,
             paired_event_id=detail.paired_event_id,
             publications_by_event_id=self.published_by_event_id,
-            publications=self.publication_manifest.workouts.values(),
-            existing_match=self.completion_manifest.matches.get(activity.local_activity_id),
-            matched_at_utc=datetime.now(timezone.utc),
+            authoritative_workout=(
+                self.authoritative_workouts_by_identity.get(
+                    _workout_identity_key(
+                        self.published_by_event_id[detail.paired_event_id].workout_identity
+                    )
+                )
+                if detail.paired_event_id in self.published_by_event_id
+                else None
+            ),
+            existing_fulfillment=existing_fulfillment,
+            observed_at_utc=observed_at_utc,
         )
-        if completion.conflict is not None:
-            self.report.quarantined_rows += 1
-            self.report.partial = True
-            self.decisions.append(
-                {
-                    "action": "quarantine",
-                    "external_activity_id_sha256": (_external_id_sha256(external_id)),
-                    **completion.conflict,
-                }
-            )
-        elif completion.match is not None:
-            self.completion_manifest.matches[activity.local_activity_id] = completion.match
-            self.report.completion_matches_linked += 1
-        elif completion.candidate is not None:
-            self.completion_candidates.append(completion.candidate)
-            self.report.completion_candidates_reported += 1
+        apply_provider_fulfillment_reconciliation(
+            manifest=self.fulfillment_manifest,
+            report=self.report,
+            decisions=self.decisions,
+            local_activity_id=activity.local_activity_id,
+            external_activity_id_sha256=_external_id_sha256(external_id),
+            paired_event_id=detail.paired_event_id,
+            existing_fulfillment=existing_fulfillment,
+            reconciliation=reconciliation,
+            observed_at_utc=observed_at_utc,
+        )
 
     def confirm_external_deletions(
         self,
@@ -374,47 +509,18 @@ class StagedActivityReconciler:
         newest: date,
         confirm_deletions: bool,
     ) -> None:
-        for current in list(self.staging_records):
-            external_id = current.origin.intervals_icu_activity_id
-            if not external_id or external_id in listed_external_ids:
-                continue
-            if not (oldest <= current.occurrence.local_date <= newest):
-                continue
-            try:
-                self.client.get_activity(external_id)
-            except IntervalsNotFoundError:
-                self._record_missing_external(current, confirm_deletions)
-            except IntervalsIcuError as exc:
-                self.report.partial = True
-                self.report.errors.append(
-                    "External deletion confirmation failed safely: " f"{exc.error_type}"
-                )
-            else:
-                self.report.partial = True
-                self.report.errors.append(
-                    "An activity omitted from a complete list still exists " "by detail lookup"
-                )
-
-    def _record_missing_external(
-        self,
-        activity: CanonicalActivity,
-        confirm_deletions: bool,
-    ) -> None:
-        if not confirm_deletions:
-            self.external_deletion_candidates.append(activity.local_activity_id)
-            self.report.partial = True
-            self.report.errors.append("A missing external activity requires deletion review")
-            return
-        tombstone = activity.model_copy(update={"status": ActivityStatus.EXTERNAL_DELETED})
-        self.staging.write(tombstone)
-        self.report.activities_tombstoned += 1
-        self.earliest_changed_date = (
-            activity.occurrence.local_date
-            if self.earliest_changed_date is None
-            else min(
-                self.earliest_changed_date,
-                activity.occurrence.local_date,
-            )
+        self.earliest_changed_date = reconcile_external_deletions(
+            client=self.client,
+            staging=self.staging,
+            staging_records=self.staging_records,
+            fulfillment_manifest=self.fulfillment_manifest,
+            listed_external_ids=listed_external_ids,
+            oldest=oldest,
+            newest=newest,
+            confirm_deletions=confirm_deletions,
+            report=self.report,
+            deletion_candidates=self.external_deletion_candidates,
+            earliest_changed_date=self.earliest_changed_date,
         )
 
     def write_quarantine_report(
@@ -430,7 +536,6 @@ class StagedActivityReconciler:
                 "schema_version": 1,
                 "run_id": run_id,
                 "ambiguous_decisions": self.decisions,
-                "completion_candidates": self.completion_candidates,
                 "external_deletion_candidates": sorted(self.external_deletion_candidates),
                 "hidden_rows": hidden_row_count,
             },
@@ -438,16 +543,24 @@ class StagedActivityReconciler:
 
     def outcome(self) -> StagedReconciliationOutcome:
         return StagedReconciliationOutcome(
-            completion_manifest=self.completion_manifest,
+            fulfillment_manifest=self.fulfillment_manifest,
             earliest_changed_date=self.earliest_changed_date,
             decisions=self.decisions,
-            completion_candidates=self.completion_candidates,
             external_deletion_candidates=self.external_deletion_candidates,
         )
 
 
 def _external_id_sha256(external_id: str) -> str:
     return hashlib.sha256(external_id.encode()).hexdigest()
+
+
+def _workout_identity_key(identity: PlanWorkoutIdentity) -> tuple[str, str, int, str]:
+    return (
+        identity.plan_id,
+        identity.plan_revision_id,
+        identity.week_number,
+        identity.local_workout_id,
+    )
 
 
 def _sanitized_decision(

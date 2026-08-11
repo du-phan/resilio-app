@@ -1,5 +1,6 @@
 """End-to-end baseline-assessment planning, review, and VDOT evidence."""
 
+import hashlib
 import json
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
@@ -8,9 +9,24 @@ import pytest
 from pydantic import ValidationError
 
 from resilio.core.activity_sync.archive import ActivityArchive
-from resilio.core.planning.artifacts import load_evidence_artifact
+from resilio.core.activity_sync.evidence_identity import (
+    activity_performance_evidence_sha256,
+)
+from resilio.core.planning.approval_evidence import verify_vdot_approval
+from resilio.core.planning.artifacts import (
+    archive_path,
+    canonical_data_sha256,
+    canonical_json_bytes,
+    evidence_path,
+    load_all_closed_plan_archives,
+    load_evidence_artifact,
+    model_sha256,
+)
 from resilio.core.planning.assessment_context import (
     create_assessment_planning_context,
+)
+from resilio.core.planning.assessment_evidence import (
+    load_verified_closed_assessment_review,
 )
 from resilio.core.planning.assessment_review import (
     close_assessment_from_review,
@@ -20,6 +36,7 @@ from resilio.core.planning.assessment_review import (
 from resilio.core.planning.assessment_vdot import (
     create_vdot_proposal_from_assessment,
 )
+from resilio.core.planning.integrity import plan_skeleton_sha256
 from resilio.core.planning.macro_context import create_macro_planning_context
 from resilio.core.planning.service import (
     PlanOperationError,
@@ -31,12 +48,18 @@ from resilio.core.planning.service import (
     load_approved_workouts_for_date_range,
     load_planning_aggregate,
 )
+from resilio.core.planning.state_repository import persist_planning_state
 from resilio.core.planning.weekly_context import create_week_planning_context
 from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.completions import save_completion_manifest
+from resilio.core.workout_fulfillment.migration import (
+    WorkoutFulfillmentMigrationError,
+    migrate_workout_fulfillment_state,
+)
+from resilio.core.workout_fulfillment.repository import save_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.schemas.assessment import TemporaryScheduleConstraint
+from resilio.schemas.plan_history import EvidenceArtifactReference
 from resilio.schemas.planning.drafts import AssessmentPlanDraft
 from resilio.schemas.planning_evidence import (
     AssessmentPlanningContext,
@@ -56,8 +79,11 @@ from resilio.schemas.publication import (
     PendingWorkoutPublication,
     PublicationManifest,
     PublishedWorkout,
-    WorkoutCompletionManifest,
-    WorkoutCompletionMatch,
+)
+from resilio.schemas.workout_fulfillment import (
+    ProviderPairedFulfillmentEvidence,
+    WorkoutFulfillmentManifest,
+    WorkoutFulfillmentRecord,
 )
 from tests.factories import make_activity
 
@@ -325,12 +351,25 @@ def _record_owned_completion(
         "week_number": 3,
         "local_workout_id": benchmark.id,
     }
+    state = load_planning_aggregate(repo)
+    assert state is not None and state.active_plan is not None
+    applied_revision = next(
+        revision
+        for revision in state.active_plan.applied_week_revisions
+        if revision.active and revision.week_number == 3
+    )
     save_manifest(
         repo,
         PublicationManifest(
             workouts={
                 benchmark.id: PublishedWorkout(
                     workout_identity=identity,
+                    applied_week_approval_id=applied_revision.approval_id,
+                    applied_running_workouts_sha256=(
+                        applied_revision.applied_running_workouts_sha256
+                    ),
+                    workout_prescription_sha256=canonical_data_sha256(benchmark),
+                    schedule_timezone=applied_revision.schedule_timezone,
                     event_id=42,
                     requested_uid="requested-assessment-uid",
                     uid="assessment-uid",
@@ -370,15 +409,29 @@ def _record_owned_completion(
         ],
     )
     ActivityArchive(repo.resolve_path("data/activities")).write(activity)
-    save_completion_manifest(
+    publication = load_manifest(repo).workouts[benchmark.id]
+    save_fulfillment_manifest(
         repo,
-        WorkoutCompletionManifest(
-            matches={
-                activity.local_activity_id: WorkoutCompletionMatch(
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                activity.local_activity_id: WorkoutFulfillmentRecord(
                     local_activity_id=activity.local_activity_id,
                     workout_identity=identity,
-                    match_method="paired_event_id",
-                    matched_at_utc=datetime(2026, 8, 20, 8, tzinfo=timezone.utc),
+                    applied_week_approval_id=publication.applied_week_approval_id,
+                    applied_running_workouts_sha256=(publication.applied_running_workouts_sha256),
+                    workout_prescription_sha256=(publication.workout_prescription_sha256),
+                    activity_performance_evidence_sha256=(
+                        activity_performance_evidence_sha256(activity)
+                    ),
+                    schedule_timezone=publication.schedule_timezone,
+                    scheduled_local_date=publication.occurrence_date,
+                    execution_local_date=activity.occurrence.local_date,
+                    schedule_offset_days=0,
+                    provider_pair=ProviderPairedFulfillmentEvidence(
+                        event_id=publication.event_id,
+                        observed_at_utc=datetime(2026, 8, 20, 8, tzinfo=timezone.utc),
+                    ),
+                    recorded_at_utc=datetime(2026, 8, 20, 8, tzinfo=timezone.utc),
                 )
             }
         ),
@@ -521,6 +574,10 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
             "week_number": 3,
             "local_workout_id": "future_owned_workout",
         },
+        applied_week_approval_id="week_approval_0123456789abcdef",
+        applied_running_workouts_sha256="7" * 64,
+        workout_prescription_sha256="8" * 64,
+        schedule_timezone="Europe/Paris",
         uid="future-owned-uid",
         external_id="resilio:v1:workout:future_owned_workout",
         publication_fingerprint_sha256="4" * 64,
@@ -573,6 +630,198 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
     )
     assert approved_state.active_vdot_approval is not None
     assert approved_state.active_vdot_approval.evidence_type == "owned_baseline_assessment"
+
+    archive = load_all_closed_plan_archives(
+        repo,
+        approved_state.closed_plan_references,
+    )[0]
+    archived_plan = archive.active_plan_snapshot.plan
+    current_context_reference = archived_plan.planning_context_reference
+    current_context_path = repo.resolve_path(evidence_path(current_context_reference))
+    legacy_context_payload = json.loads(current_context_path.read_text())
+    for weekly_context in legacy_context_payload["recent_detailed_weeks"]:
+        weekly_context.pop("schema_version")
+        adherence = weekly_context["adherence"]
+        adherence.pop("schema_version")
+        adherence["verified_completed_workout_count"] = adherence.pop("due_fulfilled_workout_count")
+        adherence["due_unmatched_workout_count"] = adherence.pop("due_unfulfilled_workout_count")
+        adherence.pop("fulfilled_workout_count")
+        adherence.pop("fulfilled_early_workout_count")
+        adherence.pop("fulfilled_late_workout_count")
+    legacy_context_bytes = (
+        json.dumps(
+            legacy_context_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        + "\n"
+    ).encode()
+    legacy_context_reference = EvidenceArtifactReference(
+        artifact_type="assessment_planning_context",
+        artifact_sha256=hashlib.sha256(legacy_context_bytes).hexdigest(),
+    )
+    legacy_context_path = repo.resolve_path(evidence_path(legacy_context_reference))
+    legacy_context_path.write_bytes(legacy_context_bytes)
+    current_context_path.unlink()
+
+    legacy_plan = archived_plan.model_copy(
+        update={"planning_context_reference": legacy_context_reference}
+    )
+    legacy_active_plan = archive.active_plan_snapshot.model_copy(
+        update={
+            "plan": legacy_plan,
+            "plan_approval": archive.active_plan_snapshot.plan_approval.model_copy(
+                update={"plan_skeleton_sha256": plan_skeleton_sha256(legacy_plan)}
+            ),
+        }
+    )
+    legacy_review = review.model_copy(
+        update={"active_plan_sha256": canonical_data_sha256(legacy_active_plan)}
+    )
+    legacy_review_bytes = canonical_json_bytes(legacy_review)
+    legacy_review_reference = EvidenceArtifactReference(
+        artifact_type="assessment_review",
+        artifact_sha256=hashlib.sha256(legacy_review_bytes).hexdigest(),
+    )
+    legacy_review_path = repo.resolve_path(evidence_path(legacy_review_reference))
+    legacy_review_path.write_bytes(legacy_review_bytes)
+    repo.resolve_path(evidence_path(review_reference)).unlink()
+    legacy_archive = archive.model_copy(
+        update={
+            "active_plan_snapshot": legacy_active_plan,
+            "closure": archive.closure.model_copy(
+                update={
+                    "assessment_review_artifact_sha256": (legacy_review_reference.artifact_sha256)
+                }
+            ),
+        }
+    )
+    repo.resolve_path(archive_path(archived_plan.id)).write_bytes(
+        canonical_json_bytes(legacy_archive)
+    )
+
+    approved_vdot = approved_state.active_vdot_approval
+    assert approved_vdot is not None
+    legacy_vdot_evidence = approved_vdot.proposal_snapshot.evidence.model_copy(
+        update={"assessment_review_sha256": legacy_review_reference.artifact_sha256}
+    )
+    legacy_vdot_proposal = approved_vdot.proposal_snapshot.model_copy(
+        update={"evidence": legacy_vdot_evidence}
+    )
+    legacy_vdot_bytes = legacy_vdot_proposal.model_dump_json(indent=2).encode()
+    proposal_path.write_bytes(legacy_vdot_bytes)
+    legacy_vdot_approval = approved_vdot.model_copy(
+        update={
+            "proposal_file_sha256": hashlib.sha256(legacy_vdot_bytes).hexdigest(),
+            "proposal_snapshot": legacy_vdot_proposal,
+        }
+    )
+    legacy_state = approved_state.model_copy(
+        update={
+            "vdot_approvals": [legacy_vdot_approval],
+            "closed_plan_references": [
+                approved_state.closed_plan_references[0].model_copy(
+                    update={"archive_sha256": model_sha256(legacy_archive)}
+                )
+            ],
+        }
+    )
+
+    orphan_review = legacy_review.model_copy(
+        update={
+            "review_summary": (
+                "This byte-distinct assessment review is intentionally not owned by the "
+                "closed assessment archive."
+            )
+        }
+    )
+    orphan_review_bytes = canonical_json_bytes(orphan_review)
+    orphan_review_reference = EvidenceArtifactReference(
+        artifact_type="assessment_review",
+        artifact_sha256=hashlib.sha256(orphan_review_bytes).hexdigest(),
+    )
+    repo.resolve_path(evidence_path(orphan_review_reference)).write_bytes(orphan_review_bytes)
+    orphan_evidence = legacy_vdot_evidence.model_copy(
+        update={"assessment_review_sha256": orphan_review_reference.artifact_sha256}
+    )
+    orphan_proposal = legacy_vdot_proposal.model_copy(update={"evidence": orphan_evidence})
+    orphan_proposal_bytes = orphan_proposal.model_dump_json(indent=2).encode()
+    proposal_path.write_bytes(orphan_proposal_bytes)
+    orphan_approval = legacy_vdot_approval.model_copy(
+        update={
+            "proposal_file_sha256": hashlib.sha256(orphan_proposal_bytes).hexdigest(),
+            "proposal_snapshot": orphan_proposal,
+        }
+    )
+    persist_planning_state(
+        repo,
+        legacy_state.model_copy(update={"vdot_approvals": [orphan_approval]}),
+    )
+    with pytest.raises(
+        WorkoutFulfillmentMigrationError,
+        match="does not belong to a closed assessment archive",
+    ):
+        migrate_workout_fulfillment_state(repo, apply=False)
+
+    mismatched_result = legacy_vdot_evidence.result.model_copy(
+        update={"performance_evidence_sha256": "0" * 64}
+    )
+    mismatched_evidence = legacy_vdot_evidence.model_copy(update={"result": mismatched_result})
+    mismatched_proposal = legacy_vdot_proposal.model_copy(update={"evidence": mismatched_evidence})
+    mismatched_proposal_bytes = mismatched_proposal.model_dump_json(indent=2).encode()
+    proposal_path.write_bytes(mismatched_proposal_bytes)
+    mismatched_approval = legacy_vdot_approval.model_copy(
+        update={
+            "proposal_file_sha256": hashlib.sha256(mismatched_proposal_bytes).hexdigest(),
+            "proposal_snapshot": mismatched_proposal,
+        }
+    )
+    persist_planning_state(
+        repo,
+        legacy_state.model_copy(update={"vdot_approvals": [mismatched_approval]}),
+    )
+    with pytest.raises(
+        WorkoutFulfillmentMigrationError,
+        match="VDOT assessment evidence differs from its referenced review",
+    ):
+        migrate_workout_fulfillment_state(repo, apply=False)
+
+    proposal_path.write_bytes(legacy_vdot_bytes)
+    persist_planning_state(repo, legacy_state)
+
+    activity_archive = ActivityArchive(repo.resolve_path("data/activities"))
+    benchmark_activity = activity_archive.load("benchmark_activity")
+    assert benchmark_activity is not None
+    activity_archive.write(
+        benchmark_activity.model_copy(
+            update={"distance_meters": benchmark_activity.distance_meters + 10}
+        )
+    )
+    with pytest.raises(
+        WorkoutFulfillmentMigrationError,
+        match="Assessment result source is invalid",
+    ):
+        migrate_workout_fulfillment_state(repo, apply=False)
+    activity_archive.write(benchmark_activity)
+
+    migration = migrate_workout_fulfillment_state(repo, apply=True)
+    migrated_state = load_planning_aggregate(repo)
+
+    assert migration.applied
+    assert migrated_state is not None
+    migrated_vdot_approval = migrated_state.active_vdot_approval
+    verify_vdot_approval(repo, migrated_vdot_approval)
+    migrated_review_sha256 = (
+        migrated_vdot_approval.proposal_snapshot.evidence.assessment_review_sha256
+    )
+    load_verified_closed_assessment_review(
+        repo,
+        review_sha256=migrated_review_sha256,
+    )
+    repeated_migration = migrate_workout_fulfillment_state(repo, apply=True)
+    assert not repeated_migration.changes_required
+    assert not repeated_migration.applied
 
     macro_context_reference = create_macro_planning_context(
         repo,

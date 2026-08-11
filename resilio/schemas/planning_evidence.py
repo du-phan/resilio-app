@@ -23,7 +23,7 @@ from resilio.schemas.plan_history import (
     BaselineAssessmentResult,
     EvidenceArtifactReference,
     GoalOutcome,
-    OwnedCompletionGoalEvidence,
+    OwnedFulfillmentGoalEvidence,
     PlanClosureDisposition,
     PlanWorkoutIdentity,
 )
@@ -41,8 +41,8 @@ class CompactTrainingWeek(BaseModel):
     evidence_as_of_date: date
     adherence_status: Literal["available", "no_plan", "unavailable"]
     due_planned_workout_count: int = Field(ge=0)
-    verified_completed_workout_count: int = Field(ge=0)
-    due_unmatched_workout_count: int = Field(ge=0)
+    due_fulfilled_workout_count: int = Field(ge=0)
+    due_unfulfilled_workout_count: int = Field(ge=0)
     actual_run_count: int = Field(ge=0)
     actual_run_distance_km: float | None = Field(
         default=None,
@@ -67,8 +67,8 @@ class CompactTrainingWeek(BaseModel):
             raise ValueError("compact training week must start on Monday")
         if (self.week_end - self.week_start).days != 6:
             raise ValueError("compact training week must end on Sunday")
-        if not self.week_start <= self.evidence_as_of_date <= self.week_end:
-            raise ValueError("weekly evidence date must fall within the week")
+        if self.evidence_as_of_date < self.week_start:
+            raise ValueError("weekly evidence date cannot precede the reviewed week")
         return self
 
 
@@ -82,8 +82,8 @@ class PlanCycleTotals(BaseModel):
         allow_inf_nan=False,
     )
     due_planned_workout_count: int = Field(ge=0)
-    verified_completed_workout_count: int = Field(ge=0)
-    due_unmatched_workout_count: int = Field(ge=0)
+    due_fulfilled_workout_count: int = Field(ge=0)
+    due_unfulfilled_workout_count: int = Field(ge=0)
     actual_run_count: int = Field(ge=0)
     actual_run_distance_km: float | None = Field(
         default=None,
@@ -114,7 +114,6 @@ class PlanCycleReview(BaseModel):
     totals: PlanCycleTotals
     compact_weeks: list[CompactTrainingWeek] = Field(max_length=52)
     recent_detailed_weeks: list[WeeklyCoachContext] = Field(max_length=12)
-    source_context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_state_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_limitations: list[str] = Field(default_factory=list)
 
@@ -141,6 +140,8 @@ class PlanCycleReview(BaseModel):
             raise ValueError("plan_started must reflect whether reviewed plan weeks exist")
         if self.totals.reviewed_week_count != len(self.compact_weeks):
             raise ValueError("reviewed week total must match compact week evidence")
+        if any(week.evidence_as_of_date > self.evidence_as_of_date for week in self.compact_weeks):
+            raise ValueError("compact week evidence cannot postdate the cycle review")
         if len(self.recent_detailed_weeks) > len(self.compact_weeks):
             raise ValueError("detailed review weeks must be a subset of compact weeks")
         evidence = self.goal_outcome.evidence
@@ -148,7 +149,7 @@ class PlanCycleReview(BaseModel):
             evidence,
             (
                 AthleteConfirmedGoalActivityEvidence,
-                OwnedCompletionGoalEvidence,
+                OwnedFulfillmentGoalEvidence,
             ),
         )
         if exact_activity_evidence != (self.goal_activity is not None):
@@ -159,7 +160,7 @@ class PlanCycleReview(BaseModel):
                 evidence,
                 (
                     AthleteConfirmedGoalActivityEvidence,
-                    OwnedCompletionGoalEvidence,
+                    OwnedFulfillmentGoalEvidence,
                 ),
             )
             and self.goal_activity.local_activity_id != evidence.local_activity_id
@@ -193,7 +194,7 @@ class HistoricalPlanSummary(BaseModel):
             evidence,
             (
                 AthleteConfirmedGoalActivityEvidence,
-                OwnedCompletionGoalEvidence,
+                OwnedFulfillmentGoalEvidence,
             ),
         )
         if exact_activity_evidence != (self.goal_activity is not None):
@@ -204,7 +205,7 @@ class HistoricalPlanSummary(BaseModel):
                 evidence,
                 (
                     AthleteConfirmedGoalActivityEvidence,
-                    OwnedCompletionGoalEvidence,
+                    OwnedFulfillmentGoalEvidence,
                 ),
             )
             and self.goal_activity.local_activity_id != evidence.local_activity_id
@@ -225,9 +226,11 @@ class AssessmentPlanningContext(BaseModel):
     current_constraints: PlanningConstraintsSnapshot
     assessment_reasons: list[AssessmentReason] = Field(min_length=1)
     temporary_schedule_constraints: list[TemporaryScheduleConstraint] = Field(default_factory=list)
-    recent_detailed_weeks: list[WeeklyCoachContext] = Field(min_length=1, max_length=12)
+    recent_detailed_weeks: list[WeeklyCoachContext] = Field(
+        min_length=1,
+        max_length=12,
+    )
     evidence_index: list["PlanningEvidencePointer"] = Field(min_length=2)
-    source_context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_state_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
@@ -392,7 +395,6 @@ class MacroPlanningContext(BaseModel):
     historical_compact_weeks: list[CompactTrainingWeek] = Field(max_length=52)
     recent_detailed_weeks: list[WeeklyCoachContext] = Field(max_length=12)
     evidence_index: list[PlanningEvidencePointer] = Field(min_length=2)
-    source_context_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     source_state_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     model_config = ConfigDict(extra="forbid")

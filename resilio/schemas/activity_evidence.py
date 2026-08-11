@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.coaching import RecoveryContext, TrainingStateSnapshot
-from resilio.schemas.publication import WorkoutCompletionMatch
+from resilio.schemas.workout_fulfillment import WorkoutFulfillmentRecord
 
 EvidenceExclusion = Literal[
     "raw_streams",
@@ -53,7 +53,7 @@ class ExactActivityCoachingEvidence(BaseModel):
     schema_version: Literal[1] = 1
     activity: CanonicalActivity
     performance_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    completion_match: Optional[WorkoutCompletionMatch] = None
+    workout_fulfillment: Optional[WorkoutFulfillmentRecord] = None
     recovery_context: RecoveryContext
     training_state: Optional[TrainingStateSnapshot] = None
     recovery_evidence_timing: RecoveryEvidenceTiming = Field(default_factory=RecoveryEvidenceTiming)
@@ -74,3 +74,13 @@ class ExactActivityCoachingEvidence(BaseModel):
     )
 
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def fulfillment_matches_activity_evidence(self) -> "ExactActivityCoachingEvidence":
+        fulfillment = self.workout_fulfillment
+        if fulfillment is not None and (
+            fulfillment.local_activity_id != self.activity.local_activity_id
+            or fulfillment.activity_performance_evidence_sha256 != self.performance_evidence_sha256
+        ):
+            raise ValueError("Workout fulfillment does not match exact activity evidence")
+        return self

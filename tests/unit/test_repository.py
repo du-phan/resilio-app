@@ -279,6 +279,4 @@ def test_repository_preserves_private_modes_for_new_state_paths(
         tmp_path / "data/athlete/history",
     ):
         assert directory.stat().st_mode & 0o777 == 0o700
-    assert (
-        tmp_path / "data/athlete/history/profile.yaml"
-    ).stat().st_mode & 0o777 == 0o600
+    assert (tmp_path / "data/athlete/history/profile.yaml").stat().st_mode & 0o777 == 0o600

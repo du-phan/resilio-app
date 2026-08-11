@@ -68,7 +68,7 @@ Use `superseded_midcycle` for an athlete-requested replacement and
    ```
 
    Inspect the returned plan identity, goal evidence, plan targets, actual run
-   exposure, exact completion counts, other-sport exposure, detailed recent
+   exposure, exact fulfillment counts, other-sport exposure, detailed recent
    weeks, compact weekly history, source coverage, and limitations. Keep
    planned and actual measurements separate. Do not manufacture completion,
    progression, readiness, performance, or injury-risk scores.

@@ -14,7 +14,7 @@ from resilio.core.planning.approval_evidence import (
     ApprovalEvidenceError,
     verify_vdot_approval,
 )
-from resilio.core.planning.artifacts import load_evidence_artifact
+from resilio.core.planning.artifacts import canonical_data_sha256, load_evidence_artifact
 from resilio.core.planning.cycle_review import (
     confirmed_goal_outcome,
     create_cycle_review,
@@ -41,7 +41,8 @@ from resilio.core.profile.repository import ProfileRepository
 from resilio.core.repository import RepositoryIO
 from resilio.core.state import save_planning_state
 from resilio.core.sync_state import write_sync_state
-from resilio.core.workout_publication.completions import save_completion_manifest
+from resilio.core.workout_fulfillment.repository import save_fulfillment_manifest
+from resilio.core.workout_fulfillment.service import WorkoutFulfillmentService
 from resilio.core.workout_publication.week_service import RunWeekSynchronizationService
 from resilio.schemas.approvals import (
     AppliedWeekRevision,
@@ -58,8 +59,12 @@ from resilio.schemas.profile import (
     PBEntry,
     TrainingConstraints,
 )
-from resilio.schemas.publication import WorkoutCompletionManifest, WorkoutCompletionMatch
 from resilio.schemas.sync import ActivityCoverageWindow, ActivitySyncState
+from resilio.schemas.workout_fulfillment import (
+    ProviderPairedFulfillmentEvidence,
+    WorkoutFulfillmentManifest,
+    WorkoutFulfillmentRecord,
+)
 from tests.factories import make_activity
 from tests.unit.test_workout_publication import FakeClient
 
@@ -1488,6 +1493,108 @@ def test_week_replacement_preserves_original_historical_authority(
     assert evidence.workouts[0].prescription.purpose == "Aerobic support"
 
 
+def test_week_replacement_cannot_alter_a_fulfilled_workout(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _apply_test_week(repo, tmp_path)
+    state = load_planning_aggregate(repo)
+    assert state.active_plan is not None
+    revision = next(item for item in state.active_plan.applied_week_revisions if item.active)
+    workout = revision.applied_week_snapshot.running_workouts[0]
+    fulfillment = WorkoutFulfillmentRecord(
+        local_activity_id="fulfilled_activity",
+        workout_identity={
+            "plan_id": revision.plan_id,
+            "plan_revision_id": revision.plan_revision_id,
+            "week_number": revision.week_number,
+            "local_workout_id": workout.id,
+        },
+        applied_week_approval_id=revision.approval_id,
+        applied_running_workouts_sha256=revision.applied_running_workouts_sha256,
+        workout_prescription_sha256=canonical_data_sha256(workout),
+        activity_performance_evidence_sha256="3" * 64,
+        schedule_timezone=revision.schedule_timezone,
+        scheduled_local_date=workout.date,
+        execution_local_date=workout.date,
+        schedule_offset_days=0,
+        provider_pair=ProviderPairedFulfillmentEvidence(
+            event_id=42,
+            observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+        ),
+        recorded_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={fulfillment.local_activity_id: fulfillment}),
+    )
+    preserving_path = tmp_path / "preserving-week-replacement.json"
+    _write_application(preserving_path, repo=repo)
+    approve_week_application(
+        repo,
+        preserving_path,
+        approved_at_utc=datetime(2026, 7, 29, 12, tzinfo=timezone.utc),
+    )
+    apply_approved_week(
+        repo,
+        preserving_path,
+        applied_at_utc=datetime(2026, 7, 29, 13, tzinfo=timezone.utc),
+    )
+    replacement_path = tmp_path / "altering-second-replacement.json"
+    _write_application(replacement_path, repo=repo, purpose="Changed fulfilled intent")
+    approve_week_application(
+        repo,
+        replacement_path,
+        approved_at_utc=datetime(2026, 7, 30, 12, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(PlanOperationError, match="cannot remove or alter"):
+        apply_approved_week(
+            repo,
+            replacement_path,
+            applied_at_utc=datetime(2026, 7, 30, 13, tzinfo=timezone.utc),
+        )
+
+
+def test_fulfillment_candidate_uses_revision_in_force_at_scheduled_instant(
+    repo: RepositoryIO,
+    tmp_path: Path,
+) -> None:
+    _apply_test_week(repo, tmp_path)
+    replacement_path = tmp_path / "historical-authority-replacement.json"
+    _write_application(
+        replacement_path,
+        repo=repo,
+        purpose="Replacement applied after the original scheduled instant",
+    )
+    approve_week_application(
+        repo,
+        replacement_path,
+        approved_at_utc=datetime(2026, 7, 29, 12, tzinfo=timezone.utc),
+    )
+    apply_approved_week(
+        repo,
+        replacement_path,
+        applied_at_utc=datetime(2026, 7, 29, 13, tzinfo=timezone.utc),
+    )
+    activity = make_activity(
+        id="historical_revision_activity",
+        date=date(2026, 7, 28),
+        start_time=datetime(2026, 7, 28, 5, tzinfo=timezone.utc),
+        distance_meters=3_000,
+    )
+    ActivityArchive(repo.resolve_path("data/activities")).write(activity)
+
+    candidates = WorkoutFulfillmentService(repo).candidates(
+        local_activity_id=activity.local_activity_id
+    )
+    candidate = next(
+        item for item in candidates if item.workout_identity.local_workout_id == "w_easy_1"
+    )
+
+    assert candidate.workout_purpose == "Aerobic support"
+
+
 def test_application_after_scheduled_instant_is_not_retroactive(
     repo: RepositoryIO,
     tmp_path: Path,
@@ -1710,17 +1817,17 @@ def test_only_an_unapproved_unapplied_plan_proposal_can_be_discarded(
         )
 
 
-def test_unapproved_plan_with_completion_ownership_cannot_be_discarded(
+def test_unapproved_plan_with_fulfillment_ownership_cannot_be_discarded(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
     approval_id = _approve_vdot(repo, tmp_path)
     plan = create_macro_plan(repo, _draft(approval_id))
-    save_completion_manifest(
+    save_fulfillment_manifest(
         repo,
-        WorkoutCompletionManifest(
-            matches={
-                "owned_activity": WorkoutCompletionMatch(
+        WorkoutFulfillmentManifest(
+            fulfillments={
+                "owned_activity": WorkoutFulfillmentRecord(
                     local_activity_id="owned_activity",
                     workout_identity={
                         "plan_id": plan.id,
@@ -1728,8 +1835,19 @@ def test_unapproved_plan_with_completion_ownership_cannot_be_discarded(
                         "week_number": 1,
                         "local_workout_id": "owned_workout",
                     },
-                    match_method="paired_event_id",
-                    matched_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
+                    applied_week_approval_id="week_approval_0123456789abcdef",
+                    applied_running_workouts_sha256="1" * 64,
+                    workout_prescription_sha256="2" * 64,
+                    activity_performance_evidence_sha256="3" * 64,
+                    schedule_timezone="Europe/Paris",
+                    scheduled_local_date=date(2026, 7, 27),
+                    execution_local_date=date(2026, 7, 27),
+                    schedule_offset_days=0,
+                    provider_pair=ProviderPairedFulfillmentEvidence(
+                        event_id=42,
+                        observed_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
+                    ),
+                    recorded_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
                 )
             }
         ),

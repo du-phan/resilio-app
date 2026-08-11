@@ -25,7 +25,8 @@ from resilio.core.planning.state_repository import (
 )
 from resilio.core.planning.workout_evidence import load_publishable_workouts_unlocked
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_publication.completions import load_completion_manifest
+from resilio.core.workout_fulfillment.evidence import assert_fulfillment_is_usable
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.activity import ActivityStatus, CanonicalActivity, is_running_sport
@@ -90,24 +91,33 @@ def _paired_activity(
     publication = load_manifest(repo).workouts.get(benchmark_identity.local_workout_id)
     if publication is None or publication.workout_identity != benchmark_identity:
         raise PlanOperationError(
-            "Benchmark completion lacks its ownership-proven publication record"
+            "Benchmark fulfillment lacks its ownership-proven publication record"
         )
-    matching_activity_ids = [
-        local_activity_id
-        for local_activity_id, match in load_completion_manifest(repo).matches.items()
-        if match.workout_identity == benchmark_identity
+    fulfillment_manifest = load_fulfillment_manifest(repo)
+    matching_records = [
+        record
+        for record in fulfillment_manifest.fulfillments.values()
+        if record.workout_identity == benchmark_identity
+        and record.provider_pair_supports_event(publication.event_id)
     ]
-    if len(matching_activity_ids) != 1:
+    if len(matching_records) != 1:
         raise PlanOperationError(
-            "Benchmark result requires one ownership-paired completion activity"
+            "Benchmark result requires one ownership-paired fulfillment activity"
         )
-    activity = ActivityArchive(repo.resolve_path("data/activities")).load(matching_activity_ids[0])
+    fulfillment = matching_records[0]
+    activity = ActivityArchive(repo.resolve_path("data/activities")).load(
+        fulfillment.local_activity_id
+    )
     if activity is None or activity.status != ActivityStatus.ACTIVE:
         raise PlanOperationError("Paired benchmark activity is absent or inactive")
     if not is_running_sport(activity.sport):
         raise PlanOperationError("Paired benchmark activity must be a running activity")
     if activity.occurrence.timezone is None:
         raise PlanOperationError("Paired benchmark activity requires a source timezone")
+    try:
+        assert_fulfillment_is_usable(fulfillment, activity, fulfillment_manifest)
+    except ValueError as exc:
+        raise PlanOperationError(str(exc)) from exc
     return activity
 
 

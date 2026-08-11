@@ -34,9 +34,7 @@ def ensure_private_directory_tree(
         existing_chain.append(current)
     for candidate in existing_chain:
         if candidate.is_symlink():
-            raise StatePermissionError(
-                f"Sensitive state path cannot be a symlink: {candidate}"
-            )
+            raise StatePermissionError(f"Sensitive state path cannot be a symlink: {candidate}")
     try:
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         for candidate in existing_chain:
@@ -50,15 +48,11 @@ def ensure_private_directory_tree(
 def harden_sensitive_file(path: Path) -> None:
     """Apply the private file mode without following a symlink."""
     if path.is_symlink():
-        raise StatePermissionError(
-            f"Sensitive state file cannot be a symlink: {path}"
-        )
+        raise StatePermissionError(f"Sensitive state file cannot be a symlink: {path}")
     try:
         path.chmod(0o600)
     except OSError as exc:
-        raise StatePermissionError(
-            f"Unable to harden sensitive state file: {path}"
-        ) from exc
+        raise StatePermissionError(f"Unable to harden sensitive state file: {path}") from exc
 
 
 def harden_sensitive_state_permissions(
@@ -80,9 +74,7 @@ def harden_sensitive_state_permissions(
     paths = [data_root, *sorted(data_root.rglob("*"))]
     for path in paths:
         if path.is_symlink():
-            raise StatePermissionError(
-                f"Sensitive state path cannot be a symlink: {path}"
-            )
+            raise StatePermissionError(f"Sensitive state path cannot be a symlink: {path}")
         try:
             if path.is_dir():
                 path.chmod(0o700)
@@ -91,9 +83,7 @@ def harden_sensitive_state_permissions(
                 harden_sensitive_file(path)
                 files_hardened += 1
         except OSError as exc:
-            raise StatePermissionError(
-                f"Unable to harden sensitive state path: {path}"
-            ) from exc
+            raise StatePermissionError(f"Unable to harden sensitive state path: {path}") from exc
     return PermissionHardeningResult(
         directories_hardened=directories_hardened,
         files_hardened=files_hardened,

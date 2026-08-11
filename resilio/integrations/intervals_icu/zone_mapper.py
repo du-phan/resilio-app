@@ -119,9 +119,7 @@ def _power_zone_index(
 ) -> int | None:
     """Resolve only an exact, unambiguous provider-ID/name match."""
     matching_indexes = [
-        index
-        for index, name in enumerate(names, start=1)
-        if name == provider_zone_id
+        index for index, name in enumerate(names, start=1) if name == provider_zone_id
     ]
     return matching_indexes[0] if len(matching_indexes) == 1 else None
 
@@ -148,9 +146,7 @@ def _power_zone_time(
             else None
         ),
         upper_bound=(
-            float(upper_bounds[zone_index - 1])
-            if zone_index <= len(upper_bounds)
-            else None
+            float(upper_bounds[zone_index - 1]) if zone_index <= len(upper_bounds) else None
         ),
     )
 
@@ -165,10 +161,7 @@ def _power_zone_distribution(
 ) -> ZoneTimeDistribution | None:
     if not source_zones:
         return None
-    zones = [
-        _power_zone_time(source, upper_bounds, names)
-        for source in source_zones
-    ]
+    zones = [_power_zone_time(source, upper_bounds, names) for source in source_zones]
     zones.sort(
         key=lambda zone: (
             zone.zone_index is None,
@@ -177,11 +170,7 @@ def _power_zone_distribution(
         )
     )
     covered_seconds = sum(zone.duration_seconds for zone in zones)
-    coverage_percent = (
-        covered_seconds / moving_seconds * 100
-        if moving_seconds > 0
-        else None
-    )
+    coverage_percent = covered_seconds / moving_seconds * 100 if moving_seconds > 0 else None
     return ZoneTimeDistribution(
         measurement_method=ZoneMeasurementMethod.POWER,
         zones=zones,

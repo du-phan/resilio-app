@@ -22,48 +22,32 @@ class MethodologyDefinition:
     expected_source_sha256: str
     source_edition: str
     source_summary_version: date = date(2026, 7, 30)
-    source_verification_scope: Literal[
-        "conceptual_summary_only"
-    ] = "conceptual_summary_only"
+    source_verification_scope: Literal["conceptual_summary_only"] = "conceptual_summary_only"
     planning_authority: Literal[
         "coach_designed_conceptually_informed"
     ] = "coach_designed_conceptually_informed"
-    executable_policy_version: Literal[
-        "coach_planning_policy_v1"
-    ] = PLANNING_POLICY_VERSION
+    executable_policy_version: Literal["coach_planning_policy_v1"] = PLANNING_POLICY_VERSION
 
 
 METHODOLOGY_DEFINITIONS: dict[TrainingMethodology, MethodologyDefinition] = {
     TrainingMethodology.DANIELS: MethodologyDefinition(
         source_document="docs/training_books/daniels_running_formula.md",
-        expected_source_sha256=(
-            "dc67bdfe2af85dce6176fb32ff7acedd23561b2904fd35a16f7e01f9ab12ea0b"
-        ),
+        expected_source_sha256=("dc67bdfe2af85dce6176fb32ff7acedd23561b2904fd35a16f7e01f9ab12ea0b"),
         source_edition="fourth_edition_conceptual_reference",
     ),
     TrainingMethodology.PFITZINGER: MethodologyDefinition(
-        source_document=(
-            "docs/training_books/advanced_marathoning_pete_pfitzinger.md"
-        ),
-        expected_source_sha256=(
-            "0df233e119b7c054aa3b9fceb5a7b4ad245c1ef572f5957fa3e638f52fc53b45"
-        ),
+        source_document=("docs/training_books/advanced_marathoning_pete_pfitzinger.md"),
+        expected_source_sha256=("0df233e119b7c054aa3b9fceb5a7b4ad245c1ef572f5957fa3e638f52fc53b45"),
         source_edition="edition_unverified",
     ),
     TrainingMethodology.FITZGERALD_80_20: MethodologyDefinition(
         source_document="docs/training_books/80_20_matt_fitzgerald.md",
-        expected_source_sha256=(
-            "730c1c396b1762eb4e878831712368f3148c1bbcb6a7e1c19ca57dc8511d8c47"
-        ),
+        expected_source_sha256=("730c1c396b1762eb4e878831712368f3148c1bbcb6a7e1c19ca57dc8511d8c47"),
         source_edition="edition_unverified",
     ),
     TrainingMethodology.FIRST: MethodologyDefinition(
-        source_document=(
-            "docs/training_books/run_less_run_faster_bill_pierce.md"
-        ),
-        expected_source_sha256=(
-            "557cc794dfc2c26e0b0565236876849908e34e41252ff154ca0a8a8ab998ecd8"
-        ),
+        source_document=("docs/training_books/run_less_run_faster_bill_pierce.md"),
+        expected_source_sha256=("557cc794dfc2c26e0b0565236876849908e34e41252ff154ca0a8a8ab998ecd8"),
         source_edition="edition_unverified",
     ),
 }

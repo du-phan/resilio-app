@@ -27,6 +27,54 @@ GarminForwardingStatus = Literal[
 
 class PublishedWorkout(BaseModel):
     workout_identity: PlanWorkoutIdentity
+    applied_week_approval_id: str = Field(pattern=r"^week_approval_[a-f0-9]{16}$")
+    applied_running_workouts_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    workout_prescription_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    schedule_timezone: str = Field(min_length=1)
+    event_id: int
+    requested_uid: str
+    uid: str
+    external_id: str
+    publication_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    rendered_workout_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    sport_settings_version_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provider_event_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    sport: Literal["run"]
+    occurrence_date: date
+    approved_start_time_local: Optional[time] = None
+    provider_start_date_local: str
+    garmin_forwarding_status: GarminForwardingStatus
+    provider_push_errors: list[PublicationPushError] = Field(default_factory=list)
+    provider_computed_aerobic_load_points: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    provider_relative_intensity_percent: Optional[float] = Field(
+        default=None,
+        ge=0,
+        le=1_000,
+        allow_inf_nan=False,
+    )
+    provider_fitness_load_points: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    provider_fatigue_load_points: Optional[float] = Field(
+        default=None,
+        ge=0,
+        allow_inf_nan=False,
+    )
+    verified_at_utc: datetime
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class HistoricalLegacyWorkoutPublication(BaseModel):
+    """Read-only v6 ownership retained when applied authority is unavailable."""
+
+    workout_identity: PlanWorkoutIdentity
     event_id: int
     requested_uid: str
     uid: str
@@ -71,6 +119,10 @@ class PendingWorkoutPublication(BaseModel):
     """Durable local intent written before any remote event mutation."""
 
     workout_identity: PlanWorkoutIdentity
+    applied_week_approval_id: str = Field(pattern=r"^week_approval_[a-f0-9]{16}$")
+    applied_running_workouts_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    workout_prescription_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    schedule_timezone: str = Field(min_length=1)
     uid: str
     external_id: str
     publication_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -85,8 +137,48 @@ class PendingWorkoutPublication(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ConfirmedPublicationDriftTarget(BaseModel):
+    """Exact remote bytes the athlete authorized Resilio to replace or retire."""
+
+    local_workout_id: str = Field(min_length=1)
+    event_id: int = Field(gt=0)
+    observed_remote_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PublicationDriftResolution(BaseModel):
     """Athlete-confirmed authority used to replace owned remote drift."""
+
+    plan_id: str
+    plan_revision_id: str
+    week_number: int = Field(ge=1)
+    strategy: Literal["restore_local", "retire_fulfilled"]
+    confirmed_targets: list[ConfirmedPublicationDriftTarget] = Field(default_factory=list)
+    athlete_confirmation_reference: str = Field(min_length=1)
+    confirmed_at_utc: datetime
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("confirmed_at_utc")
+    @classmethod
+    def timestamp_is_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("confirmed_at_utc must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def confirmation_has_exact_targets(self) -> "PublicationDriftResolution":
+        if not self.confirmed_targets:
+            raise ValueError("drift resolution requires exact confirmed targets")
+        target_ids = [target.local_workout_id for target in self.confirmed_targets]
+        if len(target_ids) != len(set(target_ids)):
+            raise ValueError("confirmed drift target workout IDs must be unique")
+        return self
+
+
+class HistoricalLegacyPublicationDriftResolution(BaseModel):
+    """Pre-token drift authority retained for audit but never reusable."""
 
     plan_id: str
     plan_revision_id: str
@@ -105,11 +197,94 @@ class PublicationDriftResolution(BaseModel):
         return value.astimezone(timezone.utc)
 
 
+class RetiredWorkoutPublication(BaseModel):
+    """Owned event removed because an athlete-confirmed early run fulfilled it."""
+
+    publication: PublishedWorkout
+    retirement_reason: Literal["fulfilled_early"] = "fulfilled_early"
+    fulfilling_local_activity_id: str = Field(min_length=1)
+    fulfillment_record_sha256_at_retirement: str = Field(pattern=r"^[0-9a-f]{64}$")
+    execution_local_date_at_retirement: date
+    schedule_offset_days_at_retirement: int = Field(lt=0)
+    provider_deletion_status: Literal["deleted", "already_absent"]
+    retired_at_utc: datetime
+    reopened_by_fulfillment_revocation_id: Optional[str] = Field(
+        default=None,
+        pattern=r"^fulfillment_revocation_[0-9a-f]{16}$",
+    )
+    reopened_at_utc: Optional[datetime] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("retired_at_utc", "reopened_at_utc")
+    @classmethod
+    def retirement_time_is_utc(cls, value: datetime) -> datetime:
+        if value is None:
+            return value
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("retirement timestamps must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def reopening_fields_are_coherent(self) -> "RetiredWorkoutPublication":
+        if (self.reopened_at_utc is None) != (self.reopened_by_fulfillment_revocation_id is None):
+            raise ValueError("retirement reopening requires an ID and timestamp")
+        return self
+
+
+class RetiredPendingWorkoutPublication(BaseModel):
+    """Cancelled durable intent for an early fulfilled future workout."""
+
+    pending_publication: PendingWorkoutPublication
+    fulfilling_local_activity_id: str = Field(min_length=1)
+    fulfillment_record_sha256_at_retirement: str = Field(pattern=r"^[0-9a-f]{64}$")
+    execution_local_date_at_retirement: date
+    schedule_offset_days_at_retirement: int = Field(lt=0)
+    provider_deletion_status: Literal["deleted", "no_remote_event"]
+    remote_event_id: Optional[int] = Field(default=None, gt=0)
+    retired_at_utc: datetime
+    reopened_by_fulfillment_revocation_id: Optional[str] = Field(
+        default=None,
+        pattern=r"^fulfillment_revocation_[0-9a-f]{16}$",
+    )
+    reopened_at_utc: Optional[datetime] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def event_id_matches_status(self) -> "RetiredPendingWorkoutPublication":
+        if (self.remote_event_id is not None) != (self.provider_deletion_status == "deleted"):
+            raise ValueError("pending retirement event ID must match deletion status")
+        if (self.reopened_at_utc is None) != (self.reopened_by_fulfillment_revocation_id is None):
+            raise ValueError("pending retirement reopening requires an ID and timestamp")
+        return self
+
+    @field_validator("retired_at_utc", "reopened_at_utc")
+    @classmethod
+    def retirement_time_is_utc(cls, value: datetime) -> datetime:
+        if value is None:
+            return value
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("retirement timestamps must be timezone-aware")
+        return value.astimezone(timezone.utc)
+
+
 class PublicationManifest(BaseModel):
-    schema_version: Literal[6] = 6
+    schema_version: Literal[7] = 7
     workouts: dict[str, PublishedWorkout] = Field(default_factory=dict)
     pending: dict[str, PendingWorkoutPublication] = Field(default_factory=dict)
+    retired: dict[str, RetiredWorkoutPublication] = Field(default_factory=dict)
+    retired_pending: dict[str, RetiredPendingWorkoutPublication] = Field(default_factory=dict)
+    retirement_history: list[RetiredWorkoutPublication] = Field(default_factory=list)
+    pending_retirement_history: list[RetiredPendingWorkoutPublication] = Field(default_factory=list)
+    historical_legacy_workouts: dict[
+        str,
+        HistoricalLegacyWorkoutPublication,
+    ] = Field(default_factory=dict)
     drift_resolutions: list[PublicationDriftResolution] = Field(default_factory=list)
+    historical_legacy_drift_resolutions: list[HistoricalLegacyPublicationDriftResolution] = Field(
+        default_factory=list
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -158,6 +333,39 @@ class PublicationManifest(BaseModel):
                 )
                 if prior_owner != local_id:
                     raise ValueError("publication manifest ownership identities must be unique")
+        for local_id, retired_record in self.retired.items():
+            if retired_record.publication.workout_identity.local_workout_id != local_id:
+                raise ValueError("retired publication key must match local workout ID")
+            if (
+                local_id in self.workouts or local_id in self.pending
+            ) and retired_record.reopened_at_utc is None:
+                raise ValueError("retired publication cannot remain active or pending")
+        for local_id, retired_pending_record in self.retired_pending.items():
+            if (
+                retired_pending_record.pending_publication.workout_identity.local_workout_id
+                != local_id
+            ):
+                raise ValueError("retired pending key must match local workout ID")
+            if (
+                local_id in self.workouts or local_id in self.pending
+            ) and retired_pending_record.reopened_at_utc is None:
+                raise ValueError("retired pending publication cannot remain active")
+        for local_id, historical_record in self.historical_legacy_workouts.items():
+            if historical_record.workout_identity.local_workout_id != local_id:
+                raise ValueError("historical publication key must match local workout ID")
+            if (
+                local_id in self.workouts
+                or local_id in self.pending
+                or local_id in self.retired
+                or local_id in self.retired_pending
+            ):
+                raise ValueError("historical publication cannot remain active or retired")
+            prior_event_owner = event_owners.setdefault(
+                historical_record.event_id,
+                local_id,
+            )
+            if prior_event_owner != local_id:
+                raise ValueError("publication manifest event IDs must be unique")
         return self
 
 
@@ -168,6 +376,8 @@ PublicationAction = Literal[
     "recovered",
     "deleted",
     "recovered_deleted",
+    "retired",
+    "recovered_retired",
 ]
 
 
@@ -260,14 +470,20 @@ class WeekSynchronizationItem(BaseModel):
         "noop",
         "recovered",
         "skipped_past",
-        "skipped_completed",
+        "skipped_fulfilled",
         "error",
         "deleted",
         "recovered_deleted",
+        "retired",
+        "recovered_retired",
     ]
     event_id: Optional[int] = None
     error_type: Optional[str] = None
     message: Optional[str] = None
+    drift_resolution_token_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
     garmin_forwarding_status: Optional[GarminForwardingStatus] = None
     provider_push_errors: list[PublicationPushError] = Field(default_factory=list)
 
@@ -277,7 +493,12 @@ class WeekSynchronizationItem(BaseModel):
 class RunWeekSynchronizationReport(BaseModel):
     week_number: int = Field(ge=1)
     as_of_date: date
-    operation: Literal["status", "reconcile", "restore_local"]
+    operation: Literal[
+        "status",
+        "reconcile",
+        "restore_local",
+        "retire_fulfilled",
+    ]
     reconciliation_safe: bool
     run_workouts_considered: int = Field(ge=0)
     desired_future_run_workouts: int = Field(ge=0)
@@ -287,41 +508,3 @@ class RunWeekSynchronizationReport(BaseModel):
     owned_future_deletion_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
-
-
-class WorkoutCompletionMatch(BaseModel):
-    local_activity_id: str
-    workout_identity: PlanWorkoutIdentity
-    match_method: str = Field(pattern=r"^paired_event_id$")
-    matched_at_utc: datetime
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class WorkoutCompletionManifest(BaseModel):
-    schema_version: Literal[3] = 3
-    matches: dict[str, WorkoutCompletionMatch] = Field(default_factory=dict)
-
-    model_config = ConfigDict(extra="forbid")
-
-    @model_validator(mode="after")
-    def completion_identities_are_unique(
-        self,
-    ) -> "WorkoutCompletionManifest":
-        workout_owners: dict[tuple[str, str, int, str], str] = {}
-        for local_activity_id, match in self.matches.items():
-            if match.local_activity_id != local_activity_id:
-                raise ValueError("completion manifest key must match local activity ID")
-            identity = match.workout_identity
-            prior_activity = workout_owners.setdefault(
-                (
-                    identity.plan_id,
-                    identity.plan_revision_id,
-                    identity.week_number,
-                    identity.local_workout_id,
-                ),
-                local_activity_id,
-            )
-            if prior_activity != local_activity_id:
-                raise ValueError("a local workout cannot match multiple activities")
-        return self

@@ -36,9 +36,7 @@ def create_vdot_proposal_from_assessment(
             review_sha256=review_sha256,
         )
         result = review.result
-        generated_local_date = timestamp.astimezone(
-            ZoneInfo(result.performance_timezone)
-        ).date()
+        generated_local_date = timestamp.astimezone(ZoneInfo(result.performance_timezone)).date()
         if result.performance_date > generated_local_date:
             raise PlanOperationError("Assessment result cannot postdate its VDOT proposal")
         try:

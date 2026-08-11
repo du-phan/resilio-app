@@ -68,13 +68,13 @@ authority. Commands return JSON envelopes.
   accepts `--constraints-file` for those cycle-specific date ranges.
 - `resilio plan discard-unapproved --plan-revision <ID>` — remove only the
   exact unapproved, unapplied proposal after proving it has no publication or
-  completion ownership; approved plans remain closure-only.
+  fulfillment ownership; approved plans remain closure-only.
 - `resilio plan assessment-candidates|create-assessment-review|close-assessment`
   — ownership-paired whole-activity or exact-segment selection, immutable
   assessment review, and separately confirmed archival.
 - `resilio plan create-cycle-review|close-cycle` — evidence-bound lifecycle
   review and immutable plan archival; completed and did-not-finish goals may
-  bind exact owned completion evidence or an athlete-confirmed canonical
+  bind exact owned fulfillment evidence or an athlete-confirmed canonical
   activity, including its retained performance measurements.
 - `resilio plan create-macro-context` — new-plan evidence gate containing all
   closed race summaries and assessment results, up to 52 compact historical
@@ -104,9 +104,33 @@ authority. Commands return JSON envelopes.
 - `resilio workout status|reconcile --week-number <N>` — inspect without
   mutation or converge one exact applied week's running-workout desired state;
   non-running prescriptions are invalid upstream and never reach publication.
+- `resilio workout fulfillment-candidates --activity-id <ID>` — list every
+  factual same-week applied-run candidate in the current active plan without
+  selecting one; closed plans remain immutable.
+- `resilio workout confirm-fulfillment --activity-id <ID> --workout-id <ID>
+  --candidate-sha256 <SHA> --confirmation-reference <TEXT> --rationale <TEXT>`
+  — revalidate and record one exact athlete-confirmed association.
+- `resilio workout dismiss-fulfillment-candidate ...` — retain the athlete's
+  rejection of one exact candidate fingerprint.
+- `resilio workout revoke-fulfillment --activity-id <ID> --workout-id <ID>
+  --reason <activity_deleted|activity_reclassified|association_incorrect>
+  --confirmation-reference <TEXT> --rationale <TEXT>` — preserve and withdraw
+  one exact fulfillment after athlete confirmation, suppress its automatic
+  recreation, and reopen any schedule item retired by that evidence.
+- `resilio workout fulfillment-status --week-number <N>` — inspect fulfilled
+  and outstanding approved workouts without rewriting the week.
 - `resilio workout resolve-drift --week-number <N> --restore-local
-  --confirmation-reference <TEXT>` — replace exact owned remote drift only
-  after explicit athlete confirmation. There is no automatic remote adoption.
+  --drift-target-token <SHA> --confirmation-reference <TEXT>` — replace only
+  the exact owned remote bytes represented by the status token after explicit
+  athlete confirmation. There is no automatic remote adoption.
+- `resilio workout resolve-drift --week-number <N> --retire-fulfilled
+  --drift-target-token <SHA> --confirmation-reference <TEXT>` — retire a
+  drifted still-future owned event only after a second explicit confirmation
+  of the exact status token.
+- `resilio migrate workout-fulfillment-v1 [--apply]` — validate the completion
+  v3/publication v6 cutover in dry-run mode, then apply it through a
+  crash-recoverable, hash-verified backup transaction. Normal fulfillment and
+  sync access remains blocked while legacy completion state exists.
 
 `resilio plan apply-week` returns the successful local application and its
 automatic run-synchronization outcome in one typed result. A provider failure

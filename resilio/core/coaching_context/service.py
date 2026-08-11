@@ -18,6 +18,7 @@ from resilio.core.coaching_context.recovery import (
     latest_wellness,
     training_state,
 )
+from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.planning.integrity import (
     plan_skeleton_sha256,
     target_week_skeleton_sha256,
@@ -31,7 +32,8 @@ from resilio.core.planning.service import (
 from resilio.core.planning.source_state import coaching_evidence_source_sha256
 from resilio.core.repository import RepositoryIO
 from resilio.core.training_state_repository import load_wellness
-from resilio.core.workout_publication.completions import load_completion_manifest
+from resilio.core.workout_fulfillment.evidence import fulfillment_was_available_as_of
+from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.schemas.activity import ActivityStatus, CanonicalActivity
 from resilio.schemas.coaching import (
@@ -43,6 +45,7 @@ from resilio.schemas.coaching import (
     WeekPlanningContext,
 )
 from resilio.schemas.planning.plans import BaselineAssessmentPlan, RaceMacroPlan
+from resilio.schemas.workout_fulfillment import WorkoutFulfillmentManifest
 
 
 def _planned_workouts_for_week(
@@ -100,6 +103,48 @@ def _coaching_data_quality(
     )
 
 
+def _adherence_activities(
+    *,
+    archive: ActivityArchive,
+    exposed_activities: list[CanonicalActivity],
+    planned_workouts: list[AuthoritativeWorkout],
+    fulfillment_manifest: WorkoutFulfillmentManifest,
+    as_of_date: date,
+) -> list[CanonicalActivity]:
+    activities = list(exposed_activities)
+    loaded_activity_ids = {activity.local_activity_id for activity in activities}
+    planned_identity_keys = {
+        (
+            workout.identity.plan_id,
+            workout.identity.plan_revision_id,
+            workout.identity.week_number,
+            workout.identity.local_workout_id,
+        )
+        for workout in planned_workouts
+    }
+    for fulfillment in fulfillment_manifest.fulfillments.values():
+        if (
+            not fulfillment_was_available_as_of(
+                fulfillment,
+                as_of_date=as_of_date,
+            )
+            or (
+                fulfillment.workout_identity.plan_id,
+                fulfillment.workout_identity.plan_revision_id,
+                fulfillment.workout_identity.week_number,
+                fulfillment.workout_identity.local_workout_id,
+            )
+            not in planned_identity_keys
+            or fulfillment.local_activity_id in loaded_activity_ids
+        ):
+            continue
+        activity = archive.load(fulfillment.local_activity_id)
+        if activity is not None:
+            activities.append(activity)
+            loaded_activity_ids.add(activity.local_activity_id)
+    return activities
+
+
 def build_weekly_coach_context(
     repo: RepositoryIO,
     *,
@@ -112,14 +157,14 @@ def build_weekly_coach_context(
     if as_of_date < week_start:
         raise ValueError("as_of_date cannot precede week start")
     week_end = week_start + timedelta(days=6)
-    effective_as_of = min(as_of_date, week_end)
+    exposure_end_date = min(as_of_date, week_end)
     archive = ActivityArchive(repo.resolve_path("data/activities"))
     activities = sorted(
         (
             activity
             for activity in archive.load_all()
             if activity.status == ActivityStatus.ACTIVE
-            and week_start <= activity.occurrence.local_date <= effective_as_of
+            and week_start <= activity.occurrence.local_date <= exposure_end_date
         ),
         key=lambda activity: (
             activity.occurrence.local_date,
@@ -130,21 +175,29 @@ def build_weekly_coach_context(
         ),
     )
     wellness = load_wellness(repo)
-    latest = latest_wellness(wellness, effective_as_of)
+    latest = latest_wellness(wellness, exposure_end_date)
     recovery = build_recovery_context(
         wellness,
-        as_of_date=effective_as_of,
+        as_of_date=exposure_end_date,
     )
     planned_workouts = _planned_workouts_for_week(
         repo,
         week_start=week_start,
         week_end=week_end,
     )
+    fulfillment_manifest = load_fulfillment_manifest(repo)
+    adherence_activities = _adherence_activities(
+        archive=archive,
+        exposed_activities=activities,
+        planned_workouts=planned_workouts.workouts,
+        fulfillment_manifest=fulfillment_manifest,
+        as_of_date=as_of_date,
+    )
     adherence = build_adherence_context(
         workouts=planned_workouts.workouts,
-        activities=activities,
-        completion_manifest=load_completion_manifest(repo),
-        as_of_date=effective_as_of,
+        activities=adherence_activities,
+        fulfillment_manifest=fulfillment_manifest,
+        as_of_date=as_of_date,
         publication_manifest=load_manifest(repo),
         status=planned_workouts.status,
         reason=planned_workouts.reason,
@@ -164,7 +217,7 @@ def build_weekly_coach_context(
     return WeeklyCoachContext(
         week_start=week_start,
         week_end=week_end,
-        as_of_date=effective_as_of,
+        as_of_date=as_of_date,
         training_state=training_state(latest),
         recovery=recovery,
         activities=[activity_context(activity) for activity in activities],
@@ -182,7 +235,7 @@ def build_weekly_coach_context(
         source_evidence_coverage=build_sync_evidence_coverage(
             repo,
             requested_window_start=week_start,
-            requested_window_end=effective_as_of,
+            requested_window_end=exposure_end_date,
         ),
     )
 

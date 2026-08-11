@@ -230,6 +230,9 @@ class WorkoutPublicationService(ProductionWorkoutPublicationService):
                 local_workout_id=workout.id,
             ),
             prescription=workout,
+            applied_week_approval_id="week_approval_0123456789abcdef",
+            applied_running_workouts_sha256="1" * 64,
+            schedule_timezone="Europe/Paris",
         )
 
 
@@ -910,10 +913,10 @@ def test_publication_manifest_rejects_cross_workout_identity_collisions(
         save_manifest(repo, mutated)
 
 
-def test_run_only_publication_manifest_uses_schema_version_six() -> None:
-    assert PublicationManifest().schema_version == 6
+def test_run_only_publication_manifest_uses_schema_version_seven() -> None:
+    assert PublicationManifest().schema_version == 7
     with pytest.raises(ValidationError):
-        PublicationManifest.model_validate({"schema_version": 5})
+        PublicationManifest.model_validate({"schema_version": 6})
 
 
 def test_publication_uses_exact_approved_local_start_time(repo) -> None:

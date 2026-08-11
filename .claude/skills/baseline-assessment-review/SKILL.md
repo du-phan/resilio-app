@@ -1,6 +1,6 @@
 ---
 name: baseline-assessment-review
-description: Confirm an ownership-paired benchmark activity or exact canonical segment, create an immutable assessment review, archive the completed assessment, and prepare a VDOT proposal. Use after the benchmark workout has been published, synchronized, and paired to its completion.
+description: Confirm an ownership-paired benchmark activity or exact canonical segment, create an immutable assessment review, archive the completed assessment, and prepare a VDOT proposal. Use after the benchmark workout has been published, synchronized, and recorded with provider-paired fulfillment.
 ---
 
 # Review a baseline assessment
@@ -12,8 +12,8 @@ never approve the resulting VDOT on the athlete's behalf.
 ## Preconditions
 
 Require one approved active baseline-assessment plan, one applied benchmark
-workout, an exact publication record, and a synchronized provider-paired
-completion. Refresh factual state:
+workout, an exact publication record, and synchronized provider-paired
+fulfillment. Refresh factual state:
 
 ```bash
 poetry run resilio dates today
@@ -23,8 +23,10 @@ poetry run resilio plan show
 poetry run resilio approvals status
 ```
 
-If completion pairing is absent, do not match by date, title, sport, distance,
-duration, or proximity. Reconcile the owned publication/completion chain first.
+If provider-paired fulfillment is absent, do not match by date, title, sport,
+distance, duration, or proximity. Reconcile the owned publication/fulfillment
+chain first. Athlete-confirmed fulfillment is intentionally ineligible for a
+timed benchmark.
 
 ## Select exact result evidence
 
