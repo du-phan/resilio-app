@@ -93,7 +93,7 @@ class WorkoutPairingReconciliationService:
         athlete_confirmation_reference: str,
         confirmed_at_utc: datetime | None = None,
     ) -> RemotePairingDriftResolution:
-        """Persist authority to restore one exact removed Resilio-authored pair."""
+        """Persist authority to restore one exact removed verified pair."""
         return confirm_remote_pairing_drift(
             self.repo,
             self.client,
@@ -321,18 +321,6 @@ class WorkoutPairingReconciliationService:
     ) -> RemoteWorkoutPairingResult:
         provider_activity_guard_sha256 = activity_pairing_guard_sha256(remote_before)
         if existing_operation is not None and existing_operation.state == "verified":
-            if (
-                fulfillment.provider_pair is not None
-                and fulfillment.provider_pair.provenance != "resilio_requested"
-            ):
-                return pairing_result(
-                    existing_operation,
-                    status="pairing_blocked",
-                    blocker_code="ambiguous_pair_removed",
-                    message=(
-                        "The removed pair was not proven to originate from a Resilio write"
-                    ),
-                )
             drift_token = remote_pairing_drift_token_sha256(
                 existing_operation,
                 provider_activity_guard_sha256=provider_activity_guard_sha256,
@@ -348,6 +336,20 @@ class WorkoutPairingReconciliationService:
                 ),
                 None,
             )
+            if (
+                fulfillment.provider_pair is not None
+                and fulfillment.provider_pair.provenance != "resilio_requested"
+                and resolution is None
+            ):
+                return pairing_result(
+                    existing_operation,
+                    status="pairing_blocked",
+                    blocker_code="ambiguous_pair_removed",
+                    message=(
+                        "The removed ambiguous pair requires exact athlete confirmation"
+                    ),
+                    pairing_drift_token_sha256=drift_token,
+                )
             if resolution is None:
                 return pairing_result(
                     existing_operation,

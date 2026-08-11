@@ -446,6 +446,13 @@ def test_unsubmitted_intent_never_becomes_independent_provider_evidence(
     assert not stored.independent_provider_pair_supports_event(42)
 
     client.activity = client.activity.model_copy(update={"paired_event_id": None})
+    inspected = service.inspect_pairing(
+        authority=authority,
+        publication=publication,
+        fulfillment=stored,
+        activity=activity,
+        now_utc=datetime(2026, 8, 10, 10, tzinfo=timezone.utc),
+    )
     removed = service.reconcile_pairing(
         authority=authority,
         publication=publication,
@@ -454,7 +461,31 @@ def test_unsubmitted_intent_never_becomes_independent_provider_evidence(
         now_utc=datetime(2026, 8, 10, 10, tzinfo=timezone.utc),
     )
     assert removed.blocker_code == "ambiguous_pair_removed"
+    assert removed.pairing_drift_token_sha256 is not None
+    assert inspected.pairing_drift_token_sha256 == removed.pairing_drift_token_sha256
     assert client.update_payloads == [42]
+
+    service.confirm_pairing_drift(
+        operation_id=removed.operation_id,
+        supplied_pairing_drift_token_sha256=removed.pairing_drift_token_sha256,
+        athlete_confirmation_reference=(
+            "Athlete confirmed restoring this exact ambiguous native pair."
+        ),
+        confirmed_at_utc=datetime(2026, 8, 10, 10, 30, tzinfo=timezone.utc),
+    )
+    restored = service.reconcile_pairing(
+        authority=authority,
+        publication=publication,
+        fulfillment=stored,
+        activity=activity,
+        now_utc=datetime(2026, 8, 10, 11, tzinfo=timezone.utc),
+    )
+
+    assert restored.status == "paired"
+    assert client.update_payloads == [42, 42]
+    final = load_fulfillment_manifest(repo).fulfillments[activity.local_activity_id]
+    assert final.provider_pair is not None
+    assert final.provider_pair.provenance == "resilio_requested"
 
 
 def test_different_existing_pair_and_strava_source_fail_without_mutation(

@@ -222,20 +222,22 @@ def inspect_remote_pairing(
             message="Intervals activity is already paired to a different event",
         )
     if operation.state == "verified":
+        drift_token = remote_pairing_drift_token_sha256(
+            operation,
+            provider_activity_guard_sha256=observed_guard_sha256,
+        )
         if (
             fulfillment.provider_pair is not None
             and fulfillment.provider_pair.provenance != "resilio_requested"
+            and resolution is None
         ):
             return pairing_result(
                 operation,
                 status="pairing_blocked",
                 blocker_code="ambiguous_pair_removed",
-                message="The removed pair was not proven to originate from a Resilio write",
+                message="The removed ambiguous pair requires exact athlete confirmation",
+                pairing_drift_token_sha256=drift_token,
             )
-        drift_token = remote_pairing_drift_token_sha256(
-            operation,
-            provider_activity_guard_sha256=observed_guard_sha256,
-        )
         if resolution is None:
             return pairing_result(
                 operation,

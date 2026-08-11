@@ -415,7 +415,7 @@ class RunWeekSynchronizationService:
             )
             if not observed_tokens and not confirmed_retry_tokens:
                 raise PublicationSafetyError(
-                    "There is no Resilio-authored native pairing drift to resolve"
+                    "There is no verified native pairing drift to resolve"
                 )
             if observed_tokens | confirmed_retry_tokens != supplied_tokens:
                 raise PublicationSafetyError(

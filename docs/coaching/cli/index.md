@@ -139,9 +139,9 @@ authority. Commands return JSON envelopes.
   athlete confirmation. There is no automatic remote adoption.
 - `resilio workout resolve-pairing-drift --week-number <N>
   --pairing-drift-token <SHA> --confirmation-reference <TEXT>` — restore only
-  an exact removed Resilio-authored native pair, or retry one pending pair whose
-  non-performance fields changed, after exact re-observation and explicit
-  athlete confirmation.
+  an exact removed verified native pair, including one whose original writer
+  is ambiguous, or retry one pending pair whose non-performance fields changed,
+  after exact re-observation and explicit athlete confirmation.
 - `resilio migrate workout-fulfillment-v2 [--apply]` — validate the strict
   publication/fulfillment/planning-evidence cutover in dry-run mode, then apply
   it through a crash-recoverable, hash-verified backup transaction. Normal

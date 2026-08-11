@@ -1,4 +1,4 @@
-"""Athlete authority for restoring one removed Resilio-authored native pair."""
+"""Athlete authority for restoring one exact removed verified native pair."""
 
 from datetime import datetime, timezone
 from typing import Protocol

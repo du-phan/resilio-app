@@ -129,11 +129,11 @@ that Intervals does not permit editing, a provider failure, a readback mismatch,
 or a concurrent non-pair field change must block without deleting either
 record. A durable pending operation makes an interrupted request retryable.
 
-If a previously verified Resilio-authored pair is later absent, or a pending
-pair operation observes changed non-performance fields, status returns an
-opaque pairing-drift token and ordinary reconcile remains blocked. Show the
-exact affected workout and request specific athlete authority to restore or
-retry that pair:
+If a previously verified pair is later absent, or a pending pair operation
+observes changed non-performance fields, status returns an opaque
+pairing-drift token and ordinary reconcile remains blocked. This includes an
+observed pair whose original writer was ambiguous. Show the exact affected
+workout and request specific athlete authority to restore or retry that pair:
 
 ```bash
 poetry run resilio workout resolve-pairing-drift \

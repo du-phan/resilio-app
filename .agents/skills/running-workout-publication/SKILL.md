@@ -125,8 +125,9 @@ poetry run resilio workout resolve-drift \
 This records the confirmation before replacing exact owned remote content.
 There is no automatic adopt-remote strategy.
 
-If status reports that a Resilio-authored native pair was removed, do not treat
-publication restore authority as pairing authority. The
+If status reports that a verified native pair was removed, including one whose
+original writer is ambiguous, do not treat publication restore authority as
+pairing authority. The
 running-workout-fulfillment procedure owns the separate exact
 `resolve-pairing-drift` confirmation.
 

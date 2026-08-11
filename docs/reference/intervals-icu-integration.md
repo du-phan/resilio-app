@@ -247,9 +247,10 @@ event through Intervals.icu's native `paired_event_id`. Resilio persists the
 approved and provider dates separately in synchronization output. It persists
 the exact pairing intent before mutation, writes only that activity field, and requires exact readback with all
 other activity fields unchanged. A different existing pair, immutable activity
-source, provider failure, or removed Resilio-authored pair blocks without
-deleting either record. Explicit publication and pairing drift resolutions are
-separate athlete authorities. Adherence accepts exact provider pairing or an
+source, provider failure, or removed verified pair blocks without deleting
+either record; an ambiguously authored removed pair exposes the same exact
+athlete-confirmed drift-resolution path. Explicit publication and pairing drift
+resolutions are separate athlete authorities. Adherence accepts exact provider pairing or an
 athlete-confirmed candidate revalidated against immutable applied authority; it
 never uses date/sport/duration resemblance automatically.
 
