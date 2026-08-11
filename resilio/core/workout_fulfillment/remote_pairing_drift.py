@@ -74,7 +74,7 @@ def _prepare_pairing_drift_resolution(
         or not operation_proves_resilio_pair_request(operation)
     ):
         raise ValueError("Pairing drift resolution lacks an exact pair operation")
-    remote = client.get_activity(operation.intervals_icu_activity_id, intervals=False)
+    remote = client.get_activity(operation.intervals_icu_activity_id, intervals=True)
     if operation.state == "verified":
         if remote.paired_event_id is not None:
             raise ValueError("Verified pairing drift may restore only a removed pair")

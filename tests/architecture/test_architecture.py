@@ -5,6 +5,8 @@ from __future__ import annotations
 import ast
 import filecmp
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -101,6 +103,22 @@ def test_dependency_direction():
                 failures.append(f"{source} imports {imported}: API may not depend on CLI")
 
     assert not failures, "\n".join(failures)
+
+
+def test_publication_repository_import_is_order_independent() -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from resilio.core.workout_publication.manifest import load_manifest",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_transport_dtos_do_not_leak_into_domain_consumers():

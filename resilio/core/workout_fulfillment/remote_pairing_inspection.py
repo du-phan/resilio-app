@@ -176,7 +176,7 @@ def inspect_remote_pairing(
         activity=activity,
         manifest=manifest,
     )
-    remote = client.get_activity(external_activity_id, intervals=False)
+    remote = client.get_activity(external_activity_id, intervals=True)
     validate_remote_performance_evidence(remote, activity)
     existing_operation = matching_resilio_pair_operation(
         manifest,

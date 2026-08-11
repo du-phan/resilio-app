@@ -316,7 +316,7 @@ class WorkoutUnpairingReconciliationService:
         try:
             remote = self.client.get_activity(
                 operation.intervals_icu_activity_id,
-                intervals=False,
+                intervals=True,
             )
         except IntervalsNotFoundError:
             return self._result(operation, status="unpaired")
@@ -402,7 +402,7 @@ class WorkoutUnpairingReconciliationService:
         try:
             remote_after = self.client.get_activity(
                 operation.intervals_icu_activity_id,
-                intervals=False,
+                intervals=True,
             )
         except IntervalsNotFoundError:
             return self._verified(
@@ -431,12 +431,7 @@ class WorkoutUnpairingReconciliationService:
                 message="Intervals did not confirm removal of the exact native pair",
                 attempted_at_utc=reconciliation_time_utc,
             )
-        if (
-            activity_pairing_guard_sha256(update_response)
-            != provider_activity_guard_sha256
-            or activity_pairing_guard_sha256(remote_after)
-            != provider_activity_guard_sha256
-        ):
+        if activity_pairing_guard_sha256(remote_after) != provider_activity_guard_sha256:
             return self._blocked(
                 manifest,
                 operation,
@@ -466,7 +461,7 @@ class WorkoutUnpairingReconciliationService:
         try:
             remote_before = self.client.get_activity(
                 operation.intervals_icu_activity_id,
-                intervals=False,
+                intervals=True,
             )
         except IntervalsNotFoundError:
             return self._verified(

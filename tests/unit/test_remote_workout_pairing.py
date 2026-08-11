@@ -183,6 +183,7 @@ class PairingClient:
 
     def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO:
         assert activity_id == self.activity.id
+        assert intervals is True
         return self.activity
 
     def update_activity_pairing(self, activity_id, pairing):

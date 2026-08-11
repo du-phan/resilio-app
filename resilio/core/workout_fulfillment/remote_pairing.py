@@ -164,7 +164,7 @@ class WorkoutPairingReconciliationService:
         manifest.remote_pairing_operations[submitted.operation_id] = submitted
         save_fulfillment_manifest(self.repo, manifest)
         try:
-            remote_after = self.client.get_activity(external_activity_id, intervals=False)
+            remote_after = self.client.get_activity(external_activity_id, intervals=True)
         except Exception:
             return pairing_result(
                 submitted,
@@ -187,12 +187,7 @@ class WorkoutPairingReconciliationService:
                 attempted_at_utc=attempted_at_utc,
                 provider_write_submitted_at_utc=attempted_at_utc,
             )
-        if (
-            activity_pairing_guard_sha256(update_response)
-            != provider_activity_guard_sha256
-            or activity_pairing_guard_sha256(remote_after)
-            != provider_activity_guard_sha256
-        ):
+        if activity_pairing_guard_sha256(remote_after) != provider_activity_guard_sha256:
             return save_blocked_pair_operation(
                 self.repo,
                 manifest,
@@ -421,7 +416,7 @@ class WorkoutPairingReconciliationService:
             != fulfillment.activity_performance_evidence_sha256
         ):
             raise ValueError("Native pairing activity performance evidence changed")
-        remote_before = self.client.get_activity(external_activity_id, intervals=False)
+        remote_before = self.client.get_activity(external_activity_id, intervals=True)
         if remote_before.id != external_activity_id:
             raise ValueError("Intervals activity readback identity changed")
         validate_remote_performance_evidence(remote_before, activity)
