@@ -659,7 +659,8 @@ def test_exact_paired_event_links_completion_idempotently(
     publication, authority = _publication_with_authority()
     _save_publication(repo, publication)
     monkeypatch.setattr(
-        "resilio.core.activity_sync.staged_reconciliation." "load_approved_workouts_for_date_range",
+        "resilio.core.activity_sync.staged_reconciliation."
+        "load_approved_workouts_for_date_range_unlocked",
         lambda *_args, **_kwargs: ApprovedWorkoutWindow(
             status="available",
             workouts=[authority],
@@ -702,7 +703,8 @@ def test_dismissed_candidate_blocks_later_automatic_provider_pair(
     publication, authority = _publication_with_authority()
     _save_publication(repo, publication)
     monkeypatch.setattr(
-        "resilio.core.activity_sync.staged_reconciliation." "load_approved_workouts_for_date_range",
+        "resilio.core.activity_sync.staged_reconciliation."
+        "load_approved_workouts_for_date_range_unlocked",
         lambda *_args, **_kwargs: ApprovedWorkoutWindow(
             status="available",
             workouts=[authority],

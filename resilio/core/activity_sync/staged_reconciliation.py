@@ -40,7 +40,7 @@ from resilio.core.activity_sync.review import (
 )
 from resilio.core.activity_transaction import write_json
 from resilio.core.planning.workout_evidence import (
-    load_approved_workouts_for_date_range,
+    load_approved_workouts_for_date_range_unlocked,
 )
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.pair_operation_evidence import (
@@ -165,7 +165,7 @@ class StagedActivityReconciler:
             publication.occurrence_date for publication in self.published_by_event_id.values()
         ]
         approved_window = (
-            load_approved_workouts_for_date_range(
+            load_approved_workouts_for_date_range_unlocked(
                 repo,
                 window_start=min(publication_dates),
                 window_end=max(publication_dates),

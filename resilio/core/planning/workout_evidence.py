@@ -21,6 +21,7 @@ from resilio.core.planning.integrity import (
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
 from resilio.core.planning.state_repository import (
     load_planning_aggregate,
+    load_planning_aggregate_unlocked,
     required_planning_state_unlocked,
 )
 from resilio.core.repository import RepositoryIO
@@ -111,22 +112,13 @@ def load_publishable_workout(
     return matches[0]
 
 
-def load_approved_workouts_for_date_range(
+def _resolve_approved_workouts_for_state(
     repo: RepositoryIO,
     *,
+    state: PlanningState | None,
     window_start: date,
     window_end: date,
 ) -> ApprovedWorkoutWindow:
-    if window_end < window_start:
-        raise ValueError("workout window end cannot precede its start")
-    try:
-        state = load_planning_aggregate(repo, allow_missing=True)
-    except PlanOperationError as exc:
-        return ApprovedWorkoutWindow(
-            status="unavailable",
-            workouts=[],
-            reason=str(exc),
-        )
     if state is None:
         return ApprovedWorkoutWindow(
             status="no_plan",
@@ -149,4 +141,53 @@ def load_approved_workouts_for_date_range(
         window_start=window_start,
         window_end=window_end,
         closed_plan_archives=closed_archives,
+    )
+
+
+def load_approved_workouts_for_date_range_unlocked(
+    repo: RepositoryIO,
+    *,
+    window_start: date,
+    window_end: date,
+) -> ApprovedWorkoutWindow:
+    """Resolve exact workout authority while the caller holds the plan lock."""
+    if window_end < window_start:
+        raise ValueError("workout window end cannot precede its start")
+    try:
+        state = load_planning_aggregate_unlocked(repo, allow_missing=True)
+    except PlanOperationError as exc:
+        return ApprovedWorkoutWindow(
+            status="unavailable",
+            workouts=[],
+            reason=str(exc),
+        )
+    return _resolve_approved_workouts_for_state(
+        repo,
+        state=state,
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+
+def load_approved_workouts_for_date_range(
+    repo: RepositoryIO,
+    *,
+    window_start: date,
+    window_end: date,
+) -> ApprovedWorkoutWindow:
+    if window_end < window_start:
+        raise ValueError("workout window end cannot precede its start")
+    try:
+        state = load_planning_aggregate(repo, allow_missing=True)
+    except PlanOperationError as exc:
+        return ApprovedWorkoutWindow(
+            status="unavailable",
+            workouts=[],
+            reason=str(exc),
+        )
+    return _resolve_approved_workouts_for_state(
+        repo,
+        state=state,
+        window_start=window_start,
+        window_end=window_end,
     )
