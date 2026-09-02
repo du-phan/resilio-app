@@ -45,10 +45,32 @@ def test_public_product_document_matches_the_runtime_boundary() -> None:
 def test_public_coaching_example_is_synthetic_unit_explicit_and_safe() -> None:
     payload = json.loads(PUBLIC_EXAMPLE.read_text())
 
+    assert set(payload) == {
+        "metadata",
+        "synchronized_facts",
+        "athlete_confirmed_constraints",
+        "missing_or_partial_evidence",
+        "coaching_judgment",
+        "proposed_action",
+    }
     assert payload["metadata"]["synthetic"] is True
     assert payload["metadata"]["source_release"] == "v0.3.0"
+    assert payload["synchronized_facts"]["coverage_status"] == "complete"
     assert payload["synchronized_facts"]["running_distance_km"] >= 0
     assert payload["synchronized_facts"]["climbing_duration_minutes"] >= 0
+    assert "next_climbing_session_date" not in payload["synchronized_facts"]
+
+    constraints = payload["athlete_confirmed_constraints"]
+    assert constraints == [
+        {
+            "sport_name": "climbing",
+            "participation_pattern": "recurring_weekly",
+            "recurring_weekday": "thursday",
+            "run_same_day_permission": "prohibited",
+            "typical_session_duration_minutes": 90,
+            "next_occurrence_date": "2026-08-20",
+        }
+    ]
     assert payload["missing_or_partial_evidence"]
     assert payload["coaching_judgment"]
     assert payload["proposed_action"]["requires_athlete_approval"] is True

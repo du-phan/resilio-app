@@ -14,8 +14,20 @@ def _settings(root: Path, content: str = "{}\n") -> None:
     (root / "config" / "settings.yaml").write_text(content)
 
 
-def test_get_repo_root_finds_repository() -> None:
-    assert (get_repo_root() / ".git").exists()
+def test_get_repo_root_finds_project_distribution() -> None:
+    root = get_repo_root()
+
+    assert (root / "AGENTS.md").is_file()
+    assert (root / "pyproject.toml").is_file()
+
+
+def test_get_repo_root_accepts_release_archive_marker(tmp_path, monkeypatch) -> None:
+    (tmp_path / "AGENTS.md").write_text("# Distribution marker\n")
+    child = tmp_path / "nested"
+    child.mkdir()
+    monkeypatch.chdir(child)
+
+    assert get_repo_root() == tmp_path
 
 
 def test_get_repo_root_raises_outside_repository(tmp_path, monkeypatch) -> None:

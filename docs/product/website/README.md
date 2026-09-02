@@ -40,8 +40,9 @@ propose a separate baseline-assessment plan before race planning.
 Canonical athlete state, plans, approvals, and coaching evidence are persisted
 locally. Resilio reads evidence from and can publish approved running workouts
 to Intervals.icu. The selected Claude Code or Codex environment processes the
-coaching context supplied to it. Optional weather lookup sends location
-coordinates to Open-Meteo.
+coaching context supplied to it. Weather-aware day-specific advice and schedule
+changes send the athlete's configured location query to Open-Meteo geocoding
+and the resulting coordinates to Open-Meteo forecasting.
 
 Intervals.icu may forward an eligible workout to Garmin. Forwarding
 eligibility is not proof that the workout reached a watch.
@@ -59,5 +60,6 @@ tag and agree with this contract. The v0.3.0 website may state that Resilio no
 longer uses the Strava API, but historical policy claims must cite Strava's
 current primary documentation and include a review date.
 
-The synthetic example in this directory is public test data. It contains no
-athlete record and must stay labelled as illustrative.
+The synthetic example in this directory is public test data assembled from the
+listed engine contracts. It contains no athlete record and must stay labelled
+as illustrative.

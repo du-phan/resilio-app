@@ -5,6 +5,7 @@
     "snapshot_date": "2026-08-17",
     "source_contracts": [
       "WeeklyCoachContext schema version 2",
+      "PlanningConstraintsSnapshot schema",
       "weekly running proposal"
     ]
   },
@@ -12,13 +13,22 @@
     "source": "Intervals.icu",
     "evidence_window_start": "2026-08-10",
     "evidence_window_end": "2026-08-16",
-    "coverage_status": "complete_with_declared_exclusions",
+    "coverage_status": "complete",
     "running_session_count": 3,
     "running_distance_km": 24.2,
     "climbing_session_count": 2,
-    "climbing_duration_minutes": 180,
-    "next_climbing_session_date": "2026-08-20"
+    "climbing_duration_minutes": 180
   },
+  "athlete_confirmed_constraints": [
+    {
+      "sport_name": "climbing",
+      "participation_pattern": "recurring_weekly",
+      "recurring_weekday": "thursday",
+      "run_same_day_permission": "prohibited",
+      "typical_session_duration_minutes": 90,
+      "next_occurrence_date": "2026-08-20"
+    }
+  ],
   "missing_or_partial_evidence": [
     {
       "signal": "sleep duration",
