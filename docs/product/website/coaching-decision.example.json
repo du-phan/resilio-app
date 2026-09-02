@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "synthetic": true,
+    "source_release": "v0.3.0",
+    "snapshot_date": "2026-08-17",
+    "source_contracts": [
+      "WeeklyCoachContext schema version 2",
+      "weekly running proposal"
+    ]
+  },
+  "synchronized_facts": {
+    "source": "Intervals.icu",
+    "evidence_window_start": "2026-08-10",
+    "evidence_window_end": "2026-08-16",
+    "coverage_status": "complete_with_declared_exclusions",
+    "running_session_count": 3,
+    "running_distance_km": 24.2,
+    "climbing_session_count": 2,
+    "climbing_duration_minutes": 180,
+    "next_climbing_session_date": "2026-08-20"
+  },
+  "missing_or_partial_evidence": [
+    {
+      "signal": "sleep duration",
+      "status": "missing",
+      "effect": "Sleep is not treated as neutral or inferred."
+    },
+    {
+      "signal": "climbing intensity",
+      "status": "duration_only",
+      "effect": "Climbing is kept separate and is not converted to running load."
+    }
+  ],
+  "coaching_judgment": {
+    "summary": "Keep the quality run away from the athlete-managed climbing day.",
+    "rationale": [
+      "The climbing session on Thursday is an explicit schedule constraint.",
+      "Recent running exposure supports retaining one quality stimulus.",
+      "Missing sleep and climbing-intensity evidence limits stronger recovery claims."
+    ]
+  },
+  "proposed_action": {
+    "running_workout_date": "2026-08-18",
+    "running_workout_name": "Controlled threshold intervals",
+    "running_workout_duration_minutes": 50,
+    "change": "Place the quality run on Tuesday and keep Friday easy after climbing.",
+    "requires_athlete_approval": true,
+    "publication_target": "Intervals.icu after approval"
+  }
+}

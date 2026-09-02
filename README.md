@@ -3,8 +3,7 @@
 Resilio is a local AI-assisted running coach for multi-sport athletes. It
 imports completed activities through Intervals.icu, preserves
 provider-computed training state locally, builds signal-first coaching
-context, and can publish owned run and cycling workouts back to the external
-calendar.
+context, and can publish owned running workouts back to the external calendar.
 
 Open this repository in Claude Code or Codex and ask to get started. The
 assistant guides environment setup, account validation, sync, profile
