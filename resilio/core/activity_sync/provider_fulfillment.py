@@ -245,6 +245,32 @@ def _reconcile_existing_provider_pair(
     )
 
 
+def _unchanged_existing_pair_without_applied_authority(
+    *,
+    activity: CanonicalActivity,
+    publication: PublishedWorkout,
+    existing_fulfillment: WorkoutFulfillmentRecord,
+    performance_sha256: str,
+    execution_local_date: date | None,
+) -> bool:
+    """Recognize an immutable closed-plan pair without rewriting its evidence."""
+    provider_pair = existing_fulfillment.provider_pair
+    return bool(
+        provider_pair is not None
+        and execution_local_date is not None
+        and existing_fulfillment.local_activity_id == activity.local_activity_id
+        and existing_fulfillment.workout_identity == publication.workout_identity
+        and existing_fulfillment.workout_prescription_sha256
+        == publication.workout_prescription_sha256
+        and existing_fulfillment.schedule_timezone == publication.schedule_timezone
+        and existing_fulfillment.scheduled_local_date == publication.occurrence_date
+        and provider_pair.event_id == publication.event_id
+        and existing_fulfillment.activity_performance_evidence_sha256
+        == performance_sha256
+        and existing_fulfillment.execution_local_date == execution_local_date
+    )
+
+
 def reconcile_provider_fulfillment(
     *,
     activity: CanonicalActivity,
@@ -276,7 +302,19 @@ def reconcile_provider_fulfillment(
             activity=activity,
             publication=publication,
         )
+    execution_local_date = _execution_local_date(
+        activity,
+        schedule_timezone=publication.schedule_timezone,
+    )
     if authoritative_workout is None:
+        if existing_fulfillment is not None and _unchanged_existing_pair_without_applied_authority(
+            activity=activity,
+            publication=publication,
+            existing_fulfillment=existing_fulfillment,
+            performance_sha256=performance_sha256,
+            execution_local_date=execution_local_date,
+        ):
+            return ProviderFulfillmentReconciliation()
         return _provider_pair_conflict(
             "paired_event_applied_authority_unavailable",
             activity=activity,
@@ -295,10 +333,6 @@ def reconcile_provider_fulfillment(
             activity=activity,
             publication=publication,
         )
-    execution_local_date = _execution_local_date(
-        activity,
-        schedule_timezone=publication.schedule_timezone,
-    )
     if execution_local_date is None:
         return _provider_pair_conflict(
             "paired_event_execution_date_unavailable",

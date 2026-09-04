@@ -1026,6 +1026,110 @@ def test_fulfillment_v1_migrates_exact_pair_provenance_and_is_idempotent() -> No
     assert repeated_changed is False
 
 
+def test_current_publication_may_retain_an_earlier_fulfillment_authority() -> None:
+    raw, publication_manifest, _, activities = _v1_active_fulfillment_migration_inputs()
+    original = _migration_authority()
+    replacement_time = datetime(2026, 7, 27, 12, tzinfo=timezone.utc)
+    original = replace(original, valid_until_utc=replacement_time)
+    replacement_workout = replace(
+        original.workout,
+        applied_week_approval_id="week_approval_1111111111111111",
+        applied_running_workouts_sha256="2" * 64,
+    )
+    replacement = replace(
+        original,
+        workout=replacement_workout,
+        valid_from_utc=replacement_time,
+        valid_until_utc=None,
+        weekly_approved_at_utc=replacement_time,
+    )
+    publication = publication_manifest.workouts["planned-run"].model_copy(
+        update={
+            "applied_week_approval_id": replacement_workout.applied_week_approval_id,
+            "applied_running_workouts_sha256": (
+                replacement_workout.applied_running_workouts_sha256
+            ),
+        }
+    )
+
+    migrated, _ = migration_module._migrate_current_fulfillment_manifest(
+        raw,
+        PublicationManifest(workouts={"planned-run": publication}),
+        [original, replacement],
+        activities,
+    )
+
+    assert (
+        migrated.fulfillments["activity-1"].applied_week_approval_id
+        == original.workout.applied_week_approval_id
+    )
+
+
+def test_current_publication_replacement_requires_retained_authority() -> None:
+    raw, publication_manifest, authorities, activities = (
+        _v1_active_fulfillment_migration_inputs()
+    )
+    publication = publication_manifest.workouts["planned-run"].model_copy(
+        update={
+            "applied_week_approval_id": "week_approval_1111111111111111",
+            "applied_running_workouts_sha256": "2" * 64,
+        }
+    )
+
+    with pytest.raises(
+        migration_module.WorkoutFulfillmentMigrationError,
+        match="exact publication authority",
+    ):
+        migration_module._migrate_current_fulfillment_manifest(
+            raw,
+            PublicationManifest(workouts={"planned-run": publication}),
+            authorities,
+            activities,
+        )
+
+
+def test_fulfillment_recorded_before_same_day_closure_retains_authority() -> None:
+    raw, publication_manifest, _, activities = _v1_active_fulfillment_migration_inputs()
+    authority = replace(
+        _migration_authority(),
+        effective_end_date=date(2026, 7, 28),
+        retired_at_utc=datetime(2026, 7, 28, 10, tzinfo=timezone.utc),
+    )
+
+    migrated, _ = migration_module._migrate_current_fulfillment_manifest(
+        raw,
+        publication_manifest,
+        [authority],
+        activities,
+    )
+
+    assert "activity-1" in migrated.fulfillments
+
+
+def test_fulfillment_recorded_after_same_day_closure_is_rejected() -> None:
+    raw, publication_manifest, _, activities = _v1_active_fulfillment_migration_inputs()
+    raw["fulfillments"]["activity-1"]["provider_pair"]["observed_at_utc"] = (
+        "2026-07-28T11:00:00Z"
+    )
+    raw["fulfillments"]["activity-1"]["recorded_at_utc"] = "2026-07-28T11:00:00Z"
+    authority = replace(
+        _migration_authority(),
+        effective_end_date=date(2026, 7, 28),
+        retired_at_utc=datetime(2026, 7, 28, 10, tzinfo=timezone.utc),
+    )
+
+    with pytest.raises(
+        migration_module.WorkoutFulfillmentMigrationError,
+        match="schedule-time workout authority",
+    ):
+        migration_module._migrate_current_fulfillment_manifest(
+            raw,
+            publication_manifest,
+            [authority],
+            activities,
+        )
+
+
 def test_fulfillment_v1_rejects_provider_pair_for_a_different_owned_event() -> None:
     raw, publication_manifest, authorities, activities = (
         _v1_active_fulfillment_migration_inputs()

@@ -114,6 +114,49 @@ def test_provider_pair_refreshes_changed_activity_evidence_idempotently() -> Non
     assert unchanged.conflict is None
 
 
+def test_unchanged_existing_pair_survives_archived_authority_window() -> None:
+    publication, authority = _publication_and_authority()
+    activity = make_activity(
+        id="act_closed_plan_pair",
+        date=publication.occurrence_date,
+        start_time=datetime(2026, 7, 28, 6, tzinfo=timezone.utc),
+    )
+    existing = reconcile_provider_fulfillment(
+        activity=activity,
+        paired_event_id=publication.event_id,
+        publications_by_event_id={publication.event_id: publication},
+        authoritative_workout=authority,
+        existing_fulfillment=None,
+        observed_at_utc=datetime(2026, 7, 28, 9, tzinfo=timezone.utc),
+    ).fulfillment
+    assert existing is not None
+
+    unchanged = reconcile_provider_fulfillment(
+        activity=activity,
+        paired_event_id=publication.event_id,
+        publications_by_event_id={publication.event_id: publication},
+        authoritative_workout=None,
+        existing_fulfillment=existing,
+        observed_at_utc=datetime(2026, 8, 4, 9, tzinfo=timezone.utc),
+    )
+    changed = reconcile_provider_fulfillment(
+        activity=activity.model_copy(update={"distance_meters": 5_010}),
+        paired_event_id=publication.event_id,
+        publications_by_event_id={publication.event_id: publication},
+        authoritative_workout=None,
+        existing_fulfillment=existing,
+        observed_at_utc=datetime(2026, 8, 4, 9, tzinfo=timezone.utc),
+    )
+
+    assert unchanged.fulfillment is None
+    assert unchanged.conflict is None
+    assert changed.conflict == {
+        "rule": "paired_event_applied_authority_unavailable",
+        "local_activity_id": activity.local_activity_id,
+        "local_workout_id": publication.workout_identity.local_workout_id,
+    }
+
+
 def test_exact_provider_pair_may_cross_a_training_week_boundary() -> None:
     publication, authority = _publication_and_authority()
     activity = make_activity(

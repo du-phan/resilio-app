@@ -210,6 +210,31 @@ def _publication_candidates(
     return candidates
 
 
+def _publication_authority_is_retained(
+    publication: PublicationAuthority,
+    fulfillment: WorkoutFulfillmentRecord,
+    authorities: list[MigrationWorkoutAuthority],
+) -> bool:
+    if (
+        publication.applied_week_approval_id == fulfillment.applied_week_approval_id
+        and publication.applied_running_workouts_sha256
+        == fulfillment.applied_running_workouts_sha256
+    ):
+        return True
+    return any(
+        item.workout.identity == publication.workout_identity
+        and item.workout.applied_week_approval_id
+        == publication.applied_week_approval_id
+        and item.workout.applied_running_workouts_sha256
+        == publication.applied_running_workouts_sha256
+        and canonical_data_sha256(item.workout.prescription)
+        == publication.workout_prescription_sha256
+        and item.workout.schedule_timezone == publication.schedule_timezone
+        and item.workout.prescription.date == publication.occurrence_date
+        for item in authorities
+    )
+
+
 def _validate_active_fulfillment(
     publication_manifest: PublicationManifest,
     fulfillment: WorkoutFulfillmentRecord,
@@ -246,10 +271,11 @@ def _validate_active_fulfillment(
         (publication, event_id)
         for publication, event_id in candidates
         if publication.workout_identity == fulfillment.workout_identity
-        and publication.applied_week_approval_id
-        == fulfillment.applied_week_approval_id
-        and publication.applied_running_workouts_sha256
-        == fulfillment.applied_running_workouts_sha256
+        and _publication_authority_is_retained(
+            publication,
+            fulfillment,
+            authorities,
+        )
         and publication.workout_prescription_sha256
         == fulfillment.workout_prescription_sha256
         and publication.schedule_timezone == fulfillment.schedule_timezone
@@ -266,7 +292,6 @@ def _validate_active_fulfillment(
     first, first_event_id = matches[0]
     if any(
         candidate.workout_identity != first.workout_identity
-        or candidate.applied_week_approval_id != first.applied_week_approval_id
         or candidate.workout_prescription_sha256
         != first.workout_prescription_sha256
         or candidate_event_id != first_event_id

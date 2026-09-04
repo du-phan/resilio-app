@@ -37,6 +37,8 @@ class MigrationWorkoutAuthority:
 def _temporally_applicable_authorities(
     identity: PlanWorkoutIdentity,
     authorities: list[MigrationWorkoutAuthority],
+    *,
+    evidence_observed_at_utc: datetime | None = None,
 ) -> list[MigrationWorkoutAuthority]:
     applicable: list[MigrationWorkoutAuthority] = []
     for item in authorities:
@@ -52,7 +54,14 @@ def _temporally_applicable_authorities(
             and item.weekly_approved_at_utc <= deadline_utc
             and item.valid_from_utc <= deadline_utc
             and (item.valid_until_utc is None or deadline_utc < item.valid_until_utc)
-            and (item.retired_at_utc is None or deadline_utc < item.retired_at_utc)
+            and (
+                item.retired_at_utc is None
+                or deadline_utc < item.retired_at_utc
+                or (
+                    evidence_observed_at_utc is not None
+                    and evidence_observed_at_utc < item.retired_at_utc
+                )
+            )
         ):
             applicable.append(item)
     return applicable
@@ -132,6 +141,7 @@ def validate_migrated_fulfillment_authority(
         temporally_applicable = _temporally_applicable_authorities(
             fulfillment.workout_identity,
             authorities,
+            evidence_observed_at_utc=fulfillment.recorded_at_utc,
         )
     except WorkoutScheduleError as exc:
         raise ValueError("Migrated fulfillment schedule authority is invalid") from exc
@@ -174,6 +184,11 @@ def validate_migrated_publication_authority(
         applicable = _temporally_applicable_authorities(
             publication.workout_identity,
             authorities,
+            evidence_observed_at_utc=(
+                publication.prepared_at_utc
+                if isinstance(publication, PendingWorkoutPublication)
+                else publication.verified_at_utc
+            ),
         )
     except WorkoutScheduleError as exc:
         raise ValueError("Migrated publication schedule authority is invalid") from exc
