@@ -32,7 +32,6 @@ from resilio.core.workout_publication.retirement_mutation import (
     assert_expected_remote_target,
     delete_remote_if_fresh,
 )
-from resilio.core.workout_publication.semantics import workout_semantics_sha256
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
 from resilio.schemas.publication import (
@@ -61,10 +60,11 @@ def retire_pending_publication(
     repo: RepositoryIO,
     client: IntervalsIcuClient,
     pending: PendingWorkoutPublication,
-    prepared: RetainedPublicationVerification,
+    retained_verification: RetainedPublicationVerification | None,
     remote: EventDTO | None,
     authority: RetainedPublicationAuthority,
     *,
+    pending_step_semantics_sha256: str,
     restore_local: bool,
     expected_remote_target: tuple[int, str] | None,
     as_of_date: date | None,
@@ -92,13 +92,16 @@ def retire_pending_publication(
             expected_remote_target,
             message="Remote event changed after athlete deletion confirmation",
         )
-        if not restore_local and not remote_matches_retained_record(
-            client,
-            remote,
-            pending,
-            authority,
-        ):
-            raise RemoteWorkoutDriftError("Pending owned event differs from its prepared workout")
+        if not restore_local:
+            if retained_verification is None or not remote_matches_retained_record(
+                client,
+                remote,
+                pending,
+                authority,
+            ):
+                raise RemoteWorkoutDriftError(
+                    "Pending owned event differs from its prepared workout"
+                )
         if (
             as_of_date is not None
             and provider_occurrence_date is not None
@@ -116,11 +119,13 @@ def retire_pending_publication(
                     authority,
                     remote,
                     expected_remote_target=expected_remote_target,
+                    renderer_representation_superseded=(retained_verification is None),
                 )
+            assert retained_verification is not None
             retained_at_remote_date = prepare_retained_publication_verification(
                 authority.workout,
                 pending,
-                athlete_id=prepared.athlete_id,
+                athlete_id=retained_verification.athlete_id,
                 provider_name=authority.provider_name,
                 provider_occurrence_date=provider_occurrence_date,
             )
@@ -134,7 +139,7 @@ def retire_pending_publication(
     deletion_operation = stage_pending_publication_deletion(
         repo,
         pending,
-        pending_step_semantics_sha256=workout_semantics_sha256(prepared.expected_step_semantics),
+        pending_step_semantics_sha256=pending_step_semantics_sha256,
     )
     if remote is not None:
         verify_semantics = (

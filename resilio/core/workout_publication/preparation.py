@@ -10,6 +10,7 @@ from resilio.core.planning.artifacts import canonical_data_sha256
 from resilio.core.workout_publication.naming import provider_workout_name
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
+    WorkoutRepresentationUnsupportedError,
     event_target_for_modes,
     event_type_for_sport,
     external_id_for,
@@ -22,7 +23,10 @@ from resilio.core.workout_publication.policy import (
     uid_for,
     validated_local_start,
 )
-from resilio.core.workout_publication.renderer import render_structured_workout
+from resilio.core.workout_publication.renderer import (
+    WorkoutRenderError,
+    render_structured_workout,
+)
 from resilio.core.workout_publication.semantics import (
     StepSemantics,
     WorkoutSemanticsError,
@@ -78,14 +82,22 @@ class RetainedPublicationVerification:
     athlete_id: str
     event: EventWriteDTO
     provider_occurrence_date: date
+    rendered_workout_sha256: str
     expected_step_semantics: tuple[StepSemantics, ...]
+
+
+def _render_workout_steps(workout: RunningWorkoutPrescription) -> str:
+    if workout.structured_workout is None:
+        raise PublicationSafetyError("Publishing requires a typed structured_workout")
+    try:
+        return render_structured_workout(workout.structured_workout.steps)
+    except WorkoutRenderError as exc:
+        raise WorkoutRepresentationUnsupportedError(str(exc)) from exc
 
 
 def rendered_workout_sha256(workout: RunningWorkoutPrescription) -> str:
     """Identify the provider workout body independent of provider settings."""
-    if workout.structured_workout is None:
-        raise PublicationSafetyError("Publishing requires a typed structured_workout")
-    rendered_steps = render_structured_workout(workout.structured_workout.steps)
+    rendered_steps = _render_workout_steps(workout)
     purpose = " ".join((workout.purpose or "").split())
     rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
     return sha256_text(rendered)
@@ -100,14 +112,33 @@ def prepare_retained_publication_verification(
     provider_occurrence_date: date,
 ) -> RetainedPublicationVerification:
     """Rebuild immutable owned fields without consulting mutable provider settings."""
-    workout = authoritative_workout.prescription
-    if workout.structured_workout is None:
-        raise PublicationSafetyError("Retained publication lacks a typed workout")
-    if rendered_workout_sha256(workout) != record.rendered_workout_sha256:
+    prepared = prepare_retained_publication_replacement(
+        authoritative_workout,
+        record,
+        athlete_id=athlete_id,
+        provider_name=provider_name,
+        provider_occurrence_date=provider_occurrence_date,
+    )
+    if prepared.rendered_workout_sha256 != record.rendered_workout_sha256:
         raise PublicationSafetyError(
             "Retained publication differs from its rendered workout authority"
         )
-    rendered_steps = render_structured_workout(workout.structured_workout.steps)
+    return prepared
+
+
+def prepare_retained_publication_replacement(
+    authoritative_workout: AuthoritativeWorkout,
+    record: PublishedWorkout | PendingWorkoutPublication,
+    *,
+    athlete_id: str,
+    provider_name: str,
+    provider_occurrence_date: date,
+) -> RetainedPublicationVerification:
+    """Build current provider bytes from separately proven retained authority."""
+    workout = authoritative_workout.prescription
+    if workout.structured_workout is None:
+        raise PublicationSafetyError("Retained publication lacks a typed workout")
+    rendered_steps = _render_workout_steps(workout)
     purpose = " ".join((workout.purpose or "").split())
     rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
     try:
@@ -132,6 +163,7 @@ def prepare_retained_publication_verification(
         athlete_id=athlete_id,
         event=event,
         provider_occurrence_date=provider_occurrence_date,
+        rendered_workout_sha256=sha256_text(rendered),
         expected_step_semantics=expected_semantics,
     )
 
@@ -185,7 +217,7 @@ def prepare_publication(
         connections=connections,
     )
 
-    rendered_steps = render_structured_workout(workout.structured_workout.steps)
+    rendered_steps = _render_workout_steps(workout)
     purpose = " ".join((workout.purpose or "").split())
     rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
     try:

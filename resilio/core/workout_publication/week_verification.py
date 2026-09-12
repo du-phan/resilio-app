@@ -6,6 +6,9 @@ from datetime import date
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.authority_matching import (
+    publication_record_has_retained_workout_authority,
+)
 from resilio.core.workout_publication.execution_placement import (
     assert_fulfillment_pair_matches_remote_placement as assert_pair_remote,
 )
@@ -16,6 +19,7 @@ from resilio.core.workout_publication.policy import (
     assert_remote_matches,
     assert_remote_ownership,
     assert_remote_unchanged,
+    pending_matches,
     provider_event_state_fingerprint,
     provider_local_date,
     training_week_bounds,
@@ -36,7 +40,7 @@ from resilio.core.workout_publication.schedule_adoption import (
 from resilio.core.workout_publication.service import WorkoutPublicationService
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
-from resilio.schemas.publication import PublishedWorkout
+from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
 from resilio.schemas.publication_placement import ProviderOccurrencePlacement
 
 
@@ -193,6 +197,52 @@ def _verify_published_remote(
     return prepared.provider_occurrence_date
 
 
+def _verify_superseded_pending_remote(
+    repo: RepositoryIO,
+    client: IntervalsIcuClient,
+    remote: EventDTO,
+    workout: AuthoritativeWorkout,
+    pending: PendingWorkoutPublication,
+    previous: PublishedWorkout | None,
+    prepared: PreparedPublication,
+    *,
+    allow_remote_schedule_adoption: bool,
+) -> date:
+    """Classify remote state when old renderer bytes cannot be reconstructed."""
+    if not publication_record_has_retained_workout_authority(pending, workout):
+        raise PublicationSafetyError(
+            "Superseded pending publication lacks retained workout authority"
+        )
+    if previous is not None:
+        return _verify_published_remote(
+            repo,
+            client,
+            remote,
+            previous,
+            prepared,
+            allow_remote_schedule_adoption=allow_remote_schedule_adoption,
+        )
+    try:
+        assert_remote_matches(
+            remote,
+            prepared.event,
+            prepared.expected_step_semantics,
+        )
+    except PublicationSafetyError as exc:
+        adopted_occurrence_date = (
+            adoptable_same_week_occurrence_date(remote, prepared)
+            if allow_remote_schedule_adoption
+            else None
+        )
+        if adopted_occurrence_date is not None:
+            return adopted_occurrence_date
+        raise RemoteWorkoutDriftError(
+            "Remote event differs from the current workout after its "
+            "pending representation was superseded"
+        ) from exc
+    return prepared.provider_occurrence_date
+
+
 def verify_workout_publication(
     repo: RepositoryIO,
     client: IntervalsIcuClient,
@@ -240,16 +290,35 @@ def verify_workout_publication(
         _assert_exact_confirmed_target(remote, expected_remote_target)
         return provider_occurrence_date
     if pending is not None:
-        pending_prepared = prepare_current_authority_pending(
-            client,
-            workout,
-            previous=previous,
-            pending=pending,
-            pending_occurrence_placement=(
-                manifest.pending_provider_occurrence_placements[local_workout_id]
-            ),
-            provider_name=provider_name,
-        )
+        try:
+            pending_prepared = prepare_current_authority_pending(
+                client,
+                workout,
+                previous=previous,
+                pending=pending,
+                pending_occurrence_placement=(
+                    manifest.pending_provider_occurrence_placements[local_workout_id]
+                ),
+                provider_name=provider_name,
+            )
+        except PublicationSafetyError:
+            if pending_matches(
+                pending,
+                uid=prepared.event.uid,
+                external_id=prepared.external_id,
+                fingerprint=prepared.publication_fingerprint_sha256,
+            ):
+                raise
+            return _verify_superseded_pending_remote(
+                repo,
+                client,
+                remote,
+                workout,
+                pending,
+                previous,
+                prepared,
+                allow_remote_schedule_adoption=allow_remote_schedule_adoption,
+            )
         if previous is None:
             try:
                 assert_remote_matches(

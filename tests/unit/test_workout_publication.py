@@ -9,6 +9,9 @@ from pydantic import ValidationError
 from resilio.canonical import canonical_data_sha256
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.identity_discovery import (
+    discover_pending_owned_identity_matches,
+)
 from resilio.core.workout_publication.manifest import (
     load_manifest,
     save_manifest,
@@ -26,7 +29,10 @@ from resilio.core.workout_publication.publication_deletions import (
     publication_deletion_operation_id,
     reconcile_publication_deletion_operations,
 )
-from resilio.core.workout_publication.renderer import render_structured_workout
+from resilio.core.workout_publication.renderer import (
+    WorkoutRenderError,
+    render_structured_workout,
+)
 from resilio.core.workout_publication.retirement_service import (
     WorkoutRetirementService,
 )
@@ -34,6 +40,7 @@ from resilio.core.workout_publication.semantics import (
     WorkoutSemanticsError,
     assert_workout_semantics_match,
     expected_workout_semantics,
+    provider_workout_semantics,
 )
 from resilio.core.workout_publication.service import (
     PublicationSafetyError,
@@ -361,29 +368,26 @@ class FakeClient:
 
 
 def _parse_fake_workout_steps(description: str) -> list[dict[str, object]]:
-    """Independent narrow fake of the Intervals text parser used by unit tests."""
+    """Independent narrow fake of documented Intervals workout-text parsing."""
     roots: list[dict[str, object]] = []
-    stack: list[tuple[int, list[dict[str, object]]]] = [(-1, roots)]
-    for raw_line in description.splitlines():
-        stripped = raw_line.strip()
-        indentation = len(raw_line) - len(raw_line.lstrip())
-        repeat_match = re.fullmatch(r".+\s(\d+)x", stripped)
+    for raw_block in re.split(r"\n\s*\n", description.strip()):
+        lines = [line.strip() for line in raw_block.splitlines() if line.strip()]
+        repeat_match = re.fullmatch(r"(?:.*\s)?(\d+)x", lines[0])
         if repeat_match:
-            while stack[-1][0] >= indentation:
-                stack.pop()
-            nested: list[dict[str, object]] = []
-            block: dict[str, object] = {
-                "reps": int(repeat_match.group(1)),
-                "steps": nested,
-            }
-            stack[-1][1].append(block)
-            stack.append((indentation, nested))
+            roots.append(
+                {
+                    "reps": int(repeat_match.group(1)),
+                    "steps": [
+                        _parse_fake_step(line[2:])
+                        for line in lines[1:]
+                        if line.startswith("- ")
+                    ],
+                }
+            )
             continue
-        if not stripped.startswith("- "):
-            continue
-        while stack[-1][0] >= indentation:
-            stack.pop()
-        stack[-1][1].append(_parse_fake_step(stripped[2:]))
+        roots.extend(
+            _parse_fake_step(line[2:]) for line in lines if line.startswith("- ")
+        )
     return roots
 
 
@@ -411,9 +415,14 @@ def _parse_fake_step(payload: str) -> dict[str, object]:
     ):
         if token.startswith("intensity="):
             result["intensity"] = token.removeprefix("intensity=")
-        elif pace_match := re.fullmatch(
-            r"(\d+):(\d{2})-(\d+):(\d{2})/km",
-            token,
+        elif (
+            pace_match := re.fullmatch(
+                r"(\d+):(\d{2})-(\d+):(\d{2})/km",
+                token,
+            )
+        ) and (
+            token_index + 1 < len(tokens)
+            and tokens[token_index + 1].casefold() == "pace"
         ):
             first = int(pace_match.group(1)) * 60 + int(pace_match.group(2))
             second = int(pace_match.group(3)) * 60 + int(pace_match.group(4))
@@ -451,10 +460,198 @@ def test_recursive_native_text_render_is_deterministic() -> None:
     second = render_structured_workout(_structure().steps)
 
     assert first == second
-    assert "Repeat 3x" in first
-    assert ("- Smooth and controlled 1000mtr 4:10-4:20/km " "intensity=interval") in first
-    assert "- 10m 5:00-5:30/km intensity=warmup" in first
-    assert first.endswith("\n")
+    assert first == (
+        "- 10m 5:00-5:30/km Pace intensity=warmup\n"
+        "\n"
+        "Repeat 3x\n"
+        "- Smooth and controlled 1000mtr 4:10-4:20/km Pace intensity=interval\n"
+        "- 2m intensity=recovery\n"
+    )
+
+
+def test_native_text_render_keeps_ordinary_root_steps_contiguous() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 300},
+                    "intensity": "warmup",
+                },
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "intensity": "active",
+                },
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 300},
+                    "intensity": "cooldown",
+                },
+            ],
+        }
+    )
+
+    assert render_structured_workout(structure.steps) == (
+        "- 5m intensity=warmup\n"
+        "- 10m intensity=active\n"
+        "- 5m intensity=cooldown\n"
+    )
+
+
+def test_native_text_render_bounds_a_middle_repeat_with_blank_lines() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "intensity": "warmup",
+                },
+                {
+                    "kind": "repeat",
+                    "repetitions": 2,
+                    "steps": [
+                        {
+                            "kind": "steady",
+                            "duration": {"unit": "seconds", "value": 300},
+                            "intensity": "interval",
+                        },
+                        {
+                            "kind": "steady",
+                            "duration": {"unit": "seconds", "value": 120},
+                            "intensity": "recovery",
+                        },
+                    ],
+                },
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "intensity": "cooldown",
+                },
+            ],
+        }
+    )
+
+    rendered = render_structured_workout(structure.steps)
+    provider_document = WorkoutDocumentDTO.model_validate(
+        {"steps": _parse_fake_workout_steps(rendered)}
+    )
+
+    assert rendered == (
+        "- 10m intensity=warmup\n"
+        "\n"
+        "Repeat 2x\n"
+        "- 5m intensity=interval\n"
+        "- 2m intensity=recovery\n"
+        "\n"
+        "- 10m intensity=cooldown\n"
+    )
+    assert len(provider_workout_semantics(provider_document)) == 6
+    assert_workout_semantics_match(
+        expected_workout_semantics(structure.steps),
+        provider_document,
+    )
+
+
+def test_native_text_render_rejects_provider_unsupported_nested_repeats() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "repeat",
+                    "repetitions": 2,
+                    "steps": [
+                        {
+                            "kind": "repeat",
+                            "repetitions": 3,
+                            "steps": [
+                                {
+                                    "kind": "steady",
+                                    "duration": {"unit": "seconds", "value": 60},
+                                    "intensity": "interval",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(
+        WorkoutRenderError,
+        match="Intervals.icu does not support nested repeat blocks",
+    ):
+        render_structured_workout(structure.steps)
+
+
+@pytest.mark.parametrize(
+    ("mode", "unit"),
+    [
+        ("pace", "seconds_per_kilometer"),
+        ("heart_rate", "beats_per_minute"),
+        ("power", "watts"),
+    ],
+)
+def test_native_text_render_rejects_fractional_whole_number_targets(
+    mode: str,
+    unit: str,
+) -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 300},
+                    "target": {
+                        "mode": mode,
+                        "unit": unit,
+                        "minimum": 310.4,
+                        "maximum": 319.6,
+                    },
+                    "intensity": "active",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(WorkoutRenderError, match="cannot be published without precision loss"):
+        render_structured_workout(structure.steps)
+
+
+def test_native_text_render_rejects_fractional_ramp_pace_target() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "ramp",
+                    "duration": {"unit": "seconds", "value": 300},
+                    "start_target": {
+                        "mode": "pace",
+                        "unit": "seconds_per_kilometer",
+                        "minimum": 330.5,
+                        "maximum": 330.5,
+                    },
+                    "end_target": {
+                        "mode": "pace",
+                        "unit": "seconds_per_kilometer",
+                        "minimum": 270,
+                        "maximum": 270,
+                    },
+                    "intensity": "active",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(WorkoutRenderError, match="cannot be published without precision loss"):
+        render_structured_workout(structure.steps)
 
 
 def test_provider_names_are_date_independent_and_reuse_identical_structures() -> None:
@@ -678,7 +875,7 @@ def test_ramp_syntax_and_direction_match_provider_semantics() -> None:
 
     assert (
         render_structured_workout(structure.steps)
-        == "- Build 5m ramp 5:30-4:30/km intensity=active\n"
+        == "- Build 5m ramp 5:30-4:30/km Pace intensity=active\n"
     )
     assert_workout_semantics_match(
         expected_workout_semantics(structure.steps),
@@ -1059,6 +1256,80 @@ def test_interrupted_read_back_recovers_from_durable_intent(repo) -> None:
     assert len(client.events) == 1
     assert "workout-1" not in manifest.pending
     assert manifest.workouts["workout-1"].event_id == recovered.event_id
+
+
+def test_pending_identity_discovery_rejects_a_duplicate_outside_its_week(repo) -> None:
+    class InterruptedReadBackClient(FakeClient):
+        fail_read_back = True
+
+        def get_event(self, event_id, *, athlete_id=None):
+            if self.fail_read_back and self.upserts:
+                self.fail_read_back = False
+                raise IntervalsTransportError(
+                    "temporary read-back failure",
+                    operation="get_event",
+                )
+            return super().get_event(event_id, athlete_id=athlete_id)
+
+    client = InterruptedReadBackClient()
+    service = WorkoutPublicationService(repo, client)
+    with pytest.raises(IntervalsTransportError):
+        service.publish(_workout())
+    pending = load_manifest(repo).pending["workout-1"]
+    first = next(iter(client.events.values()))
+    duplicate = first.model_copy(
+        update={
+            "id": client.next_id,
+            "start_date_local": "2026-11-02T07:00:00",
+        }
+    )
+    client.next_id += 1
+    client.events[duplicate.id] = duplicate
+
+    with pytest.raises(PublicationSafetyError, match="Multiple remote events"):
+        discover_pending_owned_identity_matches(
+            client,
+            pending,
+            athlete_id=client.athlete.id,
+        )
+
+
+def test_pending_recovery_republishes_after_relevant_sport_settings_change(repo) -> None:
+    class InterruptedReadBackClient(FakeClient):
+        fail_read_back = True
+
+        def get_event(self, event_id, *, athlete_id=None):
+            if self.fail_read_back and self.upserts:
+                self.fail_read_back = False
+                raise IntervalsTransportError(
+                    "temporary read-back failure",
+                    operation="get_event",
+                )
+            return super().get_event(event_id, athlete_id=athlete_id)
+
+    client = InterruptedReadBackClient()
+    service = WorkoutPublicationService(repo, client)
+    workout = _workout()
+    with pytest.raises(IntervalsTransportError):
+        service.publish(workout)
+    pending_settings_sha256 = load_manifest(repo).pending[
+        workout.id
+    ].sport_settings_version_sha256
+    client.settings[0] = client.settings[0].model_copy(
+        update={"threshold_speed_meters_per_second": 3.5}
+    )
+
+    recovered = service.publish(workout)
+
+    assert recovered.action == "updated"
+    assert client.upserts == 2
+    assert len(client.events) == 1
+    manifest = load_manifest(repo)
+    assert workout.id not in manifest.pending
+    assert (
+        manifest.workouts[workout.id].sport_settings_version_sha256
+        != pending_settings_sha256
+    )
 
 
 def test_interrupted_update_before_remote_mutation_retries_safely(repo) -> None:

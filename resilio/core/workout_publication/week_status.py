@@ -80,7 +80,6 @@ def _verified_workout_items(
                     retirement_service,
                     local_workout_id=workout.identity.local_workout_id,
                     authoritative_workout=workout,
-                    provider_name=provider_name,
                 ).confirmation_token_sha256
                 if isinstance(exc, RemoteWorkoutDriftError)
                 else None
@@ -152,7 +151,6 @@ def _verified_deletion_items(
                     retirement_service,
                     local_workout_id=local_workout_id,
                     authoritative_workout=preferred_authority.workout,
-                    provider_name=preferred_authority.provider_name,
                 ).confirmation_token_sha256
                 if isinstance(exc, RemoteWorkoutDriftError) and preferred_authority is not None
                 else None

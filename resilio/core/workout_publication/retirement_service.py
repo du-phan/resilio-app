@@ -7,8 +7,12 @@ from datetime import date
 
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.authority_matching import (
+    publication_record_has_retained_workout_authority,
+)
 from resilio.core.workout_publication.identity_discovery import (
     discover_owned_identity_matches,
+    discover_pending_owned_identity_matches,
 )
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.past_publication_retention import (
@@ -23,6 +27,7 @@ from resilio.core.workout_publication.pending_retirement_recovery import (
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     RemoteWorkoutDriftError,
+    WorkoutRepresentationUnsupportedError,
     assert_remote_ownership,
     assert_remote_unchanged,
     pending_matches,
@@ -33,6 +38,9 @@ from resilio.core.workout_publication.policy import (
 from resilio.core.workout_publication.preparation import (
     RetainedPublicationVerification,
     prepare_retained_publication_verification,
+)
+from resilio.core.workout_publication.publication_deletion_evidence import (
+    authority_step_semantics_sha256,
 )
 from resilio.core.workout_publication.publication_deletion_staging import (
     authority_candidate,
@@ -55,6 +63,9 @@ from resilio.core.workout_publication.retirement_mutation import (
 )
 from resilio.core.workout_publication.retirement_recovery import (
     recover_absent_existing_publication,
+)
+from resilio.core.workout_publication.superseded_pending_retirement import (
+    prepare_renderer_superseded_pending_retirement,
 )
 from resilio.core.workout_publication.tombstone_retirement import (
     retire_existing_tombstone,
@@ -228,7 +239,35 @@ class WorkoutRetirementService:
                 raise PublicationSafetyError(
                     "Future deletion lacks exact local ownership authority"
                 )
-            pending, prepared, matches = self._prepare_pending(authority)
+            try:
+                pending, prepared, matches = self._prepare_pending(authority)
+            except PublicationSafetyError as exc:
+                pending, matches = prepare_renderer_superseded_pending_retirement(
+                    self.repo,
+                    self.client,
+                    authority,
+                )
+                provider_occurrence_date = (
+                    provider_local_date(matches[0].start_date_local)
+                    if matches and matches[0].start_date_local is not None
+                    else provider_local_date(pending.provider_start_date_local)
+                )
+                if (
+                    isinstance(exc, WorkoutRepresentationUnsupportedError)
+                    and as_of_date is not None
+                    and provider_occurrence_date < as_of_date
+                ):
+                    raise exc
+                if matches and not restore_local:
+                    raise RemoteWorkoutDriftError(
+                        "Pending owned event has a superseded renderer representation"
+                    )
+                return RetirementVerification(
+                    provider_occurrence_date=provider_occurrence_date,
+                    retirement_required=(
+                        as_of_date is None or provider_occurrence_date >= as_of_date
+                    ),
+                )
             if (
                 matches
                 and not restore_local
@@ -299,7 +338,6 @@ class WorkoutRetirementService:
         local_workout_id: str,
         *,
         authoritative_workout: AuthoritativeWorkout,
-        provider_name: str,
     ) -> tuple[int, str]:
         """Return the exact owned remote event ID and bytes awaiting confirmation."""
         manifest = load_manifest(self.repo)
@@ -317,11 +355,20 @@ class WorkoutRetirementService:
                 external_id=record.external_id,
             )
             return remote.id, provider_event_state_fingerprint(remote)
-        _, _, matches = self._prepare_pending(
-            RetainedPublicationAuthority(
-                workout=authoritative_workout,
-                provider_name=provider_name,
+        pending = manifest.pending.get(local_workout_id)
+        if pending is None:
+            raise PublicationSafetyError("Remote drift lacks a local ownership record")
+        if not publication_record_has_retained_workout_authority(
+            pending,
+            authoritative_workout,
+        ):
+            raise PublicationSafetyError(
+                "Pending drift target lacks retained workout authority"
             )
+        matches = discover_pending_owned_identity_matches(
+            self.client,
+            pending,
+            athlete_id=self.client.get_athlete().id,
         )
         if len(matches) != 1:
             raise PublicationSafetyError(
@@ -492,7 +539,36 @@ class WorkoutRetirementService:
                 raise PublicationSafetyError(
                     "Pending deletion requires exact applied-workout authority"
                 )
-            pending, prepared, matches = self._prepare_pending(authority)
+            try:
+                pending, prepared, matches = self._prepare_pending(authority)
+            except PublicationSafetyError:
+                pending, matches = prepare_renderer_superseded_pending_retirement(
+                    self.repo,
+                    self.client,
+                    authority,
+                )
+                remote = matches[0] if matches else None
+                if remote is not None and not restore_local:
+                    raise RemoteWorkoutDriftError(
+                        "Pending owned event has a superseded renderer representation"
+                    )
+                if remote is not None and expected_remote_target is None:
+                    raise PublicationSafetyError(
+                        "Renderer-superseded pending deletion requires one exact "
+                        "confirmed remote target"
+                    )
+                return retire_pending_publication(
+                    self.repo,
+                    self.client,
+                    pending,
+                    None,
+                    remote,
+                    authority,
+                    pending_step_semantics_sha256=authority_step_semantics_sha256(authority),
+                    restore_local=restore_local,
+                    expected_remote_target=expected_remote_target,
+                    as_of_date=as_of_date,
+                )
             remote = matches[0] if matches else None
             return retire_pending_publication(
                 self.repo,
@@ -501,6 +577,7 @@ class WorkoutRetirementService:
                 prepared,
                 remote,
                 authority,
+                pending_step_semantics_sha256=authority_step_semantics_sha256(authority),
                 restore_local=restore_local,
                 expected_remote_target=expected_remote_target,
                 as_of_date=as_of_date,

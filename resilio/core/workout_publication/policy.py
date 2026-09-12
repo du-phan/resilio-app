@@ -39,6 +39,10 @@ class PublicationSafetyError(RuntimeError):
     """Publication cannot proceed without complete ownership and safety proof."""
 
 
+class WorkoutRepresentationUnsupportedError(PublicationSafetyError):
+    """A valid local workout has no lossless provider representation."""
+
+
 class ProviderSemanticsMismatchError(PublicationSafetyError):
     """Intervals parsed a different executable workout than prescribed."""
 

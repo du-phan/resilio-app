@@ -27,12 +27,10 @@ def observe_publication_drift_target(
     *,
     local_workout_id: str,
     authoritative_workout: AuthoritativeWorkout,
-    provider_name: str,
 ) -> ObservedPublicationDriftTarget:
     event_id, remote_fingerprint_sha256 = retirement_service.observe_remote_target(
         local_workout_id,
         authoritative_workout=authoritative_workout,
-        provider_name=provider_name,
     )
     target = ConfirmedPublicationDriftTarget(
         local_workout_id=local_workout_id,
@@ -50,7 +48,6 @@ def confirm_publication_drift_targets(
     *,
     drift_items: list[WeekSynchronizationItem],
     authoritative_workouts_by_local_id: dict[str, AuthoritativeWorkout],
-    provider_names_by_local_workout_id: dict[str, str],
     supplied_confirmation_tokens: list[str],
 ) -> list[ConfirmedPublicationDriftTarget]:
     """Bind consent to preflight tokens and prove the remote bytes remain unchanged."""
@@ -70,14 +67,12 @@ def confirm_publication_drift_targets(
     confirmed_targets: list[ConfirmedPublicationDriftTarget] = []
     for item in sorted(drift_items, key=lambda candidate: candidate.local_workout_id):
         authoritative_workout = authoritative_workouts_by_local_id.get(item.local_workout_id)
-        provider_name = provider_names_by_local_workout_id.get(item.local_workout_id)
-        if authoritative_workout is None or provider_name is None:
+        if authoritative_workout is None:
             raise PublicationSafetyError("Remote drift lacks exact retained workout authority")
         observed = observe_publication_drift_target(
             retirement_service,
             local_workout_id=item.local_workout_id,
             authoritative_workout=authoritative_workout,
-            provider_name=provider_name,
         )
         if observed.confirmation_token_sha256 != item.drift_resolution_token_sha256:
             raise PublicationSafetyError(

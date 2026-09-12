@@ -7,6 +7,9 @@ from datetime import date
 from resilio.core.locking import OperationLock
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.authority_matching import (
+    publication_record_has_retained_workout_authority,
+)
 from resilio.core.workout_publication.execution_placement import (
     assert_fulfillment_pair_matches_remote_placement,
 )
@@ -182,6 +185,13 @@ class WorkoutPublicationService:
             )
         ):
             return None
+        if not publication_record_has_retained_workout_authority(
+            pending,
+            authoritative_workout,
+        ):
+            raise PublicationSafetyError(
+                "Superseded pending publication lacks retained workout authority"
+            )
         if expected_remote_target is not None:
             remote = identity_matches[0]
             self._assert_confirmed_remote_target(
@@ -201,20 +211,19 @@ class WorkoutPublicationService:
             raise PublicationSafetyError(
                 "Restoring superseded pending drift requires one exact confirmed target"
             )
-        if provider_name is None:
-            raise PublicationSafetyError(
-                "Superseded pending publication requires its deterministic provider name"
+        try:
+            pending_prepared = prepare_current_authority_pending(
+                self.client,
+                authoritative_workout,
+                previous=previous,
+                pending=pending,
+                pending_occurrence_placement=(
+                    manifest.pending_provider_occurrence_placements[prepared.workout.id]
+                ),
+                provider_name=provider_name or prepared.event.name,
             )
-        pending_prepared = prepare_current_authority_pending(
-            self.client,
-            authoritative_workout,
-            previous=previous,
-            pending=pending,
-            pending_occurrence_placement=(
-                manifest.pending_provider_occurrence_placements[prepared.workout.id]
-            ),
-            provider_name=provider_name,
-        )
+        except PublicationSafetyError:
+            pending_prepared = None
         remote = identity_matches[0]
         action = superseded_pending_action(
             self.repo,
@@ -224,6 +233,9 @@ class WorkoutPublicationService:
             pending_prepared,
             previous,
             adopt_remote_schedule=adopt_remote_schedule,
+            current_settings_changed=(
+                pending.sport_settings_version_sha256 != prepared.settings_version_sha256
+            ),
         )
         if action == "persist_current":
             if previous is None:

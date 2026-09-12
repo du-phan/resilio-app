@@ -14,6 +14,7 @@ from resilio.core.workout_fulfillment.repository import (
     save_fulfillment_manifest,
 )
 from resilio.core.workout_publication import pending_recovery as pending_recovery_module
+from resilio.core.workout_publication import preparation as preparation_module
 from resilio.core.workout_publication import week_verification as week_verification_module
 from resilio.core.workout_publication.execution_placement import (
     assert_fulfillment_pair_matches_remote_placement,
@@ -25,6 +26,7 @@ from resilio.core.workout_publication.policy import uid_for
 from resilio.core.workout_publication.retained_authority import (
     RetainedPublicationAuthority,
 )
+from resilio.core.workout_publication.semantics import provider_workout_semantics
 from resilio.core.workout_publication.service import PublicationSafetyError
 from resilio.integrations.intervals_icu.dto import ActivityDTO
 from resilio.integrations.intervals_icu.errors import IntervalsTransportError
@@ -462,6 +464,128 @@ def test_future_pending_restore_reuses_a_provider_rewritten_uid(
     assert manifest.workouts["future-server-uid"].event_id == event_id
     assert manifest.workouts["future-server-uid"].uid == "server-assigned-uid"
     assert manifest.workouts["future-server-uid"].requested_uid == uid_for("future-server-uid")
+
+
+def test_renderer_evolution_pending_drift_can_be_confirmed_and_replaced(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    workout_payload = _targetless_run(
+        "renderer-evolution",
+        date(2026, 8, 11),
+    ).model_dump(mode="json")
+    workout_payload["workout_type"] = "tempo"
+    workout_payload["planned_duration_seconds"] = 2_400
+    workout_payload["planned_distance_meters"] = 5_000
+    workout_payload["planned_low_intensity_duration_seconds"] = 1_440
+    workout_payload["planned_moderate_intensity_duration_seconds"] = 0
+    workout_payload["planned_high_intensity_duration_seconds"] = 960
+    workout_payload["structured_workout"] = {
+        "sport": "run",
+        "steps": [
+            {
+                "kind": "steady",
+                "duration": {"unit": "seconds", "value": 600},
+                "intensity": "warmup",
+            },
+            {
+                "kind": "repeat",
+                "repetitions": 2,
+                "steps": [
+                    {
+                        "kind": "steady",
+                        "duration": {
+                            "unit": "meters",
+                            "value": 1_500,
+                            "nominal_seconds": 480,
+                        },
+                        "target": {
+                            "mode": "pace",
+                            "unit": "seconds_per_kilometer",
+                            "minimum": 310,
+                            "maximum": 320,
+                        },
+                        "intensity": "interval",
+                    },
+                    {
+                        "kind": "steady",
+                        "duration": {"unit": "seconds", "value": 120},
+                        "intensity": "recovery",
+                    },
+                ],
+            },
+            {
+                "kind": "steady",
+                "duration": {"unit": "seconds", "value": 600},
+                "intensity": "cooldown",
+            },
+        ],
+    }
+    workout = _authoritative(RunningWorkoutPrescription.model_validate(workout_payload))
+    service = HarnessRunWeekSynchronizationService(repo, client, [workout])
+    current_renderer = preparation_module.render_structured_workout
+
+    def legacy_renderer(steps):
+        return current_renderer(steps).replace("\n\n", "\n").replace(" Pace", "")
+
+    monkeypatch.setattr(preparation_module, "render_structured_workout", legacy_renderer)
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 9)).partial
+    event_id = next(iter(client.events))
+    malformed_document = client.events[event_id].workout_doc
+    assert malformed_document is not None
+    assert len(provider_workout_semantics(malformed_document)) == 4
+
+    monkeypatch.setattr(
+        preparation_module,
+        "render_structured_workout",
+        current_renderer,
+    )
+    status = service.status_week(1, as_of_date=date(2026, 8, 10))
+    token = status.items[0].drift_resolution_token_sha256
+
+    assert not status.reconciliation_safe
+    assert status.items[0].error_type == "remote_drift"
+    assert token is not None
+
+    restored = service.restore_local_week(
+        1,
+        as_of_date=date(2026, 8, 10),
+        athlete_confirmation_reference=(
+            "Athlete confirmed replacing the malformed pending workout."
+        ),
+        confirmed_drift_target_tokens=[token],
+    )
+
+    assert restored.reconciliation_safe
+    assert [item.status for item in restored.items] == ["updated"]
+    assert client.upserts == 2
+    assert list(client.events) == [event_id]
+    repaired_document = client.events[event_id].workout_doc
+    assert repaired_document is not None
+    assert len(provider_workout_semantics(repaired_document)) == 6
+    manifest = load_manifest(repo)
+    assert "renderer-evolution" not in manifest.pending
+    assert manifest.workouts["renderer-evolution"].event_id == event_id
+    final_status = service.status_week(1, as_of_date=date(2026, 8, 10))
+    assert final_status.reconciliation_safe
+    assert [item.status for item in final_status.items] == ["ready"]
 
 
 def test_pending_only_provider_pair_is_bound_during_recovery(

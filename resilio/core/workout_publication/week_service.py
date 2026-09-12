@@ -321,7 +321,6 @@ class RunWeekSynchronizationService:
                 return ordinary_status.model_copy(update={"operation": "restore_local"})
             identity = workouts[0].identity
             manifest = load_manifest(self.repo)
-            provider_names = provider_workout_names([item.prescription for item in workouts])
             workouts_by_id = {item.identity.local_workout_id: item for item in workouts}
             deletion_authorities = retained_publication_authorities(
                 self.repo,
@@ -330,7 +329,6 @@ class RunWeekSynchronizationService:
             for local_workout_id, authorities in deletion_authorities.items():
                 preferred = authorities.preferred()
                 workouts_by_id.setdefault(local_workout_id, preferred.workout)
-                provider_names.setdefault(local_workout_id, preferred.provider_name)
             drift_items = [
                 item
                 for item in ordinary_status.items
@@ -340,7 +338,6 @@ class RunWeekSynchronizationService:
                 self.retirement_service,
                 drift_items=drift_items,
                 authoritative_workouts_by_local_id=workouts_by_id,
-                provider_names_by_local_workout_id=provider_names,
                 supplied_confirmation_tokens=confirmed_drift_target_tokens,
             )
             manifest.drift_resolutions.append(

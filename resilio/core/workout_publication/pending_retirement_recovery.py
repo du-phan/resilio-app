@@ -4,6 +4,9 @@ from dataclasses import replace
 from datetime import date, datetime, timezone
 
 from resilio.core.repository import RepositoryIO
+from resilio.core.workout_publication.authority_matching import (
+    publication_record_has_retained_workout_authority,
+)
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
@@ -19,6 +22,7 @@ from resilio.core.workout_publication.policy import (
 )
 from resilio.core.workout_publication.preparation import (
     RetainedPublicationVerification,
+    prepare_retained_publication_replacement,
     prepare_retained_publication_verification,
 )
 from resilio.core.workout_publication.remote_event_read import get_exact_event
@@ -77,7 +81,7 @@ def _restoration_pending(
             verification.event,
             record.sport_settings_version_sha256,
         ),
-        rendered_workout_sha256=record.rendered_workout_sha256,
+        rendered_workout_sha256=verification.rendered_workout_sha256,
         sport_settings_version_sha256=record.sport_settings_version_sha256,
         sport="run",
         occurrence_date=record.occurrence_date,
@@ -96,6 +100,7 @@ def restore_confirmed_past_publication(
     observed: EventDTO,
     *,
     expected_remote_target: tuple[int, str],
+    renderer_representation_superseded: bool = False,
 ) -> PublicationResult:
     """Restore confirmed drift under durable intent and retain its exact readback."""
     if observed.start_date_local is None:
@@ -106,13 +111,26 @@ def restore_confirmed_past_publication(
         record,
         provider_local_date(observed.start_date_local),
     )
-    verification = prepare_retained_publication_verification(
-        authority.workout,
-        record,
-        athlete_id=client.get_athlete().id,
-        provider_name=authority.provider_name,
-        provider_occurrence_date=provider_occurrence_date,
-    )
+    if renderer_representation_superseded:
+        if not publication_record_has_retained_workout_authority(record, authority.workout):
+            raise PublicationSafetyError(
+                "Renderer-superseded restoration lacks retained workout authority"
+            )
+        verification = prepare_retained_publication_replacement(
+            authority.workout,
+            record,
+            athlete_id=client.get_athlete().id,
+            provider_name=authority.provider_name,
+            provider_occurrence_date=provider_occurrence_date,
+        )
+    else:
+        verification = prepare_retained_publication_verification(
+            authority.workout,
+            record,
+            athlete_id=client.get_athlete().id,
+            provider_name=authority.provider_name,
+            provider_occurrence_date=provider_occurrence_date,
+        )
     pending = _restoration_pending(record, verification)
     local_workout_id = record.workout_identity.local_workout_id
     manifest = load_manifest(repo)

@@ -72,14 +72,15 @@ def superseded_pending_action(
     client: IntervalsIcuClient,
     remote: EventDTO,
     prepared: PreparedPublication,
-    pending_prepared: PreparedPublication,
+    pending_prepared: PreparedPublication | None,
     previous: PublishedWorkout | None,
     *,
     adopt_remote_schedule: bool,
+    current_settings_changed: bool,
 ) -> SupersededPendingAction:
     """Require mutation-time proof before recovering or replacing a pending intent."""
     if _matches_current(remote, prepared):
-        return "persist_current"
+        return "upsert_current" if current_settings_changed else "persist_current"
     if adopt_remote_schedule:
         if previous is not None and remote_matches_previous_at_desired_date(
             repo,
@@ -97,6 +98,11 @@ def superseded_pending_action(
             pass
         else:
             return "upsert_current"
+    if pending_prepared is None:
+        raise RemoteWorkoutDriftError(
+            "Remote event differs from the current workout after its pending "
+            "representation was superseded"
+        )
     try:
         assert_remote_matches(
             remote,

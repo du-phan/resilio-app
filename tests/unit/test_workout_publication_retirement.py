@@ -15,15 +15,17 @@ from resilio.core.workout_fulfillment.repository import (
     save_fulfillment_manifest,
 )
 from resilio.core.workout_fulfillment.service import WorkoutFulfillmentService
+from resilio.core.workout_publication import preparation as preparation_module
 from resilio.core.workout_publication import (
     publication_deletion_recovery as deletion_recovery_module,
 )
 from resilio.core.workout_publication import week_service as week_service_module
-from resilio.core.workout_publication.manifest import load_manifest
+from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.naming import provider_workout_names
 from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     RemoteWorkoutDriftError,
+    external_id_for,
     uid_for,
 )
 from resilio.core.workout_publication.publication_deletion_drift import (
@@ -48,6 +50,7 @@ from resilio.core.workout_publication.semantics import (
 )
 from resilio.integrations.intervals_icu.dto import ActivityDTO
 from resilio.integrations.intervals_icu.errors import IntervalsTransportError
+from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.publication_operations import (
     PendingPublicationDeletionOperation,
     PublicationDeletionDriftResolution,
@@ -1054,6 +1057,335 @@ def test_revoked_pending_only_execution_placement_is_deleted_after_replacement(
     assert set(client.events) == {reconciled.items[0].event_id}
     assert set(load_manifest(repo).pending) == {"pending-placed"}
     assert len(load_publication_deletion_manifest(repo).operations) == 1
+
+
+@pytest.mark.parametrize(
+    ("as_of_date", "expected_status", "event_remains"),
+    [
+        (date(2026, 8, 9), "deleted", False),
+        (date(2026, 8, 12), "updated", True),
+    ],
+)
+def test_renderer_evolution_stale_pending_can_be_confirmed_and_reconciled(
+    tmp_path,
+    monkeypatch,
+    as_of_date: date,
+    expected_status: str,
+    event_remains: bool,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    stale = _authoritative(_pace_targeted_run("renderer-stale", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [stale])
+    current_renderer = preparation_module.render_structured_workout
+
+    def legacy_renderer(steps):
+        return current_renderer(steps).replace(" Pace", "")
+
+    monkeypatch.setattr(preparation_module, "render_structured_workout", legacy_renderer)
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 9)).partial
+    stale_event_id = next(iter(client.events))
+
+    monkeypatch.setattr(
+        preparation_module,
+        "render_structured_workout",
+        current_renderer,
+    )
+    replacement = _authoritative(
+        _targetless_run("replacement-after-renderer", date(2026, 8, 12))
+    )
+    service.workouts = [replacement]
+    stale_provider_name = provider_workout_names([stale.prescription])[
+        stale.identity.local_workout_id
+    ]
+    monkeypatch.setattr(
+        week_service_module,
+        "retained_publication_authorities",
+        lambda _repo, _workouts: {
+            stale.identity.local_workout_id: RetainedPublicationAuthorities(
+                pending=RetainedPublicationAuthority(
+                    workout=stale,
+                    provider_name=stale_provider_name,
+                )
+            )
+        },
+    )
+
+    status = service.status_week(1, as_of_date=as_of_date)
+    stale_status = next(
+        item for item in status.items if item.local_workout_id == stale.identity.local_workout_id
+    )
+
+    assert not status.reconciliation_safe
+    assert stale_status.error_type == "remote_drift"
+    assert stale_status.drift_resolution_token_sha256 is not None
+
+    restored = service.restore_local_week(
+        1,
+        as_of_date=as_of_date,
+        athlete_confirmation_reference=(
+            "Athlete confirmed retiring the exact stale malformed workout."
+        ),
+        confirmed_drift_target_tokens=[stale_status.drift_resolution_token_sha256],
+    )
+
+    assert restored.reconciliation_safe
+    stale_result = next(
+        item for item in restored.items if item.local_workout_id == stale.identity.local_workout_id
+    )
+    assert stale_result.status == expected_status
+    assert (stale_event_id in client.events) is event_remains
+    manifest = load_manifest(repo)
+    if event_remains:
+        assert stale.identity.local_workout_id in manifest.workouts
+        assert stale.identity.local_workout_id not in manifest.pending
+        corrected_description = client.events[stale_event_id].description or ""
+        assert " Pace" in corrected_description
+    else:
+        assert stale.identity.local_workout_id in manifest.pending
+        deletion_operations = load_publication_deletion_manifest(repo).operations.values()
+        assert any(
+            operation.pending_publication.workout_identity.local_workout_id
+            == stale.identity.local_workout_id
+            and operation.state == "monitoring"
+            for operation in deletion_operations
+        )
+
+
+@pytest.mark.parametrize("unsupported_legacy_shape", ["fractional_pace", "nested_repeat"])
+@pytest.mark.parametrize(
+    "reconciliation_date",
+    [
+        date(2026, 8, 9),
+        date(2026, 8, 12),
+    ],
+)
+def test_unsupported_legacy_pending_has_safe_temporal_reconciliation(
+    tmp_path,
+    monkeypatch,
+    unsupported_legacy_shape: str,
+    reconciliation_date: date,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+        omit_listed_events = False
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+        def list_events(self, oldest, newest, *, athlete_id=None):
+            if self.omit_listed_events:
+                return []
+            return super().list_events(oldest, newest, athlete_id=athlete_id)
+
+    payload = _pace_targeted_run("unsupported-legacy", date(2026, 8, 11)).model_dump(
+        mode="json"
+    )
+    if unsupported_legacy_shape == "fractional_pace":
+        target = payload["structured_workout"]["steps"][0]["target"]
+        target["minimum"] = 330.4
+        target["maximum"] = 360.4
+    else:
+        steady_step = payload["structured_workout"]["steps"][0]
+        payload["structured_workout"]["steps"] = [
+            {
+                "kind": "repeat",
+                "repetitions": 2,
+                "steps": [
+                    {
+                        "kind": "repeat",
+                        "repetitions": 2,
+                        "steps": [steady_step],
+                    }
+                ],
+            }
+        ]
+        payload["planned_duration_seconds"] = 2_400
+        payload["planned_low_intensity_duration_seconds"] = 2_400
+    stale = _authoritative(RunningWorkoutPrescription.model_validate(payload))
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    service = HarnessRunWeekSynchronizationService(repo, client, [stale])
+    current_renderer = preparation_module.render_structured_workout
+    monkeypatch.setattr(
+        preparation_module,
+        "render_structured_workout",
+        lambda _steps: "- Legacy workout 10m 5:30-6:00/km Pace intensity=active",
+    )
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 9)).partial
+    stale_event_id = next(iter(client.events))
+
+    monkeypatch.setattr(preparation_module, "render_structured_workout", current_renderer)
+    service.workouts = [
+        _authoritative(_targetless_run("replacement-after-unsupported", date(2026, 8, 12)))
+    ]
+    provider_name = provider_workout_names([stale.prescription])[
+        stale.identity.local_workout_id
+    ]
+    monkeypatch.setattr(
+        week_service_module,
+        "retained_publication_authorities",
+        lambda _repo, _workouts: {
+            stale.identity.local_workout_id: RetainedPublicationAuthorities(
+                pending=RetainedPublicationAuthority(
+                    workout=stale,
+                    provider_name=provider_name,
+                )
+            )
+        },
+    )
+
+    future_status = service.status_week(1, as_of_date=date(2026, 8, 9))
+    future_stale_status = next(
+        item
+        for item in future_status.items
+        if item.local_workout_id == stale.identity.local_workout_id
+    )
+    assert future_stale_status.error_type == "remote_drift"
+    assert future_stale_status.drift_resolution_token_sha256 is not None
+
+    if reconciliation_date > stale.prescription.date:
+        client.omit_listed_events = True
+        past_status = service.status_week(1, as_of_date=reconciliation_date)
+        past_stale_status = next(
+            item
+            for item in past_status.items
+            if item.local_workout_id == stale.identity.local_workout_id
+        )
+        assert past_stale_status.error_type == "publication_safety"
+        assert past_stale_status.drift_resolution_token_sha256 is None
+
+    restored = service.restore_local_week(
+        1,
+        as_of_date=reconciliation_date,
+        athlete_confirmation_reference=(
+            "Athlete confirmed retiring the exact unsupported legacy workout."
+        ),
+        confirmed_drift_target_tokens=[future_stale_status.drift_resolution_token_sha256],
+    )
+
+    if reconciliation_date > stale.prescription.date:
+        stale_result = next(
+            item
+            for item in restored.items
+            if item.local_workout_id == stale.identity.local_workout_id
+        )
+        assert restored.partial
+        assert stale_result.error_type == "publication_safety"
+        assert stale_event_id in client.events
+        assert stale.identity.local_workout_id in load_manifest(repo).pending
+        assert load_publication_deletion_manifest(repo).operations == {}
+        client.omit_listed_events = False
+        rediscovered_status = service.status_week(1, as_of_date=reconciliation_date)
+        rediscovered_stale_status = next(
+            item
+            for item in rediscovered_status.items
+            if item.local_workout_id == stale.identity.local_workout_id
+        )
+        assert rediscovered_stale_status.error_type == "publication_safety"
+        assert rediscovered_stale_status.drift_resolution_token_sha256 is None
+    else:
+        assert restored.reconciliation_safe
+        assert stale_event_id not in client.events
+
+
+def test_renderer_superseded_pending_rejects_non_deterministic_identity(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    class InterruptedCreateClient(FakeClient):
+        interrupt_next_upsert = True
+
+        def upsert_event(self, event, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if self.interrupt_next_upsert:
+                self.interrupt_next_upsert = False
+                raise IntervalsTransportError(
+                    "create response was lost",
+                    operation="upsert_event",
+                )
+            return stored
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    client = InterruptedCreateClient()
+    stale = _authoritative(_targetless_run("identity-stale", date(2026, 8, 11)))
+    service = HarnessRunWeekSynchronizationService(repo, client, [stale])
+    assert service.reconcile_week(1, as_of_date=date(2026, 8, 9)).partial
+    stale_event_id = next(iter(client.events))
+
+    corrupt_local_workout_id = "different-owned-workout"
+    corrupt_external_id = external_id_for(corrupt_local_workout_id)
+    corrupt_uid = uid_for(corrupt_local_workout_id)
+    manifest = load_manifest(repo)
+    manifest.pending[stale.identity.local_workout_id] = manifest.pending[
+        stale.identity.local_workout_id
+    ].model_copy(
+        update={
+            "external_id": corrupt_external_id,
+            "uid": corrupt_uid,
+        }
+    )
+    save_manifest(repo, manifest)
+    client.events[stale_event_id] = client.events[stale_event_id].model_copy(
+        update={
+            "external_id": corrupt_external_id,
+            "uid": corrupt_uid,
+        }
+    )
+    service.workouts = [
+        _authoritative(_targetless_run("replacement-after-corrupt", date(2026, 8, 12)))
+    ]
+    provider_name = provider_workout_names([stale.prescription])[
+        stale.identity.local_workout_id
+    ]
+    monkeypatch.setattr(
+        week_service_module,
+        "retained_publication_authorities",
+        lambda _repo, _workouts: {
+            stale.identity.local_workout_id: RetainedPublicationAuthorities(
+                pending=RetainedPublicationAuthority(
+                    workout=stale,
+                    provider_name=provider_name,
+                )
+            )
+        },
+    )
+
+    status = service.status_week(1, as_of_date=date(2026, 8, 9))
+    stale_status = next(
+        item for item in status.items if item.local_workout_id == stale.identity.local_workout_id
+    )
+
+    assert stale_status.error_type == "publication_safety"
+    assert stale_status.drift_resolution_token_sha256 is None
+    assert stale_event_id in client.events
 
 
 def test_revoked_pending_provider_pair_is_unpaired_after_exact_recovery(
