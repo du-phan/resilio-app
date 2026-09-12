@@ -50,6 +50,19 @@ class AuthoritativeWorkout:
     applied_authority_history: tuple[AppliedWorkoutAuthority, ...] = ()
 
 
+def current_applied_workout_authority(
+    workout: AuthoritativeWorkout,
+) -> AppliedWorkoutAuthority:
+    """Project the current prescription as one indivisible authority snapshot."""
+    return AppliedWorkoutAuthority(
+        applied_week_approval_id=workout.applied_week_approval_id,
+        applied_running_workouts_sha256=workout.applied_running_workouts_sha256,
+        workout_prescription_sha256=canonical_data_sha256(workout.prescription),
+        schedule_timezone=workout.schedule_timezone,
+        scheduled_local_date=workout.prescription.date,
+    )
+
+
 @dataclass(frozen=True)
 class ApprovedWorkoutWindow:
     status: Literal["available", "no_plan", "unavailable"]

@@ -16,6 +16,15 @@ class PendingPublicationDeletionOperation(BaseModel):
     operation_id: str = Field(pattern=r"^publication_deletion_[0-9a-f]{16}$")
     pending_publication: PendingWorkoutPublication
     previous_publication: Optional[PublishedWorkout] = None
+    pending_step_semantics_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    previous_step_semantics_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
+    preserve_previous_publication: bool = False
     reason: Literal["workout_removed"] = "workout_removed"
     state: Literal["staged", "monitoring"] = "staged"
     requested_at_utc: datetime
@@ -36,9 +45,7 @@ class PendingPublicationDeletionOperation(BaseModel):
     def monitoring_state_has_causal_timestamp(
         self,
     ) -> "PendingPublicationDeletionOperation":
-        if (self.state == "monitoring") != (
-            self.monitoring_started_at_utc is not None
-        ):
+        if (self.state == "monitoring") != (self.monitoring_started_at_utc is not None):
             raise ValueError("publication deletion monitoring requires its timestamp")
         if (
             self.monitoring_started_at_utc is not None
@@ -46,6 +53,12 @@ class PendingPublicationDeletionOperation(BaseModel):
         ):
             raise ValueError("publication deletion monitoring cannot predate its request")
         previous = self.previous_publication
+        if self.previous_step_semantics_sha256 is not None and previous is None:
+            raise ValueError("Previous step semantics require previous publication authority")
+        if self.preserve_previous_publication and previous is None:
+            raise ValueError(
+                "Preserving a publication requires exact previous publication authority"
+            )
         if previous is not None and (
             previous.workout_identity != self.pending_publication.workout_identity
             or previous.external_id != self.pending_publication.external_id
@@ -78,12 +91,8 @@ class PublicationDeletionDriftResolution(BaseModel):
 
 class PublicationDeletionManifest(BaseModel):
     schema_version: Literal[1] = 1
-    operations: dict[str, PendingPublicationDeletionOperation] = Field(
-        default_factory=dict
-    )
-    drift_resolutions: list[PublicationDeletionDriftResolution] = Field(
-        default_factory=list
-    )
+    operations: dict[str, PendingPublicationDeletionOperation] = Field(default_factory=dict)
+    drift_resolutions: list[PublicationDeletionDriftResolution] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -94,38 +103,26 @@ class PublicationDeletionManifest(BaseModel):
         for operation_id, operation in self.operations.items():
             if operation.operation_id != operation_id:
                 raise ValueError("publication deletion key must match operation ID")
-            local_workout_id = (
-                operation.pending_publication.workout_identity.local_workout_id
-            )
+            local_workout_id = operation.pending_publication.workout_identity.local_workout_id
             prior_operation = local_workout_owners.setdefault(
                 local_workout_id,
                 operation_id,
             )
             if prior_operation != operation_id:
-                raise ValueError(
-                    "publication deletion workout identities must be unique"
-                )
+                raise ValueError("publication deletion workout identities must be unique")
             external_id = operation.pending_publication.external_id
             prior_operation = external_id_owners.setdefault(external_id, operation_id)
             if prior_operation != operation_id:
-                raise ValueError(
-                    "publication deletion external identities must be unique"
-                )
+                raise ValueError("publication deletion external identities must be unique")
         resolution_tokens: set[str] = set()
         for resolution in self.drift_resolutions:
             resolved_operation = self.operations.get(resolution.operation_id)
             if resolved_operation is None:
-                raise ValueError(
-                    "publication deletion drift resolution lacks its operation"
-                )
+                raise ValueError("publication deletion drift resolution lacks its operation")
             if resolution.confirmed_at_utc < resolved_operation.requested_at_utc:
-                raise ValueError(
-                    "publication deletion drift resolution predates its operation"
-                )
+                raise ValueError("publication deletion drift resolution predates its operation")
             if resolution.drift_resolution_token_sha256 in resolution_tokens:
-                raise ValueError(
-                    "publication deletion drift resolution tokens must be unique"
-                )
+                raise ValueError("publication deletion drift resolution tokens must be unique")
             resolution_tokens.add(resolution.drift_resolution_token_sha256)
         return self
 

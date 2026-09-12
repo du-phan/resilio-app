@@ -30,7 +30,7 @@ def _publication_cutover_is_required(repo: RepositoryIO) -> bool:
         raise ValueError("Workout publication state is not valid JSON") from exc
     if not isinstance(payload, dict):
         raise ValueError("Workout publication state must be a JSON object")
-    return payload.get("schema_version") in {6, 7}
+    return payload.get("schema_version") in {6, 7, 8}
 
 
 def load_fulfillment_manifest(repo: RepositoryIO) -> WorkoutFulfillmentManifest:

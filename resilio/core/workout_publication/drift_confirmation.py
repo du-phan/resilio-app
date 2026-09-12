@@ -69,11 +69,15 @@ def confirm_publication_drift_targets(
         )
     confirmed_targets: list[ConfirmedPublicationDriftTarget] = []
     for item in sorted(drift_items, key=lambda candidate: candidate.local_workout_id):
+        authoritative_workout = authoritative_workouts_by_local_id.get(item.local_workout_id)
+        provider_name = provider_names_by_local_workout_id.get(item.local_workout_id)
+        if authoritative_workout is None or provider_name is None:
+            raise PublicationSafetyError("Remote drift lacks exact retained workout authority")
         observed = observe_publication_drift_target(
             retirement_service,
             local_workout_id=item.local_workout_id,
-            authoritative_workout=authoritative_workouts_by_local_id[item.local_workout_id],
-            provider_name=provider_names_by_local_workout_id[item.local_workout_id],
+            authoritative_workout=authoritative_workout,
+            provider_name=provider_name,
         )
         if observed.confirmation_token_sha256 != item.drift_resolution_token_sha256:
             raise PublicationSafetyError(

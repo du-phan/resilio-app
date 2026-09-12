@@ -9,17 +9,23 @@ from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     RemoteWorkoutDriftError,
     assert_remote_external_ownership,
-    provider_event_fingerprint,
+    provider_event_state_fingerprint,
     provider_local_date,
+)
+from resilio.core.workout_publication.publication_deletion_recovery import (
+    forget_deleted_previous_publication,
+    recover_absent_preserved_previous_publication,
 )
 from resilio.core.workout_publication.publication_deletions import (
     activate_publication_deletion_monitoring,
     assert_publication_deletion_integrity,
+    fresh_tombstone_error_target,
     load_publication_deletion_manifest,
     matching_tombstone_events,
     publication_deletion_drift_token,
     save_publication_deletion_manifest,
 )
+from resilio.core.workout_publication.remote_event_read import get_exact_event
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError, IntervalsNotFoundError
@@ -87,7 +93,7 @@ def _persist_drift_resolutions(
         resolution = PublicationDeletionDriftResolution(
             operation_id=operation.operation_id,
             event_id=remote.id,
-            observed_remote_fingerprint_sha256=provider_event_fingerprint(remote),
+            observed_remote_fingerprint_sha256=(provider_event_state_fingerprint(remote)),
             drift_resolution_token_sha256=token,
             athlete_confirmation_reference=athlete_confirmation_reference,
             confirmed_at_utc=confirmed_at_utc,
@@ -106,15 +112,21 @@ def _result_item(
     error_type: str | None = None,
     message: str | None = None,
     drift_resolution_token_sha256: str | None = None,
+    observed_remote: EventDTO | None = None,
+    provider_occurrence_date: date | None = None,
 ) -> PublicationDeletionOperationItem:
     pending = operation.pending_publication
+    if provider_occurrence_date is None:
+        provider_occurrence_date = (
+            provider_local_date(observed_remote.start_date_local)
+            if observed_remote is not None and observed_remote.start_date_local is not None
+            else provider_local_date(pending.provider_start_date_local)
+        )
     return PublicationDeletionOperationItem(
         operation_id=operation.operation_id,
         local_workout_id=pending.workout_identity.local_workout_id,
         occurrence_date=pending.occurrence_date,
-        provider_occurrence_date=provider_local_date(
-            pending.provider_start_date_local
-        ),
+        provider_occurrence_date=provider_occurrence_date,
         status=status,
         event_id=event_id,
         error_type=error_type,
@@ -134,49 +146,74 @@ def _apply_drift_resolution(
     athlete = client.get_athlete()
     current_matches = matching_tombstone_events(provider_events, operation)
     if len(current_matches) > 1:
-        raise PublicationSafetyError(
-            "Multiple remote events claim a publication deletion identity"
-        )
+        raise PublicationSafetyError("Multiple remote events claim a publication deletion identity")
     if current_matches and current_matches[0].id != resolution.event_id:
         raise RemoteWorkoutDriftError(
             "A new tombstone event requires a fresh exact drift confirmation"
         )
     if not current_matches:
         try:
-            client.get_event(resolution.event_id, athlete_id=athlete.id)
+            get_exact_event(client, resolution.event_id, athlete_id=athlete.id)
         except IntervalsNotFoundError:
+            preserved_provider_occurrence_date = recover_absent_preserved_previous_publication(
+                repo,
+                client,
+                operation,
+                athlete_id=athlete.id,
+            )
             activate_publication_deletion_monitoring(repo, operation)
-            return _result_item(operation, status="deletion_monitoring")
+            return _result_item(
+                operation,
+                status="deletion_monitoring",
+                provider_occurrence_date=preserved_provider_occurrence_date,
+            )
         raise PublicationSafetyError(
             "Confirmed tombstone event is absent from provider-wide identity discovery"
         )
     try:
-        remote = client.get_event(resolution.event_id, athlete_id=athlete.id)
+        remote = get_exact_event(
+            client,
+            resolution.event_id,
+            athlete_id=athlete.id,
+        )
     except IntervalsNotFoundError:
+        preserved_provider_occurrence_date = recover_absent_preserved_previous_publication(
+            repo,
+            client,
+            operation,
+            athlete_id=athlete.id,
+        )
         activate_publication_deletion_monitoring(repo, operation)
-        return _result_item(operation, status="deletion_monitoring")
+        return _result_item(
+            operation,
+            status="deletion_monitoring",
+            provider_occurrence_date=preserved_provider_occurrence_date,
+        )
     assert_remote_external_ownership(
         remote,
         external_id=operation.pending_publication.external_id,
     )
     if (
-        provider_event_fingerprint(remote)
-        != resolution.observed_remote_fingerprint_sha256
+        provider_event_state_fingerprint(remote) != resolution.observed_remote_fingerprint_sha256
         or publication_deletion_drift_token(operation, remote)
         != resolution.drift_resolution_token_sha256
     ):
-        raise RemoteWorkoutDriftError(
-            "Drifted tombstone event changed after athlete confirmation"
-        )
+        raise RemoteWorkoutDriftError("Drifted tombstone event changed after athlete confirmation")
     client.delete_event(remote.id, athlete_id=athlete.id)
     try:
-        client.get_event(remote.id, athlete_id=athlete.id)
+        get_exact_event(client, remote.id, athlete_id=athlete.id)
     except IntervalsNotFoundError:
         pass
     else:
         raise PublicationSafetyError("Confirmed drifted event still exists on read-back")
+    forget_deleted_previous_publication(repo, operation, remote.id)
     activate_publication_deletion_monitoring(repo, operation)
-    return _result_item(operation, status="deleted", event_id=remote.id)
+    return _result_item(
+        operation,
+        status="deleted",
+        event_id=remote.id,
+        observed_remote=remote,
+    )
 
 
 def resolve_publication_deletion_drifts(
@@ -229,16 +266,17 @@ def resolve_publication_deletion_drifts(
             PublicationSafetyError,
             RemoteWorkoutDriftError,
         ) as exc:
-            current_matches = matching_tombstone_events(provider_events, operation)
-            current_remote = current_matches[0] if len(current_matches) == 1 else None
+            current_remote = fresh_tombstone_error_target(
+                client,
+                operation,
+                provider_events,
+            )
             items.append(
                 _result_item(
                     operation,
                     status="error",
                     event_id=(
-                        current_remote.id
-                        if current_remote is not None
-                        else resolution.event_id
+                        current_remote.id if current_remote is not None else resolution.event_id
                     ),
                     error_type=(
                         "remote_drift"
@@ -250,10 +288,10 @@ def resolve_publication_deletion_drifts(
                     message=str(exc),
                     drift_resolution_token_sha256=(
                         publication_deletion_drift_token(operation, current_remote)
-                        if isinstance(exc, RemoteWorkoutDriftError)
-                        and current_remote is not None
+                        if isinstance(exc, RemoteWorkoutDriftError) and current_remote is not None
                         else None
                     ),
+                    observed_remote=current_remote,
                 )
             )
     partial = any(item.status == "error" for item in items)

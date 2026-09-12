@@ -32,6 +32,9 @@ from resilio.core.workout_fulfillment.repository import (
     load_fulfillment_manifest,
     save_fulfillment_manifest,
 )
+from resilio.core.workout_fulfillment.revocation_publication_authority import (
+    revoked_pair_publication_authority,
+)
 from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
     coordinated_publication_plan_lock,
@@ -436,16 +439,31 @@ class WorkoutFulfillmentService:
             updated.revoked_fulfillments.append(revocation)
             publication_manifest = load_manifest(self.repo)
             published = publication_manifest.workouts.get(local_workout_id)
-            if published is not None:
-                pair_operation = matching_resilio_pair_operation(
-                    manifest,
-                    publication=published,
-                    fulfillment=existing,
+            try:
+                publication = (
+                    revoked_pair_publication_authority(
+                        publication_manifest,
+                        existing,
+                    )
+                    if existing.provider_pair is not None
+                    else published
+                )
+            except ValueError as exc:
+                raise WorkoutFulfillmentError(str(exc)) from exc
+            if publication is not None:
+                pair_operation = (
+                    matching_resilio_pair_operation(
+                        manifest,
+                        publication=published,
+                        fulfillment=existing,
+                    )
+                    if published is not None
+                    else None
                 )
                 if existing.provider_pair is not None or pair_operation is not None:
                     stage_remote_unpairing(
                         manifest=updated,
-                        publication=published,
+                        publication=publication,
                         revocation=revocation,
                         activity=activity,
                         pair_operation=pair_operation,

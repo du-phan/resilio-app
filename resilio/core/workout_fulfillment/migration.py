@@ -19,6 +19,9 @@ from resilio.core.locking import OperationLock
 from resilio.core.repository import RepositoryIO
 from resilio.core.sync_state import read_sync_progress
 from resilio.core.workout_fulfillment.current_fulfillment_migration import (
+    load_fulfillment_manifest_for_publication_migration,
+)
+from resilio.core.workout_fulfillment.current_fulfillment_migration import (
     migrate_current_fulfillment_manifest as _migrate_current_fulfillment_manifest,
 )
 from resilio.core.workout_fulfillment.cutover_guard import MIGRATION_TRANSACTION_PATH
@@ -159,9 +162,7 @@ def _migrate_fulfillment_manifest(
         raise WorkoutFulfillmentMigrationError(
             "Legacy completion manifest violates its version 3 contract"
         ) from exc
-    publications_by_identity = _publications_by_identity(
-        publication_manifest.workouts.values()
-    )
+    publications_by_identity = _publications_by_identity(publication_manifest.workouts.values())
     historical_publications_by_identity = _publications_by_identity(
         publication_manifest.historical_legacy_workouts.values()
     )
@@ -296,9 +297,7 @@ def _finish_migration(
         pending_publication_count=len(publication_manifest.pending),
         historical_publication_count=len(publication_manifest.historical_legacy_workouts),
         active_fulfillment_count=len(fulfillment_manifest.fulfillments),
-        historical_fulfillment_count=len(
-            fulfillment_manifest.historical_legacy_fulfillments
-        ),
+        historical_fulfillment_count=len(fulfillment_manifest.historical_legacy_fulfillments),
         migrated_planning_artifact_count=planning_migration.migrated_artifact_count,
         migrated_plan_count=planning_migration.migrated_plan_count,
         changes_required=changes_required,
@@ -354,33 +353,38 @@ def migrate_workout_fulfillment_state(
             )
             activities_by_local_id = {
                 activity.local_activity_id: activity
-                for activity in ActivityArchive(
-                    repo.resolve_path("data/activities")
-                ).load_all()
+                for activity in ActivityArchive(repo.resolve_path("data/activities")).load_all()
             }
             authorities = (
                 _load_authorities_unlocked(repo)
                 if (
                     publication_raw is not None
-                    and publication_raw.get("schema_version") in {6, 7}
+                    and publication_raw.get("schema_version") in {6, 7, 8}
                 )
                 or bool(active_fulfillment_raw)
                 or bool(revoked_fulfillment_raw)
                 else []
             )
+            fulfillment_placement_manifest = (
+                load_fulfillment_manifest_for_publication_migration(
+                    current_fulfillment_raw,
+                    activities_by_local_id=activities_by_local_id,
+                )[0]
+                if current_fulfillment_raw is not None
+                else WorkoutFulfillmentManifest()
+            )
             publication_manifest, publication_changed = _migrate_publication_manifest(
                 publication_raw,
                 authorities,
                 migration_date=_athlete_local_migration_date(repo),
+                fulfillment_manifest=fulfillment_placement_manifest,
             )
             if current_fulfillment_raw is not None:
-                fulfillment_manifest, fulfillment_changed = (
-                    _migrate_current_fulfillment_manifest(
-                        current_fulfillment_raw,
-                        publication_manifest,
-                        authorities,
-                        activities_by_local_id,
-                    )
+                fulfillment_manifest, fulfillment_changed = _migrate_current_fulfillment_manifest(
+                    current_fulfillment_raw,
+                    publication_manifest,
+                    authorities,
+                    activities_by_local_id,
                 )
             else:
                 fulfillment_manifest = _migrate_fulfillment_manifest(

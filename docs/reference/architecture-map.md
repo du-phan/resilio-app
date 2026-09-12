@@ -170,9 +170,18 @@ context and must cite the latest assessment result when one exists.
 - Calendar reconciliation holds the publication lock before the plan lock,
   derives desired state from the exact active applied week, and requires
   deterministic identity, manifest ownership, unchanged remote fingerprint,
-  and semantic readback. Explicit restore-local drift resolution is separately
-  athlete-confirmed and audited. Garmin-forwarding eligibility remains
-  unverified delivery until the athlete confirms receipt.
+  and semantic readback. An exact owned, same-week date-only provider move is a
+  distinct calendar-placement projection: it preserves approved plan authority,
+  requires every other owned field and parsed workout semantic to remain exact,
+  and is persisted from readback without a provider write. Publication schema
+  v9 persists the base approved/provider-observed calendar placement separately
+  from an exact fulfillment override, so revocation removes only the override.
+  Removed-publication retirement reconstructs the immutable applied prescription
+  before semantic verification and uses the live provider date at preflight and
+  mutation time rather than stale local placement. Explicit restore-local
+  resolution for all other drift is separately
+  athlete-confirmed and audited. Garmin-forwarding
+  eligibility remains unverified delivery until the athlete confirms receipt.
 
 See the [Intervals.icu integration reference](intervals-icu-integration.md) for
 the external boundary and [agent workflow](../guides/development/agent-workflow.md)

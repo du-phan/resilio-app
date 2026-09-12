@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Literal, cast
 
+from resilio.canonical import canonical_data_sha256
 from resilio.integrations.intervals_icu.dto import (
     WorkoutDocumentDTO,
     WorkoutDocumentStepDTO,
@@ -258,6 +259,11 @@ def provider_workout_semantics(document: WorkoutDocumentDTO) -> tuple[StepSemant
     if not expanded:
         raise WorkoutSemanticsError("provider workout document has no executable steps")
     return tuple(expanded)
+
+
+def workout_semantics_sha256(semantics: tuple[StepSemantics, ...]) -> str:
+    """Fingerprint complete expanded execution semantics."""
+    return canonical_data_sha256([asdict(step) for step in semantics])
 
 
 def assert_workout_semantics_match(

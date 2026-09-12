@@ -25,6 +25,7 @@ from resilio.core.workout_fulfillment.remote_pairing_inspection import (
     matching_pairing_drift_resolution,
     pairing_guard_blocker,
     pending_pair_guard_changed,
+    provider_observed_pair_restoration_blocker,
     validate_local_pairing_evidence,
     validate_remote_performance_evidence,
 )
@@ -60,7 +61,7 @@ from resilio.schemas.workout_pairing import (
 
 
 class WorkoutPairingReconciliationService:
-    """Reconcile one athlete-confirmed fulfillment through native pairing."""
+    """Reconcile one exact fulfillment through native activity pairing."""
 
     def __init__(self, repo: RepositoryIO, client: ActivityPairingClient):
         self.repo = repo
@@ -98,9 +99,7 @@ class WorkoutPairingReconciliationService:
             self.repo,
             self.client,
             operation_id=operation_id,
-            supplied_pairing_drift_token_sha256=(
-                supplied_pairing_drift_token_sha256
-            ),
+            supplied_pairing_drift_token_sha256=(supplied_pairing_drift_token_sha256),
             athlete_confirmation_reference=athlete_confirmation_reference,
             confirmed_at_utc=confirmed_at_utc,
         )
@@ -158,9 +157,7 @@ class WorkoutPairingReconciliationService:
                 blocker_code="provider_pairing_request_failed",
                 message="Intervals pairing request failed; the durable intent is retryable",
             )
-        submitted = pending.model_copy(
-            update={"provider_write_submitted_at_utc": attempted_at_utc}
-        )
+        submitted = pending.model_copy(update={"provider_write_submitted_at_utc": attempted_at_utc})
         manifest.remote_pairing_operations[submitted.operation_id] = submitted
         save_fulfillment_manifest(self.repo, manifest)
         try:
@@ -252,6 +249,30 @@ class WorkoutPairingReconciliationService:
         provider_activity_guard_sha256: str,
         reconciliation_time_utc: datetime,
     ) -> RemoteWorkoutPairingResult:
+        provider_pair = fulfillment.provider_pair
+        revised_submitted_operation = (
+            existing_operation is not None
+            and existing_operation.state != "verified"
+            and existing_operation.provider_write_submitted_at_utc is not None
+            and bool(fulfillment.activity_evidence_revisions)
+            and existing_operation.activity_performance_evidence_sha256
+            != fulfillment.activity_performance_evidence_sha256
+            and provider_pair is not None
+            and provider_pair.event_id == publication.event_id
+            and provider_pair.provenance == "resilio_requested"
+        )
+        if revised_submitted_operation:
+            assert existing_operation is not None
+            return save_verified_pair_operation(
+                self.repo,
+                manifest,
+                existing_operation,
+                fulfillment,
+                provider_activity_guard_sha256=provider_activity_guard_sha256,
+                verified_at_utc=reconciliation_time_utc,
+                provenance="resilio_requested",
+                status="pairing_noop",
+            )
         operation, guard_blocker = self._resolve_pending_guard_drift(
             manifest,
             operation,
@@ -290,8 +311,7 @@ class WorkoutPairingReconciliationService:
             if (
                 provider_pair is None
                 or provider_pair.event_id != publication.event_id
-                or provider_pair.provenance
-                not in {"resilio_requested", "pair_origin_ambiguous"}
+                or provider_pair.provenance not in {"resilio_requested", "pair_origin_ambiguous"}
             ):
                 raise ValueError(
                     "Local provider-pair evidence conflicts with its Resilio operation"
@@ -345,9 +365,7 @@ class WorkoutPairingReconciliationService:
                     existing_operation,
                     status="pairing_blocked",
                     blocker_code="ambiguous_pair_removed",
-                    message=(
-                        "The removed ambiguous pair requires exact athlete confirmation"
-                    ),
+                    message=("The removed ambiguous pair requires exact athlete confirmation"),
                     pairing_drift_token_sha256=drift_token,
                 )
             if resolution is None:
@@ -419,9 +437,11 @@ class WorkoutPairingReconciliationService:
         ):
             raise ValueError("Native pairing activity performance evidence changed")
         remote_before = self.client.get_activity(external_activity_id, intervals=True)
-        if remote_before.id != external_activity_id:
-            raise ValueError("Intervals activity readback identity changed")
-        validate_remote_performance_evidence(remote_before, activity)
+        validate_remote_performance_evidence(
+            remote_before,
+            activity,
+            expected_external_activity_id=external_activity_id,
+        )
         existing_operation = matching_resilio_pair_operation(
             manifest,
             fulfillment=fulfillment,
@@ -433,6 +453,13 @@ class WorkoutPairingReconciliationService:
             external_activity_id=external_activity_id,
             requested_at_utc=reconciliation_time_utc,
         )
+        restoration_blocker = provider_observed_pair_restoration_blocker(
+            operation,
+            fulfillment,
+            observed_paired_event_id=remote_before.paired_event_id,
+        )
+        if restoration_blocker is not None:
+            return restoration_blocker
         if remote_before.paired_event_id == publication.event_id:
             return self._reconcile_exact_pair(
                 manifest=manifest,
@@ -441,9 +468,7 @@ class WorkoutPairingReconciliationService:
                 fulfillment=fulfillment,
                 publication=publication,
                 external_activity_id=external_activity_id,
-                provider_activity_guard_sha256=(
-                    activity_pairing_guard_sha256(remote_before)
-                ),
+                provider_activity_guard_sha256=(activity_pairing_guard_sha256(remote_before)),
                 reconciliation_time_utc=reconciliation_time_utc,
             )
         if remote_before.paired_event_id is not None:

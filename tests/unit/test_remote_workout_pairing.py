@@ -33,6 +33,7 @@ from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.publication import PublishedWorkout
 from resilio.schemas.workout_fulfillment import (
     AthleteConfirmedFulfillmentEvidence,
+    FulfillmentActivityEvidenceRevision,
     ProviderPairedFulfillmentEvidence,
     WorkoutFulfillmentManifest,
     WorkoutFulfillmentRecord,
@@ -153,6 +154,7 @@ def _publication(authority: AuthoritativeWorkout) -> PublishedWorkout:
         rendered_workout_sha256="4" * 64,
         sport_settings_version_sha256="5" * 64,
         provider_event_fingerprint_sha256="6" * 64,
+        provider_step_semantics_sha256="7" * 64,
         sport="run",
         occurrence_date=authority.prescription.date,
         provider_start_date_local="2026-08-11T00:00:00",
@@ -223,6 +225,23 @@ class FailedBeforeWritePairingClient(PairingClient):
         return super().update_activity_pairing(activity_id, pairing)
 
 
+class ReadbackFailedAfterPairingClient(PairingClient):
+    """Apply one pair, then lose its first verification readback."""
+
+    fail_next_readback = False
+
+    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO:
+        if self.fail_next_readback:
+            self.fail_next_readback = False
+            raise OSError("pairing readback transport failure")
+        return super().get_activity(activity_id, intervals=intervals)
+
+    def update_activity_pairing(self, activity_id, pairing):
+        updated = super().update_activity_pairing(activity_id, pairing)
+        self.fail_next_readback = True
+        return updated
+
+
 class GuardChangingFailedUnpairingClient(PairingClient):
     """Simulate an ambiguous unpair after an unrelated remote field edit."""
 
@@ -251,9 +270,7 @@ def test_reconcile_pairs_all_execution_timings_without_deleting_intent(
     fulfillment = _fulfillment(activity, authority)
     save_fulfillment_manifest(
         repo,
-        WorkoutFulfillmentManifest(
-            fulfillments={activity.local_activity_id: fulfillment}
-        ),
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
     )
     client = PairingClient(_remote_activity())
 
@@ -287,9 +304,7 @@ def test_existing_exact_pair_is_idempotent_and_keeps_external_provenance(
     fulfillment = _fulfillment(activity, authority)
     save_fulfillment_manifest(
         repo,
-        WorkoutFulfillmentManifest(
-            fulfillments={activity.local_activity_id: fulfillment}
-        ),
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
     )
     client = PairingClient(_remote_activity(paired_event_id=42))
 
@@ -308,6 +323,156 @@ def test_existing_exact_pair_is_idempotent_and_keeps_external_provenance(
     assert load_fulfillment_manifest(repo).remote_pairing_operations == {}
 
 
+def test_missing_provider_observed_pair_is_not_restored_without_athlete_authority(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    authority = _authority()
+    activity = _activity(repo, date(2026, 8, 10))
+    fulfillment = _fulfillment(activity, authority).model_copy(
+        update={
+            "athlete_confirmation": None,
+            "provider_pair": ProviderPairedFulfillmentEvidence(
+                event_id=42,
+                provenance="provider_observed",
+                observed_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
+            ),
+        }
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
+    )
+    client = PairingClient(_remote_activity())
+
+    result = WorkoutPairingReconciliationService(repo, client).reconcile_pairing(
+        authority=authority,
+        publication=_publication(authority),
+        fulfillment=fulfillment,
+        activity=activity,
+    )
+
+    assert result.status == "pairing_blocked"
+    assert result.blocker_code == "provider_observed_pair_missing"
+    assert client.update_payloads == []
+    assert load_fulfillment_manifest(repo).remote_pairing_operations == {}
+
+
+@pytest.mark.parametrize("method_name", ["inspect_pairing", "reconcile_pairing"])
+def test_provider_pair_evidence_must_match_the_exact_publication_event(
+    tmp_path,
+    monkeypatch,
+    method_name: str,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    authority = _authority()
+    activity = _activity(repo, date(2026, 8, 10))
+    fulfillment = _fulfillment(activity, authority).model_copy(
+        update={
+            "provider_pair": ProviderPairedFulfillmentEvidence(
+                event_id=99,
+                provenance="provider_observed",
+                observed_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
+            )
+        }
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
+    )
+    service = WorkoutPairingReconciliationService(
+        repo,
+        PairingClient(_remote_activity(paired_event_id=42)),
+    )
+
+    with pytest.raises(ValueError, match="provider-pair event does not match"):
+        getattr(service, method_name)(
+            authority=authority,
+            publication=_publication(authority),
+            fulfillment=fulfillment,
+            activity=activity,
+        )
+
+
+@pytest.mark.parametrize("method_name", ["inspect_pairing", "reconcile_pairing"])
+def test_pairing_rejects_a_different_activity_point_read(
+    tmp_path,
+    monkeypatch,
+    method_name: str,
+) -> None:
+    class WrongActivityIdentityClient(PairingClient):
+        def get_activity(self, activity_id: str, *, intervals: bool = True):
+            assert activity_id == "i123"
+            assert intervals is True
+            return self.activity.model_copy(update={"id": "i999"})
+
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    authority = _authority()
+    activity = _activity(repo, date(2026, 8, 10))
+    fulfillment = _fulfillment(activity, authority)
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
+    )
+    service = WorkoutPairingReconciliationService(
+        repo,
+        WrongActivityIdentityClient(_remote_activity()),
+    )
+
+    with pytest.raises(ValueError, match="readback identity"):
+        getattr(service, method_name)(
+            authority=authority,
+            publication=_publication(authority),
+            fulfillment=fulfillment,
+            activity=activity,
+        )
+
+
+def test_provider_only_pair_to_a_different_event_reports_the_exact_conflict(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    authority = _authority()
+    activity = _activity(repo, date(2026, 8, 10))
+    fulfillment = _fulfillment(activity, authority).model_copy(
+        update={
+            "athlete_confirmation": None,
+            "provider_pair": ProviderPairedFulfillmentEvidence(
+                event_id=42,
+                provenance="provider_observed",
+                observed_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
+            ),
+        }
+    )
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
+    )
+
+    result = WorkoutPairingReconciliationService(
+        repo,
+        PairingClient(_remote_activity(paired_event_id=99)),
+    ).inspect_pairing(
+        authority=authority,
+        publication=_publication(authority),
+        fulfillment=fulfillment,
+        activity=activity,
+    )
+
+    assert result.status == "pairing_blocked"
+    assert result.blocker_code == "activity_paired_to_different_event"
+
+
 def test_unknown_provider_fields_are_part_of_the_pairing_write_guard() -> None:
     original = ActivityDTO.model_validate(
         {**_remote_activity().model_dump(mode="json"), "provider_new_field": "v1"}
@@ -317,9 +482,7 @@ def test_unknown_provider_fields_are_part_of_the_pairing_write_guard() -> None:
     )
 
     assert original.model_extra == {"provider_new_field": "v1"}
-    assert activity_pairing_guard_sha256(original) != activity_pairing_guard_sha256(
-        changed
-    )
+    assert activity_pairing_guard_sha256(original) != activity_pairing_guard_sha256(changed)
 
 
 @pytest.mark.parametrize(
@@ -350,9 +513,7 @@ def test_pending_pair_guard_drift_requires_exact_confirmation_before_retry(
     fulfillment = _fulfillment(activity, authority)
     save_fulfillment_manifest(
         repo,
-        WorkoutFulfillmentManifest(
-            fulfillments={activity.local_activity_id: fulfillment}
-        ),
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
     )
     client = GuardChangingFailedPairingClient(
         _remote_activity(),
@@ -414,9 +575,7 @@ def test_unsubmitted_intent_never_becomes_independent_provider_evidence(
     fulfillment = _fulfillment(activity, authority)
     save_fulfillment_manifest(
         repo,
-        WorkoutFulfillmentManifest(
-            fulfillments={activity.local_activity_id: fulfillment}
-        ),
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
     )
     client = FailedBeforeWritePairingClient(_remote_activity())
     service = WorkoutPairingReconciliationService(repo, client)
@@ -488,6 +647,113 @@ def test_unsubmitted_intent_never_becomes_independent_provider_evidence(
     assert final.provider_pair.provenance == "resilio_requested"
 
 
+def test_submitted_pair_survives_a_continuous_activity_evidence_revision(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    repo = RepositoryIO()
+    authority = _authority()
+    original_activity = _activity(repo, date(2026, 8, 10))
+    original_fulfillment = _fulfillment(original_activity, authority)
+    save_fulfillment_manifest(
+        repo,
+        WorkoutFulfillmentManifest(
+            fulfillments={original_activity.local_activity_id: original_fulfillment}
+        ),
+    )
+    client = ReadbackFailedAfterPairingClient(_remote_activity())
+    service = WorkoutPairingReconciliationService(repo, client)
+    publication = _publication(authority)
+
+    interrupted = service.reconcile_pairing(
+        authority=authority,
+        publication=publication,
+        fulfillment=original_fulfillment,
+        activity=original_activity,
+        now_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
+    )
+    assert interrupted.blocker_code == "provider_pairing_readback_failed"
+    pending_operation = next(
+        iter(load_fulfillment_manifest(repo).remote_pairing_operations.values())
+    )
+    assert pending_operation.provider_write_submitted_at_utc is not None
+    assert client.activity.paired_event_id == publication.event_id
+
+    corrected_remote = client.activity.model_copy(
+        update={
+            "start_date": datetime(2026, 8, 11, 5, tzinfo=timezone.utc),
+            "start_date_local": datetime(2026, 8, 11, 7),
+        }
+    )
+    corrected_base = make_activity(
+        id=original_activity.local_activity_id,
+        date=date(2026, 8, 11),
+        distance_meters=5500,
+    )
+    corrected_activity = corrected_base.model_copy(
+        update={
+            "origin": original_activity.origin,
+            "audit": corrected_base.audit.model_copy(
+                update={
+                    "performance_evidence_sha256": performance_evidence_fingerprint(
+                        corrected_remote,
+                        corrected_base.occurrence.timezone,
+                    ),
+                    "provider_snapshot_sha256": "e" * 64,
+                    "canonical_mapping_version": 9,
+                }
+            ),
+        }
+    )
+    ActivityArchive(repo.resolve_path("data/activities")).write(corrected_activity)
+    corrected_sha256 = activity_performance_evidence_sha256(corrected_activity)
+    revised_fulfillment = WorkoutFulfillmentRecord.model_validate(
+        {
+            **original_fulfillment.model_dump(mode="python"),
+            "activity_performance_evidence_sha256": corrected_sha256,
+            "execution_local_date": date(2026, 8, 11),
+            "schedule_offset_days": 0,
+            "provider_pair": ProviderPairedFulfillmentEvidence(
+                event_id=publication.event_id,
+                provenance="resilio_requested",
+                observed_at_utc=datetime(2026, 8, 11, 8, tzinfo=timezone.utc),
+            ),
+            "activity_evidence_revisions": [
+                FulfillmentActivityEvidenceRevision(
+                    previous_activity_performance_evidence_sha256=(
+                        original_fulfillment.activity_performance_evidence_sha256
+                    ),
+                    replacement_activity_performance_evidence_sha256=(corrected_sha256),
+                    previous_execution_local_date=date(2026, 8, 10),
+                    replacement_execution_local_date=date(2026, 8, 11),
+                    observed_at_utc=datetime(2026, 8, 11, 8, tzinfo=timezone.utc),
+                )
+            ],
+        }
+    )
+    manifest = load_fulfillment_manifest(repo)
+    manifest.fulfillments[revised_fulfillment.local_activity_id] = revised_fulfillment
+    save_fulfillment_manifest(repo, manifest)
+    client.activity = corrected_remote
+
+    recovered = service.reconcile_pairing(
+        authority=authority,
+        publication=publication,
+        fulfillment=revised_fulfillment,
+        activity=corrected_activity,
+        now_utc=datetime(2026, 8, 11, 9, tzinfo=timezone.utc),
+    )
+
+    assert recovered.status == "pairing_noop"
+    stored_operation = load_fulfillment_manifest(repo).remote_pairing_operations[
+        pending_operation.operation_id
+    ]
+    assert stored_operation.state == "verified"
+    assert client.update_payloads == [publication.event_id]
+
+
 def test_different_existing_pair_and_strava_source_fail_without_mutation(
     tmp_path,
     monkeypatch,
@@ -500,9 +766,7 @@ def test_different_existing_pair_and_strava_source_fail_without_mutation(
     fulfillment = _fulfillment(activity, authority)
     save_fulfillment_manifest(
         repo,
-        WorkoutFulfillmentManifest(
-            fulfillments={activity.local_activity_id: fulfillment}
-        ),
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
     )
     publication = _publication(authority)
 
@@ -628,18 +892,14 @@ def test_revoked_unpair_rebases_nonperformance_guard_without_losing_authority(
         activity=activity,
     )
     save_fulfillment_manifest(repo, manifest)
-    client = GuardChangingFailedUnpairingClient(
-        _remote_activity(paired_event_id=42)
-    )
+    client = GuardChangingFailedUnpairingClient(_remote_activity(paired_event_id=42))
     service = WorkoutUnpairingReconciliationService(repo, client)
 
     failed = service.reconcile(
         operation,
         now_utc=datetime(2026, 8, 10, 10, tzinfo=timezone.utc),
     )
-    pending = load_fulfillment_manifest(repo).remote_pairing_operations[
-        operation.operation_id
-    ]
+    pending = load_fulfillment_manifest(repo).remote_pairing_operations[operation.operation_id]
     recovered = service.reconcile(
         pending,
         now_utc=datetime(2026, 8, 10, 11, tzinfo=timezone.utc),
@@ -662,9 +922,7 @@ def test_removed_resilio_pair_requires_exact_athlete_confirmed_drift_resolution(
     fulfillment = _fulfillment(activity, authority)
     save_fulfillment_manifest(
         repo,
-        WorkoutFulfillmentManifest(
-            fulfillments={activity.local_activity_id: fulfillment}
-        ),
+        WorkoutFulfillmentManifest(fulfillments={activity.local_activity_id: fulfillment}),
     )
     client = PairingClient(_remote_activity())
     service = WorkoutPairingReconciliationService(repo, client)
@@ -676,9 +934,7 @@ def test_removed_resilio_pair_requires_exact_athlete_confirmed_drift_resolution(
         activity=activity,
         now_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
     )
-    stored_fulfillment = load_fulfillment_manifest(repo).fulfillments[
-        activity.local_activity_id
-    ]
+    stored_fulfillment = load_fulfillment_manifest(repo).fulfillments[activity.local_activity_id]
     client.activity = client.activity.model_copy(update={"paired_event_id": None})
 
     blocked = service.reconcile_pairing(

@@ -9,9 +9,11 @@ from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import (
     ConfirmedPublicationDriftTarget,
     GarminForwardingStatus,
+    HistoricalFulfillmentRetirementConfirmation,
     HistoricalLegacyPublicationDriftResolution,
     HistoricalLegacyWorkoutPublication,
     PendingWorkoutPublication,
+    PublicationDriftResolution,
     PublicationPushError,
     PublishedWorkout,
     RetiredPendingWorkoutPublication,
@@ -171,18 +173,14 @@ class LegacyV7PublicationManifest(BaseModel):
     retired: dict[str, RetiredWorkoutPublication] = Field(default_factory=dict)
     retired_pending: dict[str, RetiredPendingWorkoutPublication] = Field(default_factory=dict)
     retirement_history: list[RetiredWorkoutPublication] = Field(default_factory=list)
-    pending_retirement_history: list[RetiredPendingWorkoutPublication] = Field(
+    pending_retirement_history: list[RetiredPendingWorkoutPublication] = Field(default_factory=list)
+    historical_legacy_workouts: dict[str, HistoricalLegacyWorkoutPublication] = Field(
+        default_factory=dict
+    )
+    drift_resolutions: list[LegacyV7PublicationDriftResolution] = Field(default_factory=list)
+    historical_legacy_drift_resolutions: list[HistoricalLegacyPublicationDriftResolution] = Field(
         default_factory=list
     )
-    historical_legacy_workouts: dict[
-        str, HistoricalLegacyWorkoutPublication
-    ] = Field(default_factory=dict)
-    drift_resolutions: list[LegacyV7PublicationDriftResolution] = Field(
-        default_factory=list
-    )
-    historical_legacy_drift_resolutions: list[
-        HistoricalLegacyPublicationDriftResolution
-    ] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -246,6 +244,42 @@ class LegacyV7PublicationManifest(BaseModel):
                 raise ValueError("historical publication cannot remain active or retired")
             if event_owners.setdefault(historical_record.event_id, local_id) != local_id:
                 raise ValueError("publication manifest event IDs must be unique")
+        return self
+
+
+class LegacyV8PublicationManifest(BaseModel):
+    """Strict publication v8 contract consumed only by the v9 migration."""
+
+    schema_version: Literal[8] = 8
+    workouts: dict[str, PublishedWorkout] = Field(default_factory=dict)
+    pending: dict[str, PendingWorkoutPublication] = Field(default_factory=dict)
+    historical_fulfillment_event_retirements: list[RetiredWorkoutPublication] = Field(
+        default_factory=list
+    )
+    historical_fulfillment_pending_retirements: list[RetiredPendingWorkoutPublication] = Field(
+        default_factory=list
+    )
+    historical_legacy_workouts: dict[str, HistoricalLegacyWorkoutPublication] = Field(
+        default_factory=dict
+    )
+    drift_resolutions: list[PublicationDriftResolution] = Field(default_factory=list)
+    historical_legacy_drift_resolutions: list[HistoricalLegacyPublicationDriftResolution] = Field(
+        default_factory=list
+    )
+    historical_fulfillment_retirement_confirmations: list[
+        HistoricalFulfillmentRetirementConfirmation
+    ] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def active_keys_match_workout_identities(self) -> "LegacyV8PublicationManifest":
+        for local_workout_id, record in self.workouts.items():
+            if record.workout_identity.local_workout_id != local_workout_id:
+                raise ValueError("publication manifest key must match local workout ID")
+        for local_workout_id, pending_record in self.pending.items():
+            if pending_record.workout_identity.local_workout_id != local_workout_id:
+                raise ValueError("publication manifest key must match local workout ID")
         return self
 
 

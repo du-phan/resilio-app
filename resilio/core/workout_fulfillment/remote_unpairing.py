@@ -28,7 +28,7 @@ from resilio.integrations.intervals_icu.activity_pairing import (
 from resilio.integrations.intervals_icu.dto import ActivityDTO, ActivityPairingWriteDTO
 from resilio.integrations.intervals_icu.errors import IntervalsNotFoundError
 from resilio.schemas.activity import CanonicalActivity
-from resilio.schemas.publication import PublishedWorkout
+from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
 from resilio.schemas.workout_fulfillment import (
     WorkoutFulfillmentManifest,
     WorkoutFulfillmentRevocation,
@@ -42,22 +42,22 @@ from resilio.schemas.workout_pairing import (
 
 
 class ActivityUnpairingClient(Protocol):
-    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO: ...
+    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO:
+        ...
 
     def update_activity_pairing(
         self,
         activity_id: str,
         pairing: ActivityPairingWriteDTO,
-    ) -> ActivityDTO: ...
+    ) -> ActivityDTO:
+        ...
 
 
 def actionable_unpair_operations(
     manifest: WorkoutFulfillmentManifest,
 ) -> list[RemoteWorkoutPairingOperation]:
     """Select latest nonterminal unpair obligations not superseded by new authority."""
-    latest_by_association: dict[
-        tuple[str, str, str, int, str], RemoteWorkoutPairingOperation
-    ] = {}
+    latest_by_association: dict[tuple[str, str, str, int, str], RemoteWorkoutPairingOperation] = {}
     for operation in manifest.remote_pairing_operations.values():
         if operation.action != "unpair":
             continue
@@ -90,49 +90,61 @@ def actionable_unpair_operations(
 def stage_remote_unpairing(
     *,
     manifest: WorkoutFulfillmentManifest,
-    publication: PublishedWorkout,
+    publication: PublishedWorkout | PendingWorkoutPublication,
     revocation: WorkoutFulfillmentRevocation,
     activity: CanonicalActivity,
     pair_operation: RemoteWorkoutPairingOperation | None = None,
 ) -> RemoteWorkoutPairingOperation:
     """Add one exact unpair intent to a manifest before it is persisted."""
     fulfillment = revocation.fulfillment
+    provider_pair = fulfillment.provider_pair
+    event_id = (
+        publication.event_id
+        if isinstance(publication, PublishedWorkout)
+        else provider_pair.event_id
+        if provider_pair is not None
+        else None
+    )
+    if event_id is None:
+        raise ValueError("Pending native unpairing requires an exact provider pair")
     operation_proves_pair_request = pair_operation is not None and (
         pair_operation.action == "pair"
         and pair_operation.local_activity_id == fulfillment.local_activity_id
         and pair_operation.workout_identity == fulfillment.workout_identity
-        and pair_operation.event_id == publication.event_id
+        and pair_operation.event_id == event_id
         and operation_proves_resilio_pair_request(pair_operation)
     )
-    if publication.workout_identity != fulfillment.workout_identity or not (
-        fulfillment.provider_pair_supports_event(publication.event_id)
-        or operation_proves_pair_request
+    publication_matches_fulfillment = (
+        publication.workout_identity == fulfillment.workout_identity
+        and publication.workout_prescription_sha256 == fulfillment.workout_prescription_sha256
+        and publication.occurrence_date == fulfillment.scheduled_local_date
+        and publication.schedule_timezone == fulfillment.schedule_timezone
+    )
+    if not publication_matches_fulfillment or not (
+        fulfillment.provider_pair_supports_event(event_id) or operation_proves_pair_request
     ):
         raise ValueError("Revoked fulfillment does not match the published native pair")
     external_activity_id = activity.origin.intervals_icu_activity_id
-    if (
-        external_activity_id is None
-        or external_activity_id != revocation.intervals_icu_activity_id
-    ):
+    if external_activity_id is None or external_activity_id != revocation.intervals_icu_activity_id:
         raise ValueError("Native unpairing requires an Intervals.icu activity identity")
     fulfillment_sha256 = canonical_data_sha256(fulfillment)
     operation = RemoteWorkoutPairingOperation(
-        operation_id=unpair_operation_id(revocation, event_id=publication.event_id),
+        operation_id=unpair_operation_id(revocation, event_id=event_id),
         action="unpair",
         state="pending",
         local_activity_id=fulfillment.local_activity_id,
         intervals_icu_activity_id=external_activity_id,
         workout_identity=fulfillment.workout_identity,
-        event_id=publication.event_id,
-        activity_performance_evidence_sha256=(
-            fulfillment.activity_performance_evidence_sha256
-        ),
+        event_id=event_id,
+        activity_performance_evidence_sha256=(fulfillment.activity_performance_evidence_sha256),
         publication_provider_event_fingerprint_sha256=(
             publication.provider_event_fingerprint_sha256
+            if isinstance(publication, PublishedWorkout)
+            else None
         ),
         fulfillment_record_sha256=fulfillment_sha256,
         revocation_id=revocation.revocation_id,
-        expected_paired_event_id_before=publication.event_id,
+        expected_paired_event_id_before=event_id,
         requested_at_utc=revocation.revoked_at_utc,
     )
     manifest.remote_pairing_operations[operation.operation_id] = operation
@@ -205,18 +217,15 @@ class WorkoutUnpairingReconciliationService:
         )
         if (
             activity is None
-            or activity.origin.intervals_icu_activity_id
-            != operation.intervals_icu_activity_id
+            or activity.origin.intervals_icu_activity_id != operation.intervals_icu_activity_id
             or activity_performance_evidence_sha256(activity)
             != fulfillment.activity_performance_evidence_sha256
             or operation.local_activity_id != fulfillment.local_activity_id
-            or operation.intervals_icu_activity_id
-            != revocation.intervals_icu_activity_id
+            or operation.intervals_icu_activity_id != revocation.intervals_icu_activity_id
             or operation.workout_identity != fulfillment.workout_identity
             or operation.activity_performance_evidence_sha256
             != fulfillment.activity_performance_evidence_sha256
-            or operation.fulfillment_record_sha256
-            != canonical_data_sha256(fulfillment)
+            or operation.fulfillment_record_sha256 != canonical_data_sha256(fulfillment)
             or operation.requested_at_utc != revocation.revoked_at_utc
             or not unpair_operation_has_exact_authority(
                 manifest,
@@ -281,8 +290,7 @@ class WorkoutUnpairingReconciliationService:
             update={
                 "state": "verified",
                 "expected_provider_activity_guard_sha256_before": (
-                    operation.expected_provider_activity_guard_sha256_before
-                    or guard_sha256
+                    operation.expected_provider_activity_guard_sha256_before or guard_sha256
                 ),
                 "last_attempted_at_utc": verified_at_utc,
                 "verified_at_utc": verified_at_utc,

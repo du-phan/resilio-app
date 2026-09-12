@@ -16,6 +16,9 @@ from resilio.core.workout_fulfillment.migration_validation import (
     WorkoutFulfillmentMigrationError,
 )
 from resilio.core.workout_fulfillment.remote_unpairing import stage_remote_unpairing
+from resilio.core.workout_fulfillment.revocation_publication_authority import (
+    revoked_pair_publication_authority,
+)
 from resilio.schemas.activity import ActivityStatus, CanonicalActivity, is_running_sport
 from resilio.schemas.publication import (
     PendingWorkoutPublication,
@@ -41,8 +44,7 @@ def _add_provider_pair_provenance(
     if not isinstance(value, dict):
         return value
     migrated = {
-        key: _add_provider_pair_provenance(item, field_name=key)
-        for key, item in value.items()
+        key: _add_provider_pair_provenance(item, field_name=key) for key, item in value.items()
     }
     if (
         field_name == "provider_pair"
@@ -54,7 +56,7 @@ def _add_provider_pair_provenance(
     return migrated
 
 
-def _load_manifest(
+def load_fulfillment_manifest_for_publication_migration(
     raw: dict[str, object],
     *,
     activities_by_local_id: dict[str, CanonicalActivity],
@@ -88,33 +90,40 @@ def _stage_revoked_unpairs(
     publication_manifest: PublicationManifest,
     authorities: list[MigrationWorkoutAuthority],
     activities_by_local_id: dict[str, CanonicalActivity],
-) -> None:
+    source_fulfillment_sha256_by_local_id: dict[str, str],
+) -> bool:
+    changed = False
     for revocation in manifest.revoked_fulfillments:
         fulfillment = revocation.fulfillment
         provider_pair = fulfillment.provider_pair
         if provider_pair is None:
             continue
-        publication = publication_manifest.workouts.get(
-            fulfillment.workout_identity.local_workout_id
-        )
-        if publication is None:
+        if any(
+            operation.action == "unpair" and operation.revocation_id == revocation.revocation_id
+            for operation in manifest.remote_pairing_operations.values()
+        ):
             continue
-        publication_matches = (
-            publication.workout_identity == fulfillment.workout_identity
-            and publication.event_id == provider_pair.event_id
-            and publication.applied_week_approval_id
-            == fulfillment.applied_week_approval_id
-            and publication.applied_running_workouts_sha256
-            == fulfillment.applied_running_workouts_sha256
-            and publication.workout_prescription_sha256
-            == fulfillment.workout_prescription_sha256
-            and publication.schedule_timezone == fulfillment.schedule_timezone
-            and publication.occurrence_date == fulfillment.scheduled_local_date
+        accepted_fulfillment_sha256_values = {
+            canonical_data_sha256(fulfillment),
+            legacy_v1_fulfillment_sha256(fulfillment),
+        }
+        captured_source_sha256 = source_fulfillment_sha256_by_local_id.get(
+            fulfillment.local_activity_id
         )
-        if not publication_matches:
+        if captured_source_sha256 is not None:
+            accepted_fulfillment_sha256_values.add(captured_source_sha256)
+        try:
+            publication = revoked_pair_publication_authority(
+                publication_manifest,
+                fulfillment,
+                accepted_fulfillment_sha256_values=(accepted_fulfillment_sha256_values),
+            )
+        except ValueError as exc:
             raise WorkoutFulfillmentMigrationError(
                 "Revoked provider pair conflicts with publication authority"
-            )
+            ) from exc
+        if publication is None:
+            continue
         try:
             validate_migrated_fulfillment_authority(fulfillment, authorities)
         except ValueError as exc:
@@ -137,10 +146,12 @@ def _stage_revoked_unpairs(
                 revocation=revocation,
                 activity=activity,
             )
+            changed = True
         except ValueError as exc:
             raise WorkoutFulfillmentMigrationError(
                 "Revoked provider pair lacks exact native-unpair authority"
             ) from exc
+    return changed
 
 
 def _publication_candidates(
@@ -155,6 +166,38 @@ def _publication_candidates(
     active_publication = manifest.workouts.get(local_workout_id)
     if active_publication is not None:
         candidates.append((active_publication, active_publication.event_id))
+    pending_publication = manifest.pending.get(local_workout_id)
+    if pending_publication is not None and (
+        active_publication is None
+        or (
+            pending_publication.workout_identity,
+            pending_publication.applied_week_approval_id,
+            pending_publication.applied_running_workouts_sha256,
+            pending_publication.workout_prescription_sha256,
+            pending_publication.schedule_timezone,
+            pending_publication.occurrence_date,
+        )
+        != (
+            active_publication.workout_identity,
+            active_publication.applied_week_approval_id,
+            active_publication.applied_running_workouts_sha256,
+            active_publication.workout_prescription_sha256,
+            active_publication.schedule_timezone,
+            active_publication.occurrence_date,
+        )
+    ):
+        candidates.append(
+            (
+                pending_publication,
+                (
+                    active_publication.event_id
+                    if active_publication is not None
+                    else fulfillment.provider_pair.event_id
+                    if fulfillment.provider_pair is not None
+                    else None
+                ),
+            )
+        )
 
     def retirement_matches(
         *,
@@ -185,9 +228,7 @@ def _publication_candidates(
         if retirement_matches(
             local_activity_id=retirement.fulfilling_local_activity_id,
             workout_identity=retirement.publication.workout_identity,
-            fulfillment_record_sha256=(
-                retirement.fulfillment_record_sha256_at_retirement
-            ),
+            fulfillment_record_sha256=(retirement.fulfillment_record_sha256_at_retirement),
             execution_local_date=retirement.execution_local_date_at_retirement,
             schedule_offset_days=retirement.schedule_offset_days_at_retirement,
             reopened_at_utc=retirement.reopened_at_utc,
@@ -199,9 +240,7 @@ def _publication_candidates(
         if retirement_matches(
             local_activity_id=retirement.fulfilling_local_activity_id,
             workout_identity=retirement.pending_publication.workout_identity,
-            fulfillment_record_sha256=(
-                retirement.fulfillment_record_sha256_at_retirement
-            ),
+            fulfillment_record_sha256=(retirement.fulfillment_record_sha256_at_retirement),
             execution_local_date=retirement.execution_local_date_at_retirement,
             schedule_offset_days=retirement.schedule_offset_days_at_retirement,
             reopened_at_utc=retirement.reopened_at_utc,
@@ -223,8 +262,7 @@ def _publication_authority_is_retained(
         return True
     return any(
         item.workout.identity == publication.workout_identity
-        and item.workout.applied_week_approval_id
-        == publication.applied_week_approval_id
+        and item.workout.applied_week_approval_id == publication.applied_week_approval_id
         and item.workout.applied_running_workouts_sha256
         == publication.applied_running_workouts_sha256
         and canonical_data_sha256(item.workout.prescription)
@@ -276,15 +314,20 @@ def _validate_active_fulfillment(
             fulfillment,
             authorities,
         )
-        and publication.workout_prescription_sha256
-        == fulfillment.workout_prescription_sha256
+        and publication.workout_prescription_sha256 == fulfillment.workout_prescription_sha256
         and publication.schedule_timezone == fulfillment.schedule_timezone
         and publication.occurrence_date == fulfillment.scheduled_local_date
-        and (
-            fulfillment.provider_pair is None
-            or fulfillment.provider_pair.event_id == event_id
-        )
+        and (fulfillment.provider_pair is None or fulfillment.provider_pair.event_id == event_id)
     ]
+    exact_applied_revision_matches = [
+        (publication, event_id)
+        for publication, event_id in matches
+        if publication.applied_week_approval_id == fulfillment.applied_week_approval_id
+        and publication.applied_running_workouts_sha256
+        == fulfillment.applied_running_workouts_sha256
+    ]
+    if exact_applied_revision_matches:
+        matches = exact_applied_revision_matches
     if not matches:
         raise WorkoutFulfillmentMigrationError(
             "Active fulfillment does not match its exact publication authority"
@@ -292,8 +335,7 @@ def _validate_active_fulfillment(
     first, first_event_id = matches[0]
     if any(
         candidate.workout_identity != first.workout_identity
-        or candidate.workout_prescription_sha256
-        != first.workout_prescription_sha256
+        or candidate.workout_prescription_sha256 != first.workout_prescription_sha256
         or candidate_event_id != first_event_id
         for candidate, candidate_event_id in matches[1:]
     ):
@@ -347,20 +389,19 @@ def migrate_current_fulfillment_manifest(
     """Migrate and cross-validate the predecessor fulfillment manifest."""
     if raw is None:
         return WorkoutFulfillmentManifest(), False
-    manifest, migrated_from_v1, source_hashes = _load_manifest(
+    manifest, migrated_from_v1, source_hashes = load_fulfillment_manifest_for_publication_migration(
         raw,
         activities_by_local_id=activities_by_local_id,
     )
-    if migrated_from_v1:
-        _stage_revoked_unpairs(
-            manifest,
-            publication_manifest=publication_manifest,
-            authorities=authorities,
-            activities_by_local_id=activities_by_local_id,
-        )
-        manifest = WorkoutFulfillmentManifest.model_validate(
-            manifest.model_dump(mode="python")
-        )
+    repaired_revoked_unpairs = _stage_revoked_unpairs(
+        manifest,
+        publication_manifest=publication_manifest,
+        authorities=authorities,
+        activities_by_local_id=activities_by_local_id,
+        source_fulfillment_sha256_by_local_id=source_hashes,
+    )
+    if migrated_from_v1 or repaired_revoked_unpairs:
+        manifest = WorkoutFulfillmentManifest.model_validate(manifest.model_dump(mode="python"))
     for fulfillment in manifest.fulfillments.values():
         _validate_active_fulfillment(
             publication_manifest,
@@ -370,8 +411,7 @@ def migrate_current_fulfillment_manifest(
             captured_source_sha256=source_hashes.get(fulfillment.local_activity_id),
             activity=activities_by_local_id.get(fulfillment.local_activity_id),
             has_unresolved_conflict=(
-                fulfillment.local_activity_id
-                in manifest.unresolved_fulfillment_conflicts
+                fulfillment.local_activity_id in manifest.unresolved_fulfillment_conflicts
             ),
         )
     for historical in manifest.historical_legacy_fulfillments.values():
@@ -380,8 +420,7 @@ def migrate_current_fulfillment_manifest(
             historical,
             activity=activities_by_local_id.get(historical.local_activity_id),
             has_unresolved_conflict=(
-                historical.local_activity_id
-                in manifest.unresolved_fulfillment_conflicts
+                historical.local_activity_id in manifest.unresolved_fulfillment_conflicts
             ),
         )
-    return manifest, migrated_from_v1
+    return manifest, migrated_from_v1 or repaired_revoked_unpairs

@@ -20,7 +20,9 @@ from resilio.core.workout_publication.drift_confirmation import (
     confirm_publication_drift_targets,
 )
 from resilio.core.workout_publication.execution_placement import (
-    confirmed_execution_placement_dates,
+    desired_provider_occurrence_placement,
+    publication_schedule_is_current,
+    resolve_provider_occurrence_placements,
 )
 from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
@@ -30,14 +32,16 @@ from resilio.core.workout_publication.manifest import load_manifest, save_manife
 from resilio.core.workout_publication.naming import provider_workout_names
 from resilio.core.workout_publication.policy import PublicationSafetyError
 from resilio.core.workout_publication.retained_authority import (
-    retained_pending_publication_authorities,
+    RetainedPublicationAuthorities,
+    retained_publication_authorities,
 )
 from resilio.core.workout_publication.retirement_service import (
+    RetirementVerification,
     WorkoutRetirementService,
 )
 from resilio.core.workout_publication.service import WorkoutPublicationService
 from resilio.core.workout_publication.week_deletions import (
-    reconcile_owned_future_deletions,
+    reconcile_owned_deletions,
 )
 from resilio.core.workout_publication.week_pairing import (
     attach_remote_pairing_status,
@@ -128,19 +132,19 @@ class RunWeekSynchronizationService:
                 raise PublicationSafetyError("Current timestamp must be timezone-aware")
             return timestamp.astimezone(ZoneInfo(schedule_timezones.pop())).date()
 
-    def _verify_owned_future_deletion(
+    def _verify_owned_deletion_candidate(
         self,
         local_workout_id: str,
         *,
         restore_local: bool,
-        authoritative_workout: AuthoritativeWorkout | None,
-        provider_name: str | None,
-    ) -> None:
-        self.retirement_service.verify(
+        retained_authorities: RetainedPublicationAuthorities | None,
+        as_of_date: date,
+    ) -> RetirementVerification:
+        return self.retirement_service.verify(
             local_workout_id,
             restore_local=restore_local,
-            authoritative_workout=authoritative_workout,
-            provider_name=provider_name,
+            retained_authorities=retained_authorities,
+            as_of_date=as_of_date,
         )
 
     def _status_authoritative_week(
@@ -152,12 +156,14 @@ class RunWeekSynchronizationService:
         restore_local: bool = False,
         confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
-        provider_occurrence_dates = confirmed_execution_placement_dates(
+        placements = resolve_provider_occurrence_placements(
             self.repo,
             workouts,
         )
-        deletion_authorities, deletion_provider_names = (
-            retained_pending_publication_authorities(self.repo, workouts)
+        publication_manifest = load_manifest(self.repo)
+        deletion_authorities = retained_publication_authorities(
+            self.repo,
+            workouts,
         )
         return build_run_week_status(
             self.repo,
@@ -178,36 +184,46 @@ class RunWeekSynchronizationService:
                     and workout.identity.local_workout_id in confirmed_remote_targets
                 ),
                 provider_name=provider_name,
-                provider_occurrence_date=provider_occurrence_dates.get(
-                    workout.identity.local_workout_id,
-                    workout.prescription.date,
+                provider_occurrence_date=(
+                    placements.placements_by_local_workout_id[
+                        workout.identity.local_workout_id
+                    ].effective_occurrence_date
+                ),
+                provider_occurrence_placement=(
+                    placements.placements_by_local_workout_id[workout.identity.local_workout_id]
                 ),
                 expected_remote_target=(
                     confirmed_remote_targets.get(workout.identity.local_workout_id)
                     if confirmed_remote_targets is not None
                     else None
                 ),
+                allow_remote_schedule_adoption=(
+                    not restore_local
+                    and workout.identity.local_workout_id not in placements.fulfillment_workout_ids
+                    and publication_schedule_is_current(
+                        publication_manifest,
+                        workout,
+                    )
+                ),
             ),
-            verify_deletion=lambda local_workout_id, workout, provider_name: (
-                self._verify_owned_future_deletion(
+            verify_deletion=lambda local_workout_id, retained_authorities: (
+                self._verify_owned_deletion_candidate(
                     local_workout_id,
                     restore_local=(
                         restore_local
                         and confirmed_remote_targets is not None
                         and local_workout_id in confirmed_remote_targets
                     ),
-                    authoritative_workout=workout,
-                    provider_name=provider_name,
+                    retained_authorities=retained_authorities,
+                    as_of_date=as_of_date,
                 )
             ),
             deletion_authorities_by_local_workout_id=deletion_authorities,
-            deletion_provider_names_by_local_workout_id=(
-                deletion_provider_names
-            ),
             provider_occurrence_dates_by_local_workout_id={
-                workout.identity.local_workout_id: provider_occurrence_dates.get(
-                    workout.identity.local_workout_id,
-                    workout.prescription.date,
+                workout.identity.local_workout_id: (
+                    placements.placements_by_local_workout_id[
+                        workout.identity.local_workout_id
+                    ].effective_occurrence_date
                 )
                 for workout in workouts
             },
@@ -307,6 +323,14 @@ class RunWeekSynchronizationService:
             manifest = load_manifest(self.repo)
             provider_names = provider_workout_names([item.prescription for item in workouts])
             workouts_by_id = {item.identity.local_workout_id: item for item in workouts}
+            deletion_authorities = retained_publication_authorities(
+                self.repo,
+                workouts,
+            )
+            for local_workout_id, authorities in deletion_authorities.items():
+                preferred = authorities.preferred()
+                workouts_by_id.setdefault(local_workout_id, preferred.workout)
+                provider_names.setdefault(local_workout_id, preferred.provider_name)
             drift_items = [
                 item
                 for item in ordinary_status.items
@@ -373,9 +397,7 @@ class RunWeekSynchronizationService:
         """Restore exact removed native pairs after athlete confirmation."""
         confirmation = athlete_confirmation_reference.strip()
         if not confirmation:
-            raise PublicationSafetyError(
-                "Pairing drift resolution requires athlete confirmation"
-            )
+            raise PublicationSafetyError("Pairing drift resolution requires athlete confirmation")
         with coordinated_publication_plan_activity_lock(
             self.repo,
             "resolve_run_week_pairing_drift",
@@ -387,36 +409,26 @@ class RunWeekSynchronizationService:
                 workouts=workouts,
             )
             if not publication_status.reconciliation_safe:
-                return publication_status.model_copy(
-                    update={"operation": "resolve_pairing_drift"}
-                )
+                return publication_status.model_copy(update={"operation": "resolve_pairing_drift"})
             pairing_status = self._with_remote_pairing_status(
                 publication_status,
                 workouts=workouts,
                 mutate=False,
             )
             drift_items = [
-                item
-                for item in pairing_status.items
-                if item.pairing_drift_token_sha256 is not None
+                item for item in pairing_status.items if item.pairing_drift_token_sha256 is not None
             ]
-            observed_tokens = {
-                item.pairing_drift_token_sha256 for item in drift_items
-            }
+            observed_tokens = {item.pairing_drift_token_sha256 for item in drift_items}
             supplied_tokens = set(confirmed_pairing_drift_tokens)
             if len(supplied_tokens) != len(confirmed_pairing_drift_tokens):
-                raise PublicationSafetyError(
-                    "Pairing drift confirmation tokens must be unique"
-                )
+                raise PublicationSafetyError("Pairing drift confirmation tokens must be unique")
             confirmed_retry_tokens = confirmed_pairing_drift_retry_tokens(
                 self.repo,
                 pairing_status,
                 supplied_tokens,
             )
             if not observed_tokens and not confirmed_retry_tokens:
-                raise PublicationSafetyError(
-                    "There is no verified native pairing drift to resolve"
-                )
+                raise PublicationSafetyError("There is no verified native pairing drift to resolve")
             if observed_tokens | confirmed_retry_tokens != supplied_tokens:
                 raise PublicationSafetyError(
                     "Pairing drift confirmations must match the exact displayed token set"
@@ -459,26 +471,45 @@ class RunWeekSynchronizationService:
         restore_local: bool,
         confirmed_remote_targets: dict[str, tuple[int, str]] | None = None,
     ) -> RunWeekSynchronizationReport:
-        provider_occurrence_dates = confirmed_execution_placement_dates(
+        placements = resolve_provider_occurrence_placements(
             self.repo,
             workouts,
         )
-        selected, skipped, _, _ = select_run_week_items(
+        verified_provider_occurrence_dates = {
+            item.local_workout_id: item.provider_occurrence_date
+            for item in status.items
+            if item.provider_occurrence_date is not None
+        }
+        selected, skipped, current_run_ids, _ = select_run_week_items(
             self.repo,
             workouts=workouts,
             as_of_date=as_of_date,
         )
         provider_names = provider_workout_names([item.prescription for item in workouts])
-        deletion_authorities, deletion_provider_names = (
-            retained_pending_publication_authorities(self.repo, workouts)
+        deletion_authorities = retained_publication_authorities(
+            self.repo,
+            workouts,
         )
+        verified_stale_items = [
+            item
+            for item in status.items
+            if item.local_workout_id not in current_run_ids and item.status == "skipped_past"
+        ]
         items = list(skipped)
         partial = False
         for workout in selected:
-            desired_provider_occurrence_date = provider_occurrence_dates.get(
-                workout.identity.local_workout_id,
-                workout.prescription.date,
+            retained_placement = placements.placements_by_local_workout_id[
+                workout.identity.local_workout_id
+            ]
+            (
+                desired_provider_occurrence_date,
+                desired_placement,
+            ) = desired_provider_occurrence_placement(
+                workout,
+                retained_placement,
+                verified_provider_occurrence_dates,
             )
+            retained_provider_occurrence_date = retained_placement.effective_occurrence_date
             expected_remote_target = (
                 confirmed_remote_targets.get(workout.identity.local_workout_id)
                 if confirmed_remote_targets is not None
@@ -490,7 +521,12 @@ class RunWeekSynchronizationService:
                     restore_local=restore_local and expected_remote_target is not None,
                     provider_name=provider_names[workout.identity.local_workout_id],
                     provider_occurrence_date=desired_provider_occurrence_date,
+                    provider_occurrence_placement=desired_placement,
                     expected_remote_target=expected_remote_target,
+                    adopt_remote_schedule=(
+                        not restore_local
+                        and desired_provider_occurrence_date != retained_provider_occurrence_date
+                    ),
                 )
             except Exception as exc:
                 partial = True
@@ -517,12 +553,11 @@ class RunWeekSynchronizationService:
                     )
                 )
         if not partial:
-            deletion_items, deletion_partial = reconcile_owned_future_deletions(
+            deletion_items, deletion_partial = reconcile_owned_deletions(
                 repo=self.repo,
                 retirement_service=self.retirement_service,
-                local_workout_ids=status.owned_future_deletion_ids,
-                authoritative_workouts_by_local_id=deletion_authorities,
-                provider_names_by_local_workout_id=deletion_provider_names,
+                local_workout_ids=status.owned_deletion_candidate_ids,
+                retained_authorities_by_local_id=deletion_authorities,
                 as_of_date=as_of_date,
                 restore_local=restore_local,
                 confirmed_remote_targets=confirmed_remote_targets,
@@ -530,10 +565,13 @@ class RunWeekSynchronizationService:
             )
             items.extend(deletion_items)
             partial = deletion_partial
+        else:
+            items.extend(verified_stale_items)
         return status.model_copy(
             update={
                 "operation": "restore_local" if restore_local else "reconcile",
                 "partial": partial,
+                "reconciliation_safe": status.reconciliation_safe and not partial,
                 "items": items,
             }
         )

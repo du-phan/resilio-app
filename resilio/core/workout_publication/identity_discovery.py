@@ -11,7 +11,11 @@ from resilio.core.workout_publication.policy import (
     provider_local_date,
     training_week_bounds,
 )
-from resilio.core.workout_publication.preparation import PreparedPublication
+from resilio.core.workout_publication.preparation import (
+    PreparedPublication,
+    RetainedPublicationVerification,
+)
+from resilio.core.workout_publication.remote_event_read import get_exact_event
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.dto import EventDTO
 from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
@@ -19,7 +23,7 @@ from resilio.schemas.publication import PendingWorkoutPublication, PublishedWork
 
 def discover_owned_identity_matches(
     client: IntervalsIcuClient,
-    prepared: PreparedPublication,
+    prepared: PreparedPublication | RetainedPublicationVerification,
     *,
     previous: PublishedWorkout | None,
     pending: PendingWorkoutPublication | None,
@@ -45,8 +49,7 @@ def discover_owned_identity_matches(
     matches = [
         event
         for event in events
-        if event.uid == prepared.event.uid
-        or event.external_id == prepared.external_id
+        if event.uid == prepared.event.uid or event.external_id == prepared.event.external_id
     ]
     if pending is not None and previous is None and not matches:
         provider_events = client.list_events(
@@ -57,23 +60,23 @@ def discover_owned_identity_matches(
         matches = [
             event
             for event in provider_events
-            if event.uid == prepared.event.uid
-            or event.external_id == prepared.external_id
+            if event.uid == prepared.event.uid or event.external_id == prepared.event.external_id
         ]
     if len(matches) > 1:
-        raise PublicationSafetyError(
-            "Multiple remote events claim the workout ownership identity"
-        )
-    for remote in matches:
+        raise PublicationSafetyError("Multiple remote events claim the workout ownership identity")
+    fresh_matches = [
+        get_exact_event(client, remote.id, athlete_id=prepared.athlete_id) for remote in matches
+    ]
+    for remote in fresh_matches:
         if previous is not None:
             assert_remote_ownership(
                 remote,
                 uid=previous.uid,
-                external_id=prepared.external_id,
+                external_id=prepared.event.external_id,
             )
         else:
             assert_remote_external_ownership(
                 remote,
-                external_id=prepared.external_id,
+                external_id=prepared.event.external_id,
             )
-    return matches
+    return fresh_matches

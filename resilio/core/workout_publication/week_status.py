@@ -20,12 +20,16 @@ from resilio.core.workout_publication.policy import (
     PublicationSafetyError,
     RemoteWorkoutDriftError,
 )
+from resilio.core.workout_publication.retained_authority import (
+    RetainedPublicationAuthorities,
+)
 from resilio.core.workout_publication.retirement_service import (
+    RetirementVerification,
     WorkoutRetirementService,
 )
 from resilio.core.workout_publication.week_selection import (
     select_run_week_items,
-    stale_future_owned_run_ids,
+    stale_owned_run_candidates,
 )
 from resilio.integrations.intervals_icu.client import IntervalsIcuClient
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError
@@ -34,8 +38,11 @@ from resilio.schemas.publication import (
     WeekSynchronizationItem,
 )
 
-VerifyWorkout = Callable[[AuthoritativeWorkout, str], None]
-VerifyDeletion = Callable[[str, AuthoritativeWorkout | None, str | None], None]
+VerifyWorkout = Callable[[AuthoritativeWorkout, str], date]
+VerifyDeletion = Callable[
+    [str, RetainedPublicationAuthorities | None],
+    RetirementVerification,
+]
 
 
 def publication_error_type(exc: Exception) -> str:
@@ -65,7 +72,7 @@ def _verified_workout_items(
     for workout in selected:
         provider_name = provider_names_by_local_workout_id[workout.identity.local_workout_id]
         try:
-            verify_workout(workout, provider_name)
+            provider_occurrence_date = verify_workout(workout, provider_name)
         except Exception as exc:
             passed = False
             drift_token = (
@@ -96,9 +103,7 @@ def _verified_workout_items(
                 WeekSynchronizationItem(
                     local_workout_id=workout.identity.local_workout_id,
                     occurrence_date=workout.prescription.date,
-                    provider_occurrence_date=provider_occurrence_dates_by_local_workout_id[
-                        workout.identity.local_workout_id
-                    ],
+                    provider_occurrence_date=provider_occurrence_date,
                     status="ready",
                     garmin_forwarding_status=(
                         "eligible_unverified" if garmin_forwarding_eligible else "not_configured"
@@ -112,19 +117,21 @@ def _verified_deletion_items(
     repo: RepositoryIO,
     *,
     local_workout_ids: list[str],
-    workouts_by_local_id: dict[str, AuthoritativeWorkout],
-    provider_names_by_local_workout_id: dict[str, str],
+    retained_authorities_by_local_id: dict[str, RetainedPublicationAuthorities],
     retirement_service: WorkoutRetirementService,
     verify_deletion: VerifyDeletion,
     as_of_date: date,
-) -> tuple[list[WeekSynchronizationItem], bool]:
+) -> tuple[list[WeekSynchronizationItem], list[str], bool]:
     items: list[WeekSynchronizationItem] = []
+    verified_candidate_ids: list[str] = []
     passed = True
     for local_workout_id in local_workout_ids:
-        authoritative_workout = workouts_by_local_id.get(local_workout_id)
-        provider_name = provider_names_by_local_workout_id.get(local_workout_id)
+        retained_authorities = retained_authorities_by_local_id.get(local_workout_id)
         try:
-            verify_deletion(local_workout_id, authoritative_workout, provider_name)
+            verification = verify_deletion(
+                local_workout_id,
+                retained_authorities,
+            )
         except Exception as exc:
             passed = False
             manifest = load_manifest(repo)
@@ -137,16 +144,17 @@ def _verified_deletion_items(
                 if pending is not None
                 else as_of_date
             )
+            preferred_authority = (
+                retained_authorities.preferred() if retained_authorities is not None else None
+            )
             drift_token = (
                 observe_publication_drift_target(
                     retirement_service,
                     local_workout_id=local_workout_id,
-                    authoritative_workout=authoritative_workout,
-                    provider_name=provider_name,
+                    authoritative_workout=preferred_authority.workout,
+                    provider_name=preferred_authority.provider_name,
                 ).confirmation_token_sha256
-                if isinstance(exc, RemoteWorkoutDriftError)
-                and authoritative_workout is not None
-                and provider_name is not None
+                if isinstance(exc, RemoteWorkoutDriftError) and preferred_authority is not None
                 else None
             )
             items.append(
@@ -159,7 +167,28 @@ def _verified_deletion_items(
                     drift_resolution_token_sha256=drift_token,
                 )
             )
-    return items, passed
+        else:
+            verified_candidate_ids.append(local_workout_id)
+            if verification.retirement_required:
+                continue
+            manifest = load_manifest(repo)
+            record = manifest.workouts.get(local_workout_id)
+            pending = manifest.pending.get(local_workout_id)
+            items.append(
+                WeekSynchronizationItem(
+                    local_workout_id=local_workout_id,
+                    occurrence_date=(
+                        record.occurrence_date
+                        if record is not None
+                        else pending.occurrence_date
+                        if pending is not None
+                        else as_of_date
+                    ),
+                    provider_occurrence_date=(verification.provider_occurrence_date),
+                    status="skipped_past",
+                )
+            )
+    return items, verified_candidate_ids, passed
 
 
 def build_run_week_status(
@@ -173,8 +202,10 @@ def build_run_week_status(
     restore_local: bool,
     verify_workout: VerifyWorkout,
     verify_deletion: VerifyDeletion,
-    deletion_authorities_by_local_workout_id: dict[str, AuthoritativeWorkout],
-    deletion_provider_names_by_local_workout_id: dict[str, str],
+    deletion_authorities_by_local_workout_id: dict[
+        str,
+        RetainedPublicationAuthorities,
+    ],
     provider_occurrence_dates_by_local_workout_id: dict[str, date],
 ) -> RunWeekSynchronizationReport:
     """Project verification results without changing local or provider state."""
@@ -184,13 +215,11 @@ def build_run_week_status(
         workouts=workouts,
         as_of_date=as_of_date,
     )
-    stale_ids = stale_future_owned_run_ids(
+    stale_ids = stale_owned_run_candidates(
         repo,
         week_identity=week_identity,
         current_run_ids=current_run_ids,
-        as_of_date=as_of_date,
     )
-    deletion_ids = stale_ids
     provider_names = provider_workout_names([item.prescription for item in workouts])
     workout_items, workouts_passed = _verified_workout_items(
         selected=selected,
@@ -202,13 +231,10 @@ def build_run_week_status(
             provider_occurrence_dates_by_local_workout_id
         ),
     )
-    deletion_items, deletions_passed = _verified_deletion_items(
+    deletion_items, deletion_candidate_ids, deletions_passed = _verified_deletion_items(
         repo,
-        local_workout_ids=deletion_ids,
-        workouts_by_local_id=deletion_authorities_by_local_workout_id,
-        provider_names_by_local_workout_id=(
-            deletion_provider_names_by_local_workout_id
-        ),
+        local_workout_ids=stale_ids,
+        retained_authorities_by_local_id=(deletion_authorities_by_local_workout_id),
         retirement_service=retirement_service,
         verify_deletion=verify_deletion,
         as_of_date=as_of_date,
@@ -219,9 +245,9 @@ def build_run_week_status(
         operation="restore_local" if restore_local else "status",
         reconciliation_safe=workouts_passed and deletions_passed,
         run_workouts_considered=len(selected) + len(skipped),
-        desired_future_run_workouts=len(selected),
+        run_workouts_requiring_reconciliation=len(selected),
         partial=not workouts_passed or not deletions_passed,
         capabilities=capabilities,
         items=[*skipped, *workout_items, *deletion_items],
-        owned_future_deletion_ids=deletion_ids,
+        owned_deletion_candidate_ids=deletion_candidate_ids,
     )

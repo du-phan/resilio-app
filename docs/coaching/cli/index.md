@@ -103,7 +103,12 @@ authority. Commands return JSON envelopes.
   capabilities reported as limitations rather than global blockers.
 - `resilio workout status|reconcile --week-number <N>` — inspect without
   mutation or converge one exact applied week's running-workout desired state;
-  non-running prescriptions are invalid upstream and never reach publication.
+  an exact same-week date-only Intervals drag is retained as provider calendar
+  placement while the approved date remains immutable. Start-time, content,
+  and unpaired cross-week changes remain protected drift. Removed workout
+  deletion eligibility is classified from the live provider date, so a moved
+  past event is preserved and a moved future event cannot become orphaned.
+  Non-running prescriptions are invalid upstream and never reach publication.
 - `resilio workout fulfillment-candidates --activity-id <ID>` — list every
   factual same-week applied-run candidate in the current active plan without
   selecting one; closed plans remain immutable.
@@ -136,7 +141,8 @@ authority. Commands return JSON envelopes.
 - `resilio workout resolve-drift --week-number <N>
   --drift-target-token <SHA> --confirmation-reference <TEXT>` — replace only
   the exact owned remote bytes represented by the status token after explicit
-  athlete confirmation. There is no automatic remote adoption.
+  athlete confirmation. The same-week date-only placement rule does not adopt
+  remote workout-content, start-time, or cross-week changes.
 - `resilio workout resolve-pairing-drift --week-number <N>
   --pairing-drift-token <SHA> --confirmation-reference <TEXT>` — restore only
   an exact removed verified native pair, including one whose original writer

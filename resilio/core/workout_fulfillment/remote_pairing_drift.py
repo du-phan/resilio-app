@@ -27,7 +27,8 @@ from resilio.schemas.workout_pairing import (
 
 
 class ActivityPairingInspectionClient(Protocol):
-    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO: ...
+    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO:
+        ...
 
 
 def confirm_remote_pairing_drift(
@@ -85,8 +86,8 @@ def _prepare_pairing_drift_resolution(
     )
     if (
         activity is None
-        or activity.origin.intervals_icu_activity_id
-        != operation.intervals_icu_activity_id
+        or remote.id != operation.intervals_icu_activity_id
+        or activity.origin.intervals_icu_activity_id != operation.intervals_icu_activity_id
         or activity.audit.performance_evidence_sha256 is None
         or performance_evidence_fingerprint(remote, activity.occurrence.timezone)
         != activity.audit.performance_evidence_sha256

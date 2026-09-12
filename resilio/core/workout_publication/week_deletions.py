@@ -1,27 +1,28 @@
-"""Reconcile ownership-proven future deletions for one applied week."""
+"""Reconcile ownership-proven stale deletions for one applied week."""
 
 from __future__ import annotations
 
 from datetime import date
 from typing import Callable
 
-from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.core.workout_publication.policy import provider_local_date
+from resilio.core.workout_publication.retained_authority import (
+    RetainedPublicationAuthorities,
+)
 from resilio.core.workout_publication.retirement_service import (
     WorkoutRetirementService,
 )
 from resilio.schemas.publication import WeekSynchronizationItem
 
 
-def reconcile_owned_future_deletions(
+def reconcile_owned_deletions(
     *,
     repo: RepositoryIO,
     retirement_service: WorkoutRetirementService,
     local_workout_ids: list[str],
-    authoritative_workouts_by_local_id: dict[str, AuthoritativeWorkout],
-    provider_names_by_local_workout_id: dict[str, str],
+    retained_authorities_by_local_id: dict[str, RetainedPublicationAuthorities],
     as_of_date: date,
     restore_local: bool,
     confirmed_remote_targets: dict[str, tuple[int, str]] | None,
@@ -62,12 +63,8 @@ def reconcile_owned_future_deletions(
                 local_workout_id,
                 restore_local=restore_confirmed_target,
                 expected_remote_target=expected_target,
-                authoritative_workout=authoritative_workouts_by_local_id.get(
-                    local_workout_id
-                ),
-                provider_name=provider_names_by_local_workout_id.get(
-                    local_workout_id
-                ),
+                retained_authorities=retained_authorities_by_local_id.get(local_workout_id),
+                as_of_date=as_of_date,
             )
         except Exception as exc:
             partial = True
@@ -87,7 +84,9 @@ def reconcile_owned_future_deletions(
                 WeekSynchronizationItem(
                     local_workout_id=local_workout_id,
                     occurrence_date=occurrence_date,
-                    provider_occurrence_date=provider_occurrence_date,
+                    provider_occurrence_date=(
+                        result.provider_occurrence_date or provider_occurrence_date
+                    ),
                     status=result.action,
                     event_id=result.event_id,
                 )

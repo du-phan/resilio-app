@@ -224,10 +224,30 @@ is target-oriented, not a step-count proof. A targetless run can therefore show
 distance/time steps, intensities, and prompts.
 
 The publication manifest plus exact remote UID/external ID and the last
-verified owned-field fingerprint is the ownership proof. Update, reschedule,
-and delete refuse ambiguous, unowned, or drifted events. One canonical lock
-order holds publication authority before plan authority for reconciliation and
-plan closure. After an ambiguous pending create, recovery first searches the
+verified owned-field fingerprint is the ownership proof. Update and delete
+refuse ambiguous, unowned, or drifted events. Every event and activity point
+read must return the exact requested provider ID. When Intervals assigns a new
+UID to an owned event, recovery retains the deterministic request UID locally
+but binds later update and deletion mutations to the freshly proven provider
+UID and original event ID; it never creates a replacement event implicitly.
+Rescheduling has one narrow
+provider-calendar placement exception: an exact owned event may be dragged to
+another date in the same Monday-Sunday training week when the provider
+local-time component derived from its prescription and every other owned field
+and parsed workout semantic remain unchanged. Status reports the approved and
+provider dates separately; reconciliation persists the
+exact remote readback without sending an update or changing approved plan
+authority. Already-published events remain eligible for this read-only
+inspection after their approved date passes; never-published past workouts are
+still not created. Cross-week, start-time, content, name, description, target,
+and step changes remain protected drift unless a current exact provider pair
+proves the cross-week execution fact. Publication schema v9 stores a base
+approved/provider-observed calendar placement and an optional exact fulfillment
+override. A current exact fulfillment fixes the effective provider occurrence
+to its factual execution date; revocation removes only that override and
+preserves any independent provider-calendar base. One
+canonical lock order holds publication authority before plan authority for
+reconciliation and plan closure. After an ambiguous pending create, recovery first searches the
 authoritative week and then the provider-wide ISO calendar range for the exact
 UID/external ID. Ordinary publication can retry its idempotent UID upsert after
 provider-wide absence. Deletion never treats that point-in-time absence as
@@ -239,7 +259,12 @@ week-specific reconciliation. Changed late bytes require their own exact
 athlete-confirmed deletion token; the confirmation is persisted before the
 remote mutation and never removes the tombstone.
 A replacement week updates retained identities and deletes only
-removed future unfulfilled events after exact ownership proof. Fulfilled
+removed unfulfilled events whose live provider occurrence is not past after
+exact ownership proof. The deletion preflight reads the provider date instead
+of trusting a stale locally recorded date, accepts the same narrow date-only
+move only after reconstructing the immutable applied prescription and checking
+its full parsed semantics, and repeats the date check immediately before
+deletion. Fulfilled
 workouts retain their approved dates in local authority while the exact owned
 Intervals occurrence is placed on the factual execution date. Early, same-day,
 and late activities retain their execution dates and are linked to that owned
@@ -250,9 +275,9 @@ other activity fields unchanged. A different existing pair, immutable activity
 source, provider failure, or removed verified pair blocks without deleting
 either record; an ambiguously authored removed pair exposes the same exact
 athlete-confirmed drift-resolution path. Explicit publication and pairing drift
-resolutions are separate athlete authorities. Adherence accepts exact provider pairing or an
-athlete-confirmed candidate revalidated against immutable applied authority; it
-never uses date/sport/duration resemblance automatically.
+resolutions are separate athlete authorities. Adherence accepts exact provider
+pairing or an athlete-confirmed candidate revalidated against immutable applied
+authority; it never uses date/sport/duration resemblance automatically.
 
 Only a qualified plan/revision/week/workout identity resolved from the active
 planning-state aggregate may be published. The aggregate must have a fresh

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import cast
 
 from resilio.core.activity_sync.archive import ActivityArchive
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
@@ -10,14 +11,32 @@ from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.remote_pairing import (
     WorkoutPairingReconciliationService,
 )
+from resilio.core.workout_fulfillment.remote_pairing_inspection import (
+    validate_remote_performance_evidence,
+)
 from resilio.core.workout_fulfillment.remote_unpairing import (
     WorkoutUnpairingReconciliationService,
     actionable_unpair_operations,
 )
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
+from resilio.core.workout_publication.authority_matching import (
+    publication_record_matches_current_workout_authority,
+)
 from resilio.core.workout_publication.manifest import load_manifest
+from resilio.core.workout_publication.policy import (
+    PublicationSafetyError,
+    assert_remote_external_ownership,
+)
+from resilio.core.workout_publication.remote_event_read import get_exact_event
+from resilio.integrations.intervals_icu.activity_pairing import (
+    activity_source_supports_pairing,
+)
+from resilio.integrations.intervals_icu.client import IntervalsIcuClient
+from resilio.integrations.intervals_icu.errors import IntervalsNotFoundError
+from resilio.schemas.activity import CanonicalActivity
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import (
+    PendingWorkoutPublication,
     PublishedWorkout,
     RunWeekSynchronizationReport,
     WeekSynchronizationItem,
@@ -47,9 +66,7 @@ def confirmed_pairing_drift_retry_tokens(
         if item.remote_pairing_operation_id is not None
     }
     confirmed_tokens: set[str] = set()
-    for resolution in load_fulfillment_manifest(
-        repo
-    ).remote_pairing_drift_resolutions:
+    for resolution in load_fulfillment_manifest(repo).remote_pairing_drift_resolutions:
         token_sha256 = resolution.pairing_drift_token_sha256
         if token_sha256 not in supplied_tokens:
             continue
@@ -71,34 +88,152 @@ def _identity_key(identity: PlanWorkoutIdentity) -> WorkoutIdentityKey:
     )
 
 
-def _confirmed_fulfillments_by_identity(
+def _fulfillments_by_identity(
     manifest: WorkoutFulfillmentManifest,
 ) -> dict[WorkoutIdentityKey, WorkoutFulfillmentRecord]:
     return {
-        _identity_key(record.workout_identity): record
-        for record in manifest.fulfillments.values()
-        if record.athlete_confirmation is not None
+        _identity_key(record.workout_identity): record for record in manifest.fulfillments.values()
     }
 
 
 def _publication_matches_pairing_authority(
-    publication: PublishedWorkout,
+    publication: PublishedWorkout | PendingWorkoutPublication,
     workout: AuthoritativeWorkout,
     fulfillment: WorkoutFulfillmentRecord,
 ) -> bool:
-    """Return whether this publication is the exact current native-pair target."""
+    """Return whether publication and fulfillment share exact current authority."""
     return (
-        publication.workout_identity == workout.identity == fulfillment.workout_identity
-        and publication.applied_week_approval_id
-        == workout.applied_week_approval_id
-        == fulfillment.applied_week_approval_id
-        and publication.applied_running_workouts_sha256
-        == workout.applied_running_workouts_sha256
-        == fulfillment.applied_running_workouts_sha256
-        and publication.workout_prescription_sha256
-        == fulfillment.workout_prescription_sha256
+        publication_record_matches_current_workout_authority(publication, workout)
+        and workout.identity == fulfillment.workout_identity
+        and publication.workout_prescription_sha256 == fulfillment.workout_prescription_sha256
         and publication.occurrence_date == fulfillment.scheduled_local_date
         and publication.schedule_timezone == fulfillment.schedule_timezone
+    )
+
+
+def _inspect_pending_pairing(
+    pairing_service: WorkoutPairingReconciliationService,
+    pending: PendingWorkoutPublication,
+    fulfillment: WorkoutFulfillmentRecord,
+    activity: CanonicalActivity,
+) -> RemoteWorkoutPairingResult | None:
+    """Verify live native pairing before a pending event can be recovered."""
+    provider_pair = fulfillment.provider_pair
+    external_activity_id = activity.origin.intervals_icu_activity_id
+    if external_activity_id is None:
+        raise ValueError("Native pairing requires an Intervals.icu activity identity")
+    remote = pairing_service.client.get_activity(
+        external_activity_id,
+        intervals=True,
+    )
+    validate_remote_performance_evidence(
+        remote,
+        activity,
+        expected_external_activity_id=external_activity_id,
+    )
+    expected_event_id = provider_pair.event_id if provider_pair is not None else None
+    if provider_pair is None and remote.paired_event_id is not None:
+        provider_client = cast(IntervalsIcuClient, pairing_service.client)
+        try:
+            paired_event = get_exact_event(provider_client, remote.paired_event_id)
+            assert_remote_external_ownership(
+                paired_event,
+                external_id=pending.external_id,
+            )
+        except (IntervalsNotFoundError, PublicationSafetyError):
+            pass
+        else:
+            expected_event_id = paired_event.id
+    if expected_event_id is not None and remote.paired_event_id == expected_event_id:
+        return RemoteWorkoutPairingResult(
+            local_activity_id=fulfillment.local_activity_id,
+            local_workout_id=fulfillment.workout_identity.local_workout_id,
+            intervals_icu_activity_id=external_activity_id,
+            event_id=expected_event_id,
+            status="pairing_noop",
+        )
+    if remote.paired_event_id is not None:
+        return RemoteWorkoutPairingResult(
+            local_activity_id=fulfillment.local_activity_id,
+            local_workout_id=fulfillment.workout_identity.local_workout_id,
+            intervals_icu_activity_id=external_activity_id,
+            event_id=expected_event_id or remote.paired_event_id,
+            status="pairing_blocked",
+            blocker_code="activity_paired_to_different_event",
+            message="Intervals activity is already paired to a different event",
+        )
+    if provider_pair is not None and fulfillment.athlete_confirmation is None:
+        blocker_code = (
+            "provider_observed_pair_missing"
+            if provider_pair.provenance == "provider_observed"
+            else "resilio_requested_pair_removed"
+        )
+        return RemoteWorkoutPairingResult(
+            local_activity_id=fulfillment.local_activity_id,
+            local_workout_id=fulfillment.workout_identity.local_workout_id,
+            intervals_icu_activity_id=external_activity_id,
+            event_id=provider_pair.event_id,
+            status="pairing_blocked",
+            blocker_code=blocker_code,
+            message="Intervals no longer reports the provider-paired fulfillment",
+        )
+    if not activity_source_supports_pairing(remote):
+        return _immutable_source_pairing_blocker(
+            fulfillment,
+            external_activity_id=external_activity_id,
+        )
+    return None
+
+
+def _immutable_source_pairing_blocker(
+    fulfillment: WorkoutFulfillmentRecord,
+    *,
+    external_activity_id: str,
+) -> RemoteWorkoutPairingResult:
+    """Describe a required native pair that Intervals cannot mutate."""
+    return RemoteWorkoutPairingResult(
+        local_activity_id=fulfillment.local_activity_id,
+        local_workout_id=fulfillment.workout_identity.local_workout_id,
+        intervals_icu_activity_id=external_activity_id,
+        event_id=(
+            fulfillment.provider_pair.event_id if fulfillment.provider_pair is not None else None
+        ),
+        status="pairing_blocked",
+        blocker_code="activity_source_is_not_mutable",
+        message="Intervals does not allow pairing updates for this activity source",
+    )
+
+
+def _inspect_unpublished_pairing(
+    pairing_service: WorkoutPairingReconciliationService,
+    fulfillment: WorkoutFulfillmentRecord,
+    activity: CanonicalActivity,
+) -> RemoteWorkoutPairingResult | None:
+    """Block an unrelated native pair before the first publication attempt."""
+    external_activity_id = activity.origin.intervals_icu_activity_id
+    if external_activity_id is None:
+        raise ValueError("Native pairing requires an Intervals.icu activity identity")
+    remote = pairing_service.client.get_activity(external_activity_id, intervals=True)
+    validate_remote_performance_evidence(
+        remote,
+        activity,
+        expected_external_activity_id=external_activity_id,
+    )
+    if remote.paired_event_id is None:
+        if not activity_source_supports_pairing(remote):
+            return _immutable_source_pairing_blocker(
+                fulfillment,
+                external_activity_id=external_activity_id,
+            )
+        return None
+    return RemoteWorkoutPairingResult(
+        local_activity_id=fulfillment.local_activity_id,
+        local_workout_id=fulfillment.workout_identity.local_workout_id,
+        intervals_icu_activity_id=external_activity_id,
+        event_id=remote.paired_event_id,
+        status="pairing_blocked",
+        blocker_code="activity_paired_to_different_event",
+        message="Intervals activity is already paired to a different event",
     )
 
 
@@ -110,9 +245,7 @@ def _latest_unpair_operations(
     operations_by_workout_id: dict[str, RemoteWorkoutPairingOperation] = {}
     for operation in actionable_unpair_operations(manifest):
         identity = operation.workout_identity
-        if (
-            _identity_key(identity) not in workout_identity_keys
-        ):
+        if _identity_key(identity) not in workout_identity_keys:
             continue
         previous = operations_by_workout_id.get(identity.local_workout_id)
         if previous is None or operation.requested_at_utc > previous.requested_at_utc:
@@ -149,6 +282,34 @@ def _pair_fulfilled_workouts(
             continue
         publication = publication_manifest.workouts.get(local_workout_id)
         if publication is None:
+            pending = publication_manifest.pending.get(local_workout_id)
+            if pending is None:
+                try:
+                    unpublished_result = _inspect_unpublished_pairing(
+                        pairing_service,
+                        fulfillment,
+                        activity,
+                    )
+                except Exception as exc:
+                    failures[local_workout_id] = str(exc)
+                else:
+                    if unpublished_result is not None:
+                        results[local_workout_id] = unpublished_result
+                continue
+            if not _publication_matches_pairing_authority(pending, workout, fulfillment):
+                continue
+            try:
+                pending_result = _inspect_pending_pairing(
+                    pairing_service,
+                    pending,
+                    fulfillment,
+                    activity,
+                )
+            except Exception as exc:
+                failures[local_workout_id] = str(exc)
+            else:
+                if pending_result is not None:
+                    results[local_workout_id] = pending_result
             continue
         if not mutate and not _publication_matches_pairing_authority(
             publication,
@@ -255,7 +416,7 @@ def attach_remote_pairing_status(
         repo=repo,
         pairing_service=pairing_service,
         workouts=workouts,
-        fulfillments_by_identity=_confirmed_fulfillments_by_identity(fulfillment_manifest),
+        fulfillments_by_identity=_fulfillments_by_identity(fulfillment_manifest),
         excluded_local_workout_ids=unfinished_unpair_workout_ids,
         mutate=mutate,
     )

@@ -72,7 +72,7 @@ class RemoteWorkoutPairingResult(BaseModel):
     local_activity_id: str = Field(min_length=1)
     local_workout_id: str = Field(min_length=1)
     intervals_icu_activity_id: str = Field(min_length=1)
-    event_id: int = Field(gt=0)
+    event_id: int | None = Field(default=None, gt=0)
     status: RemotePairingStatus
     operation_id: str | None = Field(
         default=None,
@@ -92,6 +92,13 @@ class RemoteWorkoutPairingResult(BaseModel):
         blocked = self.status == "pairing_blocked"
         if blocked != (self.blocker_code is not None and self.message is not None):
             raise ValueError("pairing blocker fields must match pairing_blocked status")
+        if self.event_id is None and (
+            not blocked or self.blocker_code != "activity_source_is_not_mutable"
+        ):
+            raise ValueError(
+                "pairing result requires an event except for an immutable-source "
+                "pre-publication blocker"
+            )
         return self
 
 
@@ -136,9 +143,7 @@ class RemotePairingDriftResolution(BaseModel):
             raise ValueError("pairing drift authority requires a pair-operation snapshot")
         expected_token = remote_pairing_drift_token_sha256(
             operation,
-            provider_activity_guard_sha256=(
-                self.observed_provider_activity_guard_sha256
-            ),
+            provider_activity_guard_sha256=(self.observed_provider_activity_guard_sha256),
         )
         if self.pairing_drift_token_sha256 != expected_token:
             raise ValueError("pairing drift token does not match its evidence snapshot")
@@ -159,8 +164,8 @@ class RemoteWorkoutPairingOperation(BaseModel):
     workout_identity: PlanWorkoutIdentity
     event_id: int = Field(gt=0)
     activity_performance_evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    publication_provider_event_fingerprint_sha256: str = Field(
-        pattern=r"^[0-9a-f]{64}$"
+    publication_provider_event_fingerprint_sha256: str | None = Field(
+        default=None, pattern=r"^[0-9a-f]{64}$"
     )
     fulfillment_record_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     revocation_id: str | None = Field(
@@ -205,12 +210,13 @@ class RemoteWorkoutPairingOperation(BaseModel):
     @model_validator(mode="after")
     def lifecycle_is_coherent(self) -> "RemoteWorkoutPairingOperation":
         if self.action == "pair":
-            if self.expected_paired_event_id_before is not None or self.revocation_id is not None:
+            if (
+                self.publication_provider_event_fingerprint_sha256 is None
+                or self.expected_paired_event_id_before is not None
+                or self.revocation_id is not None
+            ):
                 raise ValueError("pair operation must start from an unpaired activity")
-        elif (
-            self.expected_paired_event_id_before != self.event_id
-            or self.revocation_id is None
-        ):
+        elif self.expected_paired_event_id_before != self.event_id or self.revocation_id is None:
             raise ValueError("unpair operation requires its exact pair and revocation")
         if self.state == "verified":
             if (

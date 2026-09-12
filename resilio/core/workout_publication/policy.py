@@ -13,6 +13,8 @@ from resilio.core.workout_publication.semantics import (
     StepSemantics,
     WorkoutSemanticsError,
     assert_workout_semantics_match,
+    provider_workout_semantics,
+    workout_semantics_sha256,
 )
 from resilio.integrations.intervals_icu.dto import (
     ActivityFilterDTO,
@@ -109,6 +111,19 @@ def provider_event_fingerprint(remote: EventDTO) -> str:
     return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
+def provider_event_state_fingerprint(remote: EventDTO) -> str:
+    """Fingerprint owned fields plus the provider's complete parsed workout state."""
+    payload = {
+        "owned_field_fingerprint_sha256": provider_event_fingerprint(remote),
+        "workout_doc": (
+            remote.workout_doc.model_dump(mode="json", exclude_none=False)
+            if remote.workout_doc is not None
+            else None
+        ),
+    }
+    return sha256_text(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+
 def provider_local_date(provider_start_date_local: str) -> date:
     """Parse the exact local date from a persisted provider start timestamp."""
     try:
@@ -129,6 +144,20 @@ def assert_remote_unchanged(remote: EventDTO, previous: PublishedWorkout) -> Non
     if provider_event_fingerprint(remote) != previous.provider_event_fingerprint_sha256:
         raise RemoteWorkoutDriftError(
             "Remote event changed since Resilio verified the previous publication"
+        )
+    if remote.workout_doc is None:
+        raise RemoteWorkoutDriftError(
+            "Remote event lost its parsed workout document since verification"
+        )
+    try:
+        actual_step_semantics_sha256 = workout_semantics_sha256(
+            provider_workout_semantics(remote.workout_doc)
+        )
+    except WorkoutSemanticsError as exc:
+        raise RemoteWorkoutDriftError(str(exc)) from exc
+    if actual_step_semantics_sha256 != previous.provider_step_semantics_sha256:
+        raise RemoteWorkoutDriftError(
+            "Remote workout steps changed since Resilio verified the publication"
         )
 
 
@@ -305,12 +334,14 @@ def provider_push_errors(remote: EventDTO) -> list[PublicationPushError]:
 
 def garmin_forwarding_status(
     *,
-    eligible: bool,
+    eligible: bool | None,
     remote: EventDTO,
 ) -> GarminForwardingStatus:
     has_garmin_error = any("garmin" in error.service.casefold() for error in remote.push_errors)
     if has_garmin_error:
         return "provider_error_observed"
+    if eligible is None:
+        return "eligibility_unknown"
     return "eligible_unverified" if eligible else "not_configured"
 
 
@@ -343,8 +374,9 @@ def published_record(
     fingerprint: str,
     rendered_hash: str,
     settings_version: str,
+    step_semantics_sha256: str,
     provider_start_local: str,
-    garmin_eligible: bool,
+    garmin_eligible: bool | None,
     remote: EventDTO,
 ) -> PublishedWorkout:
     """Build a verified provider read-back record."""
@@ -362,6 +394,7 @@ def published_record(
         rendered_workout_sha256=rendered_hash,
         sport_settings_version_sha256=settings_version,
         provider_event_fingerprint_sha256=provider_event_fingerprint(remote),
+        provider_step_semantics_sha256=step_semantics_sha256,
         sport="run",
         occurrence_date=workout.date,
         approved_start_time_local=workout.start_time_local,

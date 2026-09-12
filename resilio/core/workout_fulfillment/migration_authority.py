@@ -53,7 +53,17 @@ def _temporally_applicable_authorities(
             and item.plan_approved_at_utc <= deadline_utc
             and item.weekly_approved_at_utc <= deadline_utc
             and item.valid_from_utc <= deadline_utc
-            and (item.valid_until_utc is None or deadline_utc < item.valid_until_utc)
+            and (
+                evidence_observed_at_utc is None or item.valid_from_utc <= evidence_observed_at_utc
+            )
+            and (
+                item.valid_until_utc is None
+                or deadline_utc < item.valid_until_utc
+                or (
+                    evidence_observed_at_utc is not None
+                    and evidence_observed_at_utc < item.valid_until_utc
+                )
+            )
             and (
                 item.retired_at_utc is None
                 or deadline_utc < item.retired_at_utc
@@ -195,8 +205,7 @@ def validate_migrated_publication_authority(
     matches = [
         item
         for item in applicable
-        if publication.applied_week_approval_id
-        == item.workout.applied_week_approval_id
+        if publication.applied_week_approval_id == item.workout.applied_week_approval_id
         and publication.applied_running_workouts_sha256
         == item.workout.applied_running_workouts_sha256
         and publication.workout_prescription_sha256
@@ -205,6 +214,4 @@ def validate_migrated_publication_authority(
         and publication.occurrence_date == item.workout.prescription.date
     ]
     if len(matches) != 1:
-        raise ValueError(
-            "Migrated publication lacks one exact schedule-time workout authority"
-        )
+        raise ValueError("Migrated publication lacks one exact schedule-time workout authority")

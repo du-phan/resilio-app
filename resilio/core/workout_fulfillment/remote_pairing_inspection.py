@@ -46,29 +46,33 @@ from resilio.schemas.workout_pairing import (
 
 
 class ActivityPairingClient(Protocol):
-    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO: ...
+    def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO:
+        ...
 
     def update_activity_pairing(
         self,
         activity_id: str,
         pairing: ActivityPairingWriteDTO,
-    ) -> ActivityDTO: ...
+    ) -> ActivityDTO:
+        ...
 
 
 def validate_remote_performance_evidence(
     remote: ActivityDTO,
     activity: CanonicalActivity,
+    *,
+    expected_external_activity_id: str,
 ) -> None:
     """Require the remote activity to match its synchronized canonical evidence."""
+    if remote.id != expected_external_activity_id:
+        raise ValueError("Intervals activity readback identity changed")
     expected_sha256 = activity.audit.performance_evidence_sha256
     observed_sha256 = performance_evidence_fingerprint(
         remote,
         activity.occurrence.timezone,
     )
     if expected_sha256 is None or observed_sha256 != expected_sha256:
-        raise ValueError(
-            "Intervals activity performance changed after canonical synchronization"
-        )
+        raise ValueError("Intervals activity performance changed after canonical synchronization")
 
 
 def validate_local_pairing_evidence(
@@ -82,13 +86,15 @@ def validate_local_pairing_evidence(
     """Prove exact local authority and return the external activity identity."""
     assert_fulfillment_authority_is_current(fulfillment, authority)
     assert_fulfillment_is_usable(fulfillment, activity, manifest)
-    if fulfillment.athlete_confirmation is None:
-        raise ValueError("Native pairing mutation requires athlete-confirmed fulfillment")
     if publication.workout_identity != fulfillment.workout_identity:
         raise ValueError("Native pairing publication identity does not match fulfillment")
     if (
-        publication.workout_prescription_sha256
-        != fulfillment.workout_prescription_sha256
+        fulfillment.provider_pair is not None
+        and fulfillment.provider_pair.event_id != publication.event_id
+    ):
+        raise ValueError("Native pairing provider-pair event does not match publication")
+    if (
+        publication.workout_prescription_sha256 != fulfillment.workout_prescription_sha256
         or publication.occurrence_date != fulfillment.scheduled_local_date
         or publication.schedule_timezone != fulfillment.schedule_timezone
     ):
@@ -130,8 +136,7 @@ def matching_pairing_drift_resolution(
             for resolution in manifest.remote_pairing_drift_resolutions
             if resolution.pairing_drift_token_sha256 == drift_token
             and resolution.pair_operation_snapshot == operation
-            and resolution.observed_provider_activity_guard_sha256
-            == observed_guard_sha256
+            and resolution.observed_provider_activity_guard_sha256 == observed_guard_sha256
         ),
         None,
     )
@@ -156,6 +161,26 @@ def pairing_guard_blocker(
     )
 
 
+def provider_observed_pair_restoration_blocker(
+    operation: RemoteWorkoutPairingOperation,
+    fulfillment: WorkoutFulfillmentRecord,
+    *,
+    observed_paired_event_id: int | None,
+) -> RemoteWorkoutPairingResult | None:
+    """Block restoration when only the provider's former pair authorized it."""
+    if fulfillment.athlete_confirmation is not None or observed_paired_event_id is not None:
+        return None
+    return pairing_result(
+        operation,
+        status="pairing_blocked",
+        blocker_code="provider_observed_pair_missing",
+        message=(
+            "The provider-observed pair is no longer present and has no "
+            "athlete authority for restoration"
+        ),
+    )
+
+
 def inspect_remote_pairing(
     repo: RepositoryIO,
     client: ActivityPairingClient,
@@ -177,7 +202,11 @@ def inspect_remote_pairing(
         manifest=manifest,
     )
     remote = client.get_activity(external_activity_id, intervals=True)
-    validate_remote_performance_evidence(remote, activity)
+    validate_remote_performance_evidence(
+        remote,
+        activity,
+        expected_external_activity_id=external_activity_id,
+    )
     existing_operation = matching_resilio_pair_operation(
         manifest,
         fulfillment=fulfillment,
@@ -189,6 +218,13 @@ def inspect_remote_pairing(
         external_activity_id=external_activity_id,
         requested_at_utc=inspection_time_utc,
     )
+    restoration_blocker = provider_observed_pair_restoration_blocker(
+        operation,
+        fulfillment,
+        observed_paired_event_id=remote.paired_event_id,
+    )
+    if restoration_blocker is not None:
+        return restoration_blocker
     observed_guard_sha256 = activity_pairing_guard_sha256(remote)
     guard_changed = pending_pair_guard_changed(
         operation,

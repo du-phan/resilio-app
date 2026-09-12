@@ -2,9 +2,16 @@ from datetime import date, datetime, timezone
 
 import pytest
 
+from resilio.canonical import canonical_data_sha256
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.candidates import FulfillmentWorkoutAuthority
+from resilio.core.workout_fulfillment.current_fulfillment_migration import (
+    migrate_current_fulfillment_manifest,
+)
+from resilio.core.workout_fulfillment.migration_authority import (
+    MigrationWorkoutAuthority,
+)
 from resilio.core.workout_fulfillment.repository import (
     WorkoutFulfillmentCutoverRequiredError,
     load_fulfillment_manifest,
@@ -18,8 +25,14 @@ from resilio.core.workout_publication.manifest import save_manifest
 from resilio.schemas.activity import ActivityOrigin, ActivityOriginKind
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
-from resilio.schemas.publication import PublicationManifest, PublishedWorkout
+from resilio.schemas.publication import (
+    PublicationManifest,
+    PublishedWorkout,
+    RetiredWorkoutPublication,
+)
+from resilio.schemas.publication_placement import ProviderOccurrencePlacement
 from resilio.schemas.workout_fulfillment import (
+    FulfillmentActivityEvidenceRevision,
     ProviderPairedFulfillmentEvidence,
     UnresolvedFulfillmentConflict,
     WorkoutFulfillmentManifest,
@@ -375,9 +388,7 @@ def test_revocation_stages_exact_unpair_for_a_native_provider_pair(
                 "w_easy": PublishedWorkout(
                     workout_identity=fulfillment.workout_identity,
                     applied_week_approval_id=fulfillment.applied_week_approval_id,
-                    applied_running_workouts_sha256=(
-                        fulfillment.applied_running_workouts_sha256
-                    ),
+                    applied_running_workouts_sha256=(fulfillment.applied_running_workouts_sha256),
                     workout_prescription_sha256=fulfillment.workout_prescription_sha256,
                     schedule_timezone=fulfillment.schedule_timezone,
                     event_id=42,
@@ -388,13 +399,19 @@ def test_revocation_stages_exact_unpair_for_a_native_provider_pair(
                     rendered_workout_sha256="5" * 64,
                     sport_settings_version_sha256="6" * 64,
                     provider_event_fingerprint_sha256="7" * 64,
+                    provider_step_semantics_sha256="8" * 64,
                     sport="run",
                     occurrence_date=fulfillment.scheduled_local_date,
                     provider_start_date_local="2026-08-11T00:00:00",
                     garmin_forwarding_status="not_configured",
                     verified_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
                 )
-            }
+            },
+            workout_provider_occurrence_placements={
+                "w_easy": ProviderOccurrencePlacement.approved_schedule(
+                    fulfillment.scheduled_local_date
+                )
+            },
         ),
     )
 
@@ -412,6 +429,212 @@ def test_revocation_stages_exact_unpair_for_a_native_provider_pair(
     assert operation.action == "unpair"
     assert operation.event_id == 42
     assert operation.state == "pending"
+
+
+def test_revocation_uses_historical_authority_across_activity_revision_and_id_reuse(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    service = _service(tmp_path, monkeypatch)
+    service.activity = service.activity.model_copy(
+        update={
+            "origin": ActivityOrigin(
+                kind=ActivityOriginKind.HISTORICAL_IMPORT,
+                intervals_icu_activity_id="i123",
+            )
+        }
+    )
+    candidate = service.candidates(local_activity_id="act_run")[0]
+    retired_fulfillment = _provider_fulfillment(candidate)
+    publication = PublishedWorkout(
+        workout_identity=retired_fulfillment.workout_identity,
+        applied_week_approval_id=retired_fulfillment.applied_week_approval_id,
+        applied_running_workouts_sha256=(retired_fulfillment.applied_running_workouts_sha256),
+        workout_prescription_sha256=(retired_fulfillment.workout_prescription_sha256),
+        schedule_timezone=retired_fulfillment.schedule_timezone,
+        event_id=42,
+        requested_uid="owned-uid",
+        uid="owned-uid",
+        external_id="resilio:v1:workout:w_easy",
+        publication_fingerprint_sha256="4" * 64,
+        rendered_workout_sha256="5" * 64,
+        sport_settings_version_sha256="6" * 64,
+        provider_event_fingerprint_sha256="7" * 64,
+        provider_step_semantics_sha256="8" * 64,
+        sport="run",
+        occurrence_date=retired_fulfillment.scheduled_local_date,
+        provider_start_date_local="2026-08-11T00:00:00",
+        garmin_forwarding_status="not_configured",
+        verified_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
+    )
+    revised_fulfillment = retired_fulfillment.model_copy(
+        update={
+            "activity_performance_evidence_sha256": "b" * 64,
+            "activity_evidence_revisions": [
+                FulfillmentActivityEvidenceRevision(
+                    previous_activity_performance_evidence_sha256=(
+                        retired_fulfillment.activity_performance_evidence_sha256
+                    ),
+                    replacement_activity_performance_evidence_sha256="b" * 64,
+                    previous_execution_local_date=(retired_fulfillment.execution_local_date),
+                    replacement_execution_local_date=(retired_fulfillment.execution_local_date),
+                    observed_at_utc=datetime(2026, 8, 10, 8, 30, tzinfo=timezone.utc),
+                )
+            ],
+        }
+    )
+    save_fulfillment_manifest(
+        service.repo,
+        WorkoutFulfillmentManifest(fulfillments={"act_run": revised_fulfillment}),
+    )
+    unrelated_identity = publication.workout_identity.model_copy(
+        update={
+            "plan_id": "plan_replacement",
+            "plan_revision_id": "plan_revision_fedcba9876543210",
+        }
+    )
+    unrelated_active = publication.model_copy(
+        update={
+            "workout_identity": unrelated_identity,
+            "event_id": 73,
+            "requested_uid": "replacement-request-uid",
+            "uid": "replacement-provider-uid",
+            "external_id": "resilio:v1:workout:replacement",
+        }
+    )
+    save_manifest(
+        service.repo,
+        PublicationManifest(
+            workouts={"w_easy": unrelated_active},
+            workout_provider_occurrence_placements={
+                "w_easy": ProviderOccurrencePlacement.approved_schedule(
+                    unrelated_active.occurrence_date
+                )
+            },
+            historical_fulfillment_event_retirements=[
+                RetiredWorkoutPublication(
+                    publication=publication,
+                    fulfilling_local_activity_id="act_run",
+                    fulfillment_record_sha256_at_retirement=(
+                        canonical_data_sha256(retired_fulfillment)
+                    ),
+                    execution_local_date_at_retirement=(retired_fulfillment.execution_local_date),
+                    schedule_offset_days_at_retirement=-1,
+                    provider_deletion_status="deleted",
+                    retired_at_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
+                )
+            ],
+        ),
+    )
+
+    service.revoke(
+        local_activity_id="act_run",
+        local_workout_id="w_easy",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the revised association.",
+        coaching_rationale="The revised activity no longer fulfills the retired workout.",
+        revoked_at_utc=datetime(2026, 8, 10, 9, tzinfo=timezone.utc),
+    )
+
+    operation = next(
+        iter(load_fulfillment_manifest(service.repo).remote_pairing_operations.values())
+    )
+    assert operation.action == "unpair"
+    assert operation.event_id == 42
+
+
+def test_v1_migration_then_runtime_revocation_uses_historical_authority(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    service = _service(tmp_path, monkeypatch)
+    service.activity = service.activity.model_copy(
+        update={
+            "origin": ActivityOrigin(
+                kind=ActivityOriginKind.HISTORICAL_IMPORT,
+                intervals_icu_activity_id="i123",
+            )
+        }
+    )
+    candidate = service.candidates(local_activity_id="act_run")[0]
+    v1_fulfillment = _provider_fulfillment(candidate)
+    raw_v1 = WorkoutFulfillmentManifest(fulfillments={"act_run": v1_fulfillment}).model_dump(
+        mode="json"
+    )
+    raw_v1["schema_version"] = 1
+    raw_v1.pop("remote_pairing_operations")
+    raw_v1.pop("remote_pairing_drift_resolutions")
+    raw_provider_pair = raw_v1["fulfillments"]["act_run"]["provider_pair"]
+    raw_provider_pair.pop("provenance")
+    v1_fulfillment_sha256 = canonical_data_sha256(raw_v1["fulfillments"]["act_run"])
+    publication = PublishedWorkout(
+        workout_identity=v1_fulfillment.workout_identity,
+        applied_week_approval_id=v1_fulfillment.applied_week_approval_id,
+        applied_running_workouts_sha256=(v1_fulfillment.applied_running_workouts_sha256),
+        workout_prescription_sha256=v1_fulfillment.workout_prescription_sha256,
+        schedule_timezone=v1_fulfillment.schedule_timezone,
+        event_id=42,
+        requested_uid="owned-uid",
+        uid="owned-uid",
+        external_id="resilio:v1:workout:w_easy",
+        publication_fingerprint_sha256="4" * 64,
+        rendered_workout_sha256="5" * 64,
+        sport_settings_version_sha256="6" * 64,
+        provider_event_fingerprint_sha256="7" * 64,
+        provider_step_semantics_sha256="8" * 64,
+        sport="run",
+        occurrence_date=v1_fulfillment.scheduled_local_date,
+        provider_start_date_local="2026-08-11T00:00:00",
+        garmin_forwarding_status="not_configured",
+        verified_at_utc=datetime(2026, 8, 10, 7, tzinfo=timezone.utc),
+    )
+    publication_manifest = PublicationManifest(
+        historical_fulfillment_event_retirements=[
+            RetiredWorkoutPublication(
+                publication=publication,
+                fulfilling_local_activity_id="act_run",
+                fulfillment_record_sha256_at_retirement=v1_fulfillment_sha256,
+                execution_local_date_at_retirement=(v1_fulfillment.execution_local_date),
+                schedule_offset_days_at_retirement=-1,
+                provider_deletion_status="deleted",
+                retired_at_utc=datetime(2026, 8, 10, 8, tzinfo=timezone.utc),
+            )
+        ]
+    )
+    authority = service._load_workout_authorities_unlocked()[0]
+    migration_authority = MigrationWorkoutAuthority(
+        workout=authority,
+        valid_from_utc=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        valid_until_utc=None,
+        plan_approved_at_utc=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        weekly_approved_at_utc=datetime(2026, 8, 1, tzinfo=timezone.utc),
+        effective_end_date=date(2026, 8, 16),
+        retired_at_utc=None,
+    )
+    migrated, changed = migrate_current_fulfillment_manifest(
+        raw_v1,
+        publication_manifest,
+        [migration_authority],
+        {"act_run": service.activity},
+    )
+    assert changed
+    save_fulfillment_manifest(service.repo, migrated)
+    save_manifest(service.repo, publication_manifest)
+
+    service.revoke(
+        local_activity_id="act_run",
+        local_workout_id="w_easy",
+        reason="association_incorrect",
+        athlete_confirmation_reference="Athlete withdrew the migrated association.",
+        coaching_rationale="The migrated provider pair must be removed.",
+        revoked_at_utc=datetime(2026, 8, 10, 9, tzinfo=timezone.utc),
+    )
+
+    operation = next(
+        iter(load_fulfillment_manifest(service.repo).remote_pairing_operations.values())
+    )
+    assert operation.action == "unpair"
+    assert operation.event_id == 42
 
 
 def test_dismissed_exact_candidate_is_not_offered_again(tmp_path, monkeypatch) -> None:
@@ -442,6 +665,20 @@ def test_normal_fulfillment_access_is_blocked_before_legacy_cutover(
     legacy_path = tmp_path / "data/state/workout_completions.json"
     legacy_path.parent.mkdir(parents=True)
     legacy_path.write_text('{"schema_version": 3, "matches": {}}')
+
+    with pytest.raises(WorkoutFulfillmentCutoverRequiredError, match="requires"):
+        load_fulfillment_manifest(RepositoryIO())
+
+
+def test_normal_fulfillment_access_is_blocked_while_publication_v8_awaits_cutover(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    (tmp_path / ".git").mkdir()
+    monkeypatch.chdir(tmp_path)
+    publication_path = tmp_path / "data/state/workout_publications.json"
+    publication_path.parent.mkdir(parents=True)
+    publication_path.write_text('{"schema_version": 8}')
 
     with pytest.raises(WorkoutFulfillmentCutoverRequiredError, match="requires"):
         load_fulfillment_manifest(RepositoryIO())

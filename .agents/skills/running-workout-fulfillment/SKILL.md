@@ -8,10 +8,12 @@ description: Detect and confirm that one synchronized running activity fulfilled
 Preserve both dates as facts: the approved workout remains on its planned date,
 and the activity remains on its execution date. Record their association in the
 fulfillment overlay. On Intervals.icu, place the exact owned calendar occurrence
-on the athlete-confirmed execution date and pair it natively to the activity so
-the provider calendar presents one execution. Never change the approved local
-date, delete the owned event, or rewrite approved workout content merely because
-the athlete ran it early or late.
+on the factual execution date and pair it natively to the activity so the
+provider calendar presents one execution. An exact provider-observed pair is
+sufficient evidence; an otherwise unpaired candidate requires athlete
+confirmation. Never change the approved local date, delete the owned event, or
+rewrite approved workout content merely because the athlete ran it early or
+late.
 
 Before first use after upgrading, require a successful dry run and applied
 cutover:
@@ -110,10 +112,17 @@ poetry run resilio workout reconcile --week-number <WEEK_NUMBER>
 This workflow applies equally to early, same-day, and late execution. It first
 proves the local fulfillment, publication lineage, canonical activity, exact
 owned event, and mutable activity source. Publication reconciliation moves only
-the provider occurrence to the confirmed execution date, with ordinary owned
-drift protection and exact readback. Pairing then persists an exact operation
-before requesting only `paired_event_id`, reads the activity back, and proves
-that no other activity fields changed.
+the provider occurrence to the factual execution date, with ordinary owned
+drift protection and exact readback. If the athlete already dragged the exact
+owned event there, the unchanged same-week date-only move is retained without a
+remote rewrite. Pairing then persists an exact operation before requesting only
+`paired_event_id`, reads the activity back, and proves that no other activity
+fields changed.
+
+Persist fulfillment execution placement as an exact override above the base
+approved or athlete-controlled provider calendar date. Revocation removes only
+that exact override; timestamps and reconciliation ordering never identify who
+moved the event.
 
 Interpret remote pairing outcomes precisely:
 

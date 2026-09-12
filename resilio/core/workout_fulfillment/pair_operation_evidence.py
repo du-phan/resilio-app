@@ -19,9 +19,45 @@ from resilio.schemas.workout_pairing import (
 
 def fulfillment_request_sha256(fulfillment: WorkoutFulfillmentRecord) -> str:
     """Fingerprint the association before native provider-pair evidence is added."""
-    return canonical_data_sha256(
-        fulfillment.model_copy(update={"provider_pair": None})
-    )
+    return canonical_data_sha256(fulfillment.model_copy(update={"provider_pair": None}))
+
+
+def fulfillment_request_sha256_lineage(
+    fulfillment: WorkoutFulfillmentRecord,
+) -> set[str]:
+    """Return request hashes proven by the continuous activity-revision chain."""
+    snapshots = {fulfillment_request_sha256(fulfillment)}
+    revisions = fulfillment.activity_evidence_revisions
+    for revision_index in range(len(revisions) - 1, -1, -1):
+        revision = revisions[revision_index]
+        historical = fulfillment.model_copy(
+            update={
+                "activity_performance_evidence_sha256": (
+                    revision.previous_activity_performance_evidence_sha256
+                ),
+                "execution_local_date": revision.previous_execution_local_date,
+                "schedule_offset_days": (
+                    revision.previous_execution_local_date - fulfillment.scheduled_local_date
+                ).days,
+                "provider_pair": None,
+                "activity_evidence_revisions": revisions[:revision_index],
+            }
+        )
+        snapshots.add(fulfillment_request_sha256(historical))
+    return snapshots
+
+
+def fulfillment_activity_evidence_sha256_lineage(
+    fulfillment: WorkoutFulfillmentRecord,
+) -> set[str]:
+    """Return every activity evidence hash in one continuous correction chain."""
+    return {
+        fulfillment.activity_performance_evidence_sha256,
+        *(
+            revision.previous_activity_performance_evidence_sha256
+            for revision in fulfillment.activity_evidence_revisions
+        ),
+    }
 
 
 def association_authorized_at_utc(fulfillment: WorkoutFulfillmentRecord) -> datetime:
@@ -95,8 +131,7 @@ def unpair_operation_has_exact_authority(
     fulfillment = revocation.fulfillment
     if (
         operation.action != "unpair"
-        or operation.operation_id
-        != unpair_operation_id(revocation, event_id=operation.event_id)
+        or operation.operation_id != unpair_operation_id(revocation, event_id=operation.event_id)
         or operation.fulfillment_record_sha256 != canonical_data_sha256(fulfillment)
     ):
         return False
@@ -105,16 +140,14 @@ def unpair_operation_has_exact_authority(
     return any(
         pair_operation.action == "pair"
         and pair_operation.local_activity_id == operation.local_activity_id
-        and pair_operation.intervals_icu_activity_id
-        == operation.intervals_icu_activity_id
+        and pair_operation.intervals_icu_activity_id == operation.intervals_icu_activity_id
         and pair_operation.workout_identity == operation.workout_identity
         and pair_operation.event_id == operation.event_id
         and pair_operation.activity_performance_evidence_sha256
         == operation.activity_performance_evidence_sha256
         and pair_operation.publication_provider_event_fingerprint_sha256
         == operation.publication_provider_event_fingerprint_sha256
-        and pair_operation.fulfillment_record_sha256
-        == operation.fulfillment_record_sha256
+        and pair_operation.fulfillment_record_sha256 == operation.fulfillment_record_sha256
         and operation_proves_resilio_pair_request(pair_operation)
         for pair_operation in manifest.remote_pairing_operations.values()
     )
@@ -127,7 +160,7 @@ def matching_resilio_pair_operation(
     fulfillment: WorkoutFulfillmentRecord,
 ) -> RemoteWorkoutPairingOperation | None:
     """Return the latest non-revoked operation for the current association lineage."""
-    request_sha256 = fulfillment_request_sha256(fulfillment)
+    request_sha256_values = fulfillment_request_sha256_lineage(fulfillment)
     candidates = [
         operation
         for operation in manifest.remote_pairing_operations.values()
@@ -141,10 +174,10 @@ def matching_resilio_pair_operation(
             operation.state == "verified"
             or (
                 operation.activity_performance_evidence_sha256
-                == fulfillment.activity_performance_evidence_sha256
+                in fulfillment_activity_evidence_sha256_lineage(fulfillment)
                 and operation.publication_provider_event_fingerprint_sha256
                 == publication.provider_event_fingerprint_sha256
-                and operation.fulfillment_record_sha256 == request_sha256
+                and operation.fulfillment_record_sha256 in request_sha256_values
             )
         )
     ]

@@ -38,7 +38,11 @@ from resilio.integrations.intervals_icu.dto import (
 from resilio.schemas.activity import SportType
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
-from resilio.schemas.publication import PendingWorkoutPublication, PublishedWorkout
+from resilio.schemas.publication import (
+    PendingWorkoutPublication,
+    PublishedWorkout,
+)
+from resilio.schemas.publication_placement import ProviderOccurrencePlacement
 from resilio.schemas.structured_workout import TargetMode, TargetUnit
 
 
@@ -61,7 +65,19 @@ class PreparedPublication:
     rendered_workout_sha256: str
     provider_occurrence_date: date
     provider_start_date_local: str
+    provider_occurrence_placement: ProviderOccurrencePlacement
     garmin_forwarding_eligible: bool
+    expected_step_semantics: tuple[StepSemantics, ...]
+
+
+@dataclass(frozen=True)
+class RetainedPublicationVerification:
+    """Immutable expected bytes for retirement without current provider readiness."""
+
+    workout: RunningWorkoutPrescription
+    athlete_id: str
+    event: EventWriteDTO
+    provider_occurrence_date: date
     expected_step_semantics: tuple[StepSemantics, ...]
 
 
@@ -75,6 +91,51 @@ def rendered_workout_sha256(workout: RunningWorkoutPrescription) -> str:
     return sha256_text(rendered)
 
 
+def prepare_retained_publication_verification(
+    authoritative_workout: AuthoritativeWorkout,
+    record: PublishedWorkout | PendingWorkoutPublication,
+    *,
+    athlete_id: str,
+    provider_name: str,
+    provider_occurrence_date: date,
+) -> RetainedPublicationVerification:
+    """Rebuild immutable owned fields without consulting mutable provider settings."""
+    workout = authoritative_workout.prescription
+    if workout.structured_workout is None:
+        raise PublicationSafetyError("Retained publication lacks a typed workout")
+    if rendered_workout_sha256(workout) != record.rendered_workout_sha256:
+        raise PublicationSafetyError(
+            "Retained publication differs from its rendered workout authority"
+        )
+    rendered_steps = render_structured_workout(workout.structured_workout.steps)
+    purpose = " ".join((workout.purpose or "").split())
+    rendered = f"{purpose}\n\n{rendered_steps}" if purpose else rendered_steps
+    try:
+        expected_semantics = expected_workout_semantics(workout.structured_workout.steps)
+    except WorkoutSemanticsError as exc:
+        raise PublicationSafetyError(str(exc)) from exc
+    event = EventWriteDTO(
+        uid=record.uid,
+        external_id=record.external_id,
+        type=event_type_for_sport(workout.sport),
+        name=provider_name,
+        description=rendered,
+        start_date_local=validated_local_start(
+            provider_occurrence_date,
+            workout.start_time_local,
+            authoritative_workout.schedule_timezone,
+        ),
+        target=event_target_for_modes(workout.structured_workout.target_modes()),
+    )
+    return RetainedPublicationVerification(
+        workout=workout,
+        athlete_id=athlete_id,
+        event=event,
+        provider_occurrence_date=provider_occurrence_date,
+        expected_step_semantics=expected_semantics,
+    )
+
+
 def prepare_publication(
     client: IntervalsIcuClient,
     authoritative_workout: AuthoritativeWorkout,
@@ -82,9 +143,20 @@ def prepare_publication(
     previous: PublishedWorkout | None,
     provider_occurrence_date: date,
     provider_name: str | None = None,
+    provider_occurrence_placement: ProviderOccurrencePlacement | None = None,
 ) -> PreparedPublication:
     """Validate device policy, render content, and bind deterministic identity."""
     workout = authoritative_workout.prescription
+    occurrence_placement = provider_occurrence_placement or (
+        ProviderOccurrencePlacement(
+            calendar_source="approved_schedule",
+            calendar_occurrence_date=workout.date,
+        )
+    )
+    if occurrence_placement.effective_occurrence_date != provider_occurrence_date:
+        raise PublicationSafetyError(
+            "Provider occurrence date differs from its placement authority"
+        )
     if previous is not None and previous.workout_identity != authoritative_workout.identity:
         raise PublicationSafetyError("Published workout belongs to different plan lineage")
     if workout.structured_workout is None:
@@ -161,6 +233,7 @@ def prepare_publication(
         rendered_workout_sha256=rendered_workout_sha256(workout),
         provider_occurrence_date=provider_occurrence_date,
         provider_start_date_local=start_local,
+        provider_occurrence_placement=occurrence_placement,
         garmin_forwarding_eligible=garmin_eligible,
         expected_step_semantics=expected_semantics,
     )
@@ -172,6 +245,7 @@ def prepare_current_authority_pending(
     *,
     previous: PublishedWorkout | None,
     pending: PendingWorkoutPublication,
+    pending_occurrence_placement: ProviderOccurrencePlacement,
     provider_name: str,
 ) -> PreparedPublication:
     """Rebuild and prove one pending intent from unchanged current authority."""
@@ -180,27 +254,22 @@ def prepare_current_authority_pending(
         authoritative_workout,
         previous=previous,
         provider_name=provider_name,
-        provider_occurrence_date=provider_local_date(
-            pending.provider_start_date_local
-        ),
+        provider_occurrence_date=provider_local_date(pending.provider_start_date_local),
+        provider_occurrence_placement=pending_occurrence_placement,
     )
     if (
         pending.workout_identity != prepared.workout_identity
         or pending.applied_week_approval_id != prepared.applied_week_approval_id
-        or pending.applied_running_workouts_sha256
-        != prepared.applied_running_workouts_sha256
-        or pending.workout_prescription_sha256
-        != prepared.workout_prescription_sha256
+        or pending.applied_running_workouts_sha256 != prepared.applied_running_workouts_sha256
+        or pending.workout_prescription_sha256 != prepared.workout_prescription_sha256
         or pending.schedule_timezone != prepared.schedule_timezone
         or pending.occurrence_date != prepared.workout.date
         or pending.approved_start_time_local != prepared.workout.start_time_local
         or pending.uid != prepared.event.uid
         or pending.external_id != prepared.external_id
-        or pending.publication_fingerprint_sha256
-        != prepared.publication_fingerprint_sha256
+        or pending.publication_fingerprint_sha256 != prepared.publication_fingerprint_sha256
         or pending.rendered_workout_sha256 != prepared.rendered_workout_sha256
-        or pending.sport_settings_version_sha256
-        != prepared.settings_version_sha256
+        or pending.sport_settings_version_sha256 != prepared.settings_version_sha256
         or pending.provider_start_date_local != prepared.provider_start_date_local
     ):
         raise PublicationSafetyError(

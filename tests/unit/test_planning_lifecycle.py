@@ -507,6 +507,9 @@ def test_plan_closure_rejects_every_unfinished_publication_intent(
         provider_start_date_local=published.provider_start_date_local,
         prepared_at_utc=datetime(2026, 8, 2, 20, tzinfo=timezone.utc),
     )
+    manifest.pending_provider_occurrence_placements[
+        "w_long_1"
+    ] = manifest.workout_provider_occurrence_placements["w_long_1"]
     save_manifest(repo, manifest)
 
     with pytest.raises(PlanOperationError, match="unfinished publication intents"):
@@ -517,6 +520,8 @@ def test_plan_closure_rejects_every_unfinished_publication_intent(
         repo,
         manifest.pending["w_long_1"],
         previous=manifest.workouts["w_long_1"],
+        pending_step_semantics_sha256="a" * 64,
+        previous_step_semantics_sha256="a" * 64,
     )
     with pytest.raises(PlanOperationError, match="unfinished publication intents"):
         _close_test_plan(repo)

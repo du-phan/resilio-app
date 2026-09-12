@@ -84,6 +84,7 @@ from resilio.schemas.publication import (
     PublicationManifest,
     PublishedWorkout,
 )
+from resilio.schemas.publication_placement import ProviderOccurrencePlacement
 from resilio.schemas.workout_fulfillment import (
     ProviderPairedFulfillmentEvidence,
     WorkoutFulfillmentManifest,
@@ -362,34 +363,37 @@ def _record_owned_completion(
         for revision in state.active_plan.applied_week_revisions
         if revision.active and revision.week_number == 3
     )
+    publication = PublishedWorkout(
+        workout_identity=identity,
+        applied_week_approval_id=applied_revision.approval_id,
+        applied_running_workouts_sha256=(applied_revision.applied_running_workouts_sha256),
+        workout_prescription_sha256=canonical_data_sha256(benchmark),
+        schedule_timezone=applied_revision.schedule_timezone,
+        event_id=42,
+        requested_uid="requested-assessment-uid",
+        uid="assessment-uid",
+        external_id="resilio:v1:workout:w_assessment_5k",
+        publication_fingerprint_sha256="1" * 64,
+        rendered_workout_sha256="2" * 64,
+        sport_settings_version_sha256="3" * 64,
+        provider_event_fingerprint_sha256="4" * 64,
+        provider_step_semantics_sha256="5" * 64,
+        sport="run",
+        occurrence_date=date(2026, 8, 20),
+        approved_start_time_local=time(7),
+        provider_start_date_local="2026-08-20T07:00:00",
+        garmin_forwarding_status="eligible_unverified",
+        verified_at_utc=datetime(2026, 8, 19, 8, tzinfo=timezone.utc),
+    )
     save_manifest(
         repo,
         PublicationManifest(
-            workouts={
-                benchmark.id: PublishedWorkout(
-                    workout_identity=identity,
-                    applied_week_approval_id=applied_revision.approval_id,
-                    applied_running_workouts_sha256=(
-                        applied_revision.applied_running_workouts_sha256
-                    ),
-                    workout_prescription_sha256=canonical_data_sha256(benchmark),
-                    schedule_timezone=applied_revision.schedule_timezone,
-                    event_id=42,
-                    requested_uid="requested-assessment-uid",
-                    uid="assessment-uid",
-                    external_id="resilio:v1:workout:w_assessment_5k",
-                    publication_fingerprint_sha256="1" * 64,
-                    rendered_workout_sha256="2" * 64,
-                    sport_settings_version_sha256="3" * 64,
-                    provider_event_fingerprint_sha256="4" * 64,
-                    sport="run",
-                    occurrence_date=date(2026, 8, 20),
-                    approved_start_time_local=time(7),
-                    provider_start_date_local="2026-08-20T07:00:00",
-                    garmin_forwarding_status="eligible_unverified",
-                    verified_at_utc=datetime(2026, 8, 19, 8, tzinfo=timezone.utc),
+            workouts={benchmark.id: publication},
+            workout_provider_occurrence_placements={
+                benchmark.id: ProviderOccurrencePlacement.approved_schedule(
+                    publication.occurrence_date
                 )
-            }
+            },
         ),
     )
     activity = make_activity(
@@ -591,11 +595,12 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
         sport="run",
         occurrence_date=review.result.performance_date,
         approved_start_time_local=time(7),
-        provider_start_date_local=(
-            f"{review.result.performance_date.isoformat()}T07:00:00"
-        ),
+        provider_start_date_local=(f"{review.result.performance_date.isoformat()}T07:00:00"),
         prepared_at_utc=datetime(2026, 8, 20, 18, 30, tzinfo=timezone.utc),
     )
+    manifest.pending_provider_occurrence_placements[
+        "future_owned_workout"
+    ] = ProviderOccurrencePlacement.approved_schedule(review.result.performance_date)
     save_manifest(repo, manifest)
     with pytest.raises(PlanOperationError, match="unfinished assessment publication"):
         close_assessment_from_review(
@@ -610,6 +615,7 @@ def test_assessment_lifecycle_supports_timed_replacement_segment_review_and_vdot
     deletion_operation = stage_pending_publication_deletion(
         repo,
         manifest.pending["future_owned_workout"],
+        pending_step_semantics_sha256="a" * 64,
     )
     activate_publication_deletion_monitoring(repo, deletion_operation)
 

@@ -10,6 +10,9 @@ from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.core.workout_publication.policy import provider_local_date
+from resilio.core.workout_publication.publication_deletions import (
+    publication_deletion_workout_ids,
+)
 from resilio.schemas.plan_history import PlanWorkoutIdentity
 from resilio.schemas.publication import WeekSynchronizationItem
 
@@ -62,18 +65,21 @@ def select_run_week_items(
             )
             if record is not None and record.workout_identity == item.identity
         ]
+        published = publication_manifest.workouts.get(workout.id)
+        has_owned_publication = (
+            published is not None and published.workout_identity == item.identity
+        )
         requires_schedule_restore = any(
             provider_local_date(record.provider_start_date_local) != workout.date
             for record in owned_records
         )
         pending = publication_manifest.pending.get(workout.id)
-        has_unfinished_pending = (
-            pending is not None and pending.workout_identity == item.identity
-        )
+        has_unfinished_pending = pending is not None and pending.workout_identity == item.identity
         status: Literal["skipped_past"] | None = (
             "skipped_past"
             if workout.date < as_of_date
             and not is_fulfilled
+            and not has_owned_publication
             and not requires_schedule_restore
             and not has_unfinished_pending
             else None
@@ -96,28 +102,25 @@ def select_run_week_items(
     )
 
 
-def stale_future_owned_run_ids(
+def stale_owned_run_candidates(
     repo: RepositoryIO,
     *,
     week_identity: PlanWorkoutIdentity,
     current_run_ids: set[str],
-    as_of_date: date,
 ) -> list[str]:
+    """Select obsolete owned records whose live dates require classification."""
     fulfilled = _fulfilled_identities(repo)
     manifest = load_manifest(repo)
+    tombstoned_ids = publication_deletion_workout_ids(repo)
     stale_published_ids = {
         local_id
         for local_id, record in manifest.workouts.items()
         if record.workout_identity.plan_id == week_identity.plan_id
         and record.workout_identity.plan_revision_id == week_identity.plan_revision_id
         and record.workout_identity.week_number == week_identity.week_number
-        and max(
-            record.occurrence_date,
-            provider_local_date(record.provider_start_date_local),
-        )
-        >= as_of_date
         and _identity_tuple(record.workout_identity) not in fulfilled
         and local_id not in current_run_ids
+        and local_id not in tombstoned_ids
     }
     stale_pending_ids = {
         local_id
@@ -127,5 +130,6 @@ def stale_future_owned_run_ids(
         and record.workout_identity.week_number == week_identity.week_number
         and _identity_tuple(record.workout_identity) not in fulfilled
         and local_id not in current_run_ids
+        and local_id not in tombstoned_ids
     }
     return sorted(stale_published_ids | stale_pending_ids)

@@ -20,7 +20,7 @@ def load_manifest(repo: RepositoryIO) -> PublicationManifest:
             raw = json.loads(path.read_text())
         except (OSError, ValueError) as exc:
             raise ValueError("Workout publication state is not valid JSON") from exc
-        if isinstance(raw, dict) and raw.get("schema_version") in {6, 7}:
+        if isinstance(raw, dict) and raw.get("schema_version") in {6, 7, 8}:
             raise ValueError(
                 "Workout publication state requires `resilio migrate "
                 "workout-fulfillment-v2 --apply` before publication access"

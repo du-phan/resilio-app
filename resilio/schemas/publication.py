@@ -8,6 +8,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.publication_placement import ProviderOccurrencePlacement
 from resilio.schemas.workout_pairing import RemotePairingStatus
 
 
@@ -23,6 +24,7 @@ GarminForwardingStatus = Literal[
     "eligible_unverified",
     "not_configured",
     "provider_error_observed",
+    "eligibility_unknown",
 ]
 
 
@@ -40,6 +42,10 @@ class PublishedWorkout(BaseModel):
     rendered_workout_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     sport_settings_version_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     provider_event_fingerprint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    provider_step_semantics_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
     sport: Literal["run"]
     occurrence_date: date
     approved_start_time_local: Optional[time] = None
@@ -133,6 +139,7 @@ class PendingWorkoutPublication(BaseModel):
     occurrence_date: date
     approved_start_time_local: Optional[time] = None
     provider_start_date_local: str
+    garmin_forwarding_eligible: Optional[bool] = None
     prepared_at_utc: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -301,15 +308,23 @@ class RetiredPendingWorkoutPublication(BaseModel):
 
 
 class PublicationManifest(BaseModel):
-    schema_version: Literal[8] = 8
+    schema_version: Literal[9] = 9
     workouts: dict[str, PublishedWorkout] = Field(default_factory=dict)
     pending: dict[str, PendingWorkoutPublication] = Field(default_factory=dict)
+    workout_provider_occurrence_placements: dict[
+        str,
+        ProviderOccurrencePlacement,
+    ] = Field(default_factory=dict)
+    pending_provider_occurrence_placements: dict[
+        str,
+        ProviderOccurrencePlacement,
+    ] = Field(default_factory=dict)
     historical_fulfillment_event_retirements: list[RetiredWorkoutPublication] = Field(
         default_factory=list
     )
-    historical_fulfillment_pending_retirements: list[
-        RetiredPendingWorkoutPublication
-    ] = Field(default_factory=list)
+    historical_fulfillment_pending_retirements: list[RetiredPendingWorkoutPublication] = Field(
+        default_factory=list
+    )
     historical_legacy_workouts: dict[
         str,
         HistoricalLegacyWorkoutPublication,
@@ -372,10 +387,7 @@ class PublicationManifest(BaseModel):
         for local_id, historical_record in self.historical_legacy_workouts.items():
             if historical_record.workout_identity.local_workout_id != local_id:
                 raise ValueError("historical publication key must match local workout ID")
-            if (
-                local_id in self.workouts
-                or local_id in self.pending
-            ):
+            if local_id in self.workouts or local_id in self.pending:
                 raise ValueError("historical publication cannot remain active")
             prior_event_owner = event_owners.setdefault(
                 historical_record.event_id,
@@ -383,6 +395,41 @@ class PublicationManifest(BaseModel):
             )
             if prior_event_owner != local_id:
                 raise ValueError("publication manifest event IDs must be unique")
+        return self
+
+    @model_validator(mode="after")
+    def occurrence_placements_match_active_records(self) -> "PublicationManifest":
+        if any(record.provider_step_semantics_sha256 is None for record in self.workouts.values()):
+            raise ValueError("active publications require exact parsed step-semantic evidence")
+        if set(self.workout_provider_occurrence_placements) != set(self.workouts):
+            raise ValueError("published workouts require exact provider occurrence placement")
+        if set(self.pending_provider_occurrence_placements) != set(self.pending):
+            raise ValueError("pending publications require exact provider occurrence placement")
+        for records, placements in (
+            (self.workouts, self.workout_provider_occurrence_placements),
+            (self.pending, self.pending_provider_occurrence_placements),
+        ):
+            for local_workout_id, record in records.items():
+                placement = placements[local_workout_id]
+                provider_occurrence_date = datetime.fromisoformat(
+                    record.provider_start_date_local
+                ).date()
+                if placement.effective_occurrence_date != provider_occurrence_date:
+                    raise ValueError("provider occurrence placement must match its active record")
+                if (
+                    placement.calendar_source == "approved_schedule"
+                    and placement.calendar_occurrence_date != record.occurrence_date
+                ):
+                    raise ValueError(
+                        "approved calendar placement must match immutable occurrence date"
+                    )
+                if (
+                    placement.calendar_source == "provider_calendar"
+                    and not placement.calendar_is_in_week_of(record.occurrence_date)
+                ):
+                    raise ValueError(
+                        "provider calendar placement must remain in the immutable " "workout week"
+                    )
         return self
 
 
@@ -394,6 +441,7 @@ PublicationAction = Literal[
     "deleted",
     "recovered_deleted",
     "deletion_monitoring",
+    "skipped_past",
 ]
 
 
@@ -528,10 +576,10 @@ class RunWeekSynchronizationReport(BaseModel):
     ]
     reconciliation_safe: bool
     run_workouts_considered: int = Field(ge=0)
-    desired_future_run_workouts: int = Field(ge=0)
+    run_workouts_requiring_reconciliation: int = Field(ge=0)
     partial: bool = False
     capabilities: RunSynchronizationCapabilities
     items: list[WeekSynchronizationItem] = Field(default_factory=list)
-    owned_future_deletion_ids: list[str] = Field(default_factory=list)
+    owned_deletion_candidate_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")

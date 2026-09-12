@@ -71,6 +71,7 @@ from resilio.schemas.publication import (
     PublicationManifest,
     PublishedWorkout,
 )
+from resilio.schemas.publication_placement import ProviderOccurrencePlacement
 from resilio.schemas.reconciliation import (
     ReconciliationAction,
     ReconciliationDecision,
@@ -543,6 +544,7 @@ def _publication(
         rendered_workout_sha256="b" * 64,
         sport_settings_version_sha256="c" * 64,
         provider_event_fingerprint_sha256="d" * 64,
+        provider_step_semantics_sha256="e" * 64,
         sport="run",
         occurrence_date=date(2026, 7, 28),
         approved_start_time_local=time(7),
@@ -553,9 +555,17 @@ def _publication(
 
 
 def _save_publication(repo: RepositoryIO, publication: PublishedWorkout) -> None:
+    local_workout_id = publication.workout_identity.local_workout_id
     save_manifest(
         repo,
-        PublicationManifest(workouts={publication.workout_identity.local_workout_id: publication}),
+        PublicationManifest(
+            workouts={local_workout_id: publication},
+            workout_provider_occurrence_placements={
+                local_workout_id: ProviderOccurrencePlacement.approved_schedule(
+                    publication.occurrence_date
+                )
+            },
+        ),
     )
 
 
@@ -813,6 +823,7 @@ def test_historical_pair_never_promotes_to_active_fulfillment(
                 "applied_running_workouts_sha256",
                 "workout_prescription_sha256",
                 "schedule_timezone",
+                "provider_step_semantics_sha256",
             },
         )
     )
@@ -827,6 +838,11 @@ def test_historical_pair_never_promotes_to_active_fulfillment(
         repo,
         PublicationManifest(
             workouts={"current-run": current_publication},
+            workout_provider_occurrence_placements={
+                "current-run": ProviderOccurrencePlacement.approved_schedule(
+                    current_publication.occurrence_date
+                )
+            },
             historical_legacy_workouts={"historical-run": historical_publication},
         ),
     )

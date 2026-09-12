@@ -1,11 +1,12 @@
 """Structured rendering and ownership-safe publication tests."""
 
 import re
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 from pydantic import ValidationError
 
+from resilio.canonical import canonical_data_sha256
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.manifest import (
@@ -22,6 +23,7 @@ from resilio.core.workout_publication.publication_deletion_drift import (
 )
 from resilio.core.workout_publication.publication_deletions import (
     load_publication_deletion_manifest,
+    publication_deletion_operation_id,
     reconcile_publication_deletion_operations,
 )
 from resilio.core.workout_publication.renderer import render_structured_workout
@@ -303,9 +305,7 @@ class FakeClient:
         return [
             event
             for event in self.events.values()
-            if oldest
-            <= datetime.fromisoformat(event.start_date_local).date()
-            <= newest
+            if oldest <= datetime.fromisoformat(event.start_date_local).date() <= newest
         ]
 
     def get_event(self, event_id, *, athlete_id=None):
@@ -847,6 +847,22 @@ def test_repeated_publication_is_remote_noop(repo) -> None:
 
     assert created.action == "created"
     assert repeated.action == "noop"
+
+
+def test_provider_calendar_base_cannot_cross_the_approved_week(repo) -> None:
+    client = FakeClient()
+    service = WorkoutPublicationService(repo, client)
+    service.publish(_workout())
+    manifest_payload = load_manifest(repo).model_dump(mode="python")
+    record = manifest_payload["workouts"]["workout-1"]
+    placement = manifest_payload["workout_provider_occurrence_placements"]["workout-1"]
+    cross_week_date = record["occurrence_date"] + timedelta(days=7)
+    record["provider_start_date_local"] = f"{cross_week_date.isoformat()}T07:00:00"
+    placement["calendar_source"] = "provider_calendar"
+    placement["calendar_occurrence_date"] = cross_week_date
+
+    with pytest.raises(ValidationError, match="immutable workout week"):
+        PublicationManifest.model_validate(manifest_payload)
     assert client.upserts == 1
     assert len(client.events) == 1
 
@@ -954,8 +970,8 @@ def test_publication_manifest_rejects_cross_workout_identity_collisions(
         save_manifest(repo, mutated)
 
 
-def test_run_only_publication_manifest_uses_schema_version_seven() -> None:
-    assert PublicationManifest().schema_version == 8
+def test_run_only_publication_manifest_uses_schema_version_nine() -> None:
+    assert PublicationManifest().schema_version == 9
     with pytest.raises(ValidationError):
         PublicationManifest.model_validate({"schema_version": 6})
 
@@ -1188,6 +1204,20 @@ def test_ambiguous_pending_deletion_reaps_a_late_provider_materialization(repo) 
     operation = next(iter(deletion_manifest.operations.values()))
     assert operation.state == "monitoring"
     assert operation.pending_publication == load_manifest(repo).pending[workout.id]
+    legacy_operation_digest = canonical_data_sha256(
+        {
+            "pending_publication": operation.pending_publication.model_dump(
+                mode="json",
+                exclude={"garmin_forwarding_eligible"},
+            ),
+            "previous_publication": None,
+            "reason": "workout_removed",
+        }
+    )
+    assert publication_deletion_operation_id(operation.pending_publication) == (
+        f"publication_deletion_{legacy_operation_digest[:16]}"
+    )
+    assert operation.operation_id != (f"publication_deletion_{legacy_operation_digest[:16]}")
 
     repeated = WorkoutRetirementService(repo, client).retire_published(
         workout.id,
@@ -1204,9 +1234,7 @@ def test_ambiguous_pending_deletion_reaps_a_late_provider_materialization(repo) 
 
     assert report.reconciliation_safe
     assert not report.partial
-    assert [(item.status, item.event_id) for item in report.items] == [
-        ("deleted", late_event_id)
-    ]
+    assert [(item.status, item.event_id) for item in report.items] == [("deleted", late_event_id)]
     assert report.items[0].occurrence_date == workout.date
     assert report.items[0].provider_occurrence_date == workout.date
     assert client.events == {}
@@ -1250,7 +1278,10 @@ def test_publication_deletion_tombstone_refuses_late_remote_drift(repo) -> None:
     assert client.delayed_event is not None
     created = FakeClient.upsert_event(client, client.delayed_event)
     client.events[created.id] = created.model_copy(
-        update={"description": "Athlete changed this workout."}
+        update={
+            "description": "Athlete changed this workout.",
+            "start_date_local": "2026-10-24T06:30:00",
+        }
     )
 
     report = reconcile_publication_deletion_operations(repo, client)
@@ -1259,6 +1290,7 @@ def test_publication_deletion_tombstone_refuses_late_remote_drift(repo) -> None:
     assert report.partial
     assert report.items[0].status == "error"
     assert report.items[0].error_type == "remote_drift"
+    assert report.items[0].provider_occurrence_date == date(2026, 10, 24)
     assert created.id in client.events
     assert len(load_publication_deletion_manifest(repo).operations) == 1
 
@@ -1275,6 +1307,7 @@ def test_publication_deletion_tombstone_refuses_late_remote_drift(repo) -> None:
     )
     assert failed_resolution.partial
     assert failed_resolution.items[0].error_type == "provider"
+    assert failed_resolution.items[0].provider_occurrence_date == date(2026, 10, 24)
     assert len(load_publication_deletion_manifest(repo).drift_resolutions) == 1
 
     resolved = resolve_publication_deletion_drifts(
@@ -1287,6 +1320,7 @@ def test_publication_deletion_tombstone_refuses_late_remote_drift(repo) -> None:
     )
     assert resolved.reconciliation_safe
     assert resolved.items[0].status == "deleted"
+    assert resolved.items[0].provider_occurrence_date == date(2026, 10, 24)
     assert client.events == {}
 
     repeated = resolve_publication_deletion_drifts(
@@ -1317,6 +1351,113 @@ def test_publication_deletion_tombstone_refuses_late_remote_drift(repo) -> None:
     replacement_token = stale_retry.items[0].drift_resolution_token_sha256
     assert replacement_token is not None and replacement_token != token
     assert recreated.id in client.events
+
+
+def test_publication_deletion_tombstone_refuses_changed_parsed_step_semantics(
+    repo,
+) -> None:
+    class DelayedCreateClient(FakeClient):
+        delayed_event: EventWriteDTO | None = None
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.delayed_event is None:
+                self.delayed_event = event
+                raise IntervalsTransportError(
+                    "provider outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+    client = DelayedCreateClient()
+    publication_service = WorkoutPublicationService(repo, client)
+    workout = _workout()
+    with pytest.raises(IntervalsTransportError):
+        publication_service.publish(workout)
+    WorkoutRetirementService(repo, client).retire_published(
+        workout.id,
+        authoritative_workout=publication_service._authoritative(workout),
+        provider_name=provider_workout_name(workout),
+    )
+    assert client.delayed_event is not None
+    created = FakeClient.upsert_event(client, client.delayed_event)
+    assert created.workout_doc is not None
+    first_step = created.workout_doc.steps[0]
+    changed_doc = created.workout_doc.model_copy(
+        update={
+            "steps": [
+                first_step.model_copy(update={"duration_seconds": first_step.duration_seconds + 1}),
+                *created.workout_doc.steps[1:],
+            ]
+        }
+    )
+    client.events[created.id] = created.model_copy(update={"workout_doc": changed_doc})
+
+    report = reconcile_publication_deletion_operations(repo, client)
+
+    assert report.partial
+    assert not report.reconciliation_safe
+    assert report.items[0].status == "error"
+    assert report.items[0].error_type == "remote_drift"
+    assert created.id in client.events
+
+
+def test_publication_deletion_rechecks_remote_bytes_immediately_before_delete(
+    repo,
+) -> None:
+    class RacingDelayedCreateClient(FakeClient):
+        delayed_event: EventWriteDTO | None = None
+        change_after_listing = False
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            if self.delayed_event is None:
+                self.delayed_event = event
+                raise IntervalsTransportError(
+                    "provider outcome is unknown",
+                    operation="upsert_event",
+                )
+            return super().upsert_event(event, athlete_id=athlete_id)
+
+        def list_events(self, oldest, newest, *, athlete_id=None):
+            listed = super().list_events(oldest, newest, athlete_id=athlete_id)
+            if self.change_after_listing:
+                event_id = listed[0].id
+                current = self.events[event_id]
+                assert current.workout_doc is not None
+                first_step = current.workout_doc.steps[0]
+                changed_doc = current.workout_doc.model_copy(
+                    update={
+                        "steps": [
+                            first_step.model_copy(
+                                update={"duration_seconds": (first_step.duration_seconds + 1)}
+                            ),
+                            *current.workout_doc.steps[1:],
+                        ]
+                    }
+                )
+                self.events[event_id] = current.model_copy(update={"workout_doc": changed_doc})
+            return listed
+
+    client = RacingDelayedCreateClient()
+    publication_service = WorkoutPublicationService(repo, client)
+    workout = _workout()
+    with pytest.raises(IntervalsTransportError):
+        publication_service.publish(workout)
+    WorkoutRetirementService(repo, client).retire_published(
+        workout.id,
+        authoritative_workout=publication_service._authoritative(workout),
+        provider_name=provider_workout_name(workout),
+    )
+    assert client.delayed_event is not None
+    event_id = FakeClient.upsert_event(client, client.delayed_event).id
+    client.change_after_listing = True
+
+    report = reconcile_publication_deletion_operations(repo, client)
+
+    assert report.partial
+    assert not report.reconciliation_safe
+    assert report.items[0].status == "error"
+    assert report.items[0].error_type == "remote_drift"
+    assert event_id in client.events
 
 
 def test_publication_deletion_drift_resolution_refuses_duplicate_owned_identity(
@@ -1447,6 +1588,33 @@ def test_reschedule_keeps_identity_and_updates_one_event(repo) -> None:
     assert changed.event_id == first.event_id
     assert len(client.events) == 1
     assert client.events[first.event_id].start_date_local.startswith("2026-10-26")
+
+
+def test_existing_publication_update_rejects_a_switched_response_event_id(repo) -> None:
+    class SwitchedResponseClient(FakeClient):
+        switch_next_response = False
+
+        def upsert_event(self, event: EventWriteDTO, *, athlete_id=None):
+            stored = super().upsert_event(event, athlete_id=athlete_id)
+            if not self.switch_next_response:
+                return stored
+            self.switch_next_response = False
+            duplicate = stored.model_copy(update={"id": self.next_id})
+            self.next_id += 1
+            self.events[duplicate.id] = duplicate
+            return duplicate
+
+    client = SwitchedResponseClient()
+    service = WorkoutPublicationService(repo, client)
+    first = service.publish(_workout())
+    client.switch_next_response = True
+
+    with pytest.raises(PublicationSafetyError, match="existing event identity"):
+        service.publish(_workout(occurrence=date(2026, 10, 26)))
+
+    manifest = load_manifest(repo)
+    assert manifest.workouts["workout-1"].event_id == first.event_id
+    assert "workout-1" in manifest.pending
 
 
 def test_exact_owned_delete_and_unowned_rejection(repo) -> None:

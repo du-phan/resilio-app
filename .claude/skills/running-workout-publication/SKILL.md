@@ -52,9 +52,10 @@ poetry run resilio workout fulfillment-status --week-number <WEEK_NUMBER>
 Status performs no mutation. Require `reconciliation_safe: true` before an
 ordinary reconcile. Report every blocker exactly; do not silently remove
 targets, invent a start time, or synchronize only the runs that happen to pass.
-For an athlete-confirmed fulfillment, status also inspects the exact native
-Intervals activity/event pair and blocks publication reconciliation when that
-pair is conflicted, unsupported, or drifted.
+For any exact fulfillment, status also inspects the native Intervals
+activity/event pair and blocks publication reconciliation when that pair is
+conflicted, unsupported, or drifted. Exact provider-observed pairs do not
+require a redundant athlete confirmation.
 
 ## Reconcile and verify
 
@@ -66,13 +67,33 @@ poetry run resilio workout reconcile --week-number <WEEK_NUMBER>
 Always run the global deletion reaper before the week-specific reconciliation;
 this is the recurring retry for late provider materializations after a prior
 plan closed. Reconciliation updates retained owned identities in place, creates missing
-approved runs, and deletes only removed future unfulfilled runs. Fulfilled
+approved runs, and deletes only removed unfulfilled runs whose live provider
+occurrence is not past. Do not infer deletion eligibility from the last locally
+recorded date: read the exact owned remote event, apply the narrow date-only
+classification, and preserve it when its provider occurrence is already past.
+Recheck the provider date immediately before deletion. Fulfilled
 workouts retain their approved dates in local authority. For an exact
-athlete-confirmed off-schedule fulfillment, reconciliation places the owned
-Intervals occurrence on the execution date before linking the activity through
-the native `paired_event_id`; it does not rewrite the approved prescription.
-The pairing workflow changes only that activity field after durable intent and
-exact readback. Non-running events and unowned workouts are never mutated.
+off-schedule fulfillment, reconciliation places the owned Intervals occurrence
+on the factual execution date before linking the activity through the native
+`paired_event_id`; it does not rewrite the approved prescription. The pairing
+workflow changes only that activity field after durable intent and exact
+readback. Non-running events and unowned workouts are never mutated.
+
+The athlete may also drag an exact owned event in Intervals. Status recognizes
+the remote date as provider calendar placement only when the move remains in
+the approved Monday-Sunday training week and the provider local-time component
+derived from the prescription, name, description, structured-workout content,
+and parsed step semantics are all unchanged. Reconciliation then persists the
+exact remote readback without rewriting the provider event or the approved
+local date. A current exact fulfillment takes precedence and fixes provider
+placement to its factual execution date.
+
+Treat calendar placement as two explicit layers: the approved or independently
+provider-observed base date, plus an optional exact fulfillment override. On
+fulfillment revocation, remove only the override; never infer placement origin
+from timestamps or operation ordering. Before deleting a moved obsolete event,
+reconstruct its immutable applied prescription and require full parsed semantic
+equality; the stored provider fingerprint alone is insufficient.
 Intervals controls its rolling Garmin export window and may remove older
 downstream workouts to limit clutter. Resilio cannot inspect or delete the
 watch's local workout list and never claims that cleanup occurred.
@@ -123,7 +144,8 @@ poetry run resilio workout resolve-drift \
 ```
 
 This records the confirmation before replacing exact owned remote content.
-There is no automatic adopt-remote strategy.
+The narrow same-week date-only calendar-placement rule above is not authority
+to adopt any remote workout-content, start-time, or cross-week change.
 
 If status reports that a verified native pair was removed, including one whose
 original writer is ambiguous, do not treat publication restore authority as
