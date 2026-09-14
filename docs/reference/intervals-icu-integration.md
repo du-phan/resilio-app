@@ -203,12 +203,18 @@ not used. Moving a workout to another calendar day does not rename it.
 Identical structures reuse the same name; only genuinely different structures
 with the same summary receive a compact variant suffix. The full purpose
 remains in the description. Workout text puts prompts before step termination
-tokens and emits explicit `intensity=...` metadata. Absolute pace uses the
-provider's required `Pace` marker. Repeat blocks use flat step lines bounded by
-blank lines; nested repeats are rejected before mutation because Intervals.icu
-does not support them. In the supported absolute pace, heart-rate, and power
-syntax, fractional target values are rejected before mutation when rendering
-would otherwise lose precision. One run uses at most one target mode.
+tokens and emits explicit `intensity=...` metadata. Executable cue prose cannot
+contain duration, distance, or clock-formatted pace values because Intervals.icu
+can treat them as the cue terminator; those values belong in their typed workout
+fields and are rejected from cues before mutation. The provider's timed-prompt
+markers are also reserved and rejected inside typed cue prose. Non-reserved
+numerical prose such as an RPE fraction remains valid cue text. Absolute pace
+uses the provider's required `Pace` marker. Repeat blocks use flat step lines
+bounded by blank lines; nested repeats are rejected before mutation because
+Intervals.icu does not support them. In the supported absolute pace,
+heart-rate, and power syntax, fractional target values are rejected before
+mutation when rendering would otherwise lose precision. One run uses at most
+one target mode.
 
 After create or update, Resilio reads the event back and requires exact owned
 fields plus semantic equivalence of the typed provider-parsed workout document.

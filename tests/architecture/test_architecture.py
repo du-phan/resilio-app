@@ -178,6 +178,14 @@ def test_weekly_plan_skill_uses_typed_structured_workouts():
     )
 
 
+def test_weekly_plan_skill_keeps_provider_reserved_syntax_out_of_cues():
+    content = (REPO_ROOT / ".agents/skills/weekly-plan-generate/SKILL.md").read_text()
+
+    assert "Keep provider-reserved workout syntax out of executable step cues" in content
+    assert "typed duration, distance, or pace target fields" in content
+    assert "timed-prompt markers" in content
+
+
 def test_weekly_planning_is_run_only_and_athlete_managed_sports_are_context():
     retired_schema_paths = [
         PACKAGE_ROOT / "schemas" / "plan.py",

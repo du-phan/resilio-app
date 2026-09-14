@@ -100,7 +100,13 @@ it, or overwrite a previously presented proposal.
 - Represent every running session under the typed `"structured_workout"`
   field, including targetless easy runs. Use recursive warm-up, work,
   recovery, repetition, and cool-down step contracts rather than an untyped
-  interval list. Do not emit a non-running workout.
+  interval list. Keep provider-reserved workout syntax out of executable step cues.
+  Express values through typed duration, distance, or pace target fields;
+  Intervals.icu otherwise parses values such as `5m`, `2km`, or `5:10` as
+  workout syntax instead of cue prose. Do not place its `33^prompt` or `<!>`
+  timed-prompt markers in a cue. Refer to typed values as the prescribed
+  duration, distance, or pace. Non-reserved numerical prose such as `RPE 3/10`
+  may stay in the cue. Do not emit a non-running workout.
 - Schedule rest as rest; do not create filler workouts to satisfy a count.
 
 ### Baseline-assessment benchmark

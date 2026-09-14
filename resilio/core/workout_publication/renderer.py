@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from resilio.schemas.structured_workout import (
     RampStep,
     RepeatStep,
@@ -17,6 +19,28 @@ from resilio.schemas.structured_workout import (
 
 class WorkoutRenderError(ValueError):
     pass
+
+
+_NUMBER = r"\d+(?:\.\d+)?"
+_INTERVALS_RESERVED_CUE_SYNTAX = re.compile(
+    rf"""
+    (?:
+        (?<![A-Za-z0-9])
+        (?:
+            (?:{_NUMBER}(?:h|m|s))+
+            |{_NUMBER}(?:mtr|km|mi)
+            |{_NUMBER}'(?:{_NUMBER}")?
+            |{_NUMBER}"
+            |\d+:\d{{2}}(?:-\d+:\d{{2}})?
+                (?:/(?:100m|100y|km|mi|500m|400m|250m))?
+        )
+        (?![A-Za-z0-9])
+        |(?<![A-Za-z0-9]){_NUMBER}\^
+        |<!>
+    )
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
 
 def _whole_number(value: float, *, unit_name: str) -> int:
@@ -39,6 +63,12 @@ def _clock(total_seconds: float) -> str:
 def _prompt(value: str | None, *, fallback: str | None = None) -> str | None:
     """Return one parser-safe prompt line without changing its words."""
     normalized = " ".join((value or fallback or "").split())
+    if reserved := _INTERVALS_RESERVED_CUE_SYNTAX.search(normalized):
+        raise WorkoutRenderError(
+            "Workout cues cannot contain reserved Intervals.icu syntax; "
+            f"remove {reserved.group(0)!r} and express the instruction in "
+            "parser-safe prose or a supported typed field"
+        )
     return normalized or None
 
 

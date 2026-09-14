@@ -590,6 +590,118 @@ def test_native_text_render_rejects_provider_unsupported_nested_repeats() -> Non
 
 
 @pytest.mark.parametrize(
+    "cue",
+    [
+        "Hold 5:10-5:20 per kilometre evenly",
+        "Hold 5m then settle",
+        "Finish with 30s relaxed",
+        "Cruise for 2km before pressing",
+        "Jog for 1h2m30s if needed",
+        "Run 500mtr before settling",
+        "Continue for 4.5mi before pressing",
+        "Relax for 5m30s first",
+        "Settle for 5' before pressing",
+        "Finish with 1'30\" relaxed",
+        "Stride for 30\" smoothly",
+        "Add a 33^timed prompt",
+        "First prompt <!> then settle",
+        "First 33^second <!> then settle",
+    ],
+)
+def test_native_text_render_rejects_provider_reserved_syntax_inside_step_cues(
+    cue: str,
+) -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {
+                        "unit": "meters",
+                        "value": 1500,
+                        "nominal_seconds": 480,
+                    },
+                    "target": {
+                        "mode": "pace",
+                        "unit": "seconds_per_kilometer",
+                        "minimum": 310,
+                        "maximum": 320,
+                    },
+                    "intensity": "interval",
+                    "cue": cue,
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(
+        WorkoutRenderError,
+        match="Workout cues cannot contain reserved Intervals.icu syntax",
+    ):
+        render_structured_workout(structure.steps)
+
+
+@pytest.mark.parametrize(
+    "cue",
+    [
+        "Stay relaxed at RPE 3/10 on 15 September.",
+        "Keep the effort near 75% without straining.",
+        "Stay near 220w while seated.",
+        "Settle into Z2 smoothly.",
+        "Hold 90rpm with relaxed shoulders.",
+        "Press 2x before the finish.",
+        "Use freeride if needed.",
+    ],
+)
+def test_native_text_render_allows_non_reserved_syntax_inside_step_cues(
+    cue: str,
+) -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "intensity": "active",
+                    "cue": cue,
+                }
+            ],
+        }
+    )
+
+    assert render_structured_workout(structure.steps) == (
+        f"- {cue} 10m intensity=active\n"
+    )
+
+
+def test_native_text_render_gives_a_supported_repair_for_reserved_cue_syntax() -> None:
+    structure = StructuredWorkout.model_validate(
+        {
+            "sport": "run",
+            "steps": [
+                {
+                    "kind": "steady",
+                    "duration": {"unit": "seconds", "value": 600},
+                    "intensity": "active",
+                    "cue": "First prompt <!> then settle",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(
+        WorkoutRenderError,
+        match=(
+            "remove '<!>' and express the instruction in parser-safe prose "
+            "or a supported typed field"
+        ),
+    ):
+        render_structured_workout(structure.steps)
+
+
+@pytest.mark.parametrize(
     ("mode", "unit"),
     [
         ("pace", "seconds_per_kilometer"),
