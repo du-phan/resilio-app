@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 from pydantic import TypeAdapter, ValidationError
 
+from resilio.api.macro_amendment import apply_macro_amendment_file, validate_macro_amendment_file
 from resilio.api.plan import (
     PlanError,
     build_assessment_template,
@@ -71,6 +72,30 @@ def discard_unapproved_command(
 @app.command("status")
 def status_command() -> None:
     _emit_result(get_plan_status(), "Training-plan population status")
+
+
+@app.command("validate-amendment")
+def validate_amendment_command(
+    proposal_file: Path = typer.Option(..., "--file"),
+) -> None:
+    _emit_result(validate_macro_amendment_file(proposal_file), "Macro amendment validated")
+
+
+@app.command("apply-amendment")
+def apply_amendment_command(
+    proposal_file: Path = typer.Option(..., "--file"),
+    expected_file_sha256: str = typer.Option(..., "--sha256"),
+    athlete_confirmation: str = typer.Option(..., "--athlete-confirmation"),
+) -> None:
+    """Approve exact reviewed macro bytes without replacing the race cycle."""
+    _emit_result(
+        apply_macro_amendment_file(
+            proposal_file,
+            expected_file_sha256=expected_file_sha256,
+            athlete_confirmation_reference=athlete_confirmation,
+        ),
+        "Macro amendment applied",
+    )
 
 
 @app.command("week")
@@ -149,7 +174,8 @@ def create_assessment_context_command(
     evidence_as_of_date: str = typer.Option(..., "--evidence-as-of"),
     intended_plan_start_date: str = typer.Option(..., "--start"),
     assessment_reasons: list[AssessmentReason] = typer.Option(..., "--reason"),
-    schedule_constraints_file: Path | None = typer.Option(
+    schedule_constraints_file: Path
+    | None = typer.Option(
         None,
         "--constraints-file",
         help="JSON array of athlete-confirmed unavailable date ranges.",
@@ -257,7 +283,8 @@ def create_cycle_review_command(
         ...,
         "--athlete-confirmation",
     ),
-    goal_activity_id: str | None = typer.Option(
+    goal_activity_id: str
+    | None = typer.Option(
         None,
         "--goal-activity-id",
     ),

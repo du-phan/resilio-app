@@ -28,6 +28,7 @@ Git history is the archive.
 - [CLI command index](coaching/cli/index.md)
 - [Athlete-managed sports](coaching/athlete-managed-sports.md)
 - [Methodology](coaching/methodology.md)
+- [Macro amendments](coaching/macro-amendments.md)
 - [Training-book summaries](training_books/)
 
 ## Product

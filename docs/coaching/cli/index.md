@@ -68,7 +68,17 @@ authority. Commands return JSON envelopes.
   accepts `--constraints-file` for those cycle-specific date ranges.
 - `resilio plan discard-unapproved --plan-revision <ID>` — remove only the
   exact unapproved, unapplied proposal after proving it has no publication or
-  fulfillment ownership; approved plans remain closure-only.
+  fulfillment ownership; approved cycles cannot be discarded.
+- `resilio plan validate-amendment --file <JSON>` — validate exact remaining
+  race-macro skeletons against the current active-state digest and fresh
+  planning context for each changed week; returns the file SHA-256 and affected
+  future workout weeks.
+- `resilio plan apply-amendment --file <JSON> --sha256 <SHA>
+  --athlete-confirmation <TEXT>` — record the exact athlete-approved macro
+  amendment and its immutable prior snapshot without changing cycle/workout
+  ownership identities. Retired upcoming workouts require fresh weekly
+  generation, approval, and application before synchronization. See the
+  [macro amendment workflow](../macro-amendments.md).
 - `resilio plan assessment-candidates|create-assessment-review|close-assessment`
   — ownership-paired whole-activity or exact-segment selection, immutable
   assessment review, and separately confirmed archival.

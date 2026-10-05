@@ -102,32 +102,31 @@ def _validate_workout_ids_are_globally_unique(
     """Prevent one external ownership ID from crossing plan or week lineage."""
     assert state.active_plan is not None
     active_plan = state.active_plan.plan
-    owners_by_workout_id: dict[str, tuple[str, int]] = {}
+    owners_by_workout_id: dict[str, set[tuple[str, str, int]]] = {}
     try:
-        closed_cycles = load_all_closed_plan_archives(
-            repo,
-            state.closed_plan_references,
-        )
+        closed_cycles = load_all_closed_plan_archives(repo, state.closed_plan_references)
     except PlanningArtifactError as exc:
         raise PlanOperationError(str(exc)) from exc
-    for cycle in closed_cycles:
-        plan = cycle.active_plan_snapshot.plan
-        for week in plan.weeks:
+    plan_states = [*(cycle.active_plan_snapshot for cycle in closed_cycles), state.active_plan]
+    for plan_state in plan_states:
+        plan = plan_state.plan
+        retained_weeks = [
+            *plan.weeks,
+            *(revision.applied_week_snapshot for revision in plan_state.applied_week_revisions),
+            *(
+                week
+                for amendment in plan_state.macro_amendments
+                for week in amendment.previous_plan.weeks
+            ),
+        ]
+        for week in retained_weeks:
             for workout in week.running_workouts:
-                owners_by_workout_id[workout.id] = (
-                    plan.id,
-                    week.week_number,
+                owners_by_workout_id.setdefault(workout.id, set()).add(
+                    (plan.id, plan.plan_revision_id, week.week_number)
                 )
-    for week in active_plan.weeks:
-        if week.week_number == populated_week.week_number:
-            continue
-        for workout in week.running_workouts:
-            owners_by_workout_id[workout.id] = (
-                active_plan.id,
-                week.week_number,
-            )
+    proposed_owner = (active_plan.id, active_plan.plan_revision_id, populated_week.week_number)
     for workout in populated_week.running_workouts:
-        if workout.id in owners_by_workout_id:
+        if owners_by_workout_id.get(workout.id, set()) - {proposed_owner}:
             raise PlanOperationError(
                 "Workout ID is already owned by another plan or week: " f"{workout.id}"
             )

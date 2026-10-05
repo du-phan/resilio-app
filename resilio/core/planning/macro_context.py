@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from resilio.core.coaching_context.service import build_coach_history
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
-    canonical_data_sha256,
+    archived_active_plan_sha256,
     import_evidence_artifact,
     load_all_closed_plan_archives,
     load_evidence_artifact,
@@ -77,7 +77,7 @@ def _load_cycle_review(
     if (
         review.plan_id != plan.id
         or review.plan_revision_id != plan.plan_revision_id
-        or review.active_plan_sha256 != canonical_data_sha256(archive.active_plan_snapshot)
+        or review.active_plan_sha256 != archived_active_plan_sha256(archive)
         or review.effective_end_date != archive.closure.effective_end_date
         or review.goal_outcome != archive.closure.goal_outcome
     ):
@@ -111,7 +111,7 @@ def _load_assessment_review(
     if (
         review.plan_id != plan.id
         or review.plan_revision_id != plan.plan_revision_id
-        or review.active_plan_sha256 != canonical_data_sha256(archive.active_plan_snapshot)
+        or review.active_plan_sha256 != archived_active_plan_sha256(archive)
         or review.result.performance_date != closure.effective_end_date
     ):
         raise PlanOperationError("Closed assessment does not match its review evidence")

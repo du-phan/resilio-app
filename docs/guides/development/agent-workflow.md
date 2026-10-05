@@ -109,8 +109,14 @@ overrides for athlete-managed sports or crams running into the remaining days.
 
 An unapproved, unapplied plan proposal may be discarded for revision only by
 its exact plan revision ID and only after local publication and fulfillment
-manifests prove that no ownership record exists. Approved plans always require
-the normal evidence-backed closure lifecycle.
+manifests prove that no ownership record exists. Replacing an approved cycle
+requires the normal evidence-backed closure lifecycle. For an athlete-approved
+change to remaining race-macro targets within the same goal and constraints,
+use the [macro amendment workflow](../../coaching/macro-amendments.md).
+Amendments retain the original cycle/workout ownership lineage, add a new
+exact-file macro approval and immutable prior snapshot, and require fresh
+weekly approval for retired upcoming workouts. Completed weeks and any
+populated week with elapsed or fulfilled workouts cannot be amended.
 
 Before a successor plan, synchronize through the evidence date, record the
 athlete-confirmed goal outcome, create and present an immutable cycle review,

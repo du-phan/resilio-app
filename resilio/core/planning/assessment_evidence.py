@@ -8,7 +8,7 @@ from resilio.core.activity_sync.evidence_identity import (
 )
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
-    canonical_data_sha256,
+    archived_active_plan_sha256,
     load_all_closed_plan_archives,
     load_evidence_artifact,
 )
@@ -76,7 +76,7 @@ def load_verified_closed_assessment_review(
     if (
         closure.assessment_review_artifact_sha256 != review_sha256
         or closure.effective_end_date != review.result.performance_date
-        or review.active_plan_sha256 != canonical_data_sha256(archive.active_plan_snapshot)
+        or review.active_plan_sha256 != archived_active_plan_sha256(archive)
         or review.benchmark_intent != plan.benchmark_intent
     ):
         raise PlanOperationError("Closed assessment archive does not match its review")

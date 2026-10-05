@@ -6,6 +6,7 @@ from resilio.core.planning.artifacts import (
     load_all_closed_plan_archives,
 )
 from resilio.core.planning.errors import PlanOperationError
+from resilio.core.planning.macro_history import verify_macro_amendment_history
 from resilio.core.planning.profile_plan_transaction import (
     coordinated_plan_lock,
 )
@@ -27,11 +28,15 @@ def load_planning_aggregate_unlocked(
     if isinstance(result, RepoError):
         raise PlanOperationError(f"Planning state is invalid: {result}")
     if result is not None:
+        if result.active_plan is not None:
+            verify_macro_amendment_history(result.active_plan)
         try:
             closed_cycles = load_all_closed_plan_archives(
                 repo,
                 result.closed_plan_references,
             )
+            for archive in closed_cycles:
+                verify_macro_amendment_history(archive.active_plan_snapshot)
         except PlanningArtifactError as exc:
             raise PlanOperationError(f"Planning history is invalid: {exc}") from exc
         approval_ids = {approval.approval_id for approval in result.vdot_approvals}

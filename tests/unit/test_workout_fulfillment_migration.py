@@ -52,7 +52,6 @@ from resilio.schemas.approvals import (
     ClosedPlanArchive,
     ClosedPlanReference,
     OwnedBaselineAssessmentVDOTEvidence,
-    PlanApproval,
     PlanningState,
     VDOTApproval,
     VDOTProposal,
@@ -62,6 +61,7 @@ from resilio.schemas.plan_history import (
     DedicatedActivityAssessmentResult,
     PlanWorkoutIdentity,
 )
+from resilio.schemas.planning.approval_records import PlanApproval
 from resilio.schemas.planning.plans import BaselineAssessmentPlan
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.planning_evidence import AssessmentPlanningContext

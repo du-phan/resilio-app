@@ -96,21 +96,34 @@ def load_closed_plan_archive(
     repo: RepositoryIO,
     reference: ClosedPlanReference,
 ) -> ClosedPlanArchive:
-    result = repo.read_json(
-        archive_path(reference.plan_id),
-        ClosedPlanArchive,
-    )
-    if result is None:
-        raise PlanningArtifactError(f"Closed plan archive is missing: {reference.plan_id}")
-    if isinstance(result, RepoError):
-        raise PlanningArtifactError(f"Closed plan archive is invalid: {result}")
+    path = repo.resolve_path(archive_path(reference.plan_id))
+    try:
+        if path.is_symlink():
+            raise PlanningArtifactError("Closed plan archive cannot be a symlink")
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != reference.archive_sha256:
+            raise PlanningArtifactError("Closed plan archive bytes changed after closure")
+        result = ClosedPlanArchive.model_validate_json(content)
+    except (OSError, ValueError) as exc:
+        raise PlanningArtifactError(
+            f"Closed plan archive is unavailable or invalid: {exc}"
+        ) from exc
     if result.active_plan_snapshot.plan.id != reference.plan_id:
         raise PlanningArtifactError("Closed plan archive ID does not match its reference")
     if result.active_plan_snapshot.plan.plan_revision_id != reference.plan_revision_id:
         raise PlanningArtifactError("Closed plan archive revision does not match its reference")
-    if model_sha256(result) != reference.archive_sha256:
-        raise PlanningArtifactError("Closed plan archive bytes changed after closure")
     return result
+
+
+def archived_active_plan_sha256(archive: ClosedPlanArchive) -> str:
+    """Hash the persisted snapshot fields, before newly added defaults expand it.
+
+    Archive readers already prove the exact stored bytes. The parsed model's
+    fields-set retains that document's explicit fields throughout nested models.
+    """
+    return canonical_data_sha256(
+        archive.active_plan_snapshot.model_dump(mode="json", by_alias=True, exclude_unset=True)
+    )
 
 
 def load_all_closed_plan_archives(

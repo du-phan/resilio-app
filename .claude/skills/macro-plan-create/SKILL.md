@@ -8,6 +8,11 @@ description: Create a methodology-explicit Monday-Sunday macro plan skeleton fro
 Operate non-interactively. Do not ask the athlete questions, approve the plan,
 or generate exact workouts.
 
+For an athlete-approved change to remaining targets within the same active
+race cycle, use `docs/coaching/macro-amendments.md` rather than creating a
+successor. This is a separate exact-file amendment approval; fresh weekly
+generation and approval remain required for retired upcoming workouts.
+
 ## Preconditions
 
 Require:

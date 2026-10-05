@@ -129,6 +129,13 @@ snapshot and the date-bounded activity, wellness, coverage, fulfillment, and
 publication inputs used by the review. Assessment review additionally
 re-verifies the owned publication/provider-paired-fulfillment chain and exact
 canonical result.
+Race-macro amendments retain cycle/workout ownership IDs while adding new
+exact-file approvals, full prior-plan digests, and predecessor audit digests.
+Only remaining skeletons are amended; affected unexecuted weekly authority is
+retired before fresh exact weekly approval. Historical adherence resolves the
+macro epoch that authorized each weekly file. Archive integrity proves stored
+bytes before parsing, and historical review bindings hash persisted snapshot
+fields without inserting newly added defaults.
 Race-macro creation performs the analogous freshness check for its 12-week
 context and must cite the latest assessment result when one exists.
 

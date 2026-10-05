@@ -15,6 +15,7 @@ from resilio.core.planning.source_state import coaching_evidence_source_sha256
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.activity import is_running_sport
 from resilio.schemas.coaching import WeekPlanningContext
+from resilio.schemas.plan_history import EvidenceArtifactReference
 from resilio.schemas.planning.applications import WeekApplication
 from resilio.schemas.planning.plans import TrainingPlan
 from resilio.schemas.planning.weeks import WeekPlan
@@ -65,18 +66,18 @@ def _validate_other_sport_considerations(
             )
 
 
-def validate_week_planning_evidence(
+def validate_week_context(
     repo: RepositoryIO,
     *,
     plan: TrainingPlan,
     target_week: WeekPlan,
-    application: WeekApplication,
+    reference: EvidenceArtifactReference,
 ) -> WeekPlanningContext:
     """Prove that a weekly proposal covers its immutable, still-current evidence."""
     try:
         context = load_evidence_artifact(
             repo,
-            application.planning_context_reference,
+            reference,
             WeekPlanningContext,
         )
     except PlanningArtifactError as exc:
@@ -101,5 +102,21 @@ def validate_week_planning_evidence(
         raise PlanOperationError(
             "Training evidence changed after the week-planning context was created"
         )
+    return context
+
+
+def validate_week_planning_evidence(
+    repo: RepositoryIO,
+    *,
+    plan: TrainingPlan,
+    target_week: WeekPlan,
+    application: WeekApplication,
+) -> WeekPlanningContext:
+    context = validate_week_context(
+        repo,
+        plan=plan,
+        target_week=target_week,
+        reference=application.planning_context_reference,
+    )
     _validate_other_sport_considerations(application, context)
     return context

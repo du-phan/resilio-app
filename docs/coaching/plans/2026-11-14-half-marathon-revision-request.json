@@ -1,6 +1,6 @@
 {
   "record_type": "athlete_approved_macro_revision_request",
-  "operational_status": "not_applied",
+  "operational_status": "applied",
   "approval": {
     "athlete_confirmation": "I validate it",
     "scope": "latest macro targets discussed in this conversation; exact weekly workouts require separate approval",
@@ -221,10 +221,24 @@
     "planned_run_distance_totals": "passed"
   },
   "application_constraints": [
-    "The active approved plan remains unchanged.",
-    "Current approved workouts and their approval history are not rewritten by this request.",
-    "The supported application workflow requires coordinated synchronization, an immutable cycle review, athlete-confirmed closure, fresh macro evidence, and successor approval.",
-    "Closure cannot use a future effective end date; replacing current-week workouts requires a separately reviewed transition and exact weekly approval.",
-    "Source activity coverage is incomplete and recent recovery readings are sparse; build and peak extensions remain conditional."
-  ]
+    "The approved remaining macro targets have been applied through an auditable amendment within the original race-cycle ownership lineage.",
+    "Completed weeks, exact fulfillment history, and original approval snapshots are preserved.",
+    "Week 6 exact running workouts have been separately approved, applied and synchronized with Intervals.icu; the existing tempo event was unchanged and the existing long-run event was updated in place.",
+    "Future unpopulated weeks require fresh weekly evidence, exact workout generation, separate approval and application.",
+    "Source synchronization is partial with quarantined rows and recent recovery readings have sparse coverage; build and peak extensions remain conditional."
+  ],
+  "application": {
+    "macro_amendment": "applied",
+    "evidence_as_of_date": "2026-10-05",
+    "week_6": {
+      "weekly_distance_meters": 23000,
+      "tempo_day_distance_meters": 10000,
+      "easy_long_run_distance_meters": 13000,
+      "local_application": "applied",
+      "intervals_icu_synchronization": "synchronized",
+      "garmin_watch_delivery": "unverified"
+    },
+    "completed_week_history": "preserved",
+    "future_exact_weekly_workouts": "require_normal_weekly_generation_and_approval"
+  }
 }

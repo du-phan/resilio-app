@@ -103,7 +103,6 @@ from resilio.core.workout_publication.publication_deletions import (
 from resilio.schemas.approvals import (
     ActivePlanState,
     ClosedPlanArchive,
-    PlanApproval,
     PlanningState,
     VDOTApproval,
 )
@@ -113,6 +112,7 @@ from resilio.schemas.plan_history import (
     PlanClosure,
     PlanClosureDisposition,
 )
+from resilio.schemas.planning.approval_records import PlanApproval
 from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
 from resilio.schemas.planning_evidence import (
     MacroPlanningContext,

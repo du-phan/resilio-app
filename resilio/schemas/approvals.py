@@ -15,6 +15,7 @@ from resilio.schemas.plan_history import (
     EvidenceArtifactReference,
     PlanLifecycleClosure,
 )
+from resilio.schemas.planning.approval_records import MacroAmendmentAudit, PlanApproval
 from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
 from resilio.schemas.planning.weeks import WeekPlan
 from resilio.schemas.vdot import RaceDistance
@@ -162,37 +163,6 @@ class VDOTApproval(BaseModel):
         return self
 
 
-class PlanApproval(BaseModel):
-    approval_id: str = Field(pattern=r"^plan_approval_[a-f0-9]{16}$")
-    plan_kind: Literal["race_macro", "baseline_assessment"]
-    plan_id: str
-    plan_revision_id: str
-    plan_skeleton_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    vdot_approval_id: str | None = Field(
-        default=None,
-        pattern=r"^vdot_approval_[a-f0-9]{16}$",
-    )
-    planning_inputs_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    approved_at_utc: datetime
-
-    model_config = ConfigDict(extra="forbid")
-
-    @field_validator("approved_at_utc")
-    @classmethod
-    def approval_time_is_aware(cls, value: datetime) -> datetime:
-        if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError("approved_at_utc must be timezone-aware")
-        return value
-
-    @model_validator(mode="after")
-    def vdot_binding_matches_plan_kind(self) -> "PlanApproval":
-        if self.plan_kind == "race_macro" and self.vdot_approval_id is None:
-            raise ValueError("race plan approval requires a VDOT approval")
-        if self.plan_kind == "baseline_assessment" and self.vdot_approval_id is not None:
-            raise ValueError("assessment plan approval cannot depend on VDOT")
-        return self
-
-
 class WeeklyApplicationAction(str, Enum):
     INITIAL = "initial"
     REPLACE = "replace"
@@ -303,6 +273,7 @@ class ActivePlanState(BaseModel):
     plan_approval: PlanApproval | None = None
     pending_weekly_approval: WeeklyApproval | None = None
     applied_week_revisions: list[AppliedWeekRevision] = Field(default_factory=list)
+    macro_amendments: list[MacroAmendmentAudit] = Field(default_factory=list)
     invalidated_at_utc: datetime | None = None
     invalidation_reason: str | None = None
 
@@ -331,6 +302,20 @@ class ActivePlanState(BaseModel):
             self._validate_week_reference(self.pending_weekly_approval)
         if self.applied_week_revisions and self.plan_approval is None:
             raise ValueError("applied week revisions require plan approval")
+        previous_amendment = None
+        for amendment in self.macro_amendments:
+            if not isinstance(self.plan, RaceMacroPlan):
+                raise ValueError("only race macros support amendments")
+            self._validate_plan_reference(amendment.previous_plan_approval)
+            self._validate_plan_reference(amendment.approval)
+            if previous_amendment is not None:
+                if amendment.previous_plan_approval != previous_amendment.approval:
+                    raise ValueError("macro amendment approvals must form one continuous chain")
+                if amendment.applied_at_utc <= previous_amendment.applied_at_utc:
+                    raise ValueError("macro amendments must follow application order")
+            previous_amendment = amendment
+        if previous_amendment is not None and self.plan_approval != previous_amendment.approval:
+            raise ValueError("active macro approval must match the latest amendment")
         active_week_numbers: list[int] = []
         for approval in self.applied_week_revisions:
             if (
@@ -339,7 +324,11 @@ class ActivePlanState(BaseModel):
             ):
                 raise ValueError("applied approval references another plan revision")
             assert self.plan_approval is not None
-            if approval.weekly_approved_at_utc < self.plan_approval.approved_at_utc:
+            macro_approval = self.plan_approval
+            for amendment in reversed(self.macro_amendments):
+                if approval.weekly_approved_at_utc < amendment.applied_at_utc:
+                    macro_approval = amendment.previous_plan_approval
+            if approval.weekly_approved_at_utc < macro_approval.approved_at_utc:
                 raise ValueError("applied weekly approval cannot predate plan approval")
             if approval.active:
                 active_week_numbers.append(approval.week_number)

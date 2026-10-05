@@ -5,6 +5,7 @@ from typing import Any, Protocol
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
     archive_path,
+    archived_active_plan_sha256,
     canonical_data_sha256,
     load_all_closed_plan_archives,
     model_sha256,
@@ -75,7 +76,7 @@ def _validate_source_review_binding(
     if (
         raw.get("plan_id") != plan.id
         or raw.get("plan_revision_id") != plan.plan_revision_id
-        or raw.get("active_plan_sha256") != canonical_data_sha256(active_plan)
+        or raw.get("active_plan_sha256") != archived_active_plan_sha256(archive)
     ):
         raise PlanningEvidenceMigrationError(
             "Closure review did not match its source plan before migration"
@@ -110,6 +111,11 @@ def migrate_active_plan(
     proposals: PlanningProposalMigration,
     skeleton_migrations: list[PlanSkeletonHashMigration],
 ) -> ActivePlanState:
+    if active_plan.macro_amendments:
+        raise PlanningEvidenceMigrationError(
+            "Legacy fulfillment cutover does not accept amended macro history; "
+            "complete that cutover before amending a race macro"
+        )
     previous_skeleton_sha256 = plan_skeleton_sha256(active_plan.plan)
     if (
         active_plan.plan_approval is not None

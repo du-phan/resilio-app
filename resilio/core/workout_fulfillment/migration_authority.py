@@ -12,6 +12,7 @@ from resilio.core.planning.artifacts import (
     load_all_closed_plan_archives,
 )
 from resilio.core.planning.integrity import assert_applied_week_revision_matches_plan
+from resilio.core.planning.macro_history import macro_authority_at
 from resilio.core.planning.schedule import (
     WorkoutScheduleError,
     schedule_authority_deadline_utc,
@@ -109,7 +110,13 @@ def load_migration_authorities_unlocked(
                 raise ValueError("Applied-week evidence lacks an approved plan")
             continue
         for revision in plan_state.applied_week_revisions:
-            assert_applied_week_revision_matches_plan(plan, revision)
+            source_plan, source_approval = macro_authority_at(
+                plan,
+                plan_approval,
+                plan_state.macro_amendments,
+                approved_at_utc=revision.weekly_approved_at_utc,
+            )
+            assert_applied_week_revision_matches_plan(source_plan, revision)
             week = revision.applied_week_snapshot
             for workout in week.running_workouts:
                 authorities.append(
@@ -130,7 +137,7 @@ def load_migration_authorities_unlocked(
                         ),
                         valid_from_utc=revision.applied_at_utc,
                         valid_until_utc=revision.invalidated_at_utc,
-                        plan_approved_at_utc=plan_approval.approved_at_utc,
+                        plan_approved_at_utc=source_approval.approved_at_utc,
                         weekly_approved_at_utc=revision.weekly_approved_at_utc,
                         effective_end_date=effective_end_date,
                         retired_at_utc=retired_at_utc,
