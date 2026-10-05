@@ -51,12 +51,12 @@ class LongRunHints(BaseModel):
     emphasis: LongRunEmphasis
     minimum_weekly_run_volume_percent: float = Field(
         ge=15,
-        le=55,
+        le=60,
         allow_inf_nan=False,
     )
     maximum_weekly_run_volume_percent: float = Field(
         ge=15,
-        le=55,
+        le=60,
         allow_inf_nan=False,
     )
     target_distance_meters: Optional[float] = Field(

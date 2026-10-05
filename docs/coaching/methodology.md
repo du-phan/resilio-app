@@ -203,6 +203,12 @@ not from a load-to-kilometer conversion.
 - Keep the macro plan strategic; exact workouts belong to separately approved
   weekly proposals.
 
+Long-run hints can specify an approved weekly-distance range within 15–60%.
+The 60% schema ceiling is an application policy, not a book-derived training
+recommendation. Each plan's exact approved range remains binding; widening the
+schema does not change existing approvals. Choose the range from demonstrated
+running exposure, frequency, recovery, and other-sport demands.
+
 Weekly planning uses only facts available through the planning date:
 
 - exact owned-workout adherence;

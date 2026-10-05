@@ -3,6 +3,7 @@
 from datetime import date, datetime, time, timezone
 
 import pytest
+from pydantic import ValidationError
 
 from resilio.core.planning.policy import (
     WeekPolicyError,
@@ -13,7 +14,7 @@ from resilio.schemas.planning.constraints import (
     PlanningConstraintsSnapshot,
 )
 from resilio.schemas.planning.plans import RaceMacroPlan
-from resilio.schemas.planning.weeks import WeekPlan
+from resilio.schemas.planning.weeks import LongRunHints, WeekPlan
 from resilio.schemas.planning.workouts import RunningWorkoutPrescription
 from resilio.schemas.profile import (
     BalancedTrainingPriority,
@@ -214,6 +215,87 @@ def test_valid_week_satisfies_frequency_quality_and_long_run_policy() -> None:
     populated = _week(workouts=_valid_runs())
 
     validate_populated_week(plan, populated)
+
+
+def test_long_run_hints_allow_an_approved_range_above_fifty_five_percent() -> None:
+    hints = LongRunHints(
+        emphasis="easy",
+        minimum_weekly_run_volume_percent=56,
+        maximum_weekly_run_volume_percent=60,
+    )
+
+    assert hints.minimum_weekly_run_volume_percent == 56
+    assert hints.maximum_weekly_run_volume_percent == 60
+
+
+@pytest.mark.parametrize(
+    "field_name",
+    ["minimum_weekly_run_volume_percent", "maximum_weekly_run_volume_percent"],
+)
+@pytest.mark.parametrize("invalid_percent", [14.999, 60.001, float("inf"), float("nan")])
+def test_long_run_hints_reject_out_of_range_or_nonfinite_percentages(
+    field_name: str, invalid_percent: float
+) -> None:
+    data = {
+        "emphasis": "easy",
+        "minimum_weekly_run_volume_percent": 50,
+        "maximum_weekly_run_volume_percent": 60,
+    }
+    data[field_name] = invalid_percent
+
+    with pytest.raises(ValidationError):
+        LongRunHints.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("weekly_distance_meters", "long_distance_meters", "approved_maximum_percent", "valid"),
+    [
+        (23_000, 13_000, 60, True),
+        (23_000, 13_000, 55, False),
+        (20_000, 12_000, 60, True),
+        (20_000, 12_000.1, 60, False),
+    ],
+)
+def test_long_run_share_enforces_the_exact_approved_percentage(
+    weekly_distance_meters: float,
+    long_distance_meters: float,
+    approved_maximum_percent: float,
+    valid: bool,
+) -> None:
+    data = _week().model_dump(mode="python")
+    data["target_run_volume_meters"] = weekly_distance_meters
+    data["workout_structure_hints"]["quality"] = {"maximum_sessions": 0, "types": []}
+    data["workout_structure_hints"]["long_run"].update(
+        maximum_weekly_run_volume_percent=approved_maximum_percent,
+        target_distance_meters=long_distance_meters,
+    )
+    skeleton = WeekPlan.model_validate(data)
+    plan = _plan(skeleton)
+    data["running_workouts"] = [
+        _workout(
+            "w_easy",
+            day=28,
+            distance_meters=weekly_distance_meters - long_distance_meters,
+            duration_seconds=3_000,
+        ),
+        _workout(
+            "w_long",
+            day=31,
+            distance_meters=long_distance_meters,
+            duration_seconds=4_800,
+            workout_type="long_run",
+        ),
+    ]
+    populated = WeekPlan.model_validate(data)
+
+    if valid:
+        validate_populated_week(plan, populated)
+    else:
+        with pytest.raises(WeekPolicyError) as caught:
+            validate_populated_week(plan, populated)
+        assert [violation.code for violation in caught.value.violations] == [
+            "long_run_share_above_maximum"
+        ]
 
 
 def test_policy_reports_stable_availability_duration_and_quality_violations() -> None:
