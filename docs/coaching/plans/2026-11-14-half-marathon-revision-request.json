@@ -1,0 +1,202 @@
+{
+  "record_type": "athlete_approved_macro_revision_request",
+  "operational_status": "not_applied",
+  "approval": {
+    "athlete_confirmation": "ok for now I validate the updated macro plan, committed and pushed",
+    "scope": "macro targets discussed in this conversation; exact weekly workouts require separate approval",
+    "week_7_confirmation": "Use 26 km total and a 14 km long run"
+  },
+  "goal": {
+    "type": "half_marathon",
+    "target_date": "2026-11-14",
+    "target_time": "2:00:00"
+  },
+  "primary_methodology": "daniels",
+  "baseline_vdot": 38.0,
+  "holiday_context": {
+    "start_date": "2026-10-19",
+    "end_date": "2026-10-25",
+    "location": "Barcelona",
+    "climbing_sessions": 0,
+    "athlete_confirmation": "in barcelona I won't climb so that week, running is the only sports for sure"
+  },
+  "weeks": [
+    {
+      "planned_run_count": 2,
+      "conditional": false,
+      "week": {
+        "week_number": 6,
+        "phase": "build",
+        "start_date": "2026-10-05",
+        "end_date": "2026-10-11",
+        "target_run_volume_meters": 22000.0,
+        "workout_structure_hints": {
+          "quality": {
+            "maximum_sessions": 1,
+            "types": [
+              "tempo"
+            ]
+          },
+          "long_run": {
+            "emphasis": "easy",
+            "minimum_weekly_run_volume_percent": 50.0,
+            "maximum_weekly_run_volume_percent": 55.0,
+            "target_distance_meters": 12000.0
+          },
+          "intensity_distribution": null
+        },
+        "running_workouts": [],
+        "is_recovery_week": false,
+        "notes": "Retain the already approved current week and its exact workouts; this request does not reapprove or replace those workouts."
+      }
+    },
+    {
+      "planned_run_count": 2,
+      "conditional": true,
+      "week": {
+        "week_number": 7,
+        "phase": "build",
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-18",
+        "target_run_volume_meters": 26000,
+        "workout_structure_hints": {
+          "quality": {
+            "maximum_sessions": 1,
+            "types": [
+              "tempo"
+            ]
+          },
+          "long_run": {
+            "emphasis": "easy",
+            "minimum_weekly_run_volume_percent": 50.0,
+            "maximum_weekly_run_volume_percent": 55.0,
+            "target_distance_meters": 14000.0
+          },
+          "intensity_distribution": null
+        },
+        "running_workouts": [],
+        "is_recovery_week": false,
+        "notes": "Athlete approved twenty-six kilometres total and a fourteen-kilometre easy long run. This increase is conditional on controlled completion of the current twelve-kilometre run and normal recovery. Retain at most the familiar tempo dose; do not increase hard work. If the extension is unsupported, revise before exact weekly generation and approval."
+      }
+    },
+    {
+      "planned_run_count": 2,
+      "conditional": false,
+      "week": {
+        "week_number": 8,
+        "phase": "recovery",
+        "start_date": "2026-10-19",
+        "end_date": "2026-10-25",
+        "target_run_volume_meters": 18000.0,
+        "workout_structure_hints": {
+          "quality": {
+            "maximum_sessions": 0,
+            "types": []
+          },
+          "long_run": {
+            "emphasis": "easy",
+            "minimum_weekly_run_volume_percent": 50.0,
+            "maximum_weekly_run_volume_percent": 55.0,
+            "target_distance_meters": 9500.0
+          },
+          "intensity_distribution": null
+        },
+        "running_workouts": [],
+        "is_recovery_week": true,
+        "notes": "Barcelona holiday, athlete-confirmed no climbing. Two easy runs only; account for walking and sleep before judging recovery."
+      }
+    },
+    {
+      "planned_run_count": 3,
+      "conditional": true,
+      "week": {
+        "week_number": 9,
+        "phase": "peak",
+        "start_date": "2026-10-26",
+        "end_date": "2026-11-01",
+        "target_run_volume_meters": 29500.0,
+        "workout_structure_hints": {
+          "quality": {
+            "maximum_sessions": 0,
+            "types": []
+          },
+          "long_run": {
+            "emphasis": "easy",
+            "minimum_weekly_run_volume_percent": 50.0,
+            "maximum_weekly_run_volume_percent": 55.0,
+            "target_distance_meters": 16000.0
+          },
+          "intensity_distribution": null
+        },
+        "running_workouts": [],
+        "is_recovery_week": false,
+        "notes": "Conditional final endurance peak. Three runs distribute the volume, with the sixteen-kilometre long run entirely easy and the other runs easy. Revise before weekly approval if recovery or climbing exposure does not support this target."
+      }
+    },
+    {
+      "planned_run_count": 2,
+      "conditional": false,
+      "week": {
+        "week_number": 10,
+        "phase": "taper",
+        "start_date": "2026-11-02",
+        "end_date": "2026-11-08",
+        "target_run_volume_meters": 18000.0,
+        "workout_structure_hints": {
+          "quality": {
+            "maximum_sessions": 1,
+            "types": [
+              "race_pace"
+            ]
+          },
+          "long_run": {
+            "emphasis": "easy",
+            "minimum_weekly_run_volume_percent": 50.0,
+            "maximum_weekly_run_volume_percent": 55.0,
+            "target_distance_meters": 9500.0
+          },
+          "intensity_distribution": null
+        },
+        "running_workouts": [],
+        "is_recovery_week": false,
+        "notes": "Two-run taper with an easy long run and brief controlled race-pace work."
+      }
+    },
+    {
+      "planned_run_count": 2,
+      "conditional": false,
+      "week": {
+        "week_number": 11,
+        "phase": "taper",
+        "start_date": "2026-11-09",
+        "end_date": "2026-11-15",
+        "target_run_volume_meters": 26097.5,
+        "workout_structure_hints": {
+          "quality": {
+            "maximum_sessions": 1,
+            "types": [
+              "race_pace"
+            ]
+          },
+          "long_run": null,
+          "intensity_distribution": null
+        },
+        "running_workouts": [],
+        "is_recovery_week": false,
+        "notes": "One five-kilometre easy run plus the official 21.0975-kilometre race. Weekly total includes the race."
+      }
+    }
+  ],
+  "validation": {
+    "week_structural_schema": "passed",
+    "long_run_target_feasibility": "passed",
+    "issues": []
+  },
+  "application_constraints": [
+    "The active approved plan remains unchanged.",
+    "Current-week approved workouts must be preserved.",
+    "The supported application workflow requires coordinated synchronization, an immutable cycle review, athlete-confirmed closure, fresh macro evidence, and successor approval.",
+    "Closure cannot use a future effective end date; preserving the current week therefore requires a later transition or a separately reviewed replacement of current-week workouts.",
+    "Source activity coverage is incomplete and recent recovery readings are sparse; peak targets remain conditional."
+  ]
+}
