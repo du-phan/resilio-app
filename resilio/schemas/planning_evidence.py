@@ -30,6 +30,7 @@ from resilio.schemas.plan_history import (
 from resilio.schemas.planning.constraints import PlanningConstraintsSnapshot
 from resilio.schemas.planning.plans import PlanGoal
 from resilio.schemas.profile import Goal as AthleteGoal
+from resilio.schemas.running_progression import RunProgressionBindingV1
 from resilio.schemas.vdot import RaceDistance
 
 
@@ -380,9 +381,10 @@ class PlanningEvidencePointer(BaseModel):
 class MacroPlanningContext(BaseModel):
     """Bounded, immutable evidence package required for a new macro plan."""
 
-    schema_version: Literal[2] = 2
+    schema_version: Literal[3] = 3
     evidence_as_of_date: date
     intended_plan_start_date: date
+    progression: RunProgressionBindingV1 | None = None
     generated_at_utc: datetime
     planning_inputs_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     current_goal: AthleteGoal

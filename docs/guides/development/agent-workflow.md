@@ -189,6 +189,15 @@ approvals, and publication/fulfillment manifests as coordinated state.
 Temporary legacy readers exist only inside a one-shot offline migration and are
 deleted after the verified cutover.
 
+Private-state cutovers use `core/state_migration_transaction.py` with the
+publication, plan, and activity locks held throughout. The durable journal
+blocks normal authority reads until recovery completes. Flush target files and
+directory links before the committed decision. Use
+`poetry run resilio migrate recover-state` to recover exactly the pending
+transaction rather than executing another migration. A full rollback across
+schema changes restores both the pinned code revision and its matching private
+state backup; old data alone is not readable under the new formats.
+
 ## Completion gate
 
 Completion requires:
@@ -208,3 +217,8 @@ completion while a broader relevant gate is red.
 See the [architecture map](../../reference/architecture-map.md),
 [Intervals.icu reference](../../reference/intervals-icu-integration.md), and
 [CLI index](../../coaching/cli/index.md).
+
+## Running progression
+
+Use the shared [running progression review](../../coaching/running-progression.md)
+before proposing or approving increased running exposure.

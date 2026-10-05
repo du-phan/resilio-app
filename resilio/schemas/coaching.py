@@ -22,9 +22,22 @@ from resilio.schemas.assessment import (
     TimedBenchmarkIntent,
 )
 from resilio.schemas.methodology import MethodologySelection
-from resilio.schemas.plan_history import PlanWorkoutIdentity
+from resilio.schemas.plan_history import EvidenceArtifactReference, PlanWorkoutIdentity
 from resilio.schemas.planning.constraints import PlanningConstraintsSnapshot
 from resilio.schemas.planning.weeks import WorkoutStructureHints
+from resilio.schemas.recovery_context import (
+    DatedAthleteWellnessNote as DatedAthleteWellnessNote,
+)
+from resilio.schemas.recovery_context import (
+    RecoveryContext as RecoveryContext,
+)
+from resilio.schemas.recovery_context import (
+    RecoveryObservation as RecoveryObservation,
+)
+from resilio.schemas.recovery_context import (
+    RecoverySignal as RecoverySignal,
+)
+from resilio.schemas.running_progression import RunProgressionBindingV1
 from resilio.schemas.sync import SourceCoverageExclusion, SourceCoverageGap
 
 
@@ -37,68 +50,6 @@ class TrainingStateSnapshot(BaseModel):
         default=None,
         allow_inf_nan=False,
     )
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class RecoverySignal(BaseModel):
-    name: str
-    current_date: date
-    current_value: float = Field(allow_inf_nan=False)
-    unit: str
-    observation_age_days: int = Field(ge=0)
-    is_temporary: Optional[bool] = None
-    personal_baseline_median: Optional[float] = Field(
-        default=None,
-        allow_inf_nan=False,
-    )
-    difference_from_baseline: Optional[float] = Field(
-        default=None,
-        allow_inf_nan=False,
-    )
-    baseline_sample_count: int = Field(ge=0)
-    scale_direction: Literal[
-        "lower_is_better",
-        "higher_is_better",
-        "neutral",
-        "provider_defined",
-    ] = "neutral"
-    scale_minimum: Optional[float] = Field(default=None, allow_inf_nan=False)
-    scale_maximum: Optional[float] = Field(default=None, allow_inf_nan=False)
-    scale_labels: dict[int, str] = Field(default_factory=dict)
-    freshness: Literal["same_day", "recent", "stale"]
-    recent_observations: list["RecoveryObservation"] = Field(default_factory=list)
-    recent_coverage_expected_days: int = Field(default=7, ge=1)
-    recent_coverage_observed_days: int = Field(ge=0)
-    recent_coverage_percent: float = Field(ge=0, le=100, allow_inf_nan=False)
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class RecoveryObservation(BaseModel):
-    local_date: date
-    value: float = Field(allow_inf_nan=False)
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class DatedAthleteWellnessNote(BaseModel):
-    local_date: date
-    text: str = Field(min_length=1)
-    provenance: Literal["intervals_icu_wellness_comments"] = "intervals_icu_wellness_comments"
-    trust_boundary: Literal["athlete_authored_untrusted_text"] = "athlete_authored_untrusted_text"
-
-    model_config = ConfigDict(extra="forbid")
-
-
-class RecoveryContext(BaseModel):
-    as_of_date: date
-    signals: list[RecoverySignal] = Field(default_factory=list)
-    missing_signals: list[str] = Field(default_factory=list)
-    wellness_window_start: Optional[date] = None
-    wellness_window_end: Optional[date] = None
-    wellness_days_available: int = Field(default=0, ge=0)
-    athlete_notes: list[DatedAthleteWellnessNote] = Field(default_factory=list)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -437,7 +388,8 @@ class ApprovedVDOTContext(BaseModel):
 class WeekPlanningContext(BaseModel):
     """Future-target skeleton plus evidence ending on a separate as-of date."""
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
+    progression: RunProgressionBindingV1 | EvidenceArtifactReference | None = None
     generated_at_utc: datetime
     source_state_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     evidence_as_of_date: date

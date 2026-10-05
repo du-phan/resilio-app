@@ -16,7 +16,14 @@ from resilio.core.activity_sync.evidence_identity import (
 )
 from resilio.core.activity_transaction import ACTIVITY_MUTATION_LOCK_PATH, remove_path
 from resilio.core.locking import OperationLock
+from resilio.core.planning.constants import PLAN_MUTATION_LOCK_PATH
 from resilio.core.repository import RepositoryIO
+from resilio.core.state_migration_guard import MIGRATION_TRANSACTION_PATH
+from resilio.core.state_migration_transaction import (
+    commit_state_migration,
+    recover_state_migration,
+    validate_migration_target_paths,
+)
 from resilio.core.sync_state import read_sync_progress
 from resilio.core.workout_fulfillment.current_fulfillment_migration import (
     load_fulfillment_manifest_for_publication_migration,
@@ -24,7 +31,6 @@ from resilio.core.workout_fulfillment.current_fulfillment_migration import (
 from resilio.core.workout_fulfillment.current_fulfillment_migration import (
     migrate_current_fulfillment_manifest as _migrate_current_fulfillment_manifest,
 )
-from resilio.core.workout_fulfillment.cutover_guard import MIGRATION_TRANSACTION_PATH
 from resilio.core.workout_fulfillment.legacy_contracts import (
     LegacyWorkoutCompletionManifest,
 )
@@ -45,11 +51,6 @@ from resilio.core.workout_fulfillment.migration_preflight import (
 )
 from resilio.core.workout_fulfillment.migration_report import (
     WorkoutFulfillmentMigrationReport,
-)
-from resilio.core.workout_fulfillment.migration_transaction import (
-    commit_workout_fulfillment_migration,
-    recover_workout_fulfillment_migration,
-    validate_migration_target_paths,
 )
 from resilio.core.workout_fulfillment.migration_validation import (
     WorkoutFulfillmentMigrationError as WorkoutFulfillmentMigrationError,
@@ -72,7 +73,7 @@ from resilio.core.workout_fulfillment.repository import (
     WORKOUT_FULFILLMENTS_PATH,
     save_fulfillment_manifest,
 )
-from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
+from resilio.core.workout_publication.locking import PUBLICATION_LOCK_PATH
 from resilio.core.workout_publication.manifest import (
     PUBLICATION_MANIFEST_PATH,
     save_manifest,
@@ -284,7 +285,7 @@ def _finish_migration(
             remove_path(repo.resolve_path(LEGACY_COMPLETIONS_PATH))
             planning_migration.apply(repo)
 
-        commit_workout_fulfillment_migration(
+        commit_state_migration(
             repo,
             run_id=run_id,
             backup_relative_path=backup_relative_path,
@@ -316,7 +317,10 @@ def migrate_workout_fulfillment_state(
     publication_path = repo.resolve_path(PUBLICATION_MANIFEST_PATH)
     legacy_completion_path = repo.resolve_path(LEGACY_COMPLETIONS_PATH)
     fulfillment_path = repo.resolve_path(WORKOUT_FULFILLMENTS_PATH)
-    with coordinated_publication_plan_lock(repo, "migrate_workout_fulfillment_v2"):
+    # Recovery owns raw locks because normal consumers reject an unresolved journal.
+    with OperationLock(
+        repo.resolve_path(PUBLICATION_LOCK_PATH), "migrate_workout_fulfillment_v2"
+    ), OperationLock(repo.resolve_path(PLAN_MUTATION_LOCK_PATH), "migrate_workout_fulfillment_v2"):
         with OperationLock(
             repo.resolve_path(ACTIVITY_MUTATION_LOCK_PATH),
             "migrate_workout_fulfillment_v2",
@@ -330,7 +334,7 @@ def migrate_workout_fulfillment_state(
                     "so rerun with --apply to recover before cutover"
                 )
             if apply:
-                recover_workout_fulfillment_migration(
+                recover_state_migration(
                     repo,
                 )
                 _recover_activity_sync_before_migration(repo)

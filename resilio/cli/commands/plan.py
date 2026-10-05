@@ -29,6 +29,7 @@ from resilio.api.plan import (
     get_plan_week,
 )
 from resilio.api.week_application import apply_week_file, validate_week_file
+from resilio.cli.commands.plan_progression import register_progression_commands
 from resilio.cli.errors import api_result_to_envelope, get_exit_code_from_envelope
 from resilio.cli.output import create_success_envelope, output_json
 from resilio.schemas.assessment import (
@@ -38,6 +39,7 @@ from resilio.schemas.assessment import (
 from resilio.schemas.plan_history import PlanClosureDisposition
 
 app = typer.Typer(help="Create, inspect, and apply approved training plans")
+register_progression_commands(app)
 SCHEDULE_CONSTRAINTS_ADAPTER: TypeAdapter[list[TemporaryScheduleConstraint]] = TypeAdapter(
     list[TemporaryScheduleConstraint]
 )

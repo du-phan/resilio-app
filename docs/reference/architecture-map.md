@@ -193,3 +193,21 @@ context and must cite the latest assessment result when one exists.
 See the [Intervals.icu integration reference](intervals-icu-integration.md) for
 the external boundary and [agent workflow](../guides/development/agent-workflow.md)
 for change discipline.
+
+## Running progression authority
+
+`schemas/running_progression.py` separates completed evidence, factual candidate
+comparisons, and coach judgment. `core/coaching_context/running_progression.py`
+projects canonical recordings and calendar exposure; `core/planning/progression_*`
+owns candidate identities, immutable authoring, and mutation-time reproof.
+MacroPlanningContext V3 and WeekPlanningContext V2 carry the reviewed binding;
+a whole amendment stores its common binding once and uses direct context
+references. Historical unassessed contexts remain readable without new readiness
+claims. Full recovery qualification is shared through `schemas/recovery_context.py`.
+
+`core/state_migration_transaction.py` owns the reusable private-state file
+transaction, original-byte backups, durability, and hash-verified recovery.
+`core/state_migration_guard.py` blocks normal planning and ownership reads while
+the journal is unresolved. The one-time historical context transformer is
+retained only with the private cutover backup, not as a runtime compatibility
+reader. See [the coaching procedure](../coaching/running-progression.md).

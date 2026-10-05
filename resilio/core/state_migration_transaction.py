@@ -1,4 +1,4 @@
-"""Crash-recoverable file transaction for the fulfillment cutover."""
+"""Crash-recoverable file transaction for coordinated private-state cutovers."""
 
 from __future__ import annotations
 
@@ -13,8 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from resilio.core.activity_transaction import remove_path, write_json
 from resilio.core.repository import RepositoryIO
+from resilio.core.state_migration_guard import MIGRATION_TRANSACTION_PATH
 from resilio.core.state_permissions import ensure_private_directory_tree, harden_sensitive_file
-from resilio.core.workout_fulfillment.cutover_guard import MIGRATION_TRANSACTION_PATH
 from resilio.schemas.repository import RepoError
 
 _FIXED_MIGRATION_TARGETS = frozenset(
@@ -38,7 +38,7 @@ class MigrationFileState(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class WorkoutFulfillmentMigrationTransaction(BaseModel):
+class StateMigrationTransaction(BaseModel):
     schema_version: Literal[1] = 1
     run_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
     phase: Literal["prepared", "committed"]
@@ -48,7 +48,14 @@ class WorkoutFulfillmentMigrationTransaction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+def _reject_symlink_chain(path: Path) -> None:
+    """Prove the leaf and all ancestors without resolving away symlink evidence."""
+    if any(candidate.is_symlink() for candidate in [path, *path.parents]):
+        raise OSError("State migration paths and ancestors cannot be symlinks")
+
+
 def _file_sha256(path: Path) -> str | None:
+    _reject_symlink_chain(path)
     if not path.exists():
         return None
     if not path.is_file() or path.is_symlink():
@@ -62,51 +69,74 @@ def _synchronize_file(path: Path) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-    directory_descriptor = os.open(path.parent, os.O_RDONLY)
+    _synchronize_directory(path.parent)
+
+
+def _synchronize_directory(path: Path) -> None:
+    directory_descriptor = os.open(path, os.O_RDONLY)
     try:
         os.fsync(directory_descriptor)
     finally:
         os.close(directory_descriptor)
 
 
+def _synchronize_state_paths(repo: RepositoryIO, paths: list[Path]) -> None:
+    """Flush files, deletions and newly created directory links before a decision."""
+    directories: set[Path] = set()
+    for path in paths:
+        _reject_symlink_chain(path)
+        if path.exists():
+            if not path.is_file():
+                raise OSError("State migration targets must be regular files")
+            _synchronize_file(path)
+        for parent in path.parents:
+            if not parent.is_relative_to(repo.repo_root):
+                break
+            if parent.exists():
+                directories.add(parent)
+    for directory in sorted(directories, key=lambda item: len(item.parts), reverse=True):
+        _synchronize_directory(directory)
+
+
 def _load_transaction(
     repo: RepositoryIO,
-) -> WorkoutFulfillmentMigrationTransaction | None:
+) -> StateMigrationTransaction | None:
+    _reject_symlink_chain(repo.resolve_path(MIGRATION_TRANSACTION_PATH))
     result = repo.read_json(
         MIGRATION_TRANSACTION_PATH,
-        WorkoutFulfillmentMigrationTransaction,
+        StateMigrationTransaction,
     )
     if result is None:
         return None
     if isinstance(result, RepoError):
-        raise OSError(f"Fulfillment migration transaction is invalid: {result}")
+        raise OSError(f"State migration transaction is invalid: {result}")
     return result
 
 
 def _write_transaction(
     repo: RepositoryIO,
-    transaction: WorkoutFulfillmentMigrationTransaction,
+    transaction: StateMigrationTransaction,
 ) -> None:
+    _reject_symlink_chain(repo.resolve_path(MIGRATION_TRANSACTION_PATH))
     write_json(
         repo.resolve_path(MIGRATION_TRANSACTION_PATH),
         transaction.model_dump(mode="json"),
     )
+    _synchronize_state_paths(repo, [repo.resolve_path(MIGRATION_TRANSACTION_PATH)])
 
 
 def _validated_targets(
     repo: RepositoryIO,
-    transaction: WorkoutFulfillmentMigrationTransaction,
+    transaction: StateMigrationTransaction,
     allowed_relative_paths: set[str] | None,
 ) -> list[tuple[MigrationFileState, Path, Path]]:
     relative_paths = [item.relative_path for item in transaction.files]
     if len(relative_paths) != len(set(relative_paths)):
-        raise OSError("Fulfillment migration transaction targets must be unique")
+        raise OSError("State migration transaction targets must be unique")
     if allowed_relative_paths is not None and set(relative_paths) != allowed_relative_paths:
-        raise OSError("Fulfillment migration transaction targets are not the expected state set")
-    if allowed_relative_paths is None and any(
-        not _is_safe_migration_target(path) for path in relative_paths
-    ):
-        raise OSError("Fulfillment migration transaction contains an unsafe state target")
+        raise OSError("State migration transaction targets are not the expected state set")
+    if any(not _is_safe_migration_target(path) for path in relative_paths):
+        raise OSError("State migration transaction contains an unsafe state target")
     backup_root = _validated_backup_root(
         repo,
         run_id=transaction.run_id,
@@ -119,7 +149,9 @@ def _validated_targets(
             item.backup_name != expected_backup_name
             or Path(item.backup_name).name != item.backup_name
         ):
-            raise OSError("Fulfillment migration backup name does not match its state target")
+            raise OSError("State migration backup name does not match its state target")
+        _reject_symlink_chain(repo.resolve_path(item.relative_path))
+        _reject_symlink_chain(backup_root / item.backup_name)
         targets.append(
             (
                 item,
@@ -138,7 +170,10 @@ def _is_safe_migration_target(relative_path: str) -> bool:
         return False
     if len(path.parts) == 4 and path.parts[:3] == ("data", "plans", "archive"):
         return bool(re.fullmatch(r"plan_[A-Za-z0-9_-]{1,120}\.json", path.name))
-    if len(path.parts) == 4 and path.parts[:3] == ("data", "plans", "proposals"):
+    if len(path.parts) == 4 and path.parts[:3] in {
+        ("data", "plans", "proposals"),
+        ("data", "plans", "vdot-proposals"),
+    }:
         return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*\.json", path.name))
     if len(path.parts) == 5 and path.parts[:3] == ("data", "plans", "evidence"):
         return bool(
@@ -151,19 +186,16 @@ def _is_safe_migration_target(relative_path: str) -> bool:
 def validate_migration_target_paths(target_relative_paths: tuple[str, ...]) -> None:
     """Reject unsafe or duplicate transaction targets before any local write."""
     if not target_relative_paths:
-        raise OSError("Fulfillment migration requires at least one state target")
+        raise OSError("State migration requires at least one state target")
     if len(target_relative_paths) != len(set(target_relative_paths)):
-        raise OSError("Fulfillment migration state targets must be unique")
+        raise OSError("State migration state targets must be unique")
     unsafe_paths = [
         relative_path
         for relative_path in target_relative_paths
         if not _is_safe_migration_target(relative_path)
     ]
     if unsafe_paths:
-        raise OSError(
-            "Fulfillment migration contains an unsafe state target: "
-            f"{unsafe_paths[0]}"
-        )
+        raise OSError("State migration contains an unsafe state target: " f"{unsafe_paths[0]}")
 
 
 def _backup_name(relative_path: str) -> str:
@@ -179,15 +211,16 @@ def _validated_backup_root(
 ) -> Path:
     expected_relative_path = f"data/backups/{run_id}"
     if backup_relative_path != expected_relative_path:
-        raise OSError("Fulfillment migration backup path does not match its run ID")
+        raise OSError("State migration backup path does not match its run ID")
+    _reject_symlink_chain(repo.resolve_path(backup_relative_path))
     backups_root = repo.resolve_path("data/backups").resolve()
     backup_root = repo.resolve_path(backup_relative_path).resolve()
     if backup_root.parent != backups_root or backup_root.name != run_id:
-        raise OSError("Fulfillment migration backup path escapes the backup directory")
+        raise OSError("State migration backup path escapes the backup directory")
     return backup_root
 
 
-def recover_workout_fulfillment_migration(
+def recover_state_migration(
     repo: RepositoryIO,
     *,
     allowed_relative_paths: set[str] | None = None,
@@ -200,15 +233,17 @@ def recover_workout_fulfillment_migration(
     if transaction.phase == "committed":
         for state, target, _ in targets:
             if _file_sha256(target) != state.after_sha256:
-                raise OSError("Committed fulfillment migration state changed before recovery")
+                raise OSError("Committed state migration state changed before recovery")
         audit_name = "committed.json"
     else:
         for state, _, backup in targets:
             if state.existed and (
                 not backup.exists() or _file_sha256(backup) != state.before_sha256
             ):
-                raise OSError("Fulfillment migration backup is missing or changed")
+                raise OSError("State migration backup is missing or changed")
         for state, target, backup in targets:
+            _reject_symlink_chain(target)
+            _reject_symlink_chain(backup)
             remove_path(target)
             if state.existed:
                 target.parent.mkdir(parents=True, exist_ok=True)
@@ -216,7 +251,8 @@ def recover_workout_fulfillment_migration(
                 harden_sensitive_file(target)
                 _synchronize_file(target)
             if _file_sha256(target) != state.before_sha256:
-                raise OSError("Fulfillment migration rollback did not restore exact bytes")
+                raise OSError("State migration rollback did not restore exact bytes")
+        _synchronize_state_paths(repo, [target for _, target, _ in targets])
         audit_name = "recovered.json"
     backup_root = _validated_backup_root(
         repo,
@@ -228,7 +264,7 @@ def recover_workout_fulfillment_migration(
     return True
 
 
-def commit_workout_fulfillment_migration(
+def commit_state_migration(
     repo: RepositoryIO,
     *,
     run_id: str,
@@ -238,15 +274,17 @@ def commit_workout_fulfillment_migration(
 ) -> None:
     """Apply fixed state files behind a durable rollback decision point."""
     validate_migration_target_paths(target_relative_paths)
+    for relative_path in target_relative_paths:
+        _reject_symlink_chain(repo.resolve_path(relative_path))
     if _load_transaction(repo) is not None:
-        raise OSError("Fulfillment migration has unresolved transaction state")
+        raise OSError("State migration has unresolved transaction state")
     backup_root = _validated_backup_root(
         repo,
         run_id=run_id,
         backup_relative_path=backup_relative_path,
     )
     if backup_root.exists():
-        raise OSError("Fulfillment migration backup directory already exists")
+        raise OSError("State migration backup directory already exists")
     ensure_private_directory_tree(repo.resolve_path("data"), backup_root)
     files: list[MigrationFileState] = []
     for relative_path in target_relative_paths:
@@ -266,17 +304,19 @@ def commit_workout_fulfillment_migration(
                 before_sha256=before_sha256,
             )
         )
-    transaction = WorkoutFulfillmentMigrationTransaction(
+    transaction = StateMigrationTransaction(
         run_id=run_id,
         phase="prepared",
         backup_relative_path=backup_relative_path,
         files=files,
     )
+    _synchronize_state_paths(repo, [backup_root / item.backup_name for item in files])
     _write_transaction(repo, transaction)
     try:
         apply_state()
+        _synchronize_state_paths(repo, [repo.resolve_path(path) for path in target_relative_paths])
     except Exception:
-        recover_workout_fulfillment_migration(
+        recover_state_migration(
             repo,
             allowed_relative_paths=set(target_relative_paths),
         )
@@ -293,7 +333,7 @@ def commit_workout_fulfillment_migration(
         }
     )
     _write_transaction(repo, committed)
-    recover_workout_fulfillment_migration(
+    recover_state_migration(
         repo,
         allowed_relative_paths=set(target_relative_paths),
     )

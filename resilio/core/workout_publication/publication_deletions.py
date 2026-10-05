@@ -6,8 +6,8 @@ from datetime import date, datetime, timezone
 
 from resilio.canonical import canonical_data_sha256
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_fulfillment.cutover_guard import (
-    assert_fulfillment_cutover_is_complete,
+from resilio.core.state_migration_guard import (
+    assert_state_migration_is_complete,
 )
 from resilio.core.workout_publication.manifest import load_manifest, save_manifest
 from resilio.core.workout_publication.policy import (
@@ -46,7 +46,7 @@ PUBLICATION_DELETION_MANIFEST_PATH = "data/state/workout_publication_deletions.j
 def load_publication_deletion_manifest(
     repo: RepositoryIO,
 ) -> PublicationDeletionManifest:
-    assert_fulfillment_cutover_is_complete(repo)
+    assert_state_migration_is_complete(repo)
     result = repo.read_json(
         PUBLICATION_DELETION_MANIFEST_PATH,
         PublicationDeletionManifest,

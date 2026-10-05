@@ -22,6 +22,9 @@ authority. Commands return JSON envelopes.
   deletion candidates.
 - `resilio migrate evidence-v5 [--apply]` — dry-run or apply the one-shot,
   backed-up activity-v5/wellness-v2 coordinated state cutover.
+- `resilio migrate recover-state` — recover only the exact pending private-state
+  transaction, checking backup hashes under publication, plan, and activity
+  locks. Prepared transactions roll back; committed transactions are verified.
 
 ## Typed coaching context
 
@@ -60,6 +63,14 @@ authority. Commands return JSON envelopes.
 
 ## Planning and approvals
 
+- `resilio plan assess-progression --kind macro|amendment|week --file <JSON>` —
+  read-only complete-candidate comparisons with recent completed running,
+  separate duration measurements, recovery qualifications, and coverage.
+- `resilio plan bind-progression-review --kind macro|amendment|week --file <JSON>
+  --review-file <REVIEW_JSON> --out <FINAL_JSON>` — reprove facts and bind the
+  coach's typed review into new immutable proposal bytes. Exact weeks require
+  supported `proceed` decisions. Validate and approve only the final output.
+  See [running progression review](../running-progression.md).
 - `resilio plan show|status|week|next-unpopulated` — current plan reads.
 - `resilio plan create-assessment-context|template-assessment|create-assessment`
   — immutable evidence gate and short return-to-running skeleton with one

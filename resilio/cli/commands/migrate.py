@@ -3,15 +3,45 @@
 import typer
 
 from resilio.cli.output import create_error_envelope, create_success_envelope, output_json
+from resilio.core.activity_transaction import ACTIVITY_MUTATION_LOCK_PATH
 from resilio.core.evidence_migration import EvidenceMigrationError, migrate_evidence_state
-from resilio.core.locking import OperationLockError
+from resilio.core.locking import OperationLock, OperationLockError
+from resilio.core.planning.constants import PLAN_MUTATION_LOCK_PATH
 from resilio.core.repository import RepositoryIO
+from resilio.core.state_migration_transaction import recover_state_migration
 from resilio.core.workout_fulfillment.migration import (
     WorkoutFulfillmentMigrationError,
     migrate_workout_fulfillment_state,
 )
+from resilio.core.workout_publication.locking import PUBLICATION_LOCK_PATH
 
 app = typer.Typer(help="Validate or apply explicit athlete-state migrations")
+
+
+@app.command(name="recover-state")
+def recover_state_command() -> None:
+    """Recover the exact journaled cutover without running another migration."""
+    repo = RepositoryIO()
+    try:
+        # Recovery alone bypasses the normal gate that blocks prepared state.
+        with (
+            OperationLock(repo.resolve_path(PUBLICATION_LOCK_PATH), "recover_state_migration"),
+            OperationLock(repo.resolve_path(PLAN_MUTATION_LOCK_PATH), "recover_state_migration"),
+            OperationLock(
+                repo.resolve_path(ACTIVITY_MUTATION_LOCK_PATH), "recover_state_migration"
+            ),
+        ):
+            recovered = recover_state_migration(repo)
+        envelope = create_success_envelope(
+            message="State migration recovered" if recovered else "No pending state migration",
+            data={"recovered": recovered},
+        )
+        exit_code = 0
+    except (OperationLockError, OSError, ValueError) as exc:
+        envelope = create_error_envelope(error_type="validation", message=str(exc))
+        exit_code = 5
+    output_json(envelope)
+    raise typer.Exit(code=exit_code)
 
 
 @app.command(name="evidence-v5")

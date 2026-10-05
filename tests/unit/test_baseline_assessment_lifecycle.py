@@ -336,6 +336,9 @@ def _apply_week(
         ],
     }
     path.write_text(json.dumps(bound_payload))
+    from tests.progression_helpers import bind_test_candidate
+
+    bind_test_candidate(repo, path, kind="week", at=approved_at_utc)
     approve_week_application(repo, path, approved_at_utc=approved_at_utc)
     apply_approved_week(repo, path, applied_at_utc=applied_at_utc)
 

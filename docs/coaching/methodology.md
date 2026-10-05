@@ -145,12 +145,11 @@ The resulting VDOT proposal and the successor race plan each retain their own
 athlete approval boundaries. The race plan's planning rationale must cite the
 latest assessment result.
 
-Temporary holidays remain date-range constraints rather than durable profile
-changes. If a holiday-shortened assessment week cannot safely accommodate the
-normal other-sport count, the coach may propose a typed session count for that
-one sport and Monday-Sunday week. The rationale and count are presented with
-the complete plan and become approved only with that plan; normal sessions must
-not be silently removed or compressed before the benchmark.
+Temporary holidays remain dated athlete context rather than durable profile
+changes. Keep athlete-managed sports as expectations, never prescribed session
+counts. Explain the scoped effect on running and recovery without silently
+removing or compressing other sports. Assessment unavailable dates remain
+explicit date-range constraints.
 
 ## Selecting one primary race methodology
 
@@ -266,3 +265,8 @@ Every review must separate:
 
 Use units in every physical quantity. Cite exact dates and comparison windows.
 Avoid causal or risk claims that the available evidence cannot support.
+
+## Running progression
+
+Use the shared [running progression review](running-progression.md)
+before proposing or approving increased running exposure.

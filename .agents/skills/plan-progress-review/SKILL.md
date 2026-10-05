@@ -78,5 +78,13 @@ Return:
 - explicit missing-data limitations;
 - progress relative to the current phase and goal;
 - prioritized next steps, with any plan change presented as a proposal that
-  requires plan-renewal review, closure, fresh macro evidence, and a new
-  approval.
+  uses a same-goal macro amendment for upcoming strategic changes. Goal or
+  cycle replacement requires renewal, closure, fresh macro evidence, and approval.
+
+## Running progression
+
+Read [the shared progression procedure](../../../docs/coaching/running-progression.md)
+when judging distance, duration, frequency, supporting mileage, or long-run
+extensions. Lead with absolute completed exposure, then review weekly share.
+Reuse dated athlete answers; planned targets and comfortable HR do not prove
+completion or distance tolerance. State one recommendation and fallback.

@@ -23,11 +23,15 @@ existed when each exact weekly file was approved.
    `weeks` containing only changed skeletons with empty `running_workouts`,
    corresponding `planning_context_references` in the same order, and a specific
    `rationale` explaining the evidence, changes, and uncertainty.
-4. Run `plan validate-amendment --file <JSON>` and present the exact changed
+4. Follow the [shared progression review](running-progression.md): assess the
+   whole candidate with `plan assess-progression --kind amendment --file <JSON>`,
+   author the review, and bind it with `plan bind-progression-review --kind amendment
+   --file <JSON> --review-file <REVIEW_JSON> --out <FINAL_JSON>`.
+5. Run `plan validate-amendment --file <FINAL_JSON>` and present only those final
    targets and the returned file SHA-256 for athlete approval.
-5. After approval, run `plan apply-amendment --file <JSON> --sha256 <SHA>
+6. After approval, run `plan apply-amendment --file <FINAL_JSON> --sha256 <SHA>
    --athlete-confirmation <TEXT>`. Review the exact readback.
-6. Generate new weekly planning context and a new exact workout file for each
+7. Generate new weekly planning context and a new exact workout file for each
    retired upcoming week. Use separate exact weekly approval/application and
    inspect its automatic synchronization result. Future unpopulated weeks stay
    strategic until their normal weekly planning date.

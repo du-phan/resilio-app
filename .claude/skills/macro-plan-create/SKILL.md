@@ -114,15 +114,37 @@ and labels the authority `coach_designed_conceptually_informed`.
    increase, long-run extension, recovery week, and taper as a coach-designed
    choice; never attribute numeric authority to the conceptual source.
 
-6. Create and validate the draft:
+6. If needed, obtain a template before authoring the complete candidate:
 
    ```bash
    poetry run resilio plan template-macro \
      --total-weeks <COUNT> \
      --out <DRAFT_JSON>
-   poetry run resilio plan create-macro --from-json <DRAFT_JSON>
+   ```
+
+   Fill the complete draft with the decisions above. Read the shared
+   `docs/coaching/running-progression.md` procedure, then assess this candidate:
+
+   ```bash
+   poetry run resilio plan assess-progression --kind macro --file <DRAFT_JSON>
+   ```
+
+   Author a typed review against the returned candidate and evidence hashes.
+   Each week and long-run comparison needs a decision, evidence-linked
+   reasoning, recommendation, fallback, and explicit future prerequisites.
+   Revise or defer unsupported progression. Conditional future weeks are
+   strategic intentions; they require observed prerequisites before exact
+   weekly approval. Bind the complete review into a new final proposal:
+
+   ```bash
+   poetry run resilio plan bind-progression-review --kind macro \
+     --file <DRAFT_JSON> --review-file <REVIEW_JSON> --out <FINAL_PROPOSAL_JSON>
+   poetry run resilio plan create-macro --from-json <FINAL_PROPOSAL_JSON>
    poetry run resilio plan show
    ```
+
+   Continue only when binding reports `review_bound`. Present the resulting
+   macro for athlete approval; the main coach records that approval separately.
 
 ## Output
 
@@ -134,3 +156,11 @@ approval prompt. The main coach records approval separately with
 `poetry run resilio approvals approve-plan`. Approval binds the current plan
 kind, plan ID, plan revision, VDOT approval, planning-input fingerprint, and
 plan-skeleton SHA-256.
+
+## Running progression
+
+Read [the shared progression procedure](../../../docs/coaching/running-progression.md)
+when judging distance, duration, frequency, supporting mileage, or long-run
+extensions. Lead with absolute completed exposure, then review weekly share.
+Reuse dated athlete answers; planned targets and comfortable HR do not prove
+completion or distance tolerance. State one recommendation and fallback.

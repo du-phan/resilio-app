@@ -18,18 +18,17 @@ from resilio.core.coaching_context.recovery import (
     latest_wellness,
     training_state,
 )
-from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
+from resilio.core.planning.adherence_evidence import ApprovedWorkoutWindow, AuthoritativeWorkout
 from resilio.core.planning.integrity import (
     plan_skeleton_sha256,
     target_week_skeleton_sha256,
 )
-from resilio.core.planning.service import (
-    ApprovedWorkoutWindow,
+from resilio.core.planning.source_state import coaching_evidence_source_sha256
+from resilio.core.planning.state_repository import load_planning_aggregate
+from resilio.core.planning.workout_evidence import (
     load_approved_workouts_for_date_range,
-    load_planning_aggregate,
     load_publishable_workouts,
 )
-from resilio.core.planning.source_state import coaching_evidence_source_sha256
 from resilio.core.repository import RepositoryIO
 from resilio.core.training_state_repository import load_wellness
 from resilio.core.workout_fulfillment.evidence import fulfillment_was_available_as_of
@@ -283,6 +282,9 @@ def build_week_planning_context(
     today = current_local_date or date.today()
     if evidence_as_of_date > today:
         raise ValueError("evidence_as_of_date cannot be in the future")
+    if not 1 <= history_week_count <= 52:
+        raise ValueError("history_week_count must be between 1 and 52")
+    history_week_count = max(6, history_week_count)
     generation_timestamp = generated_at_utc or datetime.now(timezone.utc)
     if generation_timestamp.tzinfo is None or generation_timestamp.utcoffset() is None:
         raise ValueError("generated_at_utc must be timezone-aware")

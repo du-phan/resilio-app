@@ -73,6 +73,7 @@ from resilio.schemas.workout_fulfillment import (
     WorkoutFulfillmentRecord,
 )
 from tests.factories import make_activity
+from tests.progression_helpers import bind_test_candidate
 from tests.unit.test_workout_publication import FakeClient
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -117,7 +118,7 @@ def _draft(vdot_approval_id: str) -> MacroPlanDraft:
                 f"goal_outcome.{latest_plan_id}",
             ]
         )
-    return MacroPlanDraft.model_validate(
+    candidate = MacroPlanDraft.model_validate(
         {
             "goal": {
                 "type": "10k",
@@ -188,11 +189,34 @@ def _draft(vdot_approval_id: str) -> MacroPlanDraft:
         }
     )
 
+    from tests.progression_helpers import bind_test_candidate
+
+    path = Path("data/plans/proposals/test-macro.json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(candidate.model_dump_json())
+    bind_test_candidate(
+        RepositoryIO(),
+        path,
+        kind="macro",
+        at=max(
+            datetime(2026, 7, 26, tzinfo=timezone.utc),
+            datetime.fromisoformat(context_payload["generated_at_utc"].replace("Z", "+00:00")),
+        ),
+    )
+    return MacroPlanDraft.model_validate_json(path.read_bytes())
+
 
 @pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> RepositoryIO:
     (tmp_path / ".git").mkdir()
     monkeypatch.chdir(tmp_path)
+
+    class PlanningClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 7, 26, 14, tzinfo=timezone.utc)
+
+    monkeypatch.setattr("resilio.core.planning.audit.datetime", PlanningClock)
     repository = RepositoryIO()
     methodology_source = tmp_path / "docs/training_books/daniels_running_formula.md"
     methodology_source.parent.mkdir(parents=True)
@@ -424,6 +448,13 @@ def _write_application(
         )
     )
 
+    if repo is not None:
+        from tests.progression_helpers import bind_test_candidate
+
+        bind_test_candidate(
+            repo, path, kind="week", at=datetime(2026, 7, 26, 12, 30, tzinfo=timezone.utc)
+        )
+
 
 def _create_approved_macro(
     repo: RepositoryIO,
@@ -445,6 +476,9 @@ def _apply_test_week(repo: RepositoryIO, tmp_path: Path) -> None:
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         payload_path,
@@ -453,7 +487,7 @@ def _apply_test_week(repo: RepositoryIO, tmp_path: Path) -> None:
     apply_approved_week(
         repo,
         payload_path,
-        applied_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
+        applied_at_utc=datetime(2026, 7, 26, 14, tzinfo=timezone.utc),
     )
 
 
@@ -856,6 +890,9 @@ def test_week_application_cannot_predate_week_approval(
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "backdated-week-application.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         payload_path,
@@ -1279,6 +1316,9 @@ def test_week_approval_cannot_cross_macro_plan_revisions(
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         payload_path,
@@ -1306,6 +1346,7 @@ def test_week_approval_cannot_cross_macro_plan_revisions(
     plan_b = create_macro_plan(
         repo,
         _draft(state.active_vdot_approval.approval_id),
+        created_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
     )
     assert plan_b.plan_revision_id != plan_a.plan_revision_id
 
@@ -1320,6 +1361,9 @@ def test_week_application_rejects_post_approval_mutation(
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     approve_week_application(repo, payload_path)
     _write_application(payload_path, repo=repo, purpose="Changed after approval")
 
@@ -1334,6 +1378,9 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         payload_path,
@@ -1343,7 +1390,7 @@ def test_exact_approved_week_is_applied_and_audit_is_retained(
     plan = apply_approved_week(
         repo,
         payload_path,
-        applied_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc),
+        applied_at_utc=datetime(2026, 7, 26, 14, tzinfo=timezone.utc),
     )
 
     assert [workout.id for workout in plan.weeks[0].running_workouts] == [
@@ -1405,6 +1452,9 @@ def test_week_application_must_consider_every_observed_other_sport(
     ]
     payload_path.write_text(json.dumps(payload))
 
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     state = approve_week_application(repo, payload_path)
 
     assert state.active_plan is not None
@@ -1536,6 +1586,9 @@ def test_week_replacement_preserves_original_historical_authority(
     _apply_test_week(repo, tmp_path)
     replacement_path = tmp_path / "week-replacement.json"
     _write_application(replacement_path, repo=repo, purpose="Replacement purpose")
+    bind_test_candidate(
+        repo, replacement_path, kind="week", at=datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         replacement_path,
@@ -1600,6 +1653,9 @@ def test_week_replacement_cannot_alter_a_fulfilled_workout(
     )
     preserving_path = tmp_path / "preserving-week-replacement.json"
     _write_application(preserving_path, repo=repo)
+    bind_test_candidate(
+        repo, preserving_path, kind="week", at=datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         preserving_path,
@@ -1612,6 +1668,9 @@ def test_week_replacement_cannot_alter_a_fulfilled_workout(
     )
     replacement_path = tmp_path / "altering-second-replacement.json"
     _write_application(replacement_path, repo=repo, purpose="Changed fulfilled intent")
+    bind_test_candidate(
+        repo, replacement_path, kind="week", at=datetime(2026, 7, 30, 12, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         replacement_path,
@@ -1636,6 +1695,9 @@ def test_fulfillment_candidate_uses_revision_in_force_at_scheduled_instant(
         replacement_path,
         repo=repo,
         purpose="Replacement applied after the original scheduled instant",
+    )
+    bind_test_candidate(
+        repo, replacement_path, kind="week", at=datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
     )
     approve_week_application(
         repo,
@@ -1672,6 +1734,9 @@ def test_application_after_scheduled_instant_is_not_retroactive(
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "late-week.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 28, 7, tzinfo=timezone.utc)
+    )
     approve_week_application(
         repo,
         payload_path,
@@ -1762,6 +1827,9 @@ def test_publication_requires_unchanged_applied_workout_bytes(
     _create_approved_macro(repo, tmp_path)
     payload_path = tmp_path / "week.json"
     _write_application(payload_path, repo=repo)
+    bind_test_candidate(
+        repo, payload_path, kind="week", at=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
+    )
     approve_week_application(repo, payload_path)
 
     with pytest.raises(PlanOperationError, match="does not identify"):

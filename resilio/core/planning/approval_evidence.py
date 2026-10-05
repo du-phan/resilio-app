@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -125,11 +126,17 @@ def _verify_personal_best_source(
 def _verify_race_activity_source(
     repo: RepositoryIO,
     evidence: RacePerformanceVDOTEvidence,
+    *,
+    activity_lock_held: bool = False,
 ) -> None:
     archive_root = repo.resolve_path(get_activities_dir())
     lock_path = repo.resolve_path(ACTIVITY_MUTATION_LOCK_PATH)
     try:
-        with OperationLock(lock_path, "verify_vdot_race_evidence"):
+        with (
+            nullcontext()
+            if activity_lock_held
+            else OperationLock(lock_path, "verify_vdot_race_evidence")
+        ):
             activity = ActivityArchive(archive_root).load(evidence.source_local_activity_id)
     except OperationLockError as exc:
         raise ApprovalEvidenceError(
@@ -165,12 +172,14 @@ def _verify_race_activity_source(
 def _verify_proposal_source(
     repo: RepositoryIO,
     proposal: VDOTProposal,
+    *,
+    activity_lock_held: bool = False,
 ) -> None:
     evidence = proposal.evidence
     if isinstance(evidence, PersonalBestVDOTEvidence):
         _verify_personal_best_source(repo, evidence)
     elif isinstance(evidence, RacePerformanceVDOTEvidence):
-        _verify_race_activity_source(repo, evidence)
+        _verify_race_activity_source(repo, evidence, activity_lock_held=activity_lock_held)
     elif isinstance(evidence, OwnedBaselineAssessmentVDOTEvidence):
         from resilio.core.planning.assessment_evidence import (
             verify_owned_assessment_vdot_evidence,
@@ -188,10 +197,11 @@ def load_vdot_proposal_unlocked(
     path: Path,
     *,
     expected_sha256: str | None = None,
+    activity_lock_held: bool = False,
 ) -> VerifiedVDOTProposalFile:
     """Validate exact proposal bytes while the caller holds the plan lock."""
     result = _read_vdot_proposal(path, expected_sha256=expected_sha256)
-    _verify_proposal_source(repo, result.proposal)
+    _verify_proposal_source(repo, result.proposal, activity_lock_held=activity_lock_held)
     return result
 
 
@@ -212,6 +222,8 @@ def load_vdot_proposal(
 def load_vdot_approval_evidence_unlocked(
     repo: RepositoryIO,
     approval: VDOTApproval | None,
+    *,
+    activity_lock_held: bool = False,
 ) -> tuple[VDOTApproval, VDOTProposal]:
     """Load one approval and its proposal while the caller holds the plan lock."""
     if approval is None:
@@ -221,6 +233,7 @@ def load_vdot_approval_evidence_unlocked(
         repo,
         proposal_path,
         expected_sha256=approval.proposal_file_sha256,
+        activity_lock_held=activity_lock_held,
     )
     proposal = proposal_file.proposal
     if (
@@ -236,11 +249,14 @@ def load_vdot_approval_evidence_unlocked(
 def verify_vdot_approval_unlocked(
     repo: RepositoryIO,
     approval: VDOTApproval | None,
+    *,
+    activity_lock_held: bool = False,
 ) -> VDOTApproval:
     """Re-prove approval evidence while the caller holds the plan lock."""
     approval, _proposal = load_vdot_approval_evidence_unlocked(
         repo,
         approval,
+        activity_lock_held=activity_lock_held,
     )
     return approval
 

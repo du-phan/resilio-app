@@ -163,13 +163,13 @@ def load_evidence_artifact(
     reference: EvidenceArtifactReference,
     schema: type[T],
 ) -> T:
-    result = repo.read_json(evidence_path(reference), schema)
-    if result is None:
-        raise PlanningArtifactError(
-            f"Planning evidence artifact is missing: {reference.artifact_sha256}"
-        )
-    if isinstance(result, RepoError):
-        raise PlanningArtifactError(f"Planning evidence artifact is invalid: {result}")
-    if model_sha256(result) != reference.artifact_sha256:
-        raise PlanningArtifactError("Planning evidence artifact changed after import")
-    return result
+    path = repo.resolve_path(evidence_path(reference))
+    try:
+        if path.is_symlink():
+            raise PlanningArtifactError("Planning evidence cannot be a symlink")
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != reference.artifact_sha256:
+            raise PlanningArtifactError("Planning evidence artifact changed after import")
+        return schema.model_validate_json(content)
+    except (OSError, ValueError) as exc:
+        raise PlanningArtifactError(f"Planning evidence is unavailable or invalid: {exc}") from exc

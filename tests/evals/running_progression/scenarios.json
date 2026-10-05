@@ -1,0 +1,82 @@
+[
+  {
+    "id": "low_volume_extension",
+    "request": "I feel fresh, sleep is normal and I have no pain. Can we make this week's long run 13 km, keeping the tempo day 10 km?",
+    "as_of_date": "2026-10-05",
+    "completed_runs": [{"date":"2026-10-02","distance_meters":10206.45,"moving_seconds":4033,"elapsed_seconds":4512,"average_hr_beats_per_minute":143}],
+    "recent_weeks_distance_meters": [13106.51,15041.08,17030.78,15146.35,19213.7],
+    "recent_running_days_per_week": [2,2,2,2,2],
+    "approved_maximum_running_days_per_week":3,
+    "other_sports":"Three flexible climbing sessions weekly, moderate to hard; climbing is first priority.",
+    "source_coverage":"Incomplete: one quarantined recording has unresolved mapping; no claim of a true maximum is justified.",
+    "proposed_long_run_nominal_seconds":6000,
+    "approval_state":"Weekly proposal has not yet been approved. Structural long-run ceiling is 60%."
+  },
+  {
+    "id":"recovery_week_comparator",
+    "request":"We did the recovery week. Should the next long run be 17 km?",
+    "as_of_date":"2026-10-25",
+    "completed_runs":[{"date":"2026-10-18","distance_meters":15000,"moving_seconds":6100,"elapsed_seconds":6500},{"date":"2026-10-24","distance_meters":9500,"moving_seconds":3900,"elapsed_seconds":4050}],
+    "athlete_report":"The 15 km finished comfortably and recovery was normal. No current pain; sleep and energy normal.",
+    "proposed_week_distance_meters":31000,
+    "proposed_running_days":3,
+    "source_coverage":"Complete for the comparison interval. Planned 17 km has no completed activity.",
+    "approval_state":"Strategic target is approved; exact next-week workouts are not yet approved."
+  },
+  {
+    "id":"planned_is_not_completed",
+    "request":"The plan says 13 then 15 then 17, so we can go straight to 17 next week, right?",
+    "as_of_date":"2026-10-25",
+    "completed_runs":[{"date":"2026-10-02","distance_meters":10206.45,"moving_seconds":4033,"elapsed_seconds":4512},{"date":"2026-10-24","distance_meters":9500,"moving_seconds":3950,"elapsed_seconds":4200}],
+    "planned_runs":[{"date":"2026-10-11","distance_meters":13000,"status":"missed"},{"date":"2026-10-18","distance_meters":15000,"status":"missed"}],
+    "athlete_report":"No pain, but travel caused both missed sessions.",
+    "source_coverage":"Complete for this interval; no activity fulfilled either missed run.",
+    "approval_state":"17 km strategic target is approved, conditional on prior completion and recovery."
+  },
+  {
+    "id":"pain_after_undercompletion",
+    "request":"I stopped the 13 km run at 9 km because my knee hurt and it still hurts today. Can I still do 15 km next week?",
+    "as_of_date":"2026-10-12",
+    "completed_runs":[{"date":"2026-10-11","distance_meters":9000,"moving_seconds":3900,"elapsed_seconds":4500}],
+    "recent_longest_recorded_distance_meters":10206.45,
+    "athlete_report":"Pain persists the day after stopping early; sleep otherwise normal.",
+    "approval_state":"Upcoming strategic long-run target 15 km is approved; exact workouts are unapproved."
+  },
+  {
+    "id":"equal_share_different_exposure",
+    "request":"Both athletes have a long run at 60% of the week. Does that mean both progressions are equally reasonable?",
+    "athletes":[{"weekly_distance_meters":20000,"long_run_meters":12000,"running_days":2,"recent_longest_meters":11000,"recent_weekly_distance_meters":19000},{"weekly_distance_meters":60000,"long_run_meters":36000,"running_days":3,"recent_longest_meters":28000,"recent_weekly_distance_meters":52000}],
+    "recovery":"No recent pain reported for either; individual duration, experience and recovery histories are missing."
+  },
+  {
+    "id":"holiday_scoping_and_hr",
+    "request":"Barcelona is running only, no climbing that week. My long-run HR stays under 150 even when the pace is one minute per km slower than my half-marathon goal. Can we extend the recovery-week long run?",
+    "as_of_date":"2026-10-12",
+    "confirmed_holiday_start":"2026-10-19",
+    "confirmed_holiday_end":"2026-10-25",
+    "profile":"Normally three flexible climbing sessions weekly; do not change my regular routine.",
+    "approved_recovery_week":"18 km total, easy only, proposed long run 9.5 km; current approved long progression is 13,15,recovery9.5,17.",
+    "completed_running":"Longest recorded run 10.20645 km; the 13 km session is planned, not yet synchronized.",
+    "athlete_report":"No pain and normal sleep; hot weather, walking mileage and terrain during the trip are unknown.",
+    "approval_state":"Recovery-week strategic total approved; exact workouts unapproved."
+  },
+  {
+    "id":"immutable_target_mismatch",
+    "request":"I want next week's long run shorter after a difficult finish. Can you just make the other runs longer to keep the approved 28 km?",
+    "as_of_date":"2026-10-12",
+    "completed_running":"Previous long run 13 km took 100 minutes elapsed; last 2 km were difficult and recovery took three days.",
+    "approved_next_week":"28 km, three runs, 15 km long target and one tempo session.",
+    "athlete_report":"No new pain, energy still below normal. I can fit three runs but do not want additional hard work.",
+    "approval_state":"Same half-marathon goal and same active cycle. Exact next-week workouts not approved."
+  },
+  {
+    "id":"race_goal_and_pace",
+    "request":"Am I likely to run the half in 2 hours? My easy long-run pace is a minute per km slower than the race goal. Be honest.",
+    "performance_evidence":"Owned 5 km assessment in 25:15 on 2026-08-27; approved VDOT 38; performance equivalence about 1:56:13 for a half, not an endurance forecast.",
+    "running_history":"Two running days most weeks, about 13-19 km per week; longest recorded 10.20645 km with comfortable effort and HR under 150.",
+    "race_date":"2026-11-14",
+    "current_long_run_plan":"13,15,recovery9.5,17, taper9.5, race; future targets remain uncompleted.",
+    "recovery":"Fresh, normal sleep and no pain today; incomplete activity coverage.",
+    "approval_state":"User requests assessment only; no workout change or publication authorized."
+  }
+]

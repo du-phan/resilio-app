@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from hashlib import sha256
 from pathlib import Path
 
 from pydantic import TypeAdapter
@@ -24,13 +25,13 @@ from resilio.core.planning.freshness import (
 from resilio.core.planning.integrity import (
     applied_running_workouts_sha256,
     plan_skeleton_sha256,
-    sha256_file,
     target_week_skeleton_sha256,
 )
 from resilio.core.planning.policy import (
     WeekPolicyError,
     validate_populated_week,
 )
+from resilio.core.planning.progression_review import require_progression_review_unlocked
 from resilio.core.planning.state_repository import (
     persist_planning_state,
     required_planning_state_unlocked,
@@ -38,7 +39,9 @@ from resilio.core.planning.state_repository import (
 from resilio.core.planning.weekly_evidence import validate_week_planning_evidence
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
-from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
+from resilio.core.workout_publication.locking import (
+    coordinated_publication_plan_activity_lock,
+)
 from resilio.core.workout_publication.publication_deletions import (
     publication_deletion_workout_ids,
 )
@@ -55,13 +58,26 @@ from resilio.schemas.planning.weeks import WeekPlan
 TRAINING_PLAN_ADAPTER: TypeAdapter[TrainingPlan] = TypeAdapter(TrainingPlan)
 
 
-def load_week_application(path: Path) -> WeekApplication:
+def _load_verified_week_application(path: Path) -> tuple[Path, WeekApplication, str]:
+    """Parse and fingerprint one byte snapshot without resolving away symlinks."""
+    path = path.expanduser().absolute()
+    if any(candidate.is_symlink() for candidate in [path, *path.parents]):
+        raise PlanOperationError("Approved week file and ancestors cannot be symlinks")
     try:
-        return WeekApplication.model_validate_json(path.read_text())
+        payload = path.read_bytes()
+        return (
+            path.resolve(),
+            WeekApplication.model_validate_json(payload),
+            sha256(payload).hexdigest(),
+        )
     except OSError as exc:
         raise PlanOperationError(f"Approved week file could not be read: {exc}") from exc
     except ValueError as exc:
         raise PlanOperationError(f"Approved week file is invalid: {exc}") from exc
+
+
+def load_week_application(path: Path) -> WeekApplication:
+    return _load_verified_week_application(path)[1]
 
 
 def _find_week(plan: TrainingPlan, week_number: int) -> WeekPlan:
@@ -146,17 +162,26 @@ def validate_week_application(
 ) -> WeekApplication:
     """Validate an exact file against the fresh current macro and profile."""
     application = load_week_application(application_file)
-    with coordinated_publication_plan_lock(repo, "validate_week_application"):
+    with coordinated_publication_plan_activity_lock(repo, "validate_week_application"):
         state = required_planning_state_unlocked(repo)
-        plan = require_fresh_plan(repo, state)
+        plan = require_fresh_plan(repo, state, activity_lock_held=True)
         if state.active_plan is None or state.active_plan.plan_approval is None:
             raise PlanOperationError("The current plan is not approved")
         target_week = _find_week(plan, application.week_number)
-        validate_week_planning_evidence(
+        planning_context = validate_week_planning_evidence(
             repo,
             plan=plan,
             target_week=target_week,
             application=application,
+        )
+        require_progression_review_unlocked(
+            repo,
+            candidate=application,
+            kind="week",
+            binding=planning_context.progression,
+            timestamp=validated_utc_timestamp(None),
+            constraints=plan.constraints_snapshot,
+            target_week=target_week,
         )
         populated_week = _populate_and_validate_week(
             plan,
@@ -178,11 +203,10 @@ def approve_week_application(
     approved_at_utc: datetime | None = None,
 ) -> PlanningState:
     """Bind an exact weekly proposal to its plan, revision, and prior content."""
-    resolved_file = approved_file.expanduser().resolve()
-    application = load_week_application(resolved_file)
-    with coordinated_publication_plan_lock(repo, "approve_week_application"):
+    resolved_file, application, application_sha256 = _load_verified_week_application(approved_file)
+    with coordinated_publication_plan_activity_lock(repo, "approve_week_application"):
         state = required_planning_state_unlocked(repo)
-        plan = require_fresh_plan(repo, state)
+        plan = require_fresh_plan(repo, state, activity_lock_held=True)
         assert state.active_plan is not None
         plan_approval = state.active_plan.plan_approval
         if plan_approval is None:
@@ -198,6 +222,15 @@ def approve_week_application(
             plan=plan,
             target_week=week,
             application=application,
+        )
+        require_progression_review_unlocked(
+            repo,
+            candidate=application,
+            kind="week",
+            binding=planning_context.progression,
+            timestamp=approval_timestamp,
+            constraints=plan.constraints_snapshot,
+            target_week=week,
         )
         populated_week = _populate_and_validate_week(plan, week, application)
         _validate_workout_ids_are_globally_unique(repo, state, populated_week)
@@ -220,7 +253,7 @@ def approve_week_application(
             previous_applied_running_workouts_sha256=existing_hash,
             approved_at_utc=approval_timestamp,
             approved_file=str(resolved_file),
-            approved_file_sha256=sha256_file(resolved_file),
+            approved_file_sha256=application_sha256,
         )
         active_plan = state.active_plan.model_copy(update={"pending_weekly_approval": approval})
         return persist_planning_state(
@@ -287,11 +320,10 @@ def apply_approved_week(
     applied_at_utc: datetime | None = None,
 ) -> TrainingPlan:
     """Atomically consume an exact-file approval into its bound plan revision."""
-    resolved_file = approved_file.expanduser().resolve()
-    application = load_week_application(resolved_file)
-    with coordinated_publication_plan_lock(repo, "apply_approved_week"):
+    resolved_file, application, application_sha256 = _load_verified_week_application(approved_file)
+    with coordinated_publication_plan_activity_lock(repo, "apply_approved_week"):
         state = required_planning_state_unlocked(repo)
-        plan = require_fresh_plan(repo, state)
+        plan = require_fresh_plan(repo, state, activity_lock_held=True)
         if state.active_plan is None:
             raise PlanOperationError("No current training plan is available")
         approval = state.active_plan.pending_weekly_approval
@@ -303,7 +335,7 @@ def apply_approved_week(
             raise PlanOperationError("Approved week number does not match the payload")
         if Path(approval.approved_file) != resolved_file:
             raise PlanOperationError("Approved file path does not match the payload")
-        if sha256_file(resolved_file) != approval.approved_file_sha256:
+        if application_sha256 != approval.approved_file_sha256:
             raise PlanOperationError("Approved week file changed after approval")
         week = _find_week(plan, application.week_number)
         if target_week_skeleton_sha256(week) != approval.target_week_skeleton_sha256:
@@ -311,17 +343,26 @@ def apply_approved_week(
         current_hash = applied_running_workouts_sha256(week) if week.running_workouts else None
         if current_hash != approval.previous_applied_running_workouts_sha256:
             raise PlanOperationError("Previously applied weekly content changed")
-        validate_week_planning_evidence(
+        timestamp = validated_utc_timestamp(applied_at_utc)
+        if timestamp < approval.approved_at_utc:
+            raise PlanOperationError("Weekly application cannot predate its weekly approval")
+        planning_context = validate_week_planning_evidence(
             repo,
             plan=plan,
             target_week=week,
             application=application,
         )
+        require_progression_review_unlocked(
+            repo,
+            candidate=application,
+            kind="week",
+            binding=planning_context.progression,
+            timestamp=timestamp,
+            constraints=plan.constraints_snapshot,
+            target_week=week,
+        )
         populated_week = _populate_and_validate_week(plan, week, application)
         _validate_workout_ids_are_globally_unique(repo, state, populated_week)
-        timestamp = validated_utc_timestamp(applied_at_utc)
-        if timestamp < approval.approved_at_utc:
-            raise PlanOperationError("Weekly application cannot predate its weekly approval")
         revisions = list(state.active_plan.applied_week_revisions)
         previous = next(
             (

@@ -29,6 +29,7 @@ Git history is the archive.
 - [Athlete-managed sports](coaching/athlete-managed-sports.md)
 - [Methodology](coaching/methodology.md)
 - [Macro amendments](coaching/macro-amendments.md)
+- [Running progression review](coaching/running-progression.md)
 - [Training-book summaries](training_books/)
 
 ## Product

@@ -3,8 +3,8 @@
 import json
 
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_fulfillment.cutover_guard import (
-    assert_fulfillment_cutover_is_complete,
+from resilio.core.state_migration_guard import (
+    assert_state_migration_is_complete,
 )
 from resilio.schemas.repository import RepoError
 from resilio.schemas.workout_fulfillment import WorkoutFulfillmentManifest
@@ -34,7 +34,7 @@ def _publication_cutover_is_required(repo: RepositoryIO) -> bool:
 
 
 def load_fulfillment_manifest(repo: RepositoryIO) -> WorkoutFulfillmentManifest:
-    assert_fulfillment_cutover_is_complete(repo)
+    assert_state_migration_is_complete(repo)
     if repo.file_exists(LEGACY_WORKOUT_COMPLETIONS_PATH) or (
         _publication_cutover_is_required(repo)
     ):

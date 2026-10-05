@@ -31,9 +31,11 @@ def load_planning_profile_unlocked(repo: RepositoryIO) -> AthleteProfile:
 def require_verified_vdot_approval(
     repo: RepositoryIO,
     approval: VDOTApproval | None,
+    *,
+    activity_lock_held: bool = False,
 ) -> VDOTApproval:
     try:
-        return verify_vdot_approval_unlocked(repo, approval)
+        return verify_vdot_approval_unlocked(repo, approval, activity_lock_held=activity_lock_held)
     except ApprovalEvidenceError as exc:
         raise PlanOperationError(str(exc)) from exc
 
@@ -41,13 +43,17 @@ def require_verified_vdot_approval(
 def require_fresh_plan(
     repo: RepositoryIO,
     state: PlanningState,
+    *,
+    activity_lock_held: bool = False,
 ) -> TrainingPlan:
     active_plan = state.active_plan
     if active_plan is None:
         raise PlanOperationError("No current training plan is available")
     plan = active_plan.plan
     if isinstance(plan, RaceMacroPlan):
-        require_verified_vdot_approval(repo, state.active_vdot_approval)
+        require_verified_vdot_approval(
+            repo, state.active_vdot_approval, activity_lock_held=activity_lock_held
+        )
         try:
             verify_methodology_selection(repo.repo_root, plan.methodology)
         except MethodologyRegistryError as exc:

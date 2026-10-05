@@ -7,15 +7,17 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from resilio.core.activity_transaction import ACTIVITY_MUTATION_LOCK_PATH
-from resilio.core.locking import OperationLock
 from resilio.core.planning.artifacts import canonical_data_sha256
 from resilio.core.planning.audit import new_planning_id, validated_utc_timestamp
 from resilio.core.planning.errors import PlanOperationError
 from resilio.core.planning.freshness import require_fresh_plan
 from resilio.core.planning.integrity import plan_skeleton_sha256, target_week_skeleton_sha256
+from resilio.core.planning.progression_review import (
+    require_progression_review_unlocked,
+    resolve_progression_binding,
+    validate_long_run_target,
+)
 from resilio.core.planning.schedule import schedule_authority_deadline_utc
-from resilio.core.planning.source_state import coaching_evidence_source_sha256_unlocked
 from resilio.core.planning.state_repository import (
     persist_planning_state,
     required_planning_state_unlocked,
@@ -23,7 +25,9 @@ from resilio.core.planning.state_repository import (
 from resilio.core.planning.weekly_evidence import validate_week_context
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
-from resilio.core.workout_publication.locking import coordinated_publication_plan_lock
+from resilio.core.workout_publication.locking import (
+    coordinated_publication_plan_activity_lock,
+)
 from resilio.schemas.approvals import PlanningState
 from resilio.schemas.coaching import WeekPlanningContext
 from resilio.schemas.planning.amendments import MacroAmendmentProposal, MacroAmendmentValidation
@@ -41,23 +45,6 @@ def _load_proposal(path: Path) -> tuple[MacroAmendmentProposal, str]:
         )
     except (OSError, ValueError) as exc:
         raise PlanOperationError(f"Macro amendment file is unavailable or invalid: {exc}") from exc
-
-
-def _validate_long_run_target(week: WeekPlan) -> None:
-    hints = week.workout_structure_hints.long_run
-    if hints is None or hints.target_distance_meters is None:
-        return
-    if week.target_run_volume_meters <= 0:
-        raise PlanOperationError("A long-run target requires positive weekly volume")
-    share = 100 * hints.target_distance_meters / week.target_run_volume_meters
-    if (
-        not hints.minimum_weekly_run_volume_percent
-        <= share
-        <= hints.maximum_weekly_run_volume_percent
-    ):
-        raise PlanOperationError(
-            "Amended long-run target is outside its approved weekly-distance range"
-        )
 
 
 def _require_unexecuted_week(
@@ -88,7 +75,7 @@ def _prepare_amendment(
     proposal: MacroAmendmentProposal,
     timestamp: datetime,
 ) -> tuple[RaceMacroPlan, list[int], list[WeekPlanningContext]]:
-    plan = require_fresh_plan(repo, state)
+    plan = require_fresh_plan(repo, state, activity_lock_held=True)
     active = state.active_plan
     if not isinstance(plan, RaceMacroPlan) or active is None or active.plan_approval is None:
         raise PlanOperationError("Macro amendment requires an approved active race plan")
@@ -125,7 +112,7 @@ def _prepare_amendment(
             raise PlanOperationError("Completed calendar weeks cannot be amended")
         if target_week_skeleton_sha256(amended) == target_week_skeleton_sha256(previous):
             raise PlanOperationError("An amended week must change its macro skeleton")
-        _validate_long_run_target(amended)
+        validate_long_run_target(amended)
         context = validate_week_context(repo, plan=plan, target_week=previous, reference=reference)
         if context.evidence_as_of_date != local_date or context.generated_at_utc > timestamp:
             raise PlanOperationError(
@@ -136,6 +123,19 @@ def _prepare_amendment(
             _require_unexecuted_week(repo, state, previous, timestamp)
             retired.append(previous.week_number)
         replacements[amended.week_number] = amended
+    bindings = [resolve_progression_binding(repo, context.progression) for context in contexts]
+    if any(binding != bindings[0] for binding in bindings[1:]):
+        raise PlanOperationError(
+            "Amended weeks must share one complete candidate progression review"
+        )
+    require_progression_review_unlocked(
+        repo,
+        candidate=proposal,
+        kind="amendment",
+        binding=bindings[0],
+        timestamp=timestamp,
+        constraints=plan.constraints_snapshot,
+    )
     amended_plan = RaceMacroPlan.model_validate(
         plan.model_copy(
             update={
@@ -154,7 +154,7 @@ def validate_macro_amendment(
 ) -> MacroAmendmentValidation:
     proposal, digest = _load_proposal(path)
     timestamp = validated_utc_timestamp(evaluated_at_utc)
-    with coordinated_publication_plan_lock(repo, "validate_macro_amendment"):
+    with coordinated_publication_plan_activity_lock(repo, "validate_macro_amendment"):
         state = required_planning_state_unlocked(repo)
         _, retired, _ = _prepare_amendment(repo, state, proposal, timestamp)
     return MacroAmendmentValidation(
@@ -252,9 +252,9 @@ def apply_macro_amendment(
     if not 10 <= len(athlete_confirmation_reference.strip()) <= 1_000:
         raise PlanOperationError("Macro amendment requires explicit athlete confirmation")
     timestamp = validated_utc_timestamp(applied_at_utc)
-    with coordinated_publication_plan_lock(repo, "apply_macro_amendment"):
+    with coordinated_publication_plan_activity_lock(repo, "apply_macro_amendment"):
         state = required_planning_state_unlocked(repo)
-        plan, retired, contexts = _prepare_amendment(repo, state, proposal, timestamp)
+        plan, retired, _ = _prepare_amendment(repo, state, proposal, timestamp)
         updated = _amended_state(
             state,
             plan,
@@ -265,15 +265,4 @@ def apply_macro_amendment(
             retired,
             timestamp,
         )
-        with OperationLock(repo.resolve_path(ACTIVITY_MUTATION_LOCK_PATH), "apply_macro_amendment"):
-            for context in contexts:
-                current = coaching_evidence_source_sha256_unlocked(
-                    repo,
-                    evidence_as_of_date=context.evidence_as_of_date,
-                    evidence_window_start=context.recent_history.evidence_window_start,
-                )
-                if current != context.source_state_sha256:
-                    raise PlanOperationError(
-                        "Training evidence changed before macro amendment commit"
-                    )
-            return persist_planning_state(repo, updated)
+        return persist_planning_state(repo, updated)

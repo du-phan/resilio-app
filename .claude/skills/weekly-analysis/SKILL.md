@@ -94,3 +94,11 @@ Cover:
   methodology.
 
 Do not mutate the plan or log a partial week.
+
+## Running progression
+
+Read [the shared progression procedure](../../../docs/coaching/running-progression.md)
+when judging distance, duration, frequency, supporting mileage, or long-run
+extensions. Lead with absolute completed exposure, then review weekly share.
+Reuse dated athlete answers; planned targets and comfortable HR do not prove
+completion or distance tolerance. State one recommendation and fallback.

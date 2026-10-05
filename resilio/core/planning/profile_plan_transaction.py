@@ -13,6 +13,7 @@ from resilio.core.paths import athlete_profile_path
 from resilio.core.planning.constants import PLAN_MUTATION_LOCK_PATH
 from resilio.core.repository import RepositoryIO
 from resilio.core.state import PLANNING_STATE_PATH
+from resilio.core.state_migration_guard import assert_state_migration_is_complete
 from resilio.schemas.approvals import PlanningState
 from resilio.schemas.profile import AthleteProfile
 from resilio.schemas.repository import RepoError
@@ -103,7 +104,9 @@ def coordinated_plan_lock(
     operation: str,
 ) -> Iterator[None]:
     """Acquire the plan lock and recover any interrupted state pair."""
+    assert_state_migration_is_complete(repo)
     with OperationLock(repo.resolve_path(PLAN_MUTATION_LOCK_PATH), operation):
+        assert_state_migration_is_complete(repo)
         recover_profile_plan_transaction(repo)
         yield
 

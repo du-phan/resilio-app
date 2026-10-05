@@ -11,7 +11,7 @@ from resilio.core.planning.integrity import (
     plan_skeleton_sha256,
     target_week_skeleton_sha256,
 )
-from resilio.core.planning.source_state import coaching_evidence_source_sha256
+from resilio.core.planning.source_state import coaching_evidence_source_sha256_unlocked
 from resilio.core.repository import RepositoryIO
 from resilio.schemas.activity import is_running_sport
 from resilio.schemas.coaching import WeekPlanningContext
@@ -82,6 +82,8 @@ def validate_week_context(
         )
     except PlanningArtifactError as exc:
         raise PlanOperationError(str(exc)) from exc
+    if context.constraints != plan.constraints_snapshot:
+        raise PlanOperationError("Weekly context constraints differ from its current plan")
     target = context.target_week
     if (
         target.plan_id != plan.id
@@ -93,7 +95,7 @@ def validate_week_context(
         raise PlanOperationError(
             "Week-planning context does not match the current plan-week skeleton"
         )
-    current_source_sha256 = coaching_evidence_source_sha256(
+    current_source_sha256 = coaching_evidence_source_sha256_unlocked(
         repo,
         evidence_as_of_date=context.evidence_as_of_date,
         evidence_window_start=context.recent_history.evidence_window_start,

@@ -136,3 +136,11 @@ poetry run resilio approvals approve-plan
 Then use the weekly-plan-generate and weekly-plan-apply procedures for each
 week. Creating or approving this skeleton does not publish workouts and does
 not approve a VDOT.
+
+## Running progression
+
+Read [the shared progression procedure](../../../docs/coaching/running-progression.md)
+when judging distance, duration, frequency, supporting mileage, or long-run
+extensions. Lead with absolute completed exposure, then review weekly share.
+Reuse dated athlete answers; planned targets and comfortable HR do not prove
+completion or distance tolerance. State one recommendation and fallback.

@@ -145,7 +145,10 @@ Write a `WeekApplication` JSON containing only:
 - a specific `adjustment_rationale` of at least 40 characters.
 
 The sum of run `planned_distance_meters` must equal
-the immutable target in `target_week.target_run_volume_meters`. Include exactly
+the immutable target in `target_week.target_run_volume_meters`. If supported
+workouts cannot meet that total, return a concrete safer same-cycle amendment
+through `docs/coaching/macro-amendments.md` before replacement workouts. Do not
+add filler distance or silently change the total. Include exactly
 one typed consideration for every configured athlete-managed sport and every
 non-running sport observed in `recent_history`. Each consideration must name
 the exact recent activity IDs for that sport, at least one effect on the run
@@ -153,14 +156,37 @@ plan (or `no_adjustment` alone), a precise rationale, and any uncertainty. This
 is evidence of consideration, never a prescription. Do not emit a synthetic rest workout; an
 unscheduled day is rest.
 
-Then run:
+Assess the complete candidate using the shared
+`docs/coaching/running-progression.md` authoring procedure:
 
 ```bash
-poetry run resilio plan validate-week --file <NEW_PROPOSAL_JSON>
+poetry run resilio plan assess-progression --kind week --file <NEW_PROPOSAL_JSON>
 ```
 
-Return the exact proposal contents, the evidence and uncertainty summary, the
-validation result, whether any workout is date-only, its publication-capability
-summary, the new file path, and one athlete-facing approval prompt.
-The main coach records approval with
-`poetry run resilio approvals approve-week --file <NEW_PROPOSAL_JSON>`.
+Author a typed review against the returned candidate and evidence hashes,
+covering the whole week and every session. Cite completed exposure, qualify
+nominal duration, and review frequency, supporting mileage, combined stress,
+recovery, travel, and other sports. Every exact-week decision must be `proceed`;
+unmet future prerequisites require revision or deferral. State one
+recommendation and fallback. Bind into a new final proposal and validate it:
+
+```bash
+poetry run resilio plan bind-progression-review --kind week \
+  --file <NEW_PROPOSAL_JSON> --review-file <REVIEW_JSON> --out <FINAL_PROPOSAL_JSON>
+poetry run resilio plan validate-week --file <FINAL_PROPOSAL_JSON>
+```
+
+Continue only when binding reports `review_bound`. Return the final bound
+proposal contents, evidence and uncertainty summary, validation result,
+whether any workout is date-only, its publication-capability summary, final
+file path, and one athlete-facing approval prompt. The main coach records
+approval with
+`poetry run resilio approvals approve-week --file <FINAL_PROPOSAL_JSON>`.
+
+## Running progression
+
+Read [the shared progression procedure](../../../docs/coaching/running-progression.md)
+when judging distance, duration, frequency, supporting mileage, or long-run
+extensions. Lead with absolute completed exposure, then review weekly share.
+Reuse dated athlete answers; planned targets and comfortable HR do not prove
+completion or distance tolerance. State one recommendation and fallback.

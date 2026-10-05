@@ -3,8 +3,8 @@
 import json
 
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_fulfillment.cutover_guard import (
-    assert_fulfillment_cutover_is_complete,
+from resilio.core.state_migration_guard import (
+    assert_state_migration_is_complete,
 )
 from resilio.schemas.publication import PublicationManifest
 from resilio.schemas.repository import RepoError
@@ -13,7 +13,7 @@ PUBLICATION_MANIFEST_PATH = "data/state/workout_publications.json"
 
 
 def load_manifest(repo: RepositoryIO) -> PublicationManifest:
-    assert_fulfillment_cutover_is_complete(repo)
+    assert_state_migration_is_complete(repo)
     path = repo.resolve_path(PUBLICATION_MANIFEST_PATH)
     if path.exists():
         try:

@@ -19,6 +19,7 @@ from resilio.core.planning.service import (
 from resilio.core.planning.weekly_context import create_week_planning_context
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_publication.week_service import RunWeekSynchronizationService
+from tests.progression_helpers import bind_test_candidate
 from tests.unit import test_planning_lifecycle as lifecycle
 from tests.unit.test_planning_lifecycle import _apply_test_week, _write_application
 from tests.unit.test_workout_publication import FakeClient
@@ -62,6 +63,9 @@ def _proposal(repo: RepositoryIO, tmp_path: Path, *, week_number=1, at=AMENDED_A
             }
         )
     )
+    from tests.progression_helpers import bind_test_candidate
+
+    bind_test_candidate(repo, path, kind="amendment", at=at)
     return path
 
 
@@ -148,6 +152,9 @@ def test_amended_week_republishes_using_retained_provider_ownership(repo, tmp_pa
     payload = json.loads(replacement.read_text())
     payload["running_workouts"][-1]["planned_distance_meters"] = 5_000
     replacement.write_text(json.dumps(payload))
+    from tests.progression_helpers import bind_test_candidate
+
+    bind_test_candidate(repo, replacement, kind="week", at=AMENDED_AT)
     approve_week_application(
         repo, replacement, approved_at_utc=datetime(2026, 7, 27, 13, tzinfo=timezone.utc)
     )
@@ -175,6 +182,12 @@ def test_future_amendment_preserves_completed_week_adherence(repo, tmp_path):
     second = dict(draft["weeks"][0])
     second.update(week_number=2, start_date=date(2026, 8, 3), end_date=date(2026, 8, 9))
     draft["weeks"].append(second)
+    draft_path = tmp_path / "two-week-macro.json"
+    draft_path.write_text(MacroPlanDraft.model_validate(draft).model_dump_json())
+    bind_test_candidate(
+        repo, draft_path, kind="macro", at=datetime(2026, 7, 26, tzinfo=timezone.utc)
+    )
+    draft = json.loads(draft_path.read_text())
     create_macro_plan(
         repo,
         MacroPlanDraft.model_validate(draft),
@@ -187,7 +200,7 @@ def test_future_amendment_preserves_completed_week_adherence(repo, tmp_path):
         repo, original_week, approved_at_utc=datetime(2026, 7, 26, 13, tzinfo=timezone.utc)
     )
     apply_approved_week(
-        repo, original_week, applied_at_utc=datetime(2026, 7, 27, tzinfo=timezone.utc)
+        repo, original_week, applied_at_utc=datetime(2026, 7, 26, 14, tzinfo=timezone.utc)
     )
     original = load_planning_aggregate(repo)
     at = datetime(2026, 8, 3, 12, tzinfo=timezone.utc)
@@ -211,6 +224,7 @@ def test_second_amendment_keeps_continuous_approval_chain(repo, tmp_path):
     payload = json.loads(path.read_text())
     payload["weeks"][0]["target_run_volume_meters"] = 12000
     path.write_text(json.dumps(payload))
+    bind_test_candidate(repo, path, kind="amendment", at=at)
     result = _apply(repo, path, at=at)
     first, second = result.active_plan.macro_amendments
     assert second.previous_plan_approval == first.approval
@@ -338,6 +352,7 @@ def test_amendment_history_rejects_truncating_its_oldest_record(repo, tmp_path):
     payload = json.loads(path.read_text())
     payload["weeks"][0]["target_run_volume_meters"] = 12000
     path.write_text(json.dumps(payload))
+    bind_test_candidate(repo, path, kind="amendment", at=at)
     state = _apply(repo, path, at=at)
     state.active_plan.macro_amendments.pop(0)
     # Retain no weekly records so their temporal check cannot mask chain truncation.
@@ -378,3 +393,61 @@ def test_cli_exact_amendment_boundary_applies_without_calendar_mutation(
     result = json.loads(applied.output)["data"]
     assert result["local_application_status"] == "applied"
     assert result["workout_synchronization_status"] == "requires_weekly_approval_and_application"
+
+
+def test_whole_amendment_review_is_shared_across_all_affected_contexts(repo, tmp_path):
+    from resilio.core.planning.artifacts import load_evidence_artifact
+    from resilio.core.planning.service import approve_current_plan, create_macro_plan
+    from resilio.schemas.coaching import WeekPlanningContext
+    from resilio.schemas.macro_plan_draft import MacroPlanDraft
+    from resilio.schemas.plan_history import EvidenceArtifactReference
+    from resilio.schemas.planning.amendments import MacroAmendmentProposal
+    from tests.unit.test_planning_lifecycle import _approve_vdot, _draft
+
+    draft = _draft(_approve_vdot(repo, tmp_path)).model_dump(mode="json")
+    second = dict(draft["weeks"][0])
+    second.update(week_number=2, start_date="2026-08-03", end_date="2026-08-09")
+    draft["weeks"].append(second)
+    macro_path = tmp_path / "shared-review-macro.json"
+    macro_path.write_text(json.dumps(draft))
+    bind_test_candidate(
+        repo, macro_path, kind="macro", at=datetime(2026, 7, 26, tzinfo=timezone.utc)
+    )
+    create_macro_plan(
+        repo,
+        MacroPlanDraft.model_validate_json(macro_path.read_bytes()),
+        created_at_utc=datetime(2026, 7, 26, tzinfo=timezone.utc),
+    )
+    approve_current_plan(repo, approved_at_utc=datetime(2026, 7, 26, 12, tzinfo=timezone.utc))
+    path = _proposal(repo, tmp_path)
+    payload = json.loads(path.read_bytes())
+    state = load_planning_aggregate(repo)
+    second = state.active_plan.plan.weeks[1].model_dump(mode="json")
+    second["target_run_volume_meters"] = 11000
+    second["workout_structure_hints"]["long_run"]["target_distance_meters"] = 5000
+    second["workout_structure_hints"]["long_run"]["maximum_weekly_run_volume_percent"] = 60
+    payload["weeks"].append(second)
+    reference = create_week_planning_context(
+        repo,
+        week_number=2,
+        evidence_as_of_date=AMENDED_AT.date(),
+        history_week_count=1,
+        generated_at_utc=AMENDED_AT,
+        current_local_date=AMENDED_AT.date(),
+    )
+    payload["planning_context_references"].append(reference.model_dump(mode="json"))
+    path.write_text(json.dumps(payload))
+    bind_test_candidate(repo, path, kind="amendment", at=AMENDED_AT)
+    proposal = MacroAmendmentProposal.model_validate_json(path.read_bytes())
+    first_context = load_evidence_artifact(
+        repo, proposal.planning_context_references[0], WeekPlanningContext
+    )
+    second_context = load_evidence_artifact(
+        repo, proposal.planning_context_references[1], WeekPlanningContext
+    )
+    assert isinstance(second_context.progression, EvidenceArtifactReference)
+    assert second_context.progression == proposal.planning_context_references[0]
+    assert len(first_context.progression.assessment.weeks) == 2
+    assert second_context.recent_history.requested_week_count == 6
+    result = _apply(repo, path)
+    assert result.active_plan.macro_amendments[0].affected_week_numbers == [1, 2]

@@ -49,12 +49,17 @@ from resilio.core.planning.integrity import (
     planning_constraints_snapshot,
     planning_inputs_sha256,
 )
+from resilio.core.planning.macro_evidence import load_validated_macro_context
 from resilio.core.planning.plan_proposal import (
     discard_unapproved_current_plan as discard_unapproved_current_plan,
 )
 from resilio.core.planning.profile_plan_transaction import coordinated_plan_lock
+from resilio.core.planning.progression_assessment import macro_draft_from_plan
+from resilio.core.planning.progression_review import (
+    require_progression_review_unlocked,
+    validate_long_run_target,
+)
 from resilio.core.planning.source_state import (
-    coaching_evidence_source_sha256,
     coaching_evidence_source_sha256_unlocked,
 )
 from resilio.core.planning.state_repository import (
@@ -115,7 +120,6 @@ from resilio.schemas.plan_history import (
 from resilio.schemas.planning.approval_records import PlanApproval
 from resilio.schemas.planning.plans import RaceMacroPlan, TrainingPlan
 from resilio.schemas.planning_evidence import (
-    MacroPlanningContext,
     PlanCycleReview,
 )
 from resilio.schemas.profile import AthleteProfile
@@ -147,95 +151,6 @@ def _draft_goal_matches_profile(
         and profile_goal.target_date == draft.goal.target_date
         and profile_goal.target_finish_time_seconds == draft_target_seconds
     )
-
-
-def _load_validated_macro_context(
-    repo: RepositoryIO,
-    state: PlanningState,
-    draft: MacroPlanDraft,
-    profile: AthleteProfile,
-) -> MacroPlanningContext:
-    try:
-        context = load_evidence_artifact(
-            repo,
-            draft.planning_context_reference,
-            MacroPlanningContext,
-        )
-    except PlanningArtifactError as exc:
-        raise PlanOperationError(str(exc)) from exc
-    if context.planning_inputs_sha256 != planning_inputs_sha256(profile):
-        raise PlanOperationError(
-            "Macro-planning context does not match the current planning inputs"
-        )
-    if context.current_constraints != planning_constraints_snapshot(profile):
-        raise PlanOperationError(
-            "Macro-planning context constraints differ from the current profile"
-        )
-    if context.active_vdot_approval_id != state.active_vdot_approval_id:
-        raise PlanOperationError("Macro-planning context does not use the active VDOT approval")
-    if context.source_state_sha256 != coaching_evidence_source_sha256(
-        repo,
-        evidence_as_of_date=context.evidence_as_of_date,
-    ):
-        raise PlanOperationError("Macro-planning training evidence changed after context creation")
-    if min(week.start_date for week in draft.weeks) != context.intended_plan_start_date:
-        raise PlanOperationError("Macro draft does not start on its evidence-bound intended Monday")
-    archived_plan_ids = {reference.plan_id for reference in state.closed_plan_references}
-    context_plan_ids = {summary.plan_id for summary in context.historical_plan_summaries} | {
-        summary.plan_id for summary in context.historical_assessment_summaries
-    }
-    if context_plan_ids != archived_plan_ids:
-        raise PlanOperationError(
-            "Macro-planning context does not cover the complete closed-plan history"
-        )
-    if not context.recent_detailed_weeks:
-        raise PlanOperationError("Macro-planning context must contain recent training evidence")
-    available_evidence_ids = {pointer.evidence_id for pointer in context.evidence_index}
-    cited_evidence_ids: set[str] = set()
-    for decision in draft.adaptation_decisions:
-        cited_evidence_ids.update(decision.evidence_ids)
-        unknown_ids = set(decision.evidence_ids) - available_evidence_ids
-        if unknown_ids:
-            raise PlanOperationError(
-                "Macro decision cites evidence absent from its context: " f"{sorted(unknown_ids)}"
-            )
-        if any(week_number > len(draft.weeks) for week_number in decision.affected_week_numbers):
-            raise PlanOperationError("Macro decision references a week outside the draft horizon")
-    latest_recent_week = max(
-        context.recent_detailed_weeks,
-        key=lambda week: week.week_start,
-    )
-    required_evidence_ids = {f"recent_week.{latest_recent_week.week_start.isoformat()}"}
-    if context.historical_plan_summaries:
-        latest_plan = max(
-            context.historical_plan_summaries,
-            key=lambda summary: (
-                summary.effective_end_date,
-                summary.plan_id,
-            ),
-        )
-        required_evidence_ids.update(
-            {
-                f"closed_plan.{latest_plan.plan_id}.summary",
-                f"goal_outcome.{latest_plan.plan_id}",
-            }
-        )
-    if context.historical_assessment_summaries:
-        latest_assessment = max(
-            context.historical_assessment_summaries,
-            key=lambda summary: (
-                summary.result.performance_date,
-                summary.plan_id,
-            ),
-        )
-        required_evidence_ids.add(f"assessment_result.{latest_assessment.plan_id}")
-    missing_required_ids = required_evidence_ids - cited_evidence_ids
-    if missing_required_ids:
-        raise PlanOperationError(
-            "Macro decisions do not cite required renewal evidence: "
-            f"{sorted(missing_required_ids)}"
-        )
-    return context
 
 
 def approve_vdot_proposal(
@@ -493,11 +408,13 @@ def create_macro_plan(
     created_at_utc: datetime | None = None,
 ) -> RaceMacroPlan:
     """Create a fresh macro revision from the active VDOT approval and profile."""
-    with coordinated_plan_lock(repo, "create_macro_plan"):
+    with coordinated_publication_plan_activity_lock(repo, "create_macro_plan"):
         state = _required_state(repo)
         if state.active_plan is not None:
             raise PlanOperationError("A current plan already exists; close it before replacement")
-        vdot_approval = _verify_vdot_approval(repo, state.active_vdot_approval)
+        vdot_approval = _verify_vdot_approval(
+            repo, state.active_vdot_approval, activity_lock_held=True
+        )
         if draft.vdot_approval_id != vdot_approval.approval_id:
             raise PlanOperationError("Macro draft does not reference the active VDOT approval")
         profile = _load_profile(repo)
@@ -505,7 +422,7 @@ def create_macro_plan(
             raise PlanOperationError(
                 "Macro draft goal does not match the athlete-confirmed profile goal"
             )
-        context = _load_validated_macro_context(
+        context = load_validated_macro_context(
             repo,
             state,
             draft,
@@ -540,7 +457,17 @@ def create_macro_plan(
             baseline_vdot=vdot_approval.approved_vdot,
             constraints_snapshot=planning_constraints_snapshot(profile),
         )
+        for week in draft.weeks:
+            validate_long_run_target(week)
         updated = state.model_copy(update={"active_plan": ActivePlanState(plan=plan)})
+        require_progression_review_unlocked(
+            repo,
+            candidate=draft,
+            kind="macro",
+            binding=context.progression,
+            timestamp=creation_timestamp,
+            constraints=plan.constraints_snapshot,
+        )
         _persist(repo, updated)
         return plan
 
@@ -551,12 +478,35 @@ def approve_current_plan(
     approved_at_utc: datetime | None = None,
 ) -> PlanningState:
     """Bind athlete approval to the current immutable plan skeleton."""
-    with coordinated_plan_lock(repo, "approve_current_plan"):
+    with coordinated_publication_plan_activity_lock(repo, "approve_current_plan"):
         state = _required_state(repo)
-        plan = _require_fresh_plan(repo, state)
+        plan = _require_fresh_plan(repo, state, activity_lock_held=True)
+        if state.active_plan is not None and state.active_plan.plan_approval is not None:
+            raise PlanOperationError(
+                "The current plan is already approved; use an explicit amendment for changes"
+            )
         approval_timestamp = _now_utc(approved_at_utc)
         if approval_timestamp < plan.created_at_utc:
             raise PlanOperationError("Plan approval cannot predate plan creation")
+        if (
+            isinstance(plan, RaceMacroPlan)
+            and state.active_plan is not None
+            and state.active_plan.plan_approval is None
+        ):
+            context = load_validated_macro_context(
+                repo,
+                state,
+                macro_draft_from_plan(plan),
+                _load_profile(repo),
+            )
+            require_progression_review_unlocked(
+                repo,
+                candidate=macro_draft_from_plan(plan),
+                kind="macro",
+                binding=context.progression,
+                timestamp=approval_timestamp,
+                constraints=plan.constraints_snapshot,
+            )
         approval = PlanApproval(
             approval_id=_new_id("plan_approval"),
             plan_kind=plan.kind,
