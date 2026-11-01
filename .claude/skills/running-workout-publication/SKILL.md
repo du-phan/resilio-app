@@ -59,6 +59,15 @@ require a redundant athlete confirmation.
 
 ## Reconcile and verify
 
+For an explicit athlete request to remove a missed past calendar event, use
+`poetry run resilio workout remove-missed --workout-id <EXACT_ID>
+--confirmation-reference "<ATHLETE_CONFIRMATION>"` after exact ownership and
+unfulfilled status have been checked. This changes calendar visibility only;
+the historical prescription and missed adherence remain unchanged. The typed
+removal audit suppresses recreation; a pending removal blocks ordinary
+reconciliation and requires retrying the same exact command. Never infer
+permission to remove a fulfilled event, a future occurrence, or remote drift.
+
 ```bash
 poetry run resilio workout reconcile-publication-deletions
 poetry run resilio workout reconcile --week-number <WEEK_NUMBER>

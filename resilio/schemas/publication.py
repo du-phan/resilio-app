@@ -536,6 +536,7 @@ class WeekSynchronizationItem(BaseModel):
         "noop",
         "recovered",
         "skipped_past",
+        "removed_missed",
         "error",
         "deleted",
         "recovered_deleted",

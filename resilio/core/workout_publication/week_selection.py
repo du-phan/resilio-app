@@ -8,6 +8,9 @@ from typing import Literal
 from resilio.core.planning.adherence_evidence import AuthoritativeWorkout
 from resilio.core.repository import RepositoryIO
 from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
+from resilio.core.workout_publication.calendar_removal_repository import (
+    calendar_removal_is_complete,
+)
 from resilio.core.workout_publication.manifest import load_manifest
 from resilio.core.workout_publication.policy import provider_local_date
 from resilio.core.workout_publication.publication_deletions import (
@@ -57,6 +60,17 @@ def select_run_week_items(
     ):
         workout = item.prescription
         is_fulfilled = _identity_tuple(item.identity) in fulfilled
+        if calendar_removal_is_complete(repo, item):
+            if is_fulfilled:
+                raise ValueError("Removed missed workout now has fulfillment; review is required")
+            skipped.append(
+                WeekSynchronizationItem(
+                    local_workout_id=workout.id,
+                    occurrence_date=workout.date,
+                    status="removed_missed",
+                )
+            )
+            continue
         owned_records = [
             record
             for record in (

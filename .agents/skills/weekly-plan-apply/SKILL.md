@@ -16,6 +16,11 @@ Require the approved file path and week number. Verify:
 poetry run resilio approvals status
 ```
 
+Partial-week replacements must preserve authoritative elapsed and exactly
+fulfilled prescriptions, including snapshots retired by a macro amendment.
+Validation and application independently recheck them; a deadline crossed
+since approval may require a revised proposal rather than a backdated run.
+
 The recorded plan kind, plan ID, plan revision, plan-skeleton SHA-256, week number,
 target-week-skeleton SHA-256, action, prior applied-running-workouts SHA-256,
 absolute path, file SHA-256, and immutable week-planning-context reference must

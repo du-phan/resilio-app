@@ -17,6 +17,19 @@ Non-secret transport settings live under `intervals_icu` in
 - redacts credentials and never persists raw provider payloads;
 - supports injected transports and sleepers for deterministic tests.
 
+## Upcoming athlete-managed activities
+
+Completed-state sync and typed coaching contexts do not automatically import
+upcoming non-running calendar events. When the athlete requests a calendar
+check or identifies a conflict, the existing `IntervalsIcuClient.list_events`
+supports a bounded read-only query for the target Monday-Sunday week.
+Use validated event identity, local date, sport, and name as planned context,
+separate from completed activity evidence or aerobic load. Re-read when the
+athlete reports a removal or change. Keep relevant facts and their observation
+date in the proposal rationale; unresolved timing or participation remains
+uncertain. Do not assign dates to other flexible sport expectations, rewrite
+the durable profile from a calendar entry, or mutate an athlete-owned event.
+
 ## Completed-state sync
 
 `resilio sync` reads activity summaries and details, daily wellness, and sport
@@ -175,6 +188,22 @@ approval dates are evaluated in the declared performance or athlete training
 timezone, never the host machine’s date.
 
 ## Planned running-workout synchronization
+
+An athlete may explicitly request removing an elapsed missed running event
+from the calendar. The separate missed-calendar-removal procedure verifies
+local and remote ownership, retained prescription semantics, absence of exact
+local fulfillment, and no native pair in a fresh bounded completed-activity
+read over all completed provider history through today, with date-range
+splitting when a response reaches its cap. This requests only identity,
+ordering, and native pairing fields; no full activity payload is archived.
+Native pairing is checked again on the fresh
+event immediately before deletion. It records durable intent before deletion and confirms event absence
+afterward. The private removal audit preserves athlete identity, original
+publication, exact target fingerprint, confirmation, and timestamps without
+changing the plan or historical adherence. Reconciliation suppresses completed
+removals and blocks pending ones until explicit retry. A drifted target, pending
+publication update, hidden/truncated activity read, or newly fulfilled workout
+blocks deletion.
 
 Resilio publishes only typed running workouts with deterministic external
 identities. Every approved run has a provider-neutral structured prescription;

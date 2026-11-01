@@ -57,6 +57,8 @@ def delete_remote_if_fresh(
         or provider_event_state_fingerprint(fresh) != expected_remote_target[1]
     ):
         raise PublicationSafetyError("Remote event changed after athlete retirement confirmation")
+    if verify_semantics is not None:
+        verify_semantics(fresh)
     client.delete_event(fresh.id, athlete_id=athlete_id)
     try:
         get_exact_event(client, fresh.id, athlete_id=athlete_id)

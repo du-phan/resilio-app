@@ -13,6 +13,7 @@ from resilio.api.publication import (
     reconcile_remote_publication_deletions,
     reconcile_remote_workout_pairing_operations,
     reconcile_week_run_workouts,
+    remove_missed_run_from_calendar,
     resolve_remote_publication_deletion_drift,
     resolve_week_run_workout_pairing_drift,
     restore_local_week_run_workouts,
@@ -56,7 +57,8 @@ def config_command() -> None:
 @app.command(name="configure")
 def configure_command(
     run_mode: str = typer.Option(..., "--run-mode"),
-    confirmation_reference: str | None = typer.Option(
+    confirmation_reference: str
+    | None = typer.Option(
         None,
         "--confirmation-reference",
     ),
@@ -116,6 +118,20 @@ def reconcile_command(
     )
 
 
+@app.command(name="remove-missed")
+def remove_missed_command(
+    workout_id: str = typer.Option(..., "--workout-id"),
+    confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
+) -> None:
+    _emit(
+        remove_missed_run_from_calendar(
+            local_workout_id=workout_id,
+            athlete_confirmation_reference=confirmation_reference,
+        ),
+        "Missed running event removed; historical prescription retained.",
+    )
+
+
 @app.command(name="reconcile-pairing-operations")
 def reconcile_pairing_operations_command() -> None:
     _emit(
@@ -135,7 +151,8 @@ def reconcile_publication_deletions_command() -> None:
 @app.command(name="resolve-publication-deletion-drift")
 def resolve_publication_deletion_drift_command(
     confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
-    drift_target_tokens: list[str] | None = typer.Option(
+    drift_target_tokens: list[str]
+    | None = typer.Option(
         None,
         "--drift-target-token",
     ),
@@ -153,7 +170,8 @@ def resolve_publication_deletion_drift_command(
 def resolve_drift_command(
     week_number: int = typer.Option(..., "--week-number", min=1),
     confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
-    drift_target_tokens: list[str] | None = typer.Option(
+    drift_target_tokens: list[str]
+    | None = typer.Option(
         None,
         "--drift-target-token",
     ),
@@ -175,7 +193,8 @@ def resolve_drift_command(
 def resolve_pairing_drift_command(
     week_number: int = typer.Option(..., "--week-number", min=1),
     confirmation_reference: str = typer.Option(..., "--confirmation-reference"),
-    pairing_drift_tokens: list[str] | None = typer.Option(
+    pairing_drift_tokens: list[str]
+    | None = typer.Option(
         None,
         "--pairing-drift-token",
     ),

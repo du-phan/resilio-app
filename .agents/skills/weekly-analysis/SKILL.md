@@ -42,6 +42,19 @@ judgment.
   A date-only approved workout is a valid schedule, not corrupt evidence. It
   remains due by its approved local date and may be published as an untimed
   calendar-day workout without asserting a midnight start.
+  If a later sync first records exact fulfillment, the historical `as_of`
+  context may still show it unfulfilled. Inspect
+  `resilio workout fulfillment-status --week-number <N>` and label current
+  confirmation separately from the historical cutoff; do not call a run
+  missed solely because its fulfillment evidence was recorded later.
+- Execution against prescription: for each exactly fulfilled run, compare
+  the completed activity with its approved distance, moving and elapsed time,
+  and quality steps where measurements exist. Fulfillment does not prove the
+  prescribed dose was followed. Explain material overcompletion or
+  undercompletion, preserve the historical prescription, and carry actual
+  exposure into the next planning decision through the shared
+  [macro continuity procedure](../../../docs/coaching/running-progression.md#macro-continuity-and-completed-deviations).
+  Planned duration remains a scheduling estimate, not an execution target.
 - Run exposure: report sessions, exact duration, distance in kilometers,
   elevation gain in meters, longest-run distance, and native aerobic load only
   when fully covered. If any run lacks distance or elevation, preserve the
