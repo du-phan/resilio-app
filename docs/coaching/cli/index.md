@@ -116,6 +116,11 @@ authority. Commands return JSON envelopes.
 
 ## Running-workout synchronization
 
+- `resilio workout remove-missed --workout-id <ID> --confirmation-reference <TEXT>` —
+  remove an explicitly confirmed, ownership-proven missed past event, preserving
+  immutable prescription/adherence history and a durable retry audit. A pending
+  removal blocks ordinary reconciliation; retry the same exact command.
+
 - `resilio workout config|configure` — read or record the athlete-confirmed
   automatic run-synchronization policy.
 - `resilio workout capabilities --sport run` — read-only Intervals calendar,

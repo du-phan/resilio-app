@@ -60,6 +60,13 @@ Do not use web weather. If the forecast is unavailable, state the uncertainty.
 
 ## Planning and approvals
 
+Before exact weekly generation, review actual completed execution and the
+remaining approved trajectory using the shared
+[macro continuity procedure](../../coaching/running-progression.md#macro-continuity-and-completed-deviations).
+The target-week context does not replace reading the full active plan. Record
+why targets are retained or propose an amendment when new evidence changes
+their suitability, including when the existing totals remain achievable.
+
 Race-macro plans use one named, versioned primary methodology. Follow the
 [methodology reference](../../coaching/methodology.md) and the selected source
 in `docs/training_books/`. A baseline-assessment plan is a separate,
@@ -115,8 +122,12 @@ change to remaining race-macro targets within the same goal and constraints,
 use the [macro amendment workflow](../../coaching/macro-amendments.md).
 Amendments retain the original cycle/workout ownership lineage, add a new
 exact-file macro approval and immutable prior snapshot, and require fresh
-weekly approval for retired upcoming workouts. Completed weeks and any
-populated week with elapsed or fulfilled workouts cannot be amended.
+weekly approval for retired upcoming workouts. Completed weeks and populated
+weeks with no upcoming unfulfilled run cannot be amended. Partial-week exact
+replacements preserve authoritative elapsed and exactly fulfilled prescriptions
+at validation, approval, and application, including inactive historical
+snapshots. Scheduled volume retains missed prescriptions; expected remaining
+execution is stated separately, and no new backdated authority is permitted.
 
 Before a successor plan, synchronize through the evidence date, record the
 athlete-confirmed goal outcome, create and present an immutable cycle review,

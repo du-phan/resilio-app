@@ -5,6 +5,15 @@ phase, recovery status, or quality/long-run hints within the same race goal,
 baseline, methodology, horizon, and profile constraints. A new goal or cycle
 still uses the normal review and closure workflow.
 
+Evaluate whether to retain or amend the remaining targets through the
+[macro continuity procedure](running-progression.md#macro-continuity-and-completed-deviations)
+before generating exact workouts. New completed exposure, recovery evidence,
+or scheduling context can make an achievable target strategically outdated.
+An amendment can increase or reduce remaining targets when the whole-cycle
+rationale supports it. Exceeding a previous prescription or reporting an easy
+effort does not by itself justify an increase; retaining the current targets
+with an explicit rationale remains a valid outcome.
+
 An amendment is a new proposal and approval within the existing ownership
 lineage. The plan and workout lineage IDs remain stable so native provider
 events and exact historical fulfillment remain attributable. The new amendment
@@ -36,8 +45,28 @@ existed when each exact weekly file was approved.
    inspect its automatic synchronization result. Future unpopulated weeks stay
    strategic until their normal weekly planning date.
 
-Validation preserves week numbers and dates, rejects completed calendar weeks,
-and rejects changes to a populated week with any elapsed or fulfilled workout.
+Validation preserves week numbers and dates and rejects completed calendar
+weeks. A populated partial week may be amended only while it has an upcoming,
+unfulfilled workout. The later exact weekly replacement must retain every
+elapsed prescription that was authoritative at its schedule deadline and every
+exactly fulfilled prescription, including early execution and authority in an
+inactive prior snapshot. Validation, approval, and application all recheck
+these facts; newly backdated workouts are rejected. A replacement applied after
+a workout expires during the amendment gap must be revised rather than creating
+retroactive authority.
+A missed elapsed prescription remains unchanged in the replacement and in
+historical adherence. The scheduled weekly total includes its original distance;
+state the expected remaining execution separately. For example, an unchanged
+missed 5 km plus upcoming 10 km and 16 km prescriptions has a 31 km scheduled
+total and 26 km remaining execution, rather than pretending the 5 km was run.
+For an explicitly requested calendar cleanup, `resilio workout remove-missed
+--workout-id <ID> --confirmation-reference <TEXT>` removes only an elapsed,
+unfulfilled, ownership-proven event. A separate durable removal record retains
+its original publication, exact remote fingerprint, athlete identity,
+confirmation, and request/completion times. It does not change the plan,
+historical adherence, or completed exposure. Normal reconciliation suppresses
+the removed event; pending removal blocks reconciliation until the same command
+is retried. Pending publication updates and provider-paired events are rejected.
 A pending weekly approval must be resolved first. The exact active-state and
 proposal-file digests prevent replay or changes after review. Evidence is
 rechecked under the activity lock before the single planning-state commit.

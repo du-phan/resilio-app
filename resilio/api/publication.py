@@ -19,6 +19,7 @@ from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
     coordinated_publication_plan_lock,
 )
+from resilio.core.workout_publication.missed_calendar_removal import remove_missed_calendar_workout
 from resilio.core.workout_publication.policy import (
     ProviderSemanticsMismatchError,
     PublicationSafetyError,
@@ -38,6 +39,7 @@ from resilio.core.workout_publication.week_service import (
 )
 from resilio.integrations.intervals_icu import IntervalsIcuClient
 from resilio.integrations.intervals_icu.errors import IntervalsIcuError
+from resilio.schemas.calendar_removal import MissedWorkoutCalendarRemoval
 from resilio.schemas.publication import (
     RunSynchronizationCapabilities,
     RunWeekSynchronizationReport,
@@ -51,6 +53,36 @@ from resilio.schemas.workout_pairing import RemotePairingOperationsReport
 class PublicationError:
     error_type: str
     message: str
+
+
+def remove_missed_run_from_calendar(
+    *,
+    local_workout_id: str,
+    athlete_confirmation_reference: str,
+    environment: Optional[Mapping[str, str]] = None,
+    client: Optional[IntervalsIcuClient] = None,
+) -> MissedWorkoutCalendarRemoval | PublicationError:
+    """Remove one explicitly confirmed missed event, preserving training history."""
+    resolved = _with_intervals_client(environment=environment, client=client)
+    if isinstance(resolved, PublicationError):
+        return resolved
+    integration, owned_client = resolved
+    try:
+        return remove_missed_calendar_workout(
+            RepositoryIO(),
+            integration,
+            local_workout_id=local_workout_id,
+            athlete_confirmation_reference=athlete_confirmation_reference,
+        )
+    except PublicationSafetyError as exc:
+        return PublicationError("publication_safety", str(exc))
+    except IntervalsIcuError as exc:
+        return PublicationError(exc.error_type, str(exc))
+    except (OperationLockError, OSError, ValueError) as exc:
+        return PublicationError("calendar_removal", str(exc))
+    finally:
+        if owned_client:
+            integration.close()
 
 
 def get_run_workout_synchronization_preferences() -> (

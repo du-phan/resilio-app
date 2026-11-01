@@ -232,12 +232,12 @@ def test_second_amendment_keeps_continuous_approval_chain(repo, tmp_path):
     assert load_planning_aggregate(repo) == result
 
 
-def test_populated_week_with_elapsed_workout_is_protected(repo, tmp_path):
+def test_populated_week_without_upcoming_workout_is_protected(repo, tmp_path):
     _apply_test_week(repo, tmp_path)
-    at = datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
+    at = datetime(2026, 8, 2, 12, tzinfo=timezone.utc)
     path = _proposal(repo, tmp_path, at=at)
     state = load_planning_aggregate(repo)
-    with pytest.raises(PlanOperationError, match="elapsed workouts"):
+    with pytest.raises(PlanOperationError, match="without upcoming unfulfilled workouts"):
         _apply(repo, path, at=at)
     assert load_planning_aggregate(repo) == state
 

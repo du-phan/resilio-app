@@ -33,6 +33,42 @@ race goal nor proves it. Performance equivalence, endurance preparation, and a
 race prediction are separate claims. Do not issue an invented success
 probability or derive training pace from VDOT.
 
+### Macro continuity and completed deviations
+
+Before exact weekly authoring or reconsidering an upcoming session, read the
+full active plan with `resilio plan show` alongside its target week and recent
+completed evidence. The weekly planning context contains one target skeleton
+and history; it does not supply the remaining macro trajectory. Check the
+goal horizon, next relevant endurance target, recovery weeks, taper, and
+dated constraints or prerequisites in the plan's notes. Future targets are
+intentions whose prerequisites must be checked from completed evidence before
+their own exact weekly generation.
+
+For exactly fulfilled workouts, distinguish completion from dose: compare
+the approved prescription with measured distance, moving and elapsed duration,
+quality segments, feedback, and subsequent recovery. Use actual completed
+exposure for progression comparisons while preserving the original approved
+prescription. An unexpectedly longer run can change both the next-session
+comparison and accumulated stress; it neither automatically proves additional
+capacity nor automatically requires retaining the old target.
+
+When that deviation or an athlete's question materially challenges the next
+target, compare retaining it with a relevant adjusted alternative in the
+context of the remaining cycle. Consider absolute time on feet, recent
+extensions, supporting mileage, frequency, quality, recovery, and other
+sports together. A small percentage increase alone is neither a reason to
+lengthen a run nor a reason to reject a longer alternative. Explain which
+choice better serves the goal and why; do not search for a maximum allowable
+increase.
+
+Record one decision: retain the approved targets with an evidence-based
+rationale, or prepare a [same-cycle macro amendment](macro-amendments.md).
+Consider amendment when new evidence makes the remaining progression less
+appropriate, even if its totals are still achievable. Race-macro amendments
+may increase or reduce remaining targets; they retain their separate approval
+boundary. A baseline assessment preserves its approved return progression
+and benchmark intent; do not use the race-macro amendment workflow for it.
+
 ## Evidence and uncertainty
 
 Use synchronized active completed canonical running activities, including all

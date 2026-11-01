@@ -14,6 +14,7 @@ it, or overwrite a previously presented proposal.
 
    ```bash
    poetry run resilio plan status
+   poetry run resilio plan show
    poetry run resilio plan week --week <WEEK_NUMBER>
    poetry run resilio profile get
    poetry run resilio workout capabilities --sport run
@@ -49,6 +50,18 @@ it, or overwrite a previously presented proposal.
 
 ## Coaching decisions
 
+- Review the full active plan alongside the target context using the shared
+  [macro continuity procedure](../../../docs/coaching/running-progression.md#macro-continuity-and-completed-deviations)
+  before authoring exact runs. Confirm they describe the same active plan;
+  reacquire evidence if it changed. For race macros, explain why remaining
+  targets are retained or prepare a same-cycle amendment before generating
+  replacement workouts. Future targets remain strategic intentions, never
+  completed exposure.
+- When the athlete requests a calendar check or identifies a calendar
+  conflict, use the existing read-only
+  [upcoming-activity workflow](../../../docs/reference/intervals-icu-integration.md#upcoming-athlete-managed-activities).
+  Keep planned other-sport facts separate from completed exposure and include
+  their scheduling effects and uncertainty in the proposal.
 - Branch on `target_week.plan_kind`:
 
   - for `race_macro`, follow the plan’s single primary methodology and phase;
@@ -144,6 +157,13 @@ Write a `WeekApplication` JSON containing only:
 - `other_sport_considerations`;
 - a specific `adjustment_rationale` of at least 40 characters.
 
+For a partial-week replacement, copy historical elapsed and fulfilled
+prescriptions unchanged, including their IDs, dates, content, and nominal
+durations. The approved scheduled total includes these retained prescriptions;
+distinguish remaining expected execution from that total and never present
+missed distance as completed exposure. Recheck deadline crossings before
+approval/application; never add newly backdated runs.
+
 The sum of run `planned_distance_meters` must equal
 the immutable target in `target_week.target_run_volume_meters`. If supported
 workouts cannot meet that total, return a concrete safer same-cycle amendment
@@ -177,10 +197,11 @@ poetry run resilio plan validate-week --file <FINAL_PROPOSAL_JSON>
 ```
 
 Continue only when binding reports `review_bound`. Return the final bound
-proposal contents, evidence and uncertainty summary, validation result,
-whether any workout is date-only, its publication-capability summary, final
-file path, and one athlete-facing approval prompt. The main coach records
-approval with
+proposal contents, evidence and uncertainty summary, the decision to retain
+or amend the remaining targets, validation result, whether any workout is
+date-only, its publication-capability summary, and final file path to the main
+coach. Include a suggested athlete-facing approval prompt; the main coach
+presents the reviewed proposal, asks for approval, and records it with
 `poetry run resilio approvals approve-week --file <FINAL_PROPOSAL_JSON>`.
 
 ## Running progression

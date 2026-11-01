@@ -361,6 +361,50 @@ def test_malformed_activity_payload_is_rejected() -> None:
             client.list_activities(date(2026, 1, 1), date(2026, 1, 2))
 
 
+def test_pairing_projection_requests_only_ordering_identity_and_native_pointer():
+    def handler(request):
+        assert request.url.params["fields"] == "id,type,start_date_local,paired_event_id"
+        assert request.url.params["oldest"] == date.min.isoformat()
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "paired",
+                    "type": "Run",
+                    "start_date_local": "2026-01-01T08:00:00",
+                    "paired_event_id": 42,
+                },
+                {"id": "unpaired", "type": "Run", "start_date_local": "2026-01-02T08:00:00"},
+            ],
+        )
+
+    with IntervalsIcuClient(_config(), transport=httpx.MockTransport(handler)) as client:
+        rows = client.list_activity_pairings(date.min, date(2026, 1, 2))
+    assert [row.paired_event_id for row in rows] == [42, None]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        [{"id": "hidden", "start_date_local": "2026-01-01T08:00:00", "_note": "Hidden"}],
+        [
+            {
+                "id": "invalid",
+                "type": "Run",
+                "start_date_local": "2026-01-01T08:00:00",
+                "paired_event_id": 0,
+            }
+        ],
+    ],
+)
+def test_pairing_projection_rejects_unverifiable_or_invalid_pointer(payload):
+    with IntervalsIcuClient(
+        _config(), transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    ) as client:
+        with pytest.raises(IntervalsInvalidPayloadError):
+            client.list_activity_pairings(date.min, date(2026, 1, 2))
+
+
 def test_original_file_is_binary_and_empty_content_is_rejected() -> None:
     responses = [httpx.Response(200, content=b"fixture-fit"), httpx.Response(200)]
 

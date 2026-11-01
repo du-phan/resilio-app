@@ -129,6 +129,12 @@ class ActivitySummaryDTO(ExternalDTO):
     start_date_local: str
 
 
+class ActivityPairingSummaryDTO(ActivitySummaryDTO):
+    """Minimal fresh identity/pair pointer projection for calendar deletion."""
+
+    paired_event_id: Optional[int] = Field(default=None, gt=0)
+
+
 ZoneDurationSeconds = Annotated[int, Field(ge=0, le=2_678_400)]
 
 

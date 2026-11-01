@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from resilio import __version__
 from resilio.integrations.intervals_icu.dto import (
     ActivityDTO,
+    ActivityPairingSummaryDTO,
     ActivityPairingWriteDTO,
     ActivitySummaryDTO,
     AthleteDTO,
@@ -150,10 +151,7 @@ class IntervalsIcuClient:
                         "Intervals.icu request was not submitted",
                         operation=operation,
                     ) from exc
-                self._sleeper(
-                    min(8.0, 0.5 * (2 ** (attempt - 1)))
-                    + self._jitter(0, 0.25)
-                )
+                self._sleeper(min(8.0, 0.5 * (2 ** (attempt - 1))) + self._jitter(0, 0.25))
                 continue
             except (httpx.TimeoutException, httpx.NetworkError) as exc:
                 last_transport_error = exc
@@ -348,6 +346,34 @@ class IntervalsIcuClient:
                 operation=operation,
                 status_code=response.status_code,
             ) from exc
+
+    def list_activity_pairings(
+        self,
+        oldest: date,
+        newest: date,
+        *,
+        athlete_id: Optional[str] = None,
+        limit: int = 1000,
+    ) -> list[ActivityPairingSummaryDTO]:
+        """Read only identities, ordering, and native event pointers.
+
+        The provider's explicit fields projection omits null pointers. Hidden
+        activity stubs lack required ordering/type fields and fail validation,
+        rather than being treated as unpaired activities.
+        """
+        operation = "list_activity_pairings"
+        response = self._request(
+            "GET",
+            f"/athlete/{athlete_id or self.athlete_id}/activities",
+            operation=operation,
+            params={
+                "oldest": oldest.isoformat(),
+                "newest": newest.isoformat(),
+                "limit": limit,
+                "fields": "id,type,start_date_local,paired_event_id",
+            },
+        )
+        return self._validated_list(response, ActivityPairingSummaryDTO, operation)
 
     def get_activity(self, activity_id: str, *, intervals: bool = True) -> ActivityDTO:
         operation = "get_activity"

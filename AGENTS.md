@@ -47,6 +47,9 @@ projections and typed coaching context locally.
 Use the matching skill for onboarding, baseline-assessment planning and review,
 weekly analysis, multi-week progress, plan renewal, VDOT proposal, race-macro
 planning, weekly generation, or weekly application.
+Before exact weekly generation, review completed execution against prescription
+and the remaining macro trajectory through the shared
+[running progression procedure](docs/coaching/running-progression.md).
 The coach owns all athlete questions and approvals; executor skills do not ask
 questions. Explain coaching outcomes and measurements in athlete language without
 exposing commands, tools, skills, or file paths.

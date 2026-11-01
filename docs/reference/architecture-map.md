@@ -131,8 +131,13 @@ re-verifies the owned publication/provider-paired-fulfillment chain and exact
 canonical result.
 Race-macro amendments retain cycle/workout ownership IDs while adding new
 exact-file approvals, full prior-plan digests, and predecessor audit digests.
-Only remaining skeletons are amended; affected unexecuted weekly authority is
-retired before fresh exact weekly approval. Historical adherence resolves the
+Only remaining skeletons are amended; affected weekly authority is retired
+before fresh exact weekly approval. A partial week requires an upcoming
+unfulfilled run. Weekly validation, approval, and application preserve elapsed
+authority selected at each schedule deadline and exactly fulfilled content
+against complete retained approval/hash/timezone/date tuples. Newly backdated
+prescriptions are rejected, including when a deadline passes during replacement.
+Historical adherence resolves the
 macro epoch that authorized each weekly file. Archive integrity proves stored
 bytes before parsing, and historical review bindings hash persisted snapshot
 fields without inserting newly added defaults.

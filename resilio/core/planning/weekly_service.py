@@ -10,7 +10,6 @@ from pydantic import TypeAdapter
 
 from resilio.core.planning.artifacts import (
     PlanningArtifactError,
-    canonical_data_sha256,
     load_all_closed_plan_archives,
 )
 from resilio.core.planning.audit import (
@@ -22,6 +21,7 @@ from resilio.core.planning.freshness import (
     load_planning_profile_unlocked,
     require_fresh_plan,
 )
+from resilio.core.planning.historical_prescriptions import assert_historical_prescriptions_unchanged
 from resilio.core.planning.integrity import (
     applied_running_workouts_sha256,
     plan_skeleton_sha256,
@@ -38,7 +38,6 @@ from resilio.core.planning.state_repository import (
 )
 from resilio.core.planning.weekly_evidence import validate_week_planning_evidence
 from resilio.core.repository import RepositoryIO
-from resilio.core.workout_fulfillment.repository import load_fulfillment_manifest
 from resilio.core.workout_publication.locking import (
     coordinated_publication_plan_activity_lock,
 )
@@ -168,6 +167,8 @@ def validate_week_application(
         if state.active_plan is None or state.active_plan.plan_approval is None:
             raise PlanOperationError("The current plan is not approved")
         target_week = _find_week(plan, application.week_number)
+        timestamp = validated_utc_timestamp(None)
+        assert_historical_prescriptions_unchanged(repo, state, application, timestamp=timestamp)
         planning_context = validate_week_planning_evidence(
             repo,
             plan=plan,
@@ -179,7 +180,7 @@ def validate_week_application(
             candidate=application,
             kind="week",
             binding=planning_context.progression,
-            timestamp=validated_utc_timestamp(None),
+            timestamp=timestamp,
             constraints=plan.constraints_snapshot,
             target_week=target_week,
         )
@@ -217,6 +218,9 @@ def approve_week_application(
         if approval_timestamp < plan_approval.approved_at_utc:
             raise PlanOperationError("Weekly approval cannot predate plan approval")
         week = _find_week(plan, application.week_number)
+        assert_historical_prescriptions_unchanged(
+            repo, state, application, timestamp=approval_timestamp
+        )
         planning_context = validate_week_planning_evidence(
             repo,
             plan=plan,
@@ -280,39 +284,6 @@ def _updated_plan(
     )
 
 
-def _assert_fulfilled_workouts_unchanged(
-    repo: RepositoryIO,
-    *,
-    previous_revision: AppliedWeekRevision,
-    populated_week: WeekPlan,
-) -> None:
-    prior_workouts = {
-        workout.id: workout for workout in previous_revision.applied_week_snapshot.running_workouts
-    }
-    proposed_workouts = {workout.id: workout for workout in populated_week.running_workouts}
-    for fulfillment in load_fulfillment_manifest(repo).fulfillments.values():
-        identity = fulfillment.workout_identity
-        if (
-            identity.plan_id != previous_revision.plan_id
-            or identity.plan_revision_id != previous_revision.plan_revision_id
-            or identity.week_number != previous_revision.week_number
-        ):
-            continue
-        prior = prior_workouts.get(identity.local_workout_id)
-        if prior is None or canonical_data_sha256(prior) != fulfillment.workout_prescription_sha256:
-            raise PlanOperationError(
-                "Fulfilled workout authority no longer matches its applied-week snapshot"
-            )
-        proposed = proposed_workouts.get(identity.local_workout_id)
-        if (
-            proposed is None
-            or canonical_data_sha256(proposed) != fulfillment.workout_prescription_sha256
-        ):
-            raise PlanOperationError(
-                "A weekly replacement cannot remove or alter a fulfilled workout"
-            )
-
-
 def apply_approved_week(
     repo: RepositoryIO,
     approved_file: Path,
@@ -346,6 +317,7 @@ def apply_approved_week(
         timestamp = validated_utc_timestamp(applied_at_utc)
         if timestamp < approval.approved_at_utc:
             raise PlanOperationError("Weekly application cannot predate its weekly approval")
+        assert_historical_prescriptions_unchanged(repo, state, application, timestamp=timestamp)
         planning_context = validate_week_planning_evidence(
             repo,
             plan=plan,
@@ -373,11 +345,6 @@ def apply_approved_week(
             None,
         )
         if previous is not None:
-            _assert_fulfilled_workouts_unchanged(
-                repo,
-                previous_revision=previous,
-                populated_week=populated_week,
-            )
             revisions = [
                 item.model_copy(
                     update={

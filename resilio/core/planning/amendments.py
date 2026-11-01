@@ -47,26 +47,29 @@ def _load_proposal(path: Path) -> tuple[MacroAmendmentProposal, str]:
         raise PlanOperationError(f"Macro amendment file is unavailable or invalid: {exc}") from exc
 
 
-def _require_unexecuted_week(
+def _require_upcoming_unfulfilled_workout(
     repo: RepositoryIO, state: PlanningState, week: WeekPlan, timestamp: datetime
 ) -> None:
     assert state.active_plan is not None
     plan = state.active_plan.plan
-    if any(
+    fulfilled_ids = {
+        record.workout_identity.local_workout_id
+        for record in load_fulfillment_manifest(repo).fulfillments.values()
+        if record.workout_identity.plan_id == plan.id
+        and record.workout_identity.plan_revision_id == plan.plan_revision_id
+        and record.workout_identity.week_number == week.week_number
+    }
+    if not any(
         schedule_authority_deadline_utc(
             workout, training_timezone=plan.constraints_snapshot.training_timezone
         )
-        <= timestamp
+        > timestamp
+        and workout.id not in fulfilled_ids
         for workout in week.running_workouts
     ):
-        raise PlanOperationError("A populated week with elapsed workouts cannot be amended")
-    if any(
-        record.workout_identity.plan_id == plan.id
-        and record.workout_identity.plan_revision_id == plan.plan_revision_id
-        and record.workout_identity.week_number == week.week_number
-        for record in load_fulfillment_manifest(repo).fulfillments.values()
-    ):
-        raise PlanOperationError("A populated week with fulfilled workouts cannot be amended")
+        raise PlanOperationError(
+            "A populated week without upcoming unfulfilled workouts cannot be amended"
+        )
 
 
 def _prepare_amendment(
@@ -120,7 +123,7 @@ def _prepare_amendment(
             )
         contexts.append(context)
         if previous.running_workouts:
-            _require_unexecuted_week(repo, state, previous, timestamp)
+            _require_upcoming_unfulfilled_workout(repo, state, previous, timestamp)
             retired.append(previous.week_number)
         replacements[amended.week_number] = amended
     bindings = [resolve_progression_binding(repo, context.progression) for context in contexts]

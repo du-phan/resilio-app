@@ -23,6 +23,7 @@ def test_run_sync_commands_are_bounded_to_capabilities_and_one_week() -> None:
     assert "capabilities" in workout_help.stdout
     assert "status" in workout_help.stdout
     assert "reconcile" in workout_help.stdout
+    assert "remove-missed" in workout_help.stdout
     assert "reconcile-pairing-operations" in workout_help.stdout
     assert "reconcile-publication-deletions" in workout_help.stdout
     assert "resolve-publication-deletion-drift" in workout_help.stdout
@@ -38,6 +39,38 @@ def test_run_sync_commands_are_bounded_to_capabilities_and_one_week() -> None:
     assert "publish-week" not in workout_help.stdout
     assert "publish" not in workout_help.stdout
     assert "delete" not in workout_help.stdout
+
+
+def test_missed_calendar_removal_requires_confirmation_and_delegates_exact_identity(monkeypatch):
+    captured = []
+
+    def remove(**kwargs):
+        captured.append(kwargs)
+        return "removed"
+
+    monkeypatch.setattr(workout_commands, "remove_missed_run_from_calendar", remove)
+    monkeypatch.setattr(workout_commands, "_emit", lambda result, message: None)
+    runner = CliRunner()
+    missing = runner.invoke(app, ["workout", "remove-missed", "--workout-id", "missed"])
+    assert missing.exit_code != 0 and captured == []
+    approved = runner.invoke(
+        app,
+        [
+            "workout",
+            "remove-missed",
+            "--workout-id",
+            "missed",
+            "--confirmation-reference",
+            "Athlete confirmed this exact missed event removal.",
+        ],
+    )
+    assert approved.exit_code == 0
+    assert captured == [
+        {
+            "local_workout_id": "missed",
+            "athlete_confirmation_reference": "Athlete confirmed this exact missed event removal.",
+        }
+    ]
 
 
 def test_reconcile_pairing_operations_delegates_to_the_global_drain(

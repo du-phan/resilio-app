@@ -1585,7 +1585,10 @@ def test_week_replacement_preserves_original_historical_authority(
 ) -> None:
     _apply_test_week(repo, tmp_path)
     replacement_path = tmp_path / "week-replacement.json"
-    _write_application(replacement_path, repo=repo, purpose="Replacement purpose")
+    _write_application(replacement_path, repo=repo)
+    payload = json.loads(replacement_path.read_text())
+    payload["running_workouts"][1]["purpose"] = "Replacement purpose for the upcoming run."
+    replacement_path.write_text(json.dumps(payload))
     bind_test_candidate(
         repo, replacement_path, kind="week", at=datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
     )
@@ -1671,17 +1674,11 @@ def test_week_replacement_cannot_alter_a_fulfilled_workout(
     bind_test_candidate(
         repo, replacement_path, kind="week", at=datetime(2026, 7, 30, 12, tzinfo=timezone.utc)
     )
-    approve_week_application(
-        repo,
-        replacement_path,
-        approved_at_utc=datetime(2026, 7, 30, 12, tzinfo=timezone.utc),
-    )
-
     with pytest.raises(PlanOperationError, match="cannot remove or alter"):
-        apply_approved_week(
+        approve_week_application(
             repo,
             replacement_path,
-            applied_at_utc=datetime(2026, 7, 30, 13, tzinfo=timezone.utc),
+            approved_at_utc=datetime(2026, 7, 30, 12, tzinfo=timezone.utc),
         )
 
 
@@ -1691,11 +1688,10 @@ def test_fulfillment_candidate_uses_revision_in_force_at_scheduled_instant(
 ) -> None:
     _apply_test_week(repo, tmp_path)
     replacement_path = tmp_path / "historical-authority-replacement.json"
-    _write_application(
-        replacement_path,
-        repo=repo,
-        purpose="Replacement applied after the original scheduled instant",
-    )
+    _write_application(replacement_path, repo=repo)
+    payload = json.loads(replacement_path.read_text())
+    payload["running_workouts"][1]["purpose"] = "Replacement for the upcoming supporting run."
+    replacement_path.write_text(json.dumps(payload))
     bind_test_candidate(
         repo, replacement_path, kind="week", at=datetime(2026, 7, 29, 12, tzinfo=timezone.utc)
     )
@@ -1727,7 +1723,7 @@ def test_fulfillment_candidate_uses_revision_in_force_at_scheduled_instant(
     assert candidate.workout_purpose == "Aerobic support"
 
 
-def test_application_after_scheduled_instant_is_not_retroactive(
+def test_approval_after_scheduled_instant_rejects_a_backdated_workout(
     repo: RepositoryIO,
     tmp_path: Path,
 ) -> None:
@@ -1737,16 +1733,14 @@ def test_application_after_scheduled_instant_is_not_retroactive(
     bind_test_candidate(
         repo, payload_path, kind="week", at=datetime(2026, 7, 28, 7, tzinfo=timezone.utc)
     )
-    approve_week_application(
-        repo,
-        payload_path,
-        approved_at_utc=datetime(2026, 7, 28, 7, tzinfo=timezone.utc),
-    )
-    apply_approved_week(
-        repo,
-        payload_path,
-        applied_at_utc=datetime(2026, 7, 28, 8, tzinfo=timezone.utc),
-    )
+    before = load_planning_aggregate(repo)
+    with pytest.raises(PlanOperationError, match="backdated"):
+        approve_week_application(
+            repo,
+            payload_path,
+            approved_at_utc=datetime(2026, 7, 28, 7, tzinfo=timezone.utc),
+        )
+    assert load_planning_aggregate(repo) == before
 
     evidence = load_approved_workouts_for_date_range(
         repo,
@@ -1754,11 +1748,8 @@ def test_application_after_scheduled_instant_is_not_retroactive(
         window_end=date(2026, 8, 2),
     )
 
-    assert evidence.status == "available"
-    assert [workout.prescription.id for workout in evidence.workouts] == [
-        "w_easy_2",
-        "w_long_1",
-    ]
+    assert evidence.status == "unavailable"
+    assert evidence.workouts == []
 
 
 def test_future_week_planning_context_separates_target_from_evidence(
