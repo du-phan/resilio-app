@@ -134,6 +134,20 @@ athlete-confirmed goal outcome, create and present an immutable cycle review,
 close and archive the active plan, then reassess profile, goal, and VDOT before
 creating the successor context. A plan cannot be silently overwritten, and a
 new VDOT cannot replace the dependency of an active plan.
+Inspect unfinished owned publication and native-pair operations before the final
+review. Resolve them through their exact ownership and confirmation procedures;
+report closure only after the archive transition succeeds and is read back.
+
+For a race debrief, follow the shared
+[end-of-cycle calibration review](../../coaching/running-progression.md#end-of-cycle-performance-calibration).
+Compare recorded expectations with the exact result, separate official and
+device timing, qualify unavailable splits and adherence, and carry evidence-linked
+coaching lessons into immutable goal notes. Athlete memory alone is not included
+in the successor macro context.
+Before interpreting a closed-cycle summary for a successor, also consult any
+dated corrective memories linked to that review. Preserve the immutable archive
+and distinguish later corrections from the facts and interpretation recorded at
+closure.
 
 The cycle review retains an exact completed or did-not-finish goal activity,
 including its measured performance fields, when the athlete identifies one.

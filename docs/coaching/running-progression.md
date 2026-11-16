@@ -138,6 +138,86 @@ fulfilled prescriptions, provider ownership, and previous approvals remain
 historical facts. Athlete approval comes after the final reviewed proposal;
 any subsequent candidate or source change needs normal fresh approval.
 
+## End-of-cycle performance calibration
+
+Before closing a race cycle, compare the original approved plan, later approved
+amendments, exact applied weeks, and completed execution. Preserve missed
+prescriptions and separate an unapproved draft from an applied workout. A
+matched workout establishes identity, not compliance with distance, intensity,
+recovery spacing, or race intent. Unavailable adherence is not a missed session.
+
+Build the performance comparison from evidence that actually exists:
+
+- Retain the original dated time goal, conditional stretch goal, and any
+  recorded forecast with its assumptions. If only a performance-equivalence
+  calculation exists, label it as equivalence; do not invent a past forecast
+  or treat short-distance equivalence as demonstrated endurance readiness.
+- Separate an athlete-confirmed official chip or gun result from recorded
+  elapsed time, moving time, and GPS distance. Do not replace canonical elapsed
+  time with a race result or deduct GPS excess and non-moving time to claim an
+  achieved goal. Differences can be described without assigning their cause.
+- Quantify pacing changes, fading, and late acceleration from chronological
+  splits or comparable segments. Retain athlete reports as attributed
+  qualitative evidence; do not convert them into measured pace changes or
+  recoverable time. A whole-race interval and an HR duration curve do not
+  establish where effort occurred. State missing split evidence.
+- Qualify HR by sensor uncertainty and retain the actual zone bounds and
+  coverage. A recorded maximum, cadence, or average HR alone cannot establish
+  unused effort, a new threshold, or a physiological diagnosis. A reported
+  maximum is not a verified physiological maximum, including when it equals
+  the configured bound. Before combining HR curves with activity summaries,
+  establish their time, pause-handling, filtering, and averaging bases. Check
+  whether their durations and averages can agree under the stated basis. If
+  they do not reconcile, retain the reported values and uncertainty; do not
+  use the curve as corroboration of effort or threshold calibration. The
+  difference alone does not identify a sensor fault or its cause. Device
+  temperature is not proof of ambient weather; use the repository weather
+  procedure before day-specific advice and do not apply invented time credits
+  for terrain, weather, stops, or fueling.
+
+Separate the running-performance question from the elapsed race result. An
+athlete may attribute pauses to aid stations, but the elapsed-minus-moving
+difference is not a measured total of avoidable aid-station time. Investigate
+running pace and fueling or hydration logistics separately, without assuming
+that eliminating stops would preserve the same running performance.
+
+Review run frequency, absolute distance, moving and elapsed time, longest runs,
+quality dose, race-specific practice, and taper separately. Compare completed
+spacing with approved spacing. Check other-sport duration and frequency without
+converting them into running mileage. Matching total kilometres does not prove
+that an easy week or the intended session distribution was followed. A successful
+finish does not prove optimal calibration, and a missed time goal does not by
+itself prove insufficient effort or a need for harder training.
+
+Report whole-cycle exposure and relevant recent preparation windows separately,
+with their dates. Match a study's exposure window before comparing it with the
+athlete's training. Compare the longest completed moving and elapsed durations
+with the race duration before recommending further long-run extension; similar
+time on feet at lower speed does not validate race effort. If more frequency,
+volume, or specificity is proposed, sequence the changes. An additional easy
+run can first redistribute existing exposure, and race-specific work can
+replace part of an existing session before adding another demanding day.
+
+Distinguish measured changes from causal explanations. Sparse or discrepant
+wellness and unexplained native-load changes cannot establish recovery,
+overtraining, or improved fitness. Ask only for missing race experience,
+official timing, fueling, symptoms, or unrecorded sessions that could change the
+conclusion. State what went well, what missed expectations, and which conclusion
+remains uncertain. Recommend one planning change consistent with confirmed sport
+priorities, with a fallback; do not silently increase running commitment.
+
+Save dated, evidence-linked coaching lessons as interpretations, separate from
+athlete-confirmed facts. Include the essential facts, planning changes, and
+uncertainties in the immutable cycle review's goal notes so the historical goal
+outcome carries them into successor evidence. Durable memory is supplementary:
+the macro context does not automatically include the memory store. Preserve the
+normal exact-result confirmation, closure, VDOT, and successor approval boundaries.
+If later evidence changes the interpretation of a closed cycle, preserve its
+immutable archive and review. Save a dated correction linked to the exact review
+and source evidence in durable memory. Consult such corrections before reusing
+historical coaching conclusions; their contents are not automatically included
+in successor context.
+
 ## Authoring and enforcement
 
 Runtime formats are MacroPlanningContext V3 and WeekPlanningContext V2. A
